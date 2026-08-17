@@ -3,6 +3,9 @@
 Documentation for the Query Management System, built for an IPC client. **Current phase:
 Initial Architecture & Foundation** — see the root [README.md](../README.md) for setup.
 
+**New here?** Start with [HANDOFF.md](./HANDOFF.md) — status at a glance, getting started,
+mock login identities, known issues, and what's next.
+
 ## SRS (`srs/`)
 
 The software requirements specification, in reading order:
