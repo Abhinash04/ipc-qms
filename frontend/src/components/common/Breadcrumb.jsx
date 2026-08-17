@@ -1,7 +1,6 @@
 import { Link } from 'react-router-dom';
-import ChevronRight from 'lucide-react/dist/esm/icons/chevron-right.mjs';
+import { ChevronRight } from 'lucide-react';
 
-/** items: [{ label, path? }] — last item renders as plain text (current page). */
 export function Breadcrumb({ items }) {
   return (
     <nav aria-label="Breadcrumb" className="mb-4 flex items-center gap-1.5 text-sm text-muted-foreground">

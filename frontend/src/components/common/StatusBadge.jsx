@@ -3,7 +3,6 @@ import { getStatusVariant } from '@/constants/statusStyles';
 
 const formatLabel = (value) => value.replace(/_/g, ' ');
 
-/** Renders a Badge colored by the centralized status→variant map (statusStyles.js). */
 export function StatusBadge({ type, value, className }) {
   if (!value) return null;
   return (

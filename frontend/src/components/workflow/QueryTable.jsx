@@ -11,18 +11,13 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
 import { Pagination, PaginationContent, PaginationItem, PaginationLink } from '@/components/ui/pagination';
-import { MOCK_QUERY } from '@/constants/mockQuery';
+import { useWorkflowStore } from '@/store/useWorkflowStore';
+import { findUserById } from '@/constants/mockUsers';
 import { buildPath } from '@/constants/routePaths';
 
-/**
- * Shared query-list shell used by every "/<area>" list route (Query List,
- * My Work, Assignments, Drafting, Reviews, Approvals, Dispatch). The
- * search/filter/pagination chrome is visually complete but inert — there's
- * no backend to filter or page against yet (same "display gate" scope as
- * the rest of the prototype). Real data wiring only needs to change the
- * `queries` prop.
- */
-export function QueryTable({ title, purpose, breadcrumbItems, detailPath, queries = [MOCK_QUERY], actions }) {
+export function QueryTable({ title, purpose, breadcrumbItems, detailPath, filter, actions, emptyMessage }) {
+  const allQueries = useWorkflowStore((state) => state.queries);
+  const queries = filter ? allQueries.filter(filter) : allQueries;
   return (
     <div>
       <Breadcrumb items={breadcrumbItems} />
@@ -48,7 +43,11 @@ export function QueryTable({ title, purpose, breadcrumbItems, detailPath, querie
         </div>
 
         {queries.length === 0 ? (
-          <EmptyState icon={InboxIcon} title="No queries" description="Nothing matches this view yet." />
+          <EmptyState
+            icon={InboxIcon}
+            title="No queries"
+            description={emptyMessage || 'Nothing matches this view yet.'}
+          />
         ) : (
           <Table>
             <TableHeader>
@@ -78,7 +77,9 @@ export function QueryTable({ title, purpose, breadcrumbItems, detailPath, querie
                   <TableCell>
                     <StatusBadge type="workflow" value={query.workflowState} />
                   </TableCell>
-                  <TableCell className="text-muted-foreground">{query.currentAssignee?.name || '—'}</TableCell>
+                  <TableCell className="text-muted-foreground">
+                    {query.currentAssigneeId ? findUserById(query.currentAssigneeId)?.name : 'Unassigned'}
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>

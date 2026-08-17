@@ -1,5 +1,6 @@
 import { Card, CardBody } from '@/components/ui/card';
 import { StatusBadge } from '@/components/common/StatusBadge';
+import { findUserById } from '@/constants/mockUsers';
 
 /**
  * Sticky query-identity strip shown at the top of the Case Workspace and
@@ -7,6 +8,9 @@ import { StatusBadge } from '@/components/common/StatusBadge';
  * glance, per the requested Case Workspace information flow.
  */
 export function CaseSummaryBar({ query }) {
+  if (!query) return null;
+  const assignee = query.currentAssigneeId ? findUserById(query.currentAssigneeId) : null;
+
   return (
     <Card className="mb-6">
       <CardBody className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -22,7 +26,7 @@ export function CaseSummaryBar({ query }) {
         <div className="flex gap-6 text-sm sm:text-right">
           <div>
             <p className="text-xs text-muted-foreground">Assignee</p>
-            <p className="font-medium text-foreground">{query.currentAssignee?.name || '—'}</p>
+            <p className="font-medium text-foreground">{assignee?.name || 'Unassigned'}</p>
           </div>
           <div>
             <p className="text-xs text-muted-foreground">Due date</p>
