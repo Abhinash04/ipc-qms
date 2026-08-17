@@ -1,27 +1,55 @@
 import { Link } from 'react-router-dom';
-import InboxIcon from 'lucide-react/dist/esm/icons/inbox.mjs';
-import PenLineIcon from 'lucide-react/dist/esm/icons/pen-line.mjs';
-import ClipboardCheckIcon from 'lucide-react/dist/esm/icons/clipboard-check.mjs';
-import CheckCircle2Icon from 'lucide-react/dist/esm/icons/check-circle-2.mjs';
-
+import { InboxIcon, PenLineIcon, ClipboardCheckIcon, CheckCircle2Icon } from 'lucide-react';
 import { PageHeader } from '@/components/common/PageHeader';
 import { StatTile } from '@/components/common/StatTile';
 import { StatusBadge } from '@/components/common/StatusBadge';
+import { EmptyState } from '@/components/common/EmptyState';
 import { Card, CardBody, CardHeader } from '@/components/ui/card';
 import { useAuthStore } from '@/store/useAuthStore';
+import { useWorkflowStore } from '@/store/useWorkflowStore';
 import { ROLE_LABELS } from '@/constants/roles';
-import { MOCK_QUERY } from '@/constants/mockQuery';
+import { WORKFLOW_STATE } from '@/constants/statusEnums';
 import { buildPath, ROUTE_PATHS } from '@/constants/routePaths';
 
-const KPIS = [
-  { label: 'Assigned to you', value: 1, icon: InboxIcon },
-  { label: 'In drafting', value: 1, icon: PenLineIcon },
-  { label: 'Awaiting your review', value: 0, icon: ClipboardCheckIcon },
-  { label: 'Closed this month', value: 0, icon: CheckCircle2Icon },
+const DRAFTING_STATES = [
+  WORKFLOW_STATE.ASSIGNED,
+  WORKFLOW_STATE.DRAFTING,
+  WORKFLOW_STATE.RETURNED_FOR_REVISION,
 ];
 
 export function DashboardPage() {
   const currentUser = useAuthStore((state) => state.currentUser);
+  const queries = useWorkflowStore((state) => state.queries);
+  const workflowSteps = useWorkflowStore((state) => state.workflowSteps);
+
+  const mine = queries.filter((q) => q.currentAssigneeId === currentUser?.id);
+  const awaitingMyReview = queries.filter((q) => {
+    if (q.workflowState !== WORKFLOW_STATE.UNDER_REVIEW) return false;
+    const step = workflowSteps.find((s) => s.stepId === q.currentWorkflowStepId);
+    return step?.assignedUserId === currentUser?.id;
+  });
+
+  const kpis = [
+    { label: 'Assigned to you', value: mine.length, icon: InboxIcon },
+    {
+      label: 'In drafting',
+      value: queries.filter((q) => DRAFTING_STATES.includes(q.workflowState)).length,
+      icon: PenLineIcon,
+    },
+    { label: 'Awaiting your review', value: awaitingMyReview.length, icon: ClipboardCheckIcon },
+    {
+      label: 'Closed',
+      value: queries.filter((q) => q.workflowState === WORKFLOW_STATE.CLOSED).length,
+      icon: CheckCircle2Icon,
+    },
+  ];
+
+  // Everything currently sitting on this user, whether as assignee or step owner.
+  const myQueue = queries.filter((q) => {
+    if (q.currentAssigneeId === currentUser?.id) return true;
+    const step = workflowSteps.find((s) => s.stepId === q.currentWorkflowStepId);
+    return step?.assignedUserId === currentUser?.id;
+  });
 
   return (
     <div>
@@ -31,31 +59,43 @@ export function DashboardPage() {
       />
 
       <div className="mb-6 grid grid-cols-2 gap-4 sm:grid-cols-4">
-        {KPIS.map((kpi) => (
+        {kpis.map((kpi) => (
           <StatTile key={kpi.label} label={kpi.label} value={kpi.value} icon={kpi.icon} />
         ))}
       </div>
 
       <Card>
         <CardHeader>
-          <h2 className="text-sm font-semibold text-foreground">Your assigned queries</h2>
+          <h2 className="text-sm font-semibold text-foreground">Waiting on you</h2>
         </CardHeader>
-        <CardBody>
-          <div className="flex items-center justify-between">
-            <div>
-              <Link
-                to={buildPath(ROUTE_PATHS.QUERY_DETAIL, { queryId: MOCK_QUERY.queryId })}
-                className="font-medium text-ring hover:underline"
-              >
-                {MOCK_QUERY.queryId}
-              </Link>
-              <p className="mt-0.5 text-sm text-muted-foreground">{MOCK_QUERY.subject}</p>
+        <CardBody className={myQueue.length === 0 ? 'p-4' : undefined}>
+          {myQueue.length === 0 ? (
+            <EmptyState
+              icon={InboxIcon}
+              title="Nothing waiting on you"
+              description="Switch user in the header to act as the role this query is currently with."
+            />
+          ) : (
+            <div className="space-y-3">
+              {myQueue.map((query) => (
+                <div key={query.queryId} className="flex items-center justify-between gap-4">
+                  <div>
+                    <Link
+                      to={buildPath(ROUTE_PATHS.QUERY_DETAIL, { queryId: query.queryId })}
+                      className="font-medium text-ring hover:underline"
+                    >
+                      {query.queryId}
+                    </Link>
+                    <p className="mt-0.5 text-sm text-muted-foreground">{query.subject}</p>
+                  </div>
+                  <div className="flex shrink-0 gap-2">
+                    <StatusBadge type="priority" value={query.priority} />
+                    <StatusBadge type="workflow" value={query.workflowState} />
+                  </div>
+                </div>
+              ))}
             </div>
-            <div className="flex gap-2">
-              <StatusBadge type="priority" value={MOCK_QUERY.priority} />
-              <StatusBadge type="workflow" value={MOCK_QUERY.workflowState} />
-            </div>
-          </div>
+          )}
         </CardBody>
       </Card>
     </div>

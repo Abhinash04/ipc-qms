@@ -1,10 +1,5 @@
 import { Link } from 'react-router-dom';
-import UsersIcon from 'lucide-react/dist/esm/icons/users.mjs';
-import ShieldIcon from 'lucide-react/dist/esm/icons/shield.mjs';
-import Building2Icon from 'lucide-react/dist/esm/icons/building-2.mjs';
-import WorkflowIcon from 'lucide-react/dist/esm/icons/workflow.mjs';
-import TagIcon from 'lucide-react/dist/esm/icons/tag.mjs';
-
+import { UsersIcon, ShieldIcon, Building2Icon, WorkflowIcon, TagIcon } from 'lucide-react';
 import { PageHeader } from '@/components/common/PageHeader';
 import { Breadcrumb } from '@/components/common/Breadcrumb';
 import { Card, CardBody } from '@/components/ui/card';

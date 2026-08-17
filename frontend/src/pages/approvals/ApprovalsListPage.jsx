@@ -1,5 +1,6 @@
 import { QueryTable } from '@/components/workflow/QueryTable';
 import { ROUTE_PATHS } from '@/constants/routePaths';
+import { WORKFLOW_STATE } from '@/constants/statusEnums';
 
 export function ApprovalsListPage() {
   return (
@@ -8,6 +9,8 @@ export function ApprovalsListPage() {
       purpose="Reviewed drafts awaiting final Officer-in-Charge approval."
       breadcrumbItems={[{ label: 'Dashboard', path: ROUTE_PATHS.DASHBOARD }, { label: 'Approvals' }]}
       detailPath={ROUTE_PATHS.APPROVAL_DETAIL}
+      filter={(q) => q.workflowState === WORKFLOW_STATE.PENDING_FINAL_APPROVAL}
+      emptyMessage="Nothing awaiting final approval. All review levels must complete first."
     />
   );
 }

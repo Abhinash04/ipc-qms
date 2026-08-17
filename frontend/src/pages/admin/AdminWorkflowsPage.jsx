@@ -1,5 +1,4 @@
-import WorkflowIcon from 'lucide-react/dist/esm/icons/workflow.mjs';
-
+import { WorkflowIcon } from 'lucide-react';
 import { PageHeader } from '@/components/common/PageHeader';
 import { Breadcrumb } from '@/components/common/Breadcrumb';
 import { EmptyState } from '@/components/common/EmptyState';

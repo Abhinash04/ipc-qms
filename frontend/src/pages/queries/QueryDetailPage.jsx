@@ -1,17 +1,15 @@
-import PaperclipIcon from 'lucide-react/dist/esm/icons/paperclip.mjs';
-
+import { Link } from 'react-router-dom';
+import { PaperclipIcon } from 'lucide-react';
 import { Breadcrumb } from '@/components/common/Breadcrumb';
-import { RoleGate } from '@/components/common/RoleGate';
 import { EmptyState } from '@/components/common/EmptyState';
 import { CaseSummaryBar } from '@/components/workflow/CaseSummaryBar';
 import { WorkflowTimeline } from '@/components/workflow/WorkflowTimeline';
+import { WorkflowActionsCard } from '@/components/workflow/WorkflowActionsCard';
 import { Card, CardBody, CardHeader } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
-import { MOCK_QUERY } from '@/constants/mockQuery';
+import { useQueryCase } from '@/hooks/useQueryCase';
 import { ROUTE_PATHS } from '@/constants/routePaths';
-import { ROLES } from '@/constants/roles';
 
 function InfoRow({ label, value }) {
   return (
@@ -22,16 +20,17 @@ function InfoRow({ label, value }) {
   );
 }
 
-const ACTIONS = [
-  { allow: [ROLES.OFFICER_IN_CHARGE, ROLES.SUPER_ADMIN], label: 'Assign query', variant: 'primary' },
-  { allow: [ROLES.ASSIGNED_OFFICIAL, ROLES.SUPER_ADMIN], label: 'Edit draft', variant: 'secondary' },
-  { allow: [ROLES.REVIEWER, ROLES.SUPER_ADMIN], label: 'Submit review decision', variant: 'secondary' },
-  { allow: [ROLES.OFFICER_IN_CHARGE, ROLES.SUPER_ADMIN], label: 'Grant final approval', variant: 'secondary' },
-  { allow: [ROLES.FRONT_OFFICE, ROLES.SUPER_ADMIN], label: 'Dispatch response', variant: 'secondary' },
-];
-
 export function QueryDetailPage() {
-  const query = MOCK_QUERY;
+  const { queryId, query, steps, versions, latestVersion, audit, currentStep } = useQueryCase();
+
+  if (!query) {
+    return (
+      <EmptyState
+        title="Query not found"
+        description={`No query matching ${queryId} exists in the current demo data.`}
+      />
+    );
+  }
 
   return (
     <div>
@@ -52,7 +51,7 @@ export function QueryDetailPage() {
               <h2 className="text-sm font-semibold text-foreground">Workflow progress</h2>
             </CardHeader>
             <CardBody>
-              <WorkflowTimeline steps={query.workflowSteps} />
+              <WorkflowTimeline steps={steps} currentStepId={currentStep?.stepId} />
             </CardBody>
           </Card>
 
@@ -67,12 +66,23 @@ export function QueryDetailPage() {
               </div>
 
               <TabsContent value="draft" className="mt-0 p-5">
-                <p className="mb-3 text-xs text-muted-foreground">
-                  Versions: {query.responseVersions.map((v) => v.version).join(' → ')}
-                </p>
-                <pre className="rounded-md border border-border bg-muted/40 p-4 font-sans text-sm whitespace-pre-wrap text-foreground">
-                  {query.currentDraft}
-                </pre>
+                {versions.length === 0 ? (
+                  <EmptyState
+                    title="No draft yet"
+                    description="The assigned official has not started drafting a response."
+                  />
+                ) : (
+                  <>
+                    <p className="mb-3 text-xs text-muted-foreground">
+                      Versions: {versions.map((v) => v.version).join(' → ')} — showing{' '}
+                      <span className="font-medium text-foreground">{latestVersion.version}</span> (
+                      {latestVersion.label})
+                    </p>
+                    <pre className="rounded-md border border-border bg-muted/40 p-4 font-sans text-sm whitespace-pre-wrap text-foreground">
+                      {latestVersion.content}
+                    </pre>
+                  </>
+                )}
               </TabsContent>
 
               <TabsContent value="info" className="mt-0 p-5">
@@ -106,29 +116,16 @@ export function QueryDetailPage() {
         </div>
 
         <div className="lg:col-span-1">
-          <Card>
-            <CardHeader>
-              <h2 className="text-sm font-semibold text-foreground">Available actions</h2>
-            </CardHeader>
-            <CardBody className="space-y-2">
-              {ACTIONS.map((action) => (
-                <RoleGate key={action.label} allow={action.allow}>
-                  <Button className="w-full" variant={action.variant} disabled>
-                    {action.label}
-                  </Button>
-                </RoleGate>
-              ))}
-              <p className="pt-1 text-xs text-muted-foreground">
-                Workflow actions aren't implemented yet — see docs/srs/14-open-questions-and-client-clarifications.md.
-              </p>
-            </CardBody>
-          </Card>
+          <WorkflowActionsCard />
         </div>
       </div>
 
       <Card className="mt-6">
         <CardHeader>
           <h2 className="text-sm font-semibold text-foreground">Audit history</h2>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            Append-only — {audit.length} event{audit.length === 1 ? '' : 's'} recorded.
+          </p>
         </CardHeader>
         <CardBody className="p-0">
           <Table>
@@ -136,14 +133,18 @@ export function QueryDetailPage() {
               <TableRow hoverable={false}>
                 <TableHead>Event</TableHead>
                 <TableHead>Actor</TableHead>
+                <TableHead>Details</TableHead>
                 <TableHead>When</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {query.auditHistory.map((entry, index) => (
-                <TableRow key={`${entry.event}-${index}`}>
+              {audit.map((entry) => (
+                <TableRow key={entry.auditId}>
                   <TableCell className="text-foreground">{entry.event.replace(/_/g, ' ')}</TableCell>
                   <TableCell className="text-muted-foreground">{entry.actor}</TableCell>
+                  <TableCell className="max-w-md whitespace-normal text-muted-foreground">
+                    {entry.details || '—'}
+                  </TableCell>
                   <TableCell className="text-muted-foreground">{new Date(entry.at).toLocaleString()}</TableCell>
                 </TableRow>
               ))}
@@ -151,6 +152,30 @@ export function QueryDetailPage() {
           </Table>
         </CardBody>
       </Card>
+
+      <p className="mt-4 text-xs text-muted-foreground">
+        Stage-specific actions also live on their dedicated pages —{' '}
+        <Link to={ROUTE_PATHS.ASSIGNMENTS} className="text-ring hover:underline">
+          Assignments
+        </Link>
+        ,{' '}
+        <Link to={ROUTE_PATHS.DRAFTING} className="text-ring hover:underline">
+          Drafting
+        </Link>
+        ,{' '}
+        <Link to={ROUTE_PATHS.REVIEWS} className="text-ring hover:underline">
+          Reviews
+        </Link>
+        ,{' '}
+        <Link to={ROUTE_PATHS.APPROVALS} className="text-ring hover:underline">
+          Approvals
+        </Link>
+        ,{' '}
+        <Link to={ROUTE_PATHS.DISPATCH} className="text-ring hover:underline">
+          Dispatch
+        </Link>
+        .
+      </p>
     </div>
   );
 }
