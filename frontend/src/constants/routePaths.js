@@ -1,7 +1,3 @@
-/**
- * Single source of truth for route path strings. Never hardcode paths in
- * components — import ROUTE_PATHS instead.
- */
 export const ROUTE_PATHS = {
   LOGIN: '/login',
 
@@ -39,7 +35,6 @@ export const ROUTE_PATHS = {
   REPORTS: '/reports',
 };
 
-/** Builds a concrete path from a `:param` template, e.g. buildPath(QUERY_DETAIL, { queryId: 'QRY-2026-00427' }). */
 export function buildPath(template, params = {}) {
   return Object.entries(params).reduce(
     (path, [key, value]) => path.replace(`:${key}`, value),

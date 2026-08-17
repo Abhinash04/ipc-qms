@@ -1,10 +1,5 @@
 import { BUSINESS_STATUS, WORKFLOW_STATE, PRIORITY } from './statusEnums';
 
-/**
- * Central status → Badge-variant mapping. Replaces the inline ternaries that
- * used to be duplicated across WorkflowTimeline, Header, and QueryDetailPage.
- * Values are Badge cva keys (status-green/amber/blue/indigo/purple/orange/red/gray).
- */
 export const WORKFLOW_STATE_VARIANT = {
   [WORKFLOW_STATE.RECEIVED]: 'status-gray',
   [WORKFLOW_STATE.FRONT_OFFICE_VERIFICATION]: 'status-gray',
@@ -44,7 +39,6 @@ export const PRIORITY_VARIANT = {
   [PRIORITY.URGENT]: 'status-red',
 };
 
-/** Workflow-step status (per WorkflowStep.status, not the query-level WORKFLOW_STATE). */
 export const STEP_STATUS_VARIANT = {
   COMPLETED: 'status-green',
   IN_PROGRESS: 'status-blue',
@@ -58,7 +52,6 @@ const VARIANT_MAPS = {
   step: STEP_STATUS_VARIANT,
 };
 
-/** Resolve a status value + map type to a Badge variant, falling back to neutral. */
 export function getStatusVariant(type, value) {
   return VARIANT_MAPS[type]?.[value] || 'status-gray';
 }

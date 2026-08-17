@@ -1,12 +1,6 @@
 import { ROLES } from './roles';
 import { ROUTE_PATHS } from './routePaths';
 
-/**
- * Role -> allowed route-prefix map. A route is accessible to a role if the
- * current path starts with one of its listed prefixes. This is a frontend
- * display gate only — real authorization must be enforced by the backend
- * once it exists.
- */
 export const ROLE_ROUTE_PREFIXES = {
   [ROLES.SUPER_ADMIN]: [
     ROUTE_PATHS.DASHBOARD,

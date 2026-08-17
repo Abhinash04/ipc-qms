@@ -1,9 +1,5 @@
 import { ROLES } from './roles';
 
-/**
- * Fictional development identities only — not real IPC employees.
- * Centralized mock dataset; replace with API data once auth exists.
- */
 export const MOCK_USERS = [
   {
     id: 'USR-0001',

@@ -1,17 +1,3 @@
-/**
- * Business Status vs Workflow State (see docs/srs/05-workflow-and-state-machine.md):
- *
- * - BUSINESS_STATUS is the coarse, client-facing lifecycle summary (is the
- *   query open, being worked, or closed). It's what an inquirer would see.
- * - WORKFLOW_STATE is the fine-grained internal step the query instance is
- *   currently sitting at. Many WORKFLOW_STATE values map to a single
- *   BUSINESS_STATUS (e.g. ASSIGNED, DRAFTING, and UNDER_REVIEW are all
- *   BUSINESS_STATUS "IN_PROGRESS").
- *
- * The two are tracked as separate fields on a Query — never derive one by
- * parsing the other's string value.
- */
-
 export const BUSINESS_STATUS = {
   OPEN: 'OPEN',
   IN_PROGRESS: 'IN_PROGRESS',

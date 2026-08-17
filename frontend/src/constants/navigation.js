@@ -13,7 +13,6 @@ import BarChart3 from 'lucide-react/dist/esm/icons/bar-chart-3.mjs';
 import { ROLES } from './roles';
 import { ROUTE_PATHS } from './routePaths';
 
-/** Sidebar nav items. `roles` lists who sees the item. */
 export const NAV_ITEMS = [
   { label: 'Dashboard', path: ROUTE_PATHS.DASHBOARD, icon: LayoutDashboard, roles: Object.values(ROLES) },
   { label: 'Queries', path: ROUTE_PATHS.QUERIES, icon: Inbox, roles: [ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.FRONT_OFFICE, ROLES.OFFICER_IN_CHARGE, ROLES.ASSIGNED_OFFICIAL, ROLES.REVIEWER] },

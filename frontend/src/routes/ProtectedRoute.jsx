@@ -2,7 +2,6 @@ import { useLocation } from 'react-router-dom';
 import { useAuthStore } from '@/store/useAuthStore';
 import { isRouteAllowedForRole } from '@/constants/permissions';
 
-/** Gates a route by the current mock user's role/permission map. */
 export function ProtectedRoute({ children }) {
   const currentUser = useAuthStore((state) => state.currentUser);
   const location = useLocation();
