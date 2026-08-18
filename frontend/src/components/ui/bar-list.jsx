@@ -1,13 +1,5 @@
-import { cn } from '@/lib/utils';
+import { cn } from '@/utils/cn';
 
-/**
- * Dependency-free horizontal bar list for small distributions. Each item is a
- * label + a proportional CSS bar + its value. Theme-aware via Tailwind tokens;
- * no chart library.
- *
- * @param {{ key: string, count: number }[]} data
- * @param {(v:number)=>string} [valueFormatter]
- */
 export function BarList({ data = [], valueFormatter = (v) => v, className }) {
   if (!data.length) {
     return <p className="text-sm text-muted-foreground py-4">No data.</p>;

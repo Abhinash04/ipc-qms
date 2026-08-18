@@ -3,16 +3,8 @@ import { Calendar as CalendarIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { cn } from '@/lib/utils';
+import { cn } from '@/utils/cn';
 
-/**
- * Neo-brutalist date picker. Controlled via an ISO `YYYY-MM-DD` string so it is
- * a drop-in for native <input type="date"> state.
- *
- * @param {string} value        ISO date string ('' when unset)
- * @param {(iso: string) => void} onChange
- * @param {string} placeholder
- */
 export function DatePicker({ value, onChange, placeholder = 'Pick a date', className, id, 'aria-label': ariaLabel }) {
   const date = value ? parseISO(value) : undefined;
   const valid = date && isValid(date);

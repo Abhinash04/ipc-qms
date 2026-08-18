@@ -1,11 +1,7 @@
 import { DayPicker } from 'react-day-picker';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { cn } from '@/utils/cn';
 
-/**
- * Calendar built on react-day-picker, styled with the project tokens +
- * enterprise .neo-* elevation. Used by DatePicker.
- */
 function Calendar({ className, classNames, showOutsideDays = true, ...props }) {
   return (
     <DayPicker

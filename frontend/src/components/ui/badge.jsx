@@ -3,10 +3,6 @@ import { Slot } from 'radix-ui';
 import { cn } from '@/utils/cn';
 import { badgeVariants } from '@/components/ui/badge-variants';
 
-/**
- * Legacy variant names from the pre-shadcn Badge, mapped onto the cva
- * `status-*` keys with equivalent soft bg/border/fg treatment.
- */
 const LEGACY_VARIANT_ALIASES = {
   neutral: 'status-gray',
   success: 'status-green',

@@ -13,7 +13,6 @@ export const badgeVariants = cva(
           'border-border text-foreground [a]:hover:bg-muted [a]:hover:text-muted-foreground',
         ghost: 'border-transparent hover:bg-muted hover:text-muted-foreground dark:hover:bg-muted/50',
         link: 'border-transparent text-primary underline-offset-4 hover:underline',
-        // Per-workflow-state status badges (tint bg + hue line + hue text, AA)
         'status-green': 'border-status-green-line bg-status-green-bg text-status-green-fg',
         'status-amber': 'border-status-amber-line bg-status-amber-bg text-status-amber-fg',
         'status-blue': 'border-status-blue-line bg-status-blue-bg text-status-blue-fg',

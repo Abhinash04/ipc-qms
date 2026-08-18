@@ -1,7 +1,6 @@
 "use client"
 
 import { Separator as SeparatorPrimitive } from "radix-ui"
-
 import { cn } from "@/utils/cn"
 
 function Separator({

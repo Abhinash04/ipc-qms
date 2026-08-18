@@ -2,7 +2,7 @@
 
 import { Command as CommandPrimitive } from "cmdk"
 
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import {
   Dialog,
   DialogContent,
