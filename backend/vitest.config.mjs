@@ -23,9 +23,6 @@ export default defineConfig({
       FRONT_OFFICE_EMAIL: 'front-office@test.invalid',
       OFFICER_IN_CHARGE_NAME: 'Test Officer',
       OFFICER_IN_CHARGE_EMAIL: 'officer@test.invalid',
-      ASSIGNED_OFFICIAL_NAME: 'Test Assigned Official',
-      ASSIGNED_OFFICIAL_EMAIL: 'assigned-official@test.invalid',
-      GMAIL_REFRESH_TOKEN_ASSIGNED_OFFICIAL: '',
     },
   },
 });

@@ -15,8 +15,12 @@ Two things cannot be proven by the automated suite, and this document is how you
 | Inquirer          | Abhinash Pritiraj    | abhinash.pritiraj@gmail.com | yes             |
 | Front Office      | Bhumika Makker       | bhoomikamakker@gmail.com    | yes             |
 | Officer-in-Charge | Jatin Rawat          | rawatjatin436@gmail.com     | yes             |
-| Assigned Official | **Rawat Jatin**      | jatinrawat55361@gmail.com   | yes             |
 | Assigned Official | Neha Singh           | neha.singh@ipc.example      | no — mock       |
+| Assigned Official | Rawat Jatin          | rawat.jatin@ipc.example     | no — mock       |
+| Assigned Official | Meera Iyer           | meera.iyer@ipc.example      | no — mock       |
+| Assigned Official | Arjun Nair           | arjun.nair@ipc.example      | no — mock       |
+| Assigned Official | Sana Qureshi         | sana.qureshi@ipc.example    | no — mock       |
+| Assigned Official | Vikram Desai         | vikram.desai@ipc.example    | no — mock       |
 | Reviewer I        | Amit Mehta           | amit.mehta@ipc.example      | no — mock       |
 | Reviewer II       | Kavita Rao           | kavita.rao@ipc.example      | no — mock       |
 | Admin             | Suresh Gupta         | suresh.gupta@ipc.example    | no — mock       |
@@ -26,12 +30,29 @@ Mock login password for every user: **`ipc@1234`**. The login page lists them al
 **Use Credentials** button.
 
 > **Two similar names, two different people.** _Jatin Rawat_ `rawatjatin436@gmail.com` is the
-> Officer-in-Charge; _Rawat Jatin_ `jatinrawat55361@gmail.com` is the Assigned Official. They are
-> separate accounts with separate roles — the address tells them apart, never the display name.
+> Officer-in-Charge; _Rawat Jatin_ `rawat.jatin@ipc.example` is an Assigned Official. They are
+> separate user records with separate roles — the id and the address tell them apart, never the
+> display name.
 >
-> The Assigned Official role holds **two** users: Rawat (real) and Neha Singh (mock). Whether a
-> message is really sent is decided by the acting user's own address, so Neha's actions are never
-> sent from Rawat's Gmail account.
+> **Three real accounts, not four.** The Assigned Official briefly had a real Gmail identity; it
+> was removed, and the role is now six mock officials spread across the technical divisions, each
+> with declared expertise. Whether a message is really sent is decided by the acting user's own
+> address, so an Assigned Official's actions are never sent from somebody else's Gmail account.
+
+### The Assigned Official roster and their divisions
+
+| Official     | Division                       | Expertise                                                    |
+| ------------ | ------------------------------ | ------------------------------------------------------------ |
+| Neha Singh   | Analytical & Quality Control   | assay, dissolution, impurity, method validation, chromatography |
+| Rawat Jatin  | Technical Operations           | instrumentation, calibration, laboratory operations, equipment |
+| Meera Iyer   | Pharmacopoeial Standards       | monograph, reference standard, pharmacopoeia, specification   |
+| Arjun Nair   | Microbiology                   | sterility, endotoxin, microbial limits, bioburden, contamination |
+| Sana Qureshi | Pharmaceutical Chemistry       | synthesis, degradation, stability, excipient, formulation     |
+| Vikram Desai | Regulatory Affairs & Compliance| submission, documentation, regulatory, guideline, compliance  |
+
+The assignment recommendation scores an enquiry against these expertise words and the official's
+division, plus current workload. It is **advisory only** — the OIC assigns whoever they choose,
+and the case records whether the recommendation was accepted.
 
 ---
 
@@ -41,7 +62,7 @@ A Gmail refresh token authenticates **exactly one account**, and the Gmail API s
 authenticated account **regardless of the `From:` header**. There is no header trick that makes
 Abhinash's token send as Bhumika — the recipient would still see Abhinash.
 
-So each of the four people must authorise their own account. A role with no token falls back to
+So each of the three people must authorise their own account. A role with no token falls back to
 the mock transport; **no other account is ever used on its behalf**, so the sender the QMS records
 is always the sender Gmail actually used.
 
@@ -67,7 +88,6 @@ For **each** of the four people, with that person signed in to Gmail:
 GMAIL_REFRESH_TOKEN_INQUIRER=...
 GMAIL_REFRESH_TOKEN_FRONT_OFFICE=...
 GMAIL_REFRESH_TOKEN_OFFICER_IN_CHARGE=...
-GMAIL_REFRESH_TOKEN_ASSIGNED_OFFICIAL=...
 ```
 
 > **Privacy — read before authorising Bhumika's account.** `gmail.modify` lets the QMS **read her

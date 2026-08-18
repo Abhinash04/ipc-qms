@@ -155,6 +155,8 @@ There is no model behind it yet; the interface is the swap point.
 - AI recommendation criteria: category, subject, expertise, history, workload, division, availability. — *Proposed Design*
 - Is a reason/justification required when overriding the AI recommendation? — *Client Clarification Required*
 - How heavily should current workload factor into the recommendation (hard constraint vs. soft signal)? — *Client Clarification Required*
+- The recommendation is computed from declared `expertise` keywords, the official's division and their open-query count. The scoring weights are a development stand-in, not a client-agreed formula. — *Proposed Design*
+- `recommendAssignee(query, users, openQueries) → { userId, matchPercent, reason, factors }` is a fixed contract so a model-backed implementation (Gemma is the candidate) can replace the rule-based scorer without changing the store, the pages or the workflow. Which model is approved remains open (see the AI section). — *Proposed Design*
 
 ## Review
 
@@ -164,7 +166,11 @@ There is no model behind it yet; the interface is the swap point.
 - Who can reorder review levels? — *Client Clarification Required*
 - Who assigns which reviewer to which level — the OIC, the assigned official, or auto-assignment? — *Client Clarification Required*
 - Can a reviewer directly edit the draft, or only comment/approve/return? — *Client Clarification Required*
-- What happens to the workflow position after a review is returned — does it restart at the same level or an earlier one? — *Proposed Design*: returns to the assigned official, then re-enters the same review level once revised (as shown in [05-workflow-and-state-machine.md](./05-workflow-and-state-machine.md)); not confirmed.
+- What happens to the workflow position after a review is returned — does it restart at the same level or an earlier one? — **Answered by user direction**: the revision returns to the assigned official and then re-enters at **Reviewer-I**, climbing the full ladder again. A Reviewer-II rejection therefore does not go straight back to Reviewer-II. This supersedes the earlier *Proposed Design* reading of [05-workflow-and-state-machine.md](./05-workflow-and-state-machine.md), which showed re-entry at the same level. — *User-Directed Proposed Behaviour*, still to be confirmed with the client.
+- A return for revision from **final approval** restarts the complete cycle too: every review level *and* the final-approval step reset to pending, so the revised response passes Reviewer-I → Reviewer-II → OIC again. — *User-Directed Proposed Behaviour*
+- A comment is **mandatory** whenever changes are requested, on both the reviewer path and the OIC's return-for-revision path; the action is refused without one. Approval comments stay optional. The SRS states that a `CHANGE_REQUIRED` decision records the reviewer and comments but does not say the comment is enforced. — *User-Directed Proposed Behaviour*
+- Every review decision is bound to the **response version it reviewed** (`responseId` + `version` on the review row), so a comment can never be read against text written after it. The data model does not specify this link. — *User-Directed Proposed Behaviour*
+- Reviewer-II cannot forward a response to the OIC after requesting changes — the request resets the cycle, and only a Reviewer-II approval on a subsequent version reaches final approval. — *User-Directed Proposed Behaviour*
 
 ## Transfer
 
