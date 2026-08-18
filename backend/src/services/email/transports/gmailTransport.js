@@ -1,28 +1,53 @@
 import { google } from 'googleapis';
 import env from '../../../config/env.js';
+import { identityForRole, IDENTITY_ROLES } from '../../../config/identities.js';
 
-let cachedClient = null;
+const clients = new Map();
 
-function getGmailClient() {
-  if (cachedClient) return cachedClient;
+export function getGmailClient(role = IDENTITY_ROLES.INQUIRER) {
+  if (clients.has(role)) return clients.get(role);
 
-  if (!env.GMAIL_CLIENT_ID || !env.GMAIL_CLIENT_SECRET || !env.GMAIL_REFRESH_TOKEN) {
+  const identity = identityForRole(role);
+  if (!identity) {
+    throw new Error(`Gmail transport: no identity is configured for role "${role}"`);
+  }
+
+  if (!env.GMAIL_CLIENT_ID || !env.GMAIL_CLIENT_SECRET) {
     throw new Error(
-      'Gmail transport selected but credentials are missing. ' +
-        'Set GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET and GMAIL_REFRESH_TOKEN, or use EMAIL_TRANSPORT=mock.',
+      'Gmail transport selected but the OAuth app is not configured. ' +
+        'Set GMAIL_CLIENT_ID and GMAIL_CLIENT_SECRET, or use EMAIL_TRANSPORT=mock.',
     );
   }
 
-  const auth = new google.auth.OAuth2(env.GMAIL_CLIENT_ID, env.GMAIL_CLIENT_SECRET, env.GMAIL_REDIRECT_URI);
-  auth.setCredentials({ refresh_token: env.GMAIL_REFRESH_TOKEN });
+  if (!identity.refreshToken) {
+    throw new Error(
+      `Cannot send as ${identity.name} <${identity.email}> — ` +
+        `GMAIL_REFRESH_TOKEN_${role} is not set. Each account must authorise itself; ` +
+        'another stakeholder\'s token must never be used to send on their behalf.',
+    );
+  }
 
-  cachedClient = google.gmail({ version: 'v1', auth });
-  return cachedClient;
+  const auth = new google.auth.OAuth2(
+    env.GMAIL_CLIENT_ID,
+    env.GMAIL_CLIENT_SECRET,
+    env.GMAIL_REDIRECT_URI,
+  );
+  auth.setCredentials({ refresh_token: identity.refreshToken });
+
+  const client = google.gmail({ version: 'v1', auth });
+  clients.set(role, client);
+  return client;
+}
+
+export async function authenticatedAddress(role) {
+  const gmail = getGmailClient(role);
+  const profile = await gmail.users.getProfile({ userId: 'me' });
+  return profile.data.emailAddress;
 }
 
 const asList = (value) => (Array.isArray(value) ? value.join(', ') : value || '');
 
-function buildRawMessage(message) {
+export function buildRawMessage(message) {
   const headers = [
     `From: ${message.from}`,
     `To: ${asList(message.to)}`,
@@ -42,8 +67,8 @@ function buildRawMessage(message) {
     .replace(/=+$/, '');
 }
 
-async function send(message) {
-  const gmail = getGmailClient();
+export async function send(message, { asRole = IDENTITY_ROLES.INQUIRER } = {}) {
+  const gmail = getGmailClient(asRole);
 
   const res = await gmail.users.messages.send({
     userId: 'me',
@@ -57,12 +82,12 @@ async function send(message) {
     providerMessageId: res.data.id,
     providerThreadId: res.data.threadId,
     transport: 'gmail',
+    sentAsRole: asRole,
   };
 }
 
-function reset() {
-  cachedClient = null;
+export function reset() {
+  clients.clear();
 }
 
 export const name = 'gmail';
-export { send, reset, buildRawMessage };

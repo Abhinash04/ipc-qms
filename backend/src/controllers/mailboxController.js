@@ -1,10 +1,14 @@
 import HTTP_STATUS from '../constants/httpStatus.js';
 import env from '../config/env.js';
+import { IDENTITY_ROLES, identityForRole } from '../config/identities.js';
+
+const defaultRecipient = () =>
+  identityForRole(IDENTITY_ROLES.FRONT_OFFICE)?.email || env.IPC_QUERY_EMAIL;
 import * as mailbox from '../services/email/mailbox/index.js';
 
 async function listMessages(req, res, next) {
   try {
-    const recipient = req.query.recipient || env.IPC_QUERY_EMAIL;
+    const recipient = req.query.recipient || defaultRecipient();
     const unreadOnly = req.query.unreadOnly === 'true';
     const messages = await mailbox.list(recipient, { unreadOnly });
     res.status(HTTP_STATUS.OK).json({ recipient, ...mailbox.describe(), messages });
@@ -17,7 +21,7 @@ async function receiveMessage(req, res, next) {
   try {
     const { to, from, subject, body, attachments, cc, bcc, receivedAt } = req.body || {};
     const message = await mailbox.deliver({
-      to: to || env.IPC_QUERY_EMAIL,
+      to: to || defaultRecipient(),
       from,
       subject,
       body,
@@ -35,7 +39,7 @@ async function receiveMessage(req, res, next) {
 
 async function markIngested(req, res, next) {
   try {
-    const recipient = req.query.recipient || env.IPC_QUERY_EMAIL;
+    const recipient = req.query.recipient || defaultRecipient();
     const message = await mailbox.markIngested(recipient, req.params.messageId);
     if (!message) {
       return res

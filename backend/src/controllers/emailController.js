@@ -25,6 +25,26 @@ async function sendAcknowledgement(req, res, next) {
   }
 }
 
+async function forwardQuery(req, res, next) {
+  try {
+    const { queryId, subject, body, timestamp, providerThreadId } = req.body || {};
+    if (!queryId) {
+      throw Object.assign(new Error('"queryId" is required'), { status: 400 });
+    }
+    const result = await emailService.forwardToOfficerInCharge({
+      queryId,
+      subject,
+      body,
+      timestamp,
+      providerThreadId,
+    });
+    res.status(HTTP_STATUS.CREATED).json(result);
+  } catch (error) {
+    error.status = error.status || HTTP_STATUS.BAD_REQUEST;
+    next(error);
+  }
+}
+
 async function sendResponse(req, res, next) {
   try {
     const { to, subject, body, attachments, cc, timestamp, providerThreadId } = req.body || {};
@@ -43,4 +63,4 @@ async function sendResponse(req, res, next) {
   }
 }
 
-export { getConfig, sendEnquiry, sendAcknowledgement, sendResponse };
+export { getConfig, sendEnquiry, sendAcknowledgement, forwardQuery, sendResponse };
