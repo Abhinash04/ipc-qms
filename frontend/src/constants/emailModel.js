@@ -6,6 +6,7 @@ export const EMAIL_DIRECTION = {
 export const EMAIL_TYPE = {
   INCOMING_QUERY: 'INCOMING_QUERY',
   ACKNOWLEDGEMENT: 'ACKNOWLEDGEMENT',
+  FORWARD: 'FORWARD',
   OUTGOING_RESPONSE: 'OUTGOING_RESPONSE',
 };
 
@@ -18,6 +19,7 @@ export const EMAIL_STATUS = {
 export const EMAIL_TYPE_LABELS = {
   [EMAIL_TYPE.INCOMING_QUERY]: 'Original enquiry',
   [EMAIL_TYPE.ACKNOWLEDGEMENT]: 'Acknowledgement',
+  [EMAIL_TYPE.FORWARD]: 'Forwarded to Officer-in-Charge',
   [EMAIL_TYPE.OUTGOING_RESPONSE]: 'Final response',
 };
 

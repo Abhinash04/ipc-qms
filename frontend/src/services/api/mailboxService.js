@@ -42,3 +42,13 @@ export async function sendResponse({ to, subject, body, attachments = [], cc = [
   });
   return data;
 }
+
+export async function forwardQuery({ queryId, subject, body, providerThreadId }) {
+  const { data } = await axiosClient.post('/emails/forward', {
+    queryId,
+    subject,
+    body,
+    providerThreadId,
+  });
+  return data;
+}

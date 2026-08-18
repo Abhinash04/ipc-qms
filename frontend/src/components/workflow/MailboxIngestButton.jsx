@@ -16,6 +16,8 @@ export function MailboxIngestButton() {
           {lastResult.skipped.length > 0 && ` · ${lastResult.skipped.length} already registered`}
           {lastResult.acknowledged?.length > 0 &&
             ` · ${lastResult.acknowledged.length} acknowledged`}
+          {lastResult.forwarded?.length > 0 &&
+            ` · ${lastResult.forwarded.length} forwarded to the OIC`}
         </span>
       )}
       <Button variant="outline" onClick={ingestNow} disabled={running}>

@@ -15,7 +15,7 @@ import { createEmailMessage, EMAIL_DIRECTION, EMAIL_TYPE } from '@/constants/ema
 import { buildSeedState } from '@/constants/mockDomain';
 import { summarise, recommendAssignee, draftResponse } from '@/services/ai/mockAiService';
 import { loadAll, replaceAll, persistTransition, isEmpty } from '@/services/db/db';
-import { sendResponse } from '@/services/api/mailboxService';
+import { sendResponse, forwardQuery } from '@/services/api/mailboxService';
 
 const pad = (n) => String(n).padStart(5, '0');
 
@@ -205,6 +205,16 @@ export const useWorkflowStore = create((set, get) => ({
       };
     }
 
+    const providerThreadId = mailboxMessage.providerThreadId || null;
+    if (providerThreadId) {
+      const sameThread = state.emailMessages.find(
+        (m) => m.providerThreadId && m.providerThreadId === providerThreadId,
+      );
+      if (sameThread) {
+        return get().attachToThread(sameThread.queryId, mailboxMessage);
+      }
+    }
+
     const timestamp = mailboxMessage.receivedAt || now();
 
     let counters = state.counters;
@@ -304,6 +314,53 @@ export const useWorkflowStore = create((set, get) => ({
     return { queryId, threadId, messageId, created: true };
   },
 
+  attachToThread: (queryId, mailboxMessage) => {
+    const state = get();
+    const query = state.queries.find((q) => q.queryId === queryId);
+    if (!query) return { queryId: null, created: false, reason: 'unknown-query' };
+
+    const sourceMessageId = mailboxMessage.mailboxMessageId || mailboxMessage.providerMessageId;
+    const timestamp = mailboxMessage.receivedAt || now();
+    const messageMint = mintId(state.counters, 'MSG');
+
+    const message = createEmailMessage({
+      messageId: messageMint.id,
+      threadId: query.threadId,
+      queryId,
+      direction: EMAIL_DIRECTION.INBOUND,
+      emailType: EMAIL_TYPE.INCOMING_QUERY,
+      from: mailboxMessage.from,
+      to: mailboxMessage.to,
+      cc: mailboxMessage.cc || [],
+      subject: mailboxMessage.subject || query.subject,
+      body: mailboxMessage.body || '',
+      timestamp,
+      providerMessageId: mailboxMessage.providerMessageId || null,
+      providerThreadId: mailboxMessage.providerThreadId || null,
+    });
+    message.sourceMessageId = sourceMessageId;
+
+    get().applyTransition({
+      queryId,
+      actor: null,
+      actorLabel: 'System',
+      event: AUDIT_EVENT.QUERY_RECEIVED,
+      details: `Further correspondence received from ${parseAddress(mailboxMessage.from)} on the existing thread.`,
+      mutate: (base) => ({
+        counters: { ...base.counters, ...messageMint.bump },
+        emailMessages: [...base.emailMessages, message],
+      }),
+    });
+
+    return {
+      queryId,
+      threadId: query.threadId,
+      messageId: message.messageId,
+      created: false,
+      reason: 'attached-to-thread',
+    };
+  },
+
   recordAcknowledgement: ({ queryId, from, to, subject, body, timestamp, providerMessageId }) => {
     const state = get();
     const query = state.queries.find((q) => q.queryId === queryId);
@@ -358,19 +415,67 @@ export const useWorkflowStore = create((set, get) => ({
     });
   },
 
-  forwardToOic: (queryId, actor) => {
-    assertCan(get(), WORKFLOW_ACTION.FORWARD, queryId, actor);
-    return get().applyTransition({
+  forwardToOic: async (queryId, actor, forward = forwardQuery) => {
+    const query = assertCan(get(), WORKFLOW_ACTION.FORWARD, queryId, actor);
+
+    const original = get().emailMessages.find(
+      (m) => m.queryId === queryId && m.emailType === EMAIL_TYPE.INCOMING_QUERY,
+    );
+
+    const body = [
+      `Forwarded by ${actorName(actor)} for assignment.`,
+      '',
+      `Query: ${queryId}`,
+      `Received from: ${query.inquirer?.name || ''} <${query.inquirer?.email || ''}>`,
+      '',
+      '---------- Original enquiry ----------',
+      `Subject: ${query.subject}`,
+      '',
+      original?.body || query.description || '',
+    ].join('\n');
+
+    const sent = await forward({
+      queryId,
+      subject: query.subject,
+      body,
+      providerThreadId: original?.providerThreadId || null,
+    });
+
+    const timestamp = sent?.sentAt || now();
+    const messageMint = mintId(get().counters, 'MSG');
+
+    const message = createEmailMessage({
+      messageId: messageMint.id,
+      threadId: query.threadId,
+      queryId,
+      direction: EMAIL_DIRECTION.OUTBOUND,
+      emailType: EMAIL_TYPE.FORWARD,
+      from: sent?.from || actorName(actor),
+      to: sent?.to || [],
+      subject: sent?.subject || `Fwd: ${query.subject} [${queryId}]`,
+      body: sent?.body || body,
+      timestamp,
+      providerMessageId: sent?.providerMessageId || null,
+      providerThreadId: sent?.providerThreadId || null,
+    });
+
+    get().applyTransition({
       queryId,
       actor,
       event: AUDIT_EVENT.QUERY_FORWARDED,
       patch: { workflowState: WORKFLOW_STATE.PENDING_ASSIGNMENT },
-      details: 'Query forwarded to the Officer-in-Charge for assignment.',
+      details: `Forwarded by ${actorName(actor)} to ${message.to.join(', ')} for assignment.`,
       notify: {
         recipientRole: 'OFFICER_IN_CHARGE',
         message: `${queryId} is awaiting assignment.`,
       },
+      mutate: (base) => ({
+        counters: { ...base.counters, ...messageMint.bump },
+        emailMessages: [...base.emailMessages, message],
+      }),
     });
+
+    return { queryId, messageId: message.messageId, forwarded: true };
   },
 
   recommendAssigneeFor: (queryId) => {
@@ -741,7 +846,17 @@ export const useWorkflowStore = create((set, get) => ({
     });
   },
 
-  grantFinalApproval: (queryId, actor) => {
+  /**
+   * Final approval is the business event that dispatches the response.
+   *
+   * The approval commits first and is never rolled back. Only then is the
+   * response sent: a failed send leaves the case at READY_FOR_DISPATCH — still
+   * approved, still locked, never CLOSED — so it can be retried from the
+   * Dispatch page without a second Query Case or a duplicate email.
+   *
+   * `send` is injected so tests drive it without a network.
+   */
+  grantFinalApproval: async (queryId, actor, send = sendResponse) => {
     assertCan(get(), WORKFLOW_ACTION.FINAL_APPROVE, queryId, actor);
     const state = get();
     const current = state.getCurrentStep(queryId);
@@ -769,6 +884,10 @@ export const useWorkflowStore = create((set, get) => ({
         ),
       }),
     });
+
+    // Dispatch automatically. Nobody has to open the Dispatch page or press a
+    // button; reaching READY_FOR_DISPATCH is what sends the response.
+    return get().dispatchResponse(queryId, null, send);
   },
 
   rejectFinalApproval: (queryId, reason, actor) => {
@@ -802,7 +921,41 @@ export const useWorkflowStore = create((set, get) => ({
   },
 
   dispatchResponse: async (queryId, actor, send = sendResponse) => {
-    const query = assertCan(get(), WORKFLOW_ACTION.DISPATCH, queryId, actor);
+    const state = get();
+    const query = state.queries.find((q) => q.queryId === queryId);
+    if (!query) throw new Error(`DISPATCH: query ${queryId} does not exist`);
+
+    // Order matters, and each step guards something different.
+    //
+    // 1. PERMISSION first, so an unauthorised caller is refused outright and
+    //    never receives the benign "already dispatched" shape instead.
+    //    A human retry from the Dispatch page passes an actor and is gated
+    //    exactly as before. The automatic dispatch that follows final approval
+    //    passes NO actor: it is the system acting on the READY_FOR_DISPATCH
+    //    transition. Recorded in docs/srs/14 as a deliberate widening.
+    if (actor) {
+      assertCan(state, WORKFLOW_ACTION.DISPATCH, queryId, actor);
+    }
+
+    // 2. IDEMPOTENCY next, so a duplicate trigger is a harmless no-op rather
+    //    than an error — a refresh, a retry or a double click must not send a
+    //    second response, and must not look like a failure either. The guard is
+    //    the stored OUTGOING_RESPONSE message, which lives in IndexedDB and so
+    //    survives a reload and a backend restart.
+    const already = state.emailMessages.find(
+      (m) => m.queryId === queryId && m.emailType === EMAIL_TYPE.OUTGOING_RESPONSE,
+    );
+    if (already) {
+      return { queryId, messageId: already.messageId, dispatched: false, reason: 'already-dispatched' };
+    }
+
+    // 3. STATE last, for the system path: nothing may be sent before the
+    //    Officer-in-Charge has granted final approval.
+    if (!actor && query.workflowState !== WORKFLOW_STATE.READY_FOR_DISPATCH) {
+      throw new Error(
+        `DISPATCH refused: ${queryId} is ${query.workflowState}, not ${WORKFLOW_STATE.READY_FOR_DISPATCH}`,
+      );
+    }
 
     const approved = get().getLatestVersion(queryId);
     if (!approved) {
