@@ -1,7 +1,7 @@
 import { StatusBadge } from '@/components/common/StatusBadge';
 import { EmptyState } from '@/components/common/EmptyState';
 import { findUserById } from '@/constants/mockUsers';
-import ListChecksIcon from 'lucide-react/dist/esm/icons/list-checks.mjs';
+import { ListChecksIcon } from 'lucide-react';
 
 const DOT_CLASS = {
   COMPLETED: 'bg-status-green-fg',

@@ -1,24 +1,27 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import LockIcon from 'lucide-react/dist/esm/icons/lock.mjs';
-
+import { LockIcon } from 'lucide-react';
 import { Card, CardBody, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useQueryCase } from '@/hooks/useQueryCase';
 import { useWorkflowStore } from '@/store/useWorkflowStore';
 import { WORKFLOW_ACTION, CLARIFICATION_REQUIRED_ACTIONS } from '@/constants/workflowRules';
 import { WORKFLOW_STATE } from '@/constants/statusEnums';
-import { buildPath, ROUTE_PATHS } from '@/constants/routePaths';
+import { buildPath } from '@/constants/routePaths';
+import { SECTION } from '@/constants/routeSections';
+import { useRoutePaths } from '@/hooks/useRoutePaths';
+import { useWorkflowAction } from '@/hooks/useWorkflowAction';
+import { ActionError } from '@/components/workflow/ActionError';
 
-const ACTION_ROUTES = {
-  [WORKFLOW_ACTION.ASSIGN]: ROUTE_PATHS.ASSIGNMENT_DETAIL,
-  [WORKFLOW_ACTION.GENERATE_AI_DRAFT]: ROUTE_PATHS.DRAFTING_DETAIL,
-  [WORKFLOW_ACTION.SAVE_DRAFT]: ROUTE_PATHS.DRAFTING_DETAIL,
-  [WORKFLOW_ACTION.SUBMIT_FOR_REVIEW]: ROUTE_PATHS.DRAFTING_DETAIL,
-  [WORKFLOW_ACTION.APPROVE_REVIEW]: ROUTE_PATHS.REVIEW_DETAIL,
-  [WORKFLOW_ACTION.REQUEST_REVISION]: ROUTE_PATHS.REVIEW_DETAIL,
-  [WORKFLOW_ACTION.FINAL_APPROVE]: ROUTE_PATHS.APPROVAL_DETAIL,
-  [WORKFLOW_ACTION.DISPATCH]: ROUTE_PATHS.DISPATCH_DETAIL,
+const ACTION_SECTIONS = {
+  [WORKFLOW_ACTION.ASSIGN]: SECTION.ASSIGNMENT_DETAIL,
+  [WORKFLOW_ACTION.GENERATE_AI_DRAFT]: SECTION.DRAFTING_DETAIL,
+  [WORKFLOW_ACTION.SAVE_DRAFT]: SECTION.DRAFTING_DETAIL,
+  [WORKFLOW_ACTION.SUBMIT_FOR_REVIEW]: SECTION.DRAFTING_DETAIL,
+  [WORKFLOW_ACTION.APPROVE_REVIEW]: SECTION.REVIEW_DETAIL,
+  [WORKFLOW_ACTION.REQUEST_REVISION]: SECTION.REVIEW_DETAIL,
+  [WORKFLOW_ACTION.FINAL_APPROVE]: SECTION.APPROVAL_DETAIL,
+  [WORKFLOW_ACTION.DISPATCH]: SECTION.DISPATCH_DETAIL,
 };
 
 const ACTION_LABELS = {
@@ -32,15 +35,21 @@ const ACTION_LABELS = {
 
 export function WorkflowActionsCard() {
   const { queryId, query, currentUser, can } = useQueryCase();
+  const paths = useRoutePaths();
+  const { run, error, clearError } = useWorkflowAction();
   const verifyQuery = useWorkflowStore((state) => state.verifyQuery);
   const forwardToOic = useWorkflowStore((state) => state.forwardToOic);
   const [showClarification, setShowClarification] = useState(null);
 
   if (!query) return null;
 
-  const availableLinks = Object.entries(ACTION_ROUTES)
-    .filter(([action]) => can(action) && ACTION_LABELS[action])
-    .map(([action, path]) => ({ action, path, label: ACTION_LABELS[action] }));
+  const availableLinks = Object.entries(ACTION_SECTIONS)
+    .filter(([action, section]) => can(action) && ACTION_LABELS[action] && paths[section])
+    .map(([action, section]) => ({
+      action,
+      path: paths[section],
+      label: ACTION_LABELS[action],
+    }));
 
   const seen = new Set();
   const links = availableLinks.filter((l) => {
@@ -60,6 +69,8 @@ export function WorkflowActionsCard() {
         </p>
       </CardHeader>
       <CardBody className="space-y-2">
+        <ActionError message={error} onDismiss={clearError} />
+
         {isClosed && (
           <p className="rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
             This query is closed. Its full audit history remains available below.
@@ -67,13 +78,13 @@ export function WorkflowActionsCard() {
         )}
 
         {can(WORKFLOW_ACTION.VERIFY) && (
-          <Button className="w-full" onClick={() => verifyQuery(queryId, currentUser)}>
+          <Button className="w-full" onClick={() => run(() => verifyQuery(queryId, currentUser))}>
             Verify query details
           </Button>
         )}
 
         {can(WORKFLOW_ACTION.FORWARD) && (
-          <Button className="w-full" onClick={() => forwardToOic(queryId, currentUser)}>
+          <Button className="w-full" onClick={() => run(() => forwardToOic(queryId, currentUser))}>
             Forward to Officer-in-Charge
           </Button>
         )}
