@@ -1,6 +1,5 @@
 import { ScrollArea as ScrollAreaPrimitive } from "radix-ui"
-
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 
 function ScrollArea({
   className,
@@ -8,8 +7,6 @@ function ScrollArea({
   ...props
 }) {
   return (
-    // overflow-hidden is load-bearing: without it a flex-child ScrollArea's
-    // automatic min-size becomes its content height and nothing scrolls.
     <ScrollAreaPrimitive.Root data-slot="scroll-area" className={cn("relative overflow-hidden", className)} {...props}>
       <ScrollAreaPrimitive.Viewport
         data-slot="scroll-area-viewport"

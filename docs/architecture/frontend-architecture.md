@@ -53,35 +53,64 @@ Per `.claude/frontend-rules.md`, state is deliberately split by concern:
 
 ## Route Plan
 
-Every planned route, its purpose, and what it depends on. "Placeholder" pages exist to
-establish the skeleton per the initial-foundation scope; only Dashboard and Query Detail are
-built out with real mock data end-to-end.
+Application routes are **namespaced by role**: every page lives at
+`/<role-slug>/<section>`, so the URL alone says who is looking at it and the route gate can
+refuse another role's namespace outright. `/login` is the only page outside a namespace.
 
-| Route | Purpose | Primary Role(s) | Main Component | Data (this phase) | Future API Dependency |
+| Role | Slug |
+| --- | --- |
+| Inquirer | `inquirer` |
+| Front Office | `front-officer` |
+| Officer-in-Charge | `officer-in-charge` |
+| Assigned Official | `assigned-official` |
+| Reviewer | `reviewer` |
+| Admin | `admin` |
+| Super Admin | `super-admin` |
+
+Routes are **generated**, not hand-listed: `constants/routeSections.js` defines the section
+segments, `constants/permissions.js` grants sections per role, and `routes/roleRoutes.js` crosses
+the two. Components never hold a literal path — they read `useRoutePaths()`, which resolves the
+current user's role into concrete paths.
+
+| Section | Segment | Granted to | Main Component | Data (this phase) | Future API Dependency |
 | --- | --- | --- | --- | --- | --- |
-| `/login` | Entry point; explains the mock session. | All | `LoginPage` | Mock current user | `POST /auth/login` |
-| `/dashboard` | Role-specific pending-work overview. | All | `DashboardPage` | Mock KPIs + `MOCK_QUERY` | `GET /dashboard` |
-| `/queries` | All registered queries. | Admin, Front Office, OIC, Assigned Official, Reviewer | `QueriesListPage` | `MOCK_QUERY` (1 row) | `GET /queries` |
-| `/queries/:queryId` | Full query detail — info, timeline, draft, reviews, audit. | Same as above | `QueryDetailPage` | `MOCK_QUERY` (full) | `GET /queries/:id`, `/reviews`, `/responses`, `/audit` |
-| `/my-work` | Queries assigned to / awaiting the current user. | Assigned Official, Reviewer, Super Admin | `MyWorkPage` | `MOCK_QUERY` (1 row) | `GET /queries?assignee=me` |
-| `/assignments` | Queries pending/awaiting assignment. | OIC, Super Admin | `AssignmentsListPage` | `MOCK_QUERY` (1 row) | `GET /queries?state=PENDING_ASSIGNMENT` |
-| `/assignments/:queryId` | AI recommendation + assign/override. | OIC, Super Admin | `AssignmentDetailPage` | Route param only | `POST /queries/:id/assign` |
-| `/drafting` | Queries in investigation & drafting. | Assigned Official, Super Admin | `DraftingListPage` | `MOCK_QUERY` (1 row) | `GET /queries?state=DRAFTING` |
-| `/drafting/:queryId` | AI draft + human editing. | Assigned Official, Super Admin | `DraftingDetailPage` | Route param only | `GET/POST /queries/:id/responses` |
-| `/reviews` | Queries awaiting the user's review. | Reviewer, Super Admin | `ReviewsListPage` | `MOCK_QUERY` (1 row) | `GET /queries?state=UNDER_REVIEW` |
-| `/reviews/:queryId` | Approve / return a review step. | Reviewer, Super Admin | `ReviewDetailPage` | Route param only | `POST /queries/:id/reviews` |
-| `/approvals` | Reviewed drafts awaiting final approval. | OIC, Super Admin | `ApprovalsListPage` | `MOCK_QUERY` (1 row) | `GET /queries?state=PENDING_FINAL_APPROVAL` |
-| `/approvals/:queryId` | Final approve / reject / return. | OIC, Super Admin | `ApprovalDetailPage` | Route param only | `POST /queries/:id/workflow` |
-| `/dispatch` | Approved responses ready to send. | Front Office, Super Admin | `DispatchListPage` | `MOCK_QUERY` (1 row) | `GET /queries?state=READY_FOR_DISPATCH` |
-| `/dispatch/:queryId` | Preview + send + close. | Front Office, Super Admin | `DispatchDetailPage` | Route param only | `POST /queries/:id/dispatch` (planned resource) |
-| `/notifications` | Workflow events relevant to the user. | All | `NotificationsPage` | Static mock list | `GET /notifications` |
-| `/reports` | Operational metrics/exports. | Admin, Super Admin, OIC | `ReportsPage` | Static text | `GET /dashboard` (reporting variant) |
-| `/admin` | Admin area index. | Admin, Super Admin | `AdminOverviewPage` | Static links | — |
-| `/admin/users` | User directory. | Admin, Super Admin | `AdminUsersPage` | `MOCK_USERS` | `GET/POST /users` |
-| `/admin/roles` | Role hierarchy reference. | Admin, Super Admin | `AdminRolesPage` | `ROLES` enum | `GET /roles` |
-| `/admin/divisions` | Divisions + members. | Admin, Super Admin | `AdminDivisionsPage` | `MOCK_DIVISIONS` + `MOCK_USERS` | `GET/POST /divisions` |
-| `/admin/workflows` | Review-level templates. | Admin, Super Admin | `AdminWorkflowsPage` | Static text | `GET/POST` (planned resource) |
-| `/admin/categories` | Query categories. | Admin, Super Admin | `AdminCategoriesPage` | Static list | `GET/POST` (planned resource) |
+| Login | `/login` (no namespace) | Everyone signed out | `LoginPage` | `MOCK_USERS` + one dev password | `POST /auth/login` |
+| Dashboard | `dashboard` | All roles | `DashboardPage` | Live workflow store | `GET /dashboard` |
+| Raise Enquiry | `compose` | Inquirer, Super Admin | `ComposeEnquiryPage` | `GET /emails/config` | `POST /emails/enquiry` |
+| Queries | `queries` | Front Office, OIC, Assigned Official, Reviewer, Admin, Super Admin | `QueriesListPage` | Live workflow store | `GET /queries` |
+| Query detail | `queries/:queryId` | Same as above | `QueryDetailPage` | Live workflow store | `GET /queries/:id`, `/reviews`, `/responses`, `/audit` |
+| My Work | `my-work` | Assigned Official, Reviewer, Super Admin | `MyWorkPage` | Live workflow store | `GET /queries?assignee=me` |
+| Assignments | `assignments` | OIC, Super Admin | `AssignmentsListPage` | Live workflow store | `GET /queries?state=PENDING_ASSIGNMENT` |
+| Assignment detail | `assignments/:queryId` | OIC, Super Admin | `AssignmentDetailPage` | Route param only | `POST /queries/:id/assign` |
+| Drafting | `drafting` | Assigned Official, Super Admin | `DraftingListPage` | Live workflow store | `GET /queries?state=DRAFTING` |
+| Drafting detail | `drafting/:queryId` | Assigned Official, Super Admin | `DraftingDetailPage` | Route param only | `GET/POST /queries/:id/responses` |
+| Reviews | `reviews` | Reviewer, Super Admin | `ReviewsListPage` | Live workflow store | `GET /queries?state=UNDER_REVIEW` |
+| Review detail | `reviews/:queryId` | Reviewer, Super Admin | `ReviewDetailPage` | Route param only | `POST /queries/:id/reviews` |
+| Approvals | `approvals` | OIC, Super Admin | `ApprovalsListPage` | Live workflow store | `GET /queries?state=PENDING_FINAL_APPROVAL` |
+| Approval detail | `approvals/:queryId` | OIC, Super Admin | `ApprovalDetailPage` | Route param only | `POST /queries/:id/workflow` |
+| Dispatch | `dispatch` | Front Office, Super Admin | `DispatchListPage` | Live workflow store | `GET /queries?state=READY_FOR_DISPATCH` |
+| Dispatch detail | `dispatch/:queryId` | Front Office, Super Admin | `DispatchDetailPage` | Route param only | `POST /queries/:id/dispatch` (planned resource) |
+| Notifications | `notifications` | All except Inquirer | `NotificationsPage` | Live workflow store | `GET /notifications` |
+| Reports | `reports` | OIC, Admin, Super Admin | `ReportsPage` | Static text | `GET /dashboard` (reporting variant) |
+| Administration | `administration` | Admin, Super Admin | `AdminOverviewPage` | Static links | — |
+| Users | `users` | Admin, Super Admin | `AdminUsersPage` | `MOCK_USERS` | `GET/POST /users` |
+| Roles | `roles` | Admin, Super Admin | `AdminRolesPage` | `ROLES` enum | `GET /roles` |
+| Divisions | `divisions` | Admin, Super Admin | `AdminDivisionsPage` | `MOCK_DIVISIONS` + `MOCK_USERS` | `GET/POST /divisions` |
+| Workflows | `workflows` | Admin, Super Admin | `AdminWorkflowsPage` | Static text | `GET/POST` (planned resource) |
+| Categories | `categories` | Admin, Super Admin | `AdminCategoriesPage` | Static list | `GET/POST` (planned resource) |
+
+Examples: `/front-officer/queries/QRY-2026-00001`, `/reviewer/reviews`, `/super-admin/users`,
+`/inquirer/compose`.
+
+**Access control.** `ProtectedRoute` sends a signed-out visitor to `/login`, and shows an
+"Access restricted" panel when a signed-in user opens a URL outside their grants — the denial is
+explicit rather than a 404, which makes RBAC verifiable by hand. The sidebar is derived from the
+same grant lists (`navItemsForRole`), so it can never offer a link the gate would refuse.
+
+**Authentication is mock.** `useAuthStore` holds the current mock user and persists only their id
+to `localStorage` under `qms.auth`, resolving it back through `MOCK_USERS` on load; an id that no
+longer exists fails closed to signed out. Replacing this with real authentication means changing
+`LoginPage` and `useAuthStore` — the role-based routing above is unaffected.
 
 ## Path Alias
 

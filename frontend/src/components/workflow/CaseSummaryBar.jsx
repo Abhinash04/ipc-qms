@@ -2,11 +2,6 @@ import { Card, CardBody } from '@/components/ui/card';
 import { StatusBadge } from '@/components/common/StatusBadge';
 import { findUserById } from '@/constants/mockUsers';
 
-/**
- * Sticky query-identity strip shown at the top of the Case Workspace and
- * every stage detail page. Answers Query → Status → Assignee → Stage in one
- * glance, per the requested Case Workspace information flow.
- */
 export function CaseSummaryBar({ query }) {
   if (!query) return null;
   const assignee = query.currentAssigneeId ? findUserById(query.currentAssigneeId) : null;

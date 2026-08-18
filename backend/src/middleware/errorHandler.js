@@ -1,5 +1,5 @@
-const HTTP_STATUS = require('../constants/httpStatus');
-const env = require('../config/env');
+import HTTP_STATUS from '../constants/httpStatus.js';
+import env from '../config/env.js';
 
 // eslint-disable-next-line no-unused-vars
 function errorHandler(err, req, res, next) {
@@ -10,4 +10,4 @@ function errorHandler(err, req, res, next) {
   });
 }
 
-module.exports = errorHandler;
+export default errorHandler;

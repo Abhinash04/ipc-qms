@@ -1,5 +1,4 @@
 import { useState } from 'react';
-
 import { Breadcrumb } from '@/components/common/Breadcrumb';
 import { EmptyState } from '@/components/common/EmptyState';
 import { CaseSummaryBar } from '@/components/workflow/CaseSummaryBar';
@@ -13,10 +12,14 @@ import { useQueryCase } from '@/hooks/useQueryCase';
 import { useWorkflowStore } from '@/store/useWorkflowStore';
 import { WORKFLOW_ACTION } from '@/constants/workflowRules';
 import { findUserById } from '@/constants/mockUsers';
-import { ROUTE_PATHS } from '@/constants/routePaths';
+import { useRoutePaths } from '@/hooks/useRoutePaths';
+import { useWorkflowAction } from '@/hooks/useWorkflowAction';
+import { ActionError } from '@/components/workflow/ActionError';
 
 export function ApprovalDetailPage() {
+  const paths = useRoutePaths();
   const { queryId, query, steps, reviews, latestVersion, currentStep, currentUser, can } = useQueryCase();
+  const { run, error, clearError } = useWorkflowAction();
   const grantFinalApproval = useWorkflowStore((state) => state.grantFinalApproval);
   const rejectFinalApproval = useWorkflowStore((state) => state.rejectFinalApproval);
   const returnForRevision = useWorkflowStore((state) => state.returnForRevisionFromApproval);
@@ -30,14 +33,17 @@ export function ApprovalDetailPage() {
     <div>
       <Breadcrumb
         items={[
-          { label: 'Dashboard', path: ROUTE_PATHS.DASHBOARD },
-          { label: 'Approvals', path: ROUTE_PATHS.APPROVALS },
+          { label: 'Dashboard', path: paths.DASHBOARD },
+          { label: 'Approvals', path: paths.APPROVALS },
           { label: query.queryId },
         ]}
       />
 
       <CaseSummaryBar query={query} />
 
+
+
+      <ActionError message={error} onDismiss={clearError} />
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="space-y-6 lg:col-span-2">
           <Card>
@@ -104,24 +110,31 @@ export function ApprovalDetailPage() {
                       rows={3}
                     />
                   </div>
-                  <Button className="w-full" onClick={() => grantFinalApproval(queryId, currentUser)}>
+                  <Button className="w-full" onClick={() => run(() => grantFinalApproval(queryId, currentUser))}>
                     Approve
                   </Button>
                   <Button
                     variant="secondary"
                     className="w-full"
+                    disabled={!comment.trim()}
                     onClick={() => {
-                      returnForRevision(queryId, comment, currentUser);
+                      // Wrapped, like every other action: returning without a
+                      // comment throws, and an uncaught throw blanks the page.
+                      run(() => returnForRevision(queryId, comment, currentUser));
                       setComment('');
                     }}
                   >
                     Return for revision
                   </Button>
+                  <p className="text-xs text-muted-foreground">
+                    A comment is required. Returning restarts the full review cycle — the revised
+                    response passes Reviewer-I and Reviewer-II again before returning here.
+                  </p>
                   <Button
                     variant="destructive"
                     className="w-full"
                     onClick={() => {
-                      rejectFinalApproval(queryId, comment, currentUser);
+                      run(() => rejectFinalApproval(queryId, comment, currentUser));
                       setComment('');
                     }}
                   >

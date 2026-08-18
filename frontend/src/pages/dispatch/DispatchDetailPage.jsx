@@ -1,20 +1,27 @@
-import MailIcon from 'lucide-react/dist/esm/icons/mail.mjs';
-import PaperclipIcon from 'lucide-react/dist/esm/icons/paperclip.mjs';
-import SendIcon from 'lucide-react/dist/esm/icons/send.mjs';
-
+import {MailIcon, PaperclipIcon, SendIcon} from 'lucide-react';
 import { Breadcrumb } from '@/components/common/Breadcrumb';
 import { EmptyState } from '@/components/common/EmptyState';
 import { CaseSummaryBar } from '@/components/workflow/CaseSummaryBar';
 import { Card, CardBody, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { EMAIL_TYPE } from '@/constants/emailModel';
 import { useQueryCase } from '@/hooks/useQueryCase';
 import { useWorkflowStore } from '@/store/useWorkflowStore';
 import { WORKFLOW_ACTION } from '@/constants/workflowRules';
 import { WORKFLOW_STATE } from '@/constants/statusEnums';
-import { ROUTE_PATHS } from '@/constants/routePaths';
+import { useRoutePaths } from '@/hooks/useRoutePaths';
+import { useWorkflowAction } from '@/hooks/useWorkflowAction';
+import { ActionError } from '@/components/workflow/ActionError';
 
 export function DispatchDetailPage() {
-  const { queryId, query, latestVersion, currentUser, can } = useQueryCase();
+  const paths = useRoutePaths();
+  const { queryId, query, latestVersion, messages, currentUser, can } = useQueryCase();
+
+  // Dispatch is automatic: granting final approval sends the response. This
+  // page reports what happened; the button below is a RETRY, offered only when
+  // the automatic send did not succeed.
+  const dispatched = messages.find((m) => m.emailType === EMAIL_TYPE.OUTGOING_RESPONSE);
+  const { run, error, clearError } = useWorkflowAction();
   const dispatchResponse = useWorkflowStore((state) => state.dispatchResponse);
 
   if (!query) return <EmptyState title="Query not found" />;
@@ -26,14 +33,17 @@ export function DispatchDetailPage() {
     <div>
       <Breadcrumb
         items={[
-          { label: 'Dashboard', path: ROUTE_PATHS.DASHBOARD },
-          { label: 'Dispatch', path: ROUTE_PATHS.DISPATCH },
+          { label: 'Dashboard', path: paths.DASHBOARD },
+          { label: 'Dispatch', path: paths.DISPATCH },
           { label: query.queryId },
         ]}
       />
 
       <CaseSummaryBar query={query} />
 
+
+
+      <ActionError message={error} onDismiss={clearError} />
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="space-y-6 lg:col-span-2">
           <Card>
@@ -98,24 +108,30 @@ export function DispatchDetailPage() {
                 <p className="text-sm text-muted-foreground">{query.inquirer.email}</p>
               </div>
 
-              {isClosed ? (
-                <p className="rounded-md border border-status-green-line bg-status-green-bg px-3 py-2 text-sm text-status-green-fg">
-                  Response dispatched and query closed.
-                </p>
+              {dispatched ? (
+                <div className="rounded-md border border-status-green-line bg-status-green-bg px-3 py-2 text-sm text-status-green-fg">
+                  <p className="font-medium">Response sent automatically</p>
+                  <p className="mt-0.5">
+                    Sent {new Date(dispatched.timestamp).toLocaleString()} to{' '}
+                    {dispatched.to.join(', ')}.
+                  </p>
+                  {isClosed && <p className="mt-0.5">Query closed.</p>}
+                </div>
               ) : canDispatch ? (
                 <>
-                  <Button className="w-full" onClick={() => dispatchResponse(queryId, currentUser)}>
-                    <SendIcon className="h-4 w-4" aria-hidden="true" />
-                    Send response
-                  </Button>
-                  <p className="text-xs text-muted-foreground">
-                    Mock send — no real email is transmitted. Dispatching records the event and
-                    closes the query.
+                  <p className="rounded-md border border-status-amber-line bg-status-amber-bg px-3 py-2 text-sm text-status-amber-fg">
+                    The automatic dispatch did not complete. The response is approved and locked —
+                    retrying sends it without creating a second response.
                   </p>
+                  <Button className="w-full" onClick={() => run(() => dispatchResponse(queryId, currentUser))}>
+                    <SendIcon className="h-4 w-4" aria-hidden="true" />
+                    Retry sending response
+                  </Button>
                 </>
               ) : (
                 <p className="rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
-                  Dispatch is available to Front Office once the query reaches READY_FOR_DISPATCH.
+                  The response is sent automatically when the Officer-in-Charge grants final
+                  approval. Nothing to do here.
                 </p>
               )}
             </CardBody>

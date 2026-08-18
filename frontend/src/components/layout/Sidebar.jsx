@@ -1,12 +1,11 @@
 import { useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import FileText from 'lucide-react/dist/esm/icons/file-text.mjs';
-import ChevronsRight from 'lucide-react/dist/esm/icons/chevrons-right.mjs';
-import LogOut from 'lucide-react/dist/esm/icons/log-out.mjs';
+import { FileText, ChevronsRight, LogOut } from 'lucide-react';
 
-import { NAV_ITEMS } from '@/constants/navigation';
+import { navItemsForRole } from '@/constants/navigation';
 import { ROLE_LABELS } from '@/constants/roles';
+import { SECTION } from '@/constants/routeSections';
 import { ROUTE_PATHS } from '@/constants/routePaths';
 import { useAuthStore } from '@/store/useAuthStore';
 import { cn } from '@/utils/cn';
@@ -16,8 +15,6 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 const STORAGE_KEY = 'qms.sidebar.collapsed';
 const WIDTH_OPEN = 248;
 const WIDTH_CLOSED = 68;
-
-/** Slide/fade used by every label that appears when the rail expands. */
 const labelMotion = {
   layout: true,
   initial: { opacity: 0, x: -8 },
@@ -35,10 +32,7 @@ function readCollapsed() {
 
 export function Sidebar() {
   const currentUser = useAuthStore((state) => state.currentUser);
-  const items = NAV_ITEMS.filter((item) => item.roles.includes(currentUser?.role));
-
-  // Persisted on toggle rather than in an effect — this project's React 19
-  // lint rules reject setState-in-effect and render-phase writes.
+  const items = navItemsForRole(currentUser?.role);
   const [collapsed, setCollapsed] = useState(readCollapsed);
   const open = !collapsed;
 
@@ -80,12 +74,12 @@ export function Sidebar() {
 }
 
 function NavItem({ item, open }) {
-  const { label, path, icon: Icon } = item;
+  const { label, path, icon: Icon, section } = item;
 
   const link = (
     <NavLink
       to={path}
-      end={path === ROUTE_PATHS.DASHBOARD}
+      end={section === SECTION.DASHBOARD}
       className={({ isActive }) =>
         cn(
           'relative flex h-10 items-center rounded-md text-sm transition-colors',
@@ -117,7 +111,6 @@ function NavItem({ item, open }) {
     </NavLink>
   );
 
-  // Collapsed rail has no visible labels — surface them as tooltips instead.
   if (open) return link;
 
   return (
@@ -161,9 +154,6 @@ function initials(name) {
 function UserFooter({ open, user }) {
   const logout = useAuthStore((state) => state.logout);
   const navigate = useNavigate();
-
-  // Navigate as well as clear the session — a bare logout() would leave
-  // ProtectedRoute rendering "Not signed in" with no route back.
   const handleLogout = () => {
     logout();
     navigate(ROUTE_PATHS.LOGIN);

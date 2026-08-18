@@ -1,7 +1,5 @@
 import { Link } from 'react-router-dom';
-import SearchIcon from 'lucide-react/dist/esm/icons/search.mjs';
-import InboxIcon from 'lucide-react/dist/esm/icons/inbox.mjs';
-
+import { SearchIcon, InboxIcon } from 'lucide-react';
 import { Breadcrumb } from '@/components/common/Breadcrumb';
 import { PageHeader } from '@/components/common/PageHeader';
 import { EmptyState } from '@/components/common/EmptyState';

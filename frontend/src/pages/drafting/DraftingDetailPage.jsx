@@ -12,10 +12,14 @@ import { useQueryCase } from '@/hooks/useQueryCase';
 import { useWorkflowStore } from '@/store/useWorkflowStore';
 import { WORKFLOW_ACTION } from '@/constants/workflowRules';
 import { WORKFLOW_STATE } from '@/constants/statusEnums';
-import { ROUTE_PATHS } from '@/constants/routePaths';
+import { useRoutePaths } from '@/hooks/useRoutePaths';
+import { useWorkflowAction } from '@/hooks/useWorkflowAction';
+import { ActionError } from '@/components/workflow/ActionError';
 
 export function DraftingDetailPage() {
+  const paths = useRoutePaths();
   const { queryId, query, versions, latestVersion, reviews, currentUser, can } = useQueryCase();
+  const { run, error, clearError } = useWorkflowAction();
   const generateAiDraft = useWorkflowStore((state) => state.generateAiDraft);
   const saveDraftVersion = useWorkflowStore((state) => state.saveDraftVersion);
   const submitForReview = useWorkflowStore((state) => state.submitForReview);
@@ -32,14 +36,17 @@ export function DraftingDetailPage() {
     <div>
       <Breadcrumb
         items={[
-          { label: 'Dashboard', path: ROUTE_PATHS.DASHBOARD },
-          { label: 'Drafting', path: ROUTE_PATHS.DRAFTING },
+          { label: 'Dashboard', path: paths.DASHBOARD },
+          { label: 'Drafting', path: paths.DRAFTING },
           { label: query.queryId },
         ]}
       />
 
       <CaseSummaryBar query={query} />
 
+
+
+      <ActionError message={error} onDismiss={clearError} />
       {wasReturned && latestReturn && (
         <div className="mb-6 rounded-md border border-status-orange-line bg-status-orange-bg px-4 py-3 text-sm text-status-orange-fg">
           <p className="font-medium">Returned for revision</p>
@@ -78,7 +85,7 @@ export function DraftingDetailPage() {
               {can(WORKFLOW_ACTION.SAVE_DRAFT) ? (
                 <div className="flex flex-wrap gap-2">
                   {can(WORKFLOW_ACTION.GENERATE_AI_DRAFT) && (
-                    <Button variant="secondary" onClick={() => generateAiDraft(queryId, currentUser)}>
+                    <Button variant="secondary" onClick={() => run(() => generateAiDraft(queryId, currentUser))}>
                       <SparklesIcon className="h-4 w-4" aria-hidden="true" />
                       Generate AI draft
                     </Button>
@@ -102,7 +109,7 @@ export function DraftingDetailPage() {
                       variant="secondary"
                       disabled={isDirty}
                       title={isDirty ? 'Save your changes as a version first' : undefined}
-                      onClick={() => submitForReview(queryId, currentUser)}
+                      onClick={() => run(() => submitForReview(queryId, currentUser))}
                     >
                       Submit for review
                     </Button>

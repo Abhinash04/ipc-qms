@@ -1,11 +1,8 @@
 import { cva } from "class-variance-authority";
-
-import { cn } from "@/lib/utils";
+import { cn } from "@/utils/cn";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-
-// Import split components to keep single-responsibility / avoid no-multi-comp warnings
 import { InputGroupAddon } from "./input-group-addon";
 
 function InputGroup({

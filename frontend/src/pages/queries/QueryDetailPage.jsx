@@ -5,11 +5,13 @@ import { EmptyState } from '@/components/common/EmptyState';
 import { CaseSummaryBar } from '@/components/workflow/CaseSummaryBar';
 import { WorkflowTimeline } from '@/components/workflow/WorkflowTimeline';
 import { WorkflowActionsCard } from '@/components/workflow/WorkflowActionsCard';
+import { EmailThread } from '@/components/email/EmailThread';
+import { AiSummaryCard } from '@/components/ai/AiSummaryCard';
 import { Card, CardBody, CardHeader } from '@/components/ui/card';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
 import { useQueryCase } from '@/hooks/useQueryCase';
-import { ROUTE_PATHS } from '@/constants/routePaths';
+import { useRoutePaths } from '@/hooks/useRoutePaths';
 
 function InfoRow({ label, value }) {
   return (
@@ -21,7 +23,9 @@ function InfoRow({ label, value }) {
 }
 
 export function QueryDetailPage() {
-  const { queryId, query, steps, versions, latestVersion, audit, currentStep } = useQueryCase();
+  const paths = useRoutePaths();
+  const { queryId, query, steps, versions, latestVersion, audit, messages, currentStep } =
+    useQueryCase();
 
   if (!query) {
     return (
@@ -36,8 +40,8 @@ export function QueryDetailPage() {
     <div>
       <Breadcrumb
         items={[
-          { label: 'Dashboard', path: ROUTE_PATHS.DASHBOARD },
-          { label: 'Queries', path: ROUTE_PATHS.QUERIES },
+          { label: 'Dashboard', path: paths.DASHBOARD },
+          { label: 'Queries', path: paths.QUERIES },
           { label: query.queryId },
         ]}
       />
@@ -54,6 +58,10 @@ export function QueryDetailPage() {
               <WorkflowTimeline steps={steps} currentStepId={currentStep?.stepId} />
             </CardBody>
           </Card>
+
+          <AiSummaryCard summary={query.aiSummary} />
+
+          <EmailThread messages={messages} />
 
           <Card className="overflow-hidden py-3">
             <Tabs defaultValue="draft">
@@ -155,23 +163,23 @@ export function QueryDetailPage() {
 
       <p className="mt-4 text-xs text-muted-foreground">
         Stage-specific actions also live on their dedicated pages —{' '}
-        <Link to={ROUTE_PATHS.ASSIGNMENTS} className="text-ring hover:underline">
+        <Link to={paths.ASSIGNMENTS} className="text-ring hover:underline">
           Assignments
         </Link>
         ,{' '}
-        <Link to={ROUTE_PATHS.DRAFTING} className="text-ring hover:underline">
+        <Link to={paths.DRAFTING} className="text-ring hover:underline">
           Drafting
         </Link>
         ,{' '}
-        <Link to={ROUTE_PATHS.REVIEWS} className="text-ring hover:underline">
+        <Link to={paths.REVIEWS} className="text-ring hover:underline">
           Reviews
         </Link>
         ,{' '}
-        <Link to={ROUTE_PATHS.APPROVALS} className="text-ring hover:underline">
+        <Link to={paths.APPROVALS} className="text-ring hover:underline">
           Approvals
         </Link>
         ,{' '}
-        <Link to={ROUTE_PATHS.DISPATCH} className="text-ring hover:underline">
+        <Link to={paths.DISPATCH} className="text-ring hover:underline">
           Dispatch
         </Link>
         .

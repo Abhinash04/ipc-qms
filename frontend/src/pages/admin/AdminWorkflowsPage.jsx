@@ -2,12 +2,13 @@ import { WorkflowIcon } from 'lucide-react';
 import { PageHeader } from '@/components/common/PageHeader';
 import { Breadcrumb } from '@/components/common/Breadcrumb';
 import { EmptyState } from '@/components/common/EmptyState';
-import { ROUTE_PATHS } from '@/constants/routePaths';
+import { useRoutePaths } from '@/hooks/useRoutePaths';
 
 export function AdminWorkflowsPage() {
+  const paths = useRoutePaths();
   return (
     <div>
-      <Breadcrumb items={[{ label: 'Dashboard', path: ROUTE_PATHS.DASHBOARD }, { label: 'Admin', path: ROUTE_PATHS.ADMIN }, { label: 'Workflows' }]} />
+      <Breadcrumb items={[{ label: 'Dashboard', path: paths.DASHBOARD }, { label: 'Admin', path: paths.ADMINISTRATION }, { label: 'Workflows' }]} />
       <PageHeader title="Workflows" purpose="Configure dynamic review-level templates for query categories." />
       <EmptyState
         icon={WorkflowIcon}

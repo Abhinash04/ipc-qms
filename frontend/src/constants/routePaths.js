@@ -1,39 +1,40 @@
+import { ROLES } from './roles';
+import { SECTIONS } from './routeSections';
+import { ROLE_SLUG, sectionsForRole } from './permissions';
+
 export const ROUTE_PATHS = {
   LOGIN: '/login',
-
-  DASHBOARD: '/dashboard',
-
-  QUERIES: '/queries',
-  QUERY_DETAIL: '/queries/:queryId',
-
-  MY_WORK: '/my-work',
-
-  ASSIGNMENTS: '/assignments',
-  ASSIGNMENT_DETAIL: '/assignments/:queryId',
-
-  DRAFTING: '/drafting',
-  DRAFTING_DETAIL: '/drafting/:queryId',
-
-  REVIEWS: '/reviews',
-  REVIEW_DETAIL: '/reviews/:queryId',
-
-  APPROVALS: '/approvals',
-  APPROVAL_DETAIL: '/approvals/:queryId',
-
-  DISPATCH: '/dispatch',
-  DISPATCH_DETAIL: '/dispatch/:queryId',
-
-  NOTIFICATIONS: '/notifications',
-
-  ADMIN: '/admin',
-  ADMIN_USERS: '/admin/users',
-  ADMIN_ROLES: '/admin/roles',
-  ADMIN_DIVISIONS: '/admin/divisions',
-  ADMIN_WORKFLOWS: '/admin/workflows',
-  ADMIN_CATEGORIES: '/admin/categories',
-
-  REPORTS: '/reports',
 };
+
+export { ROLE_SLUG };
+
+export function sectionPath(role, section) {
+  const slug = ROLE_SLUG[role];
+  if (!slug) return ROUTE_PATHS.LOGIN;
+  return `/${slug}/${SECTIONS[section].segment}`;
+}
+
+function buildPathsForRole(role) {
+  const paths = {};
+  for (const section of sectionsForRole(role)) {
+    paths[section] = sectionPath(role, section);
+  }
+  return Object.freeze(paths);
+}
+
+export const PATHS_BY_ROLE = Object.freeze(
+  Object.fromEntries(Object.values(ROLES).map((role) => [role, buildPathsForRole(role)])),
+);
+
+export const NO_PATHS = Object.freeze({});
+
+export function pathsForRole(role) {
+  return PATHS_BY_ROLE[role] || NO_PATHS;
+}
+
+export function roleHome(role) {
+  return PATHS_BY_ROLE[role]?.DASHBOARD || ROUTE_PATHS.LOGIN;
+}
 
 export function buildPath(template, params = {}) {
   return Object.entries(params).reduce(

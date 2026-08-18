@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import SparklesIcon from 'lucide-react/dist/esm/icons/sparkles.mjs';
-
 import { Breadcrumb } from '@/components/common/Breadcrumb';
 import { EmptyState } from '@/components/common/EmptyState';
 import { CaseSummaryBar } from '@/components/workflow/CaseSummaryBar';
@@ -12,35 +11,43 @@ import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@
 import { useQueryCase } from '@/hooks/useQueryCase';
 import { useWorkflowStore } from '@/store/useWorkflowStore';
 import { WORKFLOW_ACTION } from '@/constants/workflowRules';
-import { AI_ASSIGNMENT_RECOMMENDATION } from '@/constants/mockDomain';
 import { MOCK_USERS, findUserById } from '@/constants/mockUsers';
 import { ROLES, ROLE_LABELS } from '@/constants/roles';
-import { ROUTE_PATHS } from '@/constants/routePaths';
+import { useRoutePaths } from '@/hooks/useRoutePaths';
+import { useWorkflowAction } from '@/hooks/useWorkflowAction';
+import { ActionError } from '@/components/workflow/ActionError';
 
 const ELIGIBLE_ASSIGNEES = MOCK_USERS.filter((u) => u.role === ROLES.ASSIGNED_OFFICIAL);
 
 export function AssignmentDetailPage() {
+  const paths = useRoutePaths();
   const { queryId, query, currentUser, assignee, can } = useQueryCase();
+  const { run, error, clearError } = useWorkflowAction();
   const assignQuery = useWorkflowStore((state) => state.assignQuery);
+  const recommendAssigneeFor = useWorkflowStore((state) => state.recommendAssigneeFor);
   const [override, setOverride] = useState('');
 
   if (!query) return <EmptyState title="Query not found" />;
 
-  const recommended = findUserById(AI_ASSIGNMENT_RECOMMENDATION.recommendedUserId);
+  const recommendation = recommendAssigneeFor(queryId);
+  const recommended = recommendation ? findUserById(recommendation.userId) : null;
   const canAssign = can(WORKFLOW_ACTION.ASSIGN);
 
   return (
     <div>
       <Breadcrumb
         items={[
-          { label: 'Dashboard', path: ROUTE_PATHS.DASHBOARD },
-          { label: 'Assignments', path: ROUTE_PATHS.ASSIGNMENTS },
+          { label: 'Dashboard', path: paths.DASHBOARD },
+          { label: 'Assignments', path: paths.ASSIGNMENTS },
           { label: query.queryId },
         ]}
       />
 
       <CaseSummaryBar query={query} />
 
+
+
+      <ActionError message={error} onDismiss={clearError} />
       <Card>
         <CardHeader className="flex items-center gap-2">
           <SparklesIcon className="h-4 w-4 text-status-indigo-fg" aria-hidden="true" />
@@ -53,13 +60,12 @@ export function AssignmentDetailPage() {
               <p className="text-base font-semibold text-foreground">{recommended?.name}</p>
             </div>
             <Badge variant="status-indigo" className="text-sm">
-              {AI_ASSIGNMENT_RECOMMENDATION.matchPercent}% match
+              {recommendation?.matchPercent ?? 0}% match
             </Badge>
           </div>
 
           <p className="text-sm text-muted-foreground">
-            {AI_ASSIGNMENT_RECOMMENDATION.reason} Considered:{' '}
-            {AI_ASSIGNMENT_RECOMMENDATION.factors.join(', ').toLowerCase()}.
+            {recommendation?.reason}
           </p>
 
           {assignee && (
@@ -74,7 +80,7 @@ export function AssignmentDetailPage() {
 
           {canAssign ? (
             <div className="space-y-3 pt-1">
-              <Button onClick={() => assignQuery(queryId, recommended.id, currentUser)}>
+              <Button onClick={() => run(() => assignQuery(queryId, recommended.id, currentUser))}>
                 Accept recommendation — assign {recommended?.name}
               </Button>
 
@@ -96,7 +102,7 @@ export function AssignmentDetailPage() {
                   <Button
                     variant="secondary"
                     disabled={!override}
-                    onClick={() => assignQuery(queryId, override, currentUser)}
+                    onClick={() => run(() => assignQuery(queryId, override, currentUser))}
                   >
                     Assign
                   </Button>

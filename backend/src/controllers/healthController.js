@@ -1,4 +1,4 @@
-const HTTP_STATUS = require('../constants/httpStatus');
+import HTTP_STATUS from '../constants/httpStatus.js';
 
 function getHealth(req, res) {
   res.status(HTTP_STATUS.OK).json({
@@ -8,4 +8,4 @@ function getHealth(req, res) {
   });
 }
 
-module.exports = { getHealth };
+export { getHealth };

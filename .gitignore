@@ -12,5 +12,13 @@ frontend/dist/
 backend/node_modules/
 backend/.env
 
+credentials.json
+token.json
+*-credentials.json
+*-token.json
+*service-account*.json
+*.pem
+*.p12
+
 *.log
 .DS_Store

@@ -13,16 +13,19 @@ initial-foundation scope (see [docs/srs/01-introduction.md](./srs/01-introductio
 
 | Area | Status | Notes |
 | --- | --- | --- |
-| Frontend shell & routing | ✅ Done | 23 routes, role-gated nav, all render — see §Repository Map. |
+| Frontend shell & routing | ✅ Done | Role-namespaced routes (`/<role-slug>/<section>`), generated from the RBAC grant table; nav derived from the same table. See `docs/architecture/frontend-architecture.md`. |
 | Design system | ✅ Done | DM Sans + "MiniMax Bold" identity, see §Design System below. |
-| Mock data & RBAC (display-only) | ✅ Done | 8 mock users, 6 roles, 1 canonical mock query (`QRY-2026-00427`). |
+| Mock data & RBAC (display-only) | ✅ Done | 8 mock users, 6 roles. |
 | Backend health endpoint | ✅ Done | `GET /api/v1/health`. |
-| Backend actually runnable | ❌ **Broken** | See §Known Issues — fix before anything else backend-related. |
-| Real authentication | ❌ Not started | App boots into a hardcoded mock session. |
-| Database (PostgreSQL) | ❌ Not started | `backend/src/models/` and `services/` are empty by design. |
-| Workflow state-transition engine | ❌ Not started | All "action" buttons in the UI are disabled placeholders. |
-| AI integration (assignment/drafting) | ❌ Not started | UI shows the SRS example content as static mock only. |
-| Email integration | ❌ Not started | No ingestion or dispatch wired to anything real. |
+| Backend actually runnable | ✅ Done | Backend is **ESM throughout** (`"type": "module"`), matching the frontend; `npm run dev` starts cleanly. |
+| Backend test harness | ✅ Done | vitest + supertest, `npm test`. |
+| Workflow state-transition engine | ✅ Done | Live Zustand + Dexie engine; single-writer `applyTransition` guarantees an audit event per transition. |
+| Persistence | ✅ Done | Dexie/IndexedDB (frontend). PostgreSQL still not started — `backend/src/models/` remains empty by design. |
+| Real authentication | 🟡 Mock | Login form validates against `MOCK_USERS` + one shared dev password, then lands on the role's own dashboard. Session id persists in `localStorage`. No token, no hashing — `LoginPage` + `useAuthStore` are the swap points for the real thing. |
+| AI integration (summary/assignment/drafting) | 🟡 Mock | `services/ai/mockAiService.js` — outputs derived from each query's own content, behind a swappable interface. No real LLM. |
+| Email integration | ✅ Done (mock) | Enquiry → mailbox → ingestion → acknowledgement → dispatched response, all on one thread. Real Gmail send is **NOT VERIFIED** pending the manual test in `docs/EMAIL_MANUAL_TEST.md`. |
+| Full query lifecycle | ✅ Done | Email → case → verify → assign → draft → dynamic review → revision → final approval → dispatch → CLOSED. |
+| Workflow validation | ✅ Done | Every transition validated centrally in the store (role + state); the UI gate is presentation only. |
 
 ## Getting Started
 
@@ -97,19 +100,22 @@ to ignore or adopt later, not currently imported anywhere.
 
 ## Known Issues (fix before next phase)
 
-1. **Backend cannot currently start.** `backend/src/server.js` uses ESM `import` syntax
-   (`import app from './app.js'`), but `backend/src/app.js` uses CommonJS (`require`/
-   `module.exports`), and `backend/package.json` has `"type": "commonjs"`. Running
-   `npm start` or `npm run dev` in `backend/` throws `SyntaxError: Cannot use import statement
-   outside a module` immediately. This was introduced by tooling outside this project's
-   control, not by any change described in this repo's history, and was out of scope to fix
-   during the frontend design pass. **Fix**: either change `server.js` back to
-   `const app = require('./app'); const env = require('./config/env');`, or convert the whole
-   backend to `"type": "module"` in `package.json` and rewrite `app.js` (and any future
-   backend files) to ESM `import`/`export` consistently. Pick one, not a mix.
-2. **`frontend/README.md` is still the unedited stock Vite template** — it was never updated
+1. **`frontend/README.md` is still the unedited stock Vite template** — it was never updated
    with QMS-specific content, unlike the root and `backend/README.md` (both accurate). Low
    priority, but worth replacing so `frontend/` doesn't mislead a reader who opens it directly.
+2. **The mock IPC mailbox is in-memory and does not survive a backend restart.** Query cases
+   persist in the browser's IndexedDB, but the mailbox does not — restarting the backend
+   empties the inbox while existing queries remain. This is a deliberate development-only
+   simplification, not a defect.
+3. **Several orphaned files** sit in `frontend/src/components/common/` (`AiGenerateButton`,
+   `CaseTimeline`, `ProgressRail`, `RoleGate`) with zero importers; the first three also
+   import a non-existent `@/lib/utils`. Unreferenced, so the build is unaffected.
+
+> Resolved previously: the backend ESM/CommonJS mismatch that prevented `npm run dev` from
+> starting has been fixed. The backend has since been migrated from CommonJS to **ES Modules**,
+> so both halves of the repo now use one module system; the test files no longer need a
+> `createRequire` bridge. The Gmail transport is still loaded lazily, now via dynamic `import()`,
+> so `googleapis` is not pulled in unless `EMAIL_TRANSPORT=gmail`.
 
 ## Git Status Caveat
 

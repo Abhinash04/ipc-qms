@@ -1,10 +1,12 @@
-import RotateCcwIcon from 'lucide-react/dist/esm/icons/rotate-ccw.mjs';
+import { useNavigate } from 'react-router-dom';
+import { RotateCcwIcon } from 'lucide-react';
 
+import { roleHome } from '@/constants/routePaths';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useWorkflowStore } from '@/store/useWorkflowStore';
 import { useHealthCheck } from '@/hooks/useHealthCheck';
 import { ROLE_LABELS, ROLES } from '@/constants/roles';
-import { MOCK_USERS } from '@/constants/mockUsers';
+import { MOCK_USERS, findUserById } from '@/constants/mockUsers';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select';
@@ -14,9 +16,14 @@ const SWITCHABLE_USERS = MOCK_USERS.filter((user) => user.role !== ROLES.INQUIRE
 export function Header() {
   const currentUser = useAuthStore((state) => state.currentUser);
   const login = useAuthStore((state) => state.login);
+  const navigate = useNavigate();
   const resetDemo = useWorkflowStore((state) => state.resetDemo);
   const persistenceError = useWorkflowStore((state) => state.persistenceError);
   const { data, isLoading, isError } = useHealthCheck();
+  const switchUser = (userId) => {
+    login(userId);
+    navigate(roleHome(findUserById(userId)?.role));
+  };
 
   const status = isLoading ? 'checking' : isError ? 'offline' : data?.status === 'healthy' ? 'online' : 'offline';
   const statusVariant = status === 'online' ? 'status-green' : status === 'checking' ? 'status-gray' : 'status-red';
@@ -42,7 +49,7 @@ export function Header() {
           <label htmlFor="user-switcher" className="text-xs text-muted-foreground">
             Viewing as
           </label>
-          <Select id="user-switcher" value={currentUser?.id || ''} onValueChange={(id) => login(id)}>
+          <Select id="user-switcher" value={currentUser?.id || ''} onValueChange={switchUser}>
             <SelectTrigger className="w-56" size="sm">
               <SelectValue placeholder="Select a user" />
             </SelectTrigger>
