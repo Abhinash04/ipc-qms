@@ -3,15 +3,6 @@ import '@testing-library/jest-dom/vitest';
 import { afterEach, beforeEach, expect, vi } from 'vitest';
 import { cleanup } from '@testing-library/react';
 
-/**
- * Fail any test that logs a console error or warning.
- *
- * This is the point of the suite: React reports the "getSnapshot should be
- * cached" infinite-loop bug as a console error *before* it escalates to a
- * thrown exception, and a plain "did it render" assertion would pass right up
- * until the render depth limit is hit. Treating console noise as a failure is
- * what makes these smoke tests actually catch unstable-selector regressions.
- */
 let consoleError;
 let consoleWarn;
 const captured = [];
