@@ -3,10 +3,15 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import { MainLayout } from '@/layouts/MainLayout';
 import { AuthLayout } from '@/layouts/AuthLayout';
 import { ProtectedRoute } from '@/routes/ProtectedRoute';
-import { ROUTE_PATHS } from '@/constants/routePaths';
+import { SECTION } from '@/constants/routeSections';
+import { ROUTE_PATHS, roleHome } from '@/constants/routePaths';
+import { ROLE_ROUTES } from '@/routes/roleRoutes';
+import { useAuthStore } from '@/store/useAuthStore';
 
 import { LoginPage } from '@/pages/auth/LoginPage';
 import { DashboardPage } from '@/pages/dashboard/DashboardPage';
+import { ComposeEnquiryPage } from '@/pages/inquirer/ComposeEnquiryPage';
+import { MailboxInboxPage } from '@/pages/frontOffice/MailboxInboxPage';
 import { QueriesListPage } from '@/pages/queries/QueriesListPage';
 import { QueryDetailPage } from '@/pages/queries/QueryDetailPage';
 import { MyWorkPage } from '@/pages/myWork/MyWorkPage';
@@ -29,10 +34,40 @@ import { AdminDivisionsPage } from '@/pages/admin/AdminDivisionsPage';
 import { AdminWorkflowsPage } from '@/pages/admin/AdminWorkflowsPage';
 import { AdminCategoriesPage } from '@/pages/admin/AdminCategoriesPage';
 
+const SECTION_ELEMENT = {
+  [SECTION.DASHBOARD]: <DashboardPage />,
+  [SECTION.COMPOSE]: <ComposeEnquiryPage />,
+  [SECTION.INBOX]: <MailboxInboxPage />,
+  [SECTION.QUERIES]: <QueriesListPage />,
+  [SECTION.QUERY_DETAIL]: <QueryDetailPage />,
+  [SECTION.MY_WORK]: <MyWorkPage />,
+  [SECTION.ASSIGNMENTS]: <AssignmentsListPage />,
+  [SECTION.ASSIGNMENT_DETAIL]: <AssignmentDetailPage />,
+  [SECTION.DRAFTING]: <DraftingListPage />,
+  [SECTION.DRAFTING_DETAIL]: <DraftingDetailPage />,
+  [SECTION.REVIEWS]: <ReviewsListPage />,
+  [SECTION.REVIEW_DETAIL]: <ReviewDetailPage />,
+  [SECTION.APPROVALS]: <ApprovalsListPage />,
+  [SECTION.APPROVAL_DETAIL]: <ApprovalDetailPage />,
+  [SECTION.DISPATCH]: <DispatchListPage />,
+  [SECTION.DISPATCH_DETAIL]: <DispatchDetailPage />,
+  [SECTION.NOTIFICATIONS]: <NotificationsPage />,
+  [SECTION.REPORTS]: <ReportsPage />,
+  [SECTION.ADMINISTRATION]: <AdminOverviewPage />,
+  [SECTION.USERS]: <AdminUsersPage />,
+  [SECTION.ROLES_DIRECTORY]: <AdminRolesPage />,
+  [SECTION.DIVISIONS]: <AdminDivisionsPage />,
+  [SECTION.WORKFLOWS]: <AdminWorkflowsPage />,
+  [SECTION.CATEGORIES]: <AdminCategoriesPage />,
+};
+
 export function AppRoutes() {
+  const currentUser = useAuthStore((state) => state.currentUser);
+  const home = currentUser ? roleHome(currentUser.role) : ROUTE_PATHS.LOGIN;
+
   return (
     <Routes>
-      <Route path="/" element={<Navigate to={ROUTE_PATHS.DASHBOARD} replace />} />
+      <Route path="/" element={<Navigate to={home} replace />} />
 
       <Route element={<AuthLayout />}>
         <Route path={ROUTE_PATHS.LOGIN} element={<LoginPage />} />
@@ -45,37 +80,9 @@ export function AppRoutes() {
           </ProtectedRoute>
         }
       >
-        <Route path={ROUTE_PATHS.DASHBOARD} element={<DashboardPage />} />
-
-        <Route path={ROUTE_PATHS.QUERIES} element={<QueriesListPage />} />
-        <Route path={ROUTE_PATHS.QUERY_DETAIL} element={<QueryDetailPage />} />
-
-        <Route path={ROUTE_PATHS.MY_WORK} element={<MyWorkPage />} />
-
-        <Route path={ROUTE_PATHS.ASSIGNMENTS} element={<AssignmentsListPage />} />
-        <Route path={ROUTE_PATHS.ASSIGNMENT_DETAIL} element={<AssignmentDetailPage />} />
-
-        <Route path={ROUTE_PATHS.DRAFTING} element={<DraftingListPage />} />
-        <Route path={ROUTE_PATHS.DRAFTING_DETAIL} element={<DraftingDetailPage />} />
-
-        <Route path={ROUTE_PATHS.REVIEWS} element={<ReviewsListPage />} />
-        <Route path={ROUTE_PATHS.REVIEW_DETAIL} element={<ReviewDetailPage />} />
-
-        <Route path={ROUTE_PATHS.APPROVALS} element={<ApprovalsListPage />} />
-        <Route path={ROUTE_PATHS.APPROVAL_DETAIL} element={<ApprovalDetailPage />} />
-
-        <Route path={ROUTE_PATHS.DISPATCH} element={<DispatchListPage />} />
-        <Route path={ROUTE_PATHS.DISPATCH_DETAIL} element={<DispatchDetailPage />} />
-
-        <Route path={ROUTE_PATHS.NOTIFICATIONS} element={<NotificationsPage />} />
-        <Route path={ROUTE_PATHS.REPORTS} element={<ReportsPage />} />
-
-        <Route path={ROUTE_PATHS.ADMIN} element={<AdminOverviewPage />} />
-        <Route path={ROUTE_PATHS.ADMIN_USERS} element={<AdminUsersPage />} />
-        <Route path={ROUTE_PATHS.ADMIN_ROLES} element={<AdminRolesPage />} />
-        <Route path={ROUTE_PATHS.ADMIN_DIVISIONS} element={<AdminDivisionsPage />} />
-        <Route path={ROUTE_PATHS.ADMIN_WORKFLOWS} element={<AdminWorkflowsPage />} />
-        <Route path={ROUTE_PATHS.ADMIN_CATEGORIES} element={<AdminCategoriesPage />} />
+        {ROLE_ROUTES.map(({ path, section }) => (
+          <Route key={path} path={path} element={SECTION_ELEMENT[section]} />
+        ))}
       </Route>
     </Routes>
   );

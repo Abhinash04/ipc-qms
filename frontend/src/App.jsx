@@ -2,11 +2,6 @@ import { BrowserRouter } from 'react-router-dom';
 import { AppRoutes } from '@/routes/AppRoutes';
 import { useWorkflowStore } from '@/store/useWorkflowStore';
 
-/**
- * Gate rendering until IndexedDB has been read. Without this the first paint
- * would show the in-memory seed and a user could act on stale state before
- * their persisted progress loads.
- */
 function HydrationGate({ children }) {
   const hydrated = useWorkflowStore((state) => state.hydrated);
 

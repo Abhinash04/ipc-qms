@@ -11,9 +11,6 @@ import { useWorkflowStore } from '@/store/useWorkflowStore'
 
 const queryClient = new QueryClient()
 
-// Load the workflow domain from IndexedDB (seeding it on first run) before the
-// app paints. Kicked off at module scope rather than in an effect so it runs
-// exactly once, including under StrictMode's double-invoke in development.
 useWorkflowStore.getState().hydrate()
 
 createRoot(document.getElementById('root')).render(
