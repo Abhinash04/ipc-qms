@@ -8,18 +8,18 @@ import { Badge } from '@/components/ui/badge';
 import { useWorkflowStore } from '@/store/useWorkflowStore';
 import { useAuthStore } from '@/store/useAuthStore';
 import { ROLE_LABELS } from '@/constants/roles';
-import { buildPath, ROUTE_PATHS } from '@/constants/routePaths';
+import { buildPath } from '@/constants/routePaths';
+import { useRoutePaths } from '@/hooks/useRoutePaths';
 
 export function NotificationsPage() {
+  const paths = useRoutePaths();
   const currentUser = useAuthStore((state) => state.currentUser);
   const notifications = useWorkflowStore((state) => state.notifications);
-
-  // Newest first; every workflow transition that names a recipient role emits one.
   const ordered = [...notifications].sort((a, b) => new Date(b.at) - new Date(a.at));
 
   return (
     <div>
-      <Breadcrumb items={[{ label: 'Dashboard', path: ROUTE_PATHS.DASHBOARD }, { label: 'Notifications' }]} />
+      <Breadcrumb items={[{ label: 'Dashboard', path: paths.DASHBOARD }, { label: 'Notifications' }]} />
       <PageHeader
         title="Notifications"
         purpose="Workflow events raised as the query moves. Delivery channels (email/in-app) to be confirmed with client."
@@ -44,7 +44,7 @@ export function NotificationsPage() {
                       </Badge>
                       {note.queryId && (
                         <Link
-                          to={buildPath(ROUTE_PATHS.QUERY_DETAIL, { queryId: note.queryId })}
+                          to={buildPath(paths.QUERY_DETAIL, { queryId: note.queryId })}
                           className="text-xs text-ring hover:underline"
                         >
                           {note.queryId}
@@ -61,8 +61,7 @@ export function NotificationsPage() {
           </ul>
         )}
         <CardBody className="border-t border-border text-xs text-muted-foreground">
-          Notifications are generated in-app as workflow transitions occur. Real delivery
-          infrastructure is not implemented — see docs/srs/10-notifications.md.
+          Notifications are generated in-app as workflow transitions occur. Real delivery infrastructure is not implemented — see docs/srs/10-notifications.md.
         </CardBody>
       </Card>
     </div>

@@ -9,7 +9,8 @@ import { useAuthStore } from '@/store/useAuthStore';
 import { useWorkflowStore } from '@/store/useWorkflowStore';
 import { ROLE_LABELS } from '@/constants/roles';
 import { WORKFLOW_STATE } from '@/constants/statusEnums';
-import { buildPath, ROUTE_PATHS } from '@/constants/routePaths';
+import { buildPath } from '@/constants/routePaths';
+import { useRoutePaths } from '@/hooks/useRoutePaths';
 
 const DRAFTING_STATES = [
   WORKFLOW_STATE.ASSIGNED,
@@ -18,6 +19,7 @@ const DRAFTING_STATES = [
 ];
 
 export function DashboardPage() {
+  const paths = useRoutePaths();
   const currentUser = useAuthStore((state) => state.currentUser);
   const queries = useWorkflowStore((state) => state.queries);
   const workflowSteps = useWorkflowStore((state) => state.workflowSteps);
@@ -44,7 +46,6 @@ export function DashboardPage() {
     },
   ];
 
-  // Everything currently sitting on this user, whether as assignee or step owner.
   const myQueue = queries.filter((q) => {
     if (q.currentAssigneeId === currentUser?.id) return true;
     const step = workflowSteps.find((s) => s.stepId === q.currentWorkflowStepId);
@@ -81,7 +82,7 @@ export function DashboardPage() {
                 <div key={query.queryId} className="flex items-center justify-between gap-4">
                   <div>
                     <Link
-                      to={buildPath(ROUTE_PATHS.QUERY_DETAIL, { queryId: query.queryId })}
+                      to={buildPath(paths.QUERY_DETAIL, { queryId: query.queryId })}
                       className="font-medium text-ring hover:underline"
                     >
                       {query.queryId}

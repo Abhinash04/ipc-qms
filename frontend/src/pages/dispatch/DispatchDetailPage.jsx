@@ -1,7 +1,4 @@
-import MailIcon from 'lucide-react/dist/esm/icons/mail.mjs';
-import PaperclipIcon from 'lucide-react/dist/esm/icons/paperclip.mjs';
-import SendIcon from 'lucide-react/dist/esm/icons/send.mjs';
-
+import {MailIcon, PaperclipIcon, SendIcon} from 'lucide-react';
 import { Breadcrumb } from '@/components/common/Breadcrumb';
 import { EmptyState } from '@/components/common/EmptyState';
 import { CaseSummaryBar } from '@/components/workflow/CaseSummaryBar';
@@ -11,10 +8,14 @@ import { useQueryCase } from '@/hooks/useQueryCase';
 import { useWorkflowStore } from '@/store/useWorkflowStore';
 import { WORKFLOW_ACTION } from '@/constants/workflowRules';
 import { WORKFLOW_STATE } from '@/constants/statusEnums';
-import { ROUTE_PATHS } from '@/constants/routePaths';
+import { useRoutePaths } from '@/hooks/useRoutePaths';
+import { useWorkflowAction } from '@/hooks/useWorkflowAction';
+import { ActionError } from '@/components/workflow/ActionError';
 
 export function DispatchDetailPage() {
+  const paths = useRoutePaths();
   const { queryId, query, latestVersion, currentUser, can } = useQueryCase();
+  const { run, error, clearError } = useWorkflowAction();
   const dispatchResponse = useWorkflowStore((state) => state.dispatchResponse);
 
   if (!query) return <EmptyState title="Query not found" />;
@@ -26,14 +27,17 @@ export function DispatchDetailPage() {
     <div>
       <Breadcrumb
         items={[
-          { label: 'Dashboard', path: ROUTE_PATHS.DASHBOARD },
-          { label: 'Dispatch', path: ROUTE_PATHS.DISPATCH },
+          { label: 'Dashboard', path: paths.DASHBOARD },
+          { label: 'Dispatch', path: paths.DISPATCH },
           { label: query.queryId },
         ]}
       />
 
       <CaseSummaryBar query={query} />
 
+
+
+      <ActionError message={error} onDismiss={clearError} />
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="space-y-6 lg:col-span-2">
           <Card>
@@ -104,7 +108,7 @@ export function DispatchDetailPage() {
                 </p>
               ) : canDispatch ? (
                 <>
-                  <Button className="w-full" onClick={() => dispatchResponse(queryId, currentUser)}>
+                  <Button className="w-full" onClick={() => run(() => dispatchResponse(queryId, currentUser))}>
                     <SendIcon className="h-4 w-4" aria-hidden="true" />
                     Send response
                   </Button>

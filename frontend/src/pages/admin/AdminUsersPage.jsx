@@ -6,12 +6,13 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@
 import { MOCK_USERS } from '@/constants/mockUsers';
 import { ROLE_LABELS } from '@/constants/roles';
 import { findDivisionById } from '@/constants/mockDivisions';
-import { ROUTE_PATHS } from '@/constants/routePaths';
+import { useRoutePaths } from '@/hooks/useRoutePaths';
 
 export function AdminUsersPage() {
+  const paths = useRoutePaths();
   return (
     <div>
-      <Breadcrumb items={[{ label: 'Dashboard', path: ROUTE_PATHS.DASHBOARD }, { label: 'Admin', path: ROUTE_PATHS.ADMIN }, { label: 'Users' }]} />
+      <Breadcrumb items={[{ label: 'Dashboard', path: paths.DASHBOARD }, { label: 'Admin', path: paths.ADMINISTRATION }, { label: 'Users' }]} />
       <PageHeader title="Users" purpose="Mock user directory — replace with API data once auth exists." />
       <Card className="overflow-hidden">
         <Table>

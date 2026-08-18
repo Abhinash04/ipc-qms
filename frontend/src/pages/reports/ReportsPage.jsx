@@ -5,7 +5,7 @@ import { StatTile } from '@/components/common/StatTile';
 import { EmptyState } from '@/components/common/EmptyState';
 import { useWorkflowStore } from '@/store/useWorkflowStore';
 import { WORKFLOW_STATE, BUSINESS_STATUS } from '@/constants/statusEnums';
-import { ROUTE_PATHS } from '@/constants/routePaths';
+import { useRoutePaths } from '@/hooks/useRoutePaths';
 
 const DRAFTING_STATES = [
   WORKFLOW_STATE.ASSIGNED,
@@ -14,6 +14,7 @@ const DRAFTING_STATES = [
 ];
 
 export function ReportsPage() {
+  const paths = useRoutePaths();
   const queries = useWorkflowStore((state) => state.queries);
 
   const kpis = [
@@ -37,7 +38,7 @@ export function ReportsPage() {
 
   return (
     <div>
-      <Breadcrumb items={[{ label: 'Dashboard', path: ROUTE_PATHS.DASHBOARD }, { label: 'Reports' }]} />
+      <Breadcrumb items={[{ label: 'Dashboard', path: paths.DASHBOARD }, { label: 'Reports' }]} />
       <PageHeader title="Reports" purpose="Operational metrics and exports. Required metrics to be confirmed with client." />
 
       <div className="mb-6 grid grid-cols-2 gap-4 sm:grid-cols-4">

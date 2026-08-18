@@ -3,12 +3,13 @@ import { Breadcrumb } from '@/components/common/Breadcrumb';
 import { Card } from '@/components/ui/card';
 import { MOCK_DIVISIONS } from '@/constants/mockDivisions';
 import { MOCK_USERS } from '@/constants/mockUsers';
-import { ROUTE_PATHS } from '@/constants/routePaths';
+import { useRoutePaths } from '@/hooks/useRoutePaths';
 
 export function AdminDivisionsPage() {
+  const paths = useRoutePaths();
   return (
     <div>
-      <Breadcrumb items={[{ label: 'Dashboard', path: ROUTE_PATHS.DASHBOARD }, { label: 'Admin', path: ROUTE_PATHS.ADMIN }, { label: 'Divisions' }]} />
+      <Breadcrumb items={[{ label: 'Dashboard', path: paths.DASHBOARD }, { label: 'Admin', path: paths.ADMINISTRATION }, { label: 'Divisions' }]} />
       <PageHeader title="Divisions" purpose="Organizational divisions and their assigned members." />
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         {MOCK_DIVISIONS.map((division) => {

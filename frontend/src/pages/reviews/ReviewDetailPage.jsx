@@ -15,12 +15,16 @@ import { useWorkflowStore } from '@/store/useWorkflowStore';
 import { WORKFLOW_ACTION } from '@/constants/workflowRules';
 import { MOCK_USERS, findUserById } from '@/constants/mockUsers';
 import { ROLES } from '@/constants/roles';
-import { ROUTE_PATHS } from '@/constants/routePaths';
+import { useRoutePaths } from '@/hooks/useRoutePaths';
+import { useWorkflowAction } from '@/hooks/useWorkflowAction';
+import { ActionError } from '@/components/workflow/ActionError';
 
 const ELIGIBLE_REVIEWERS = MOCK_USERS.filter((u) => u.role === ROLES.REVIEWER);
 
 export function ReviewDetailPage() {
+  const paths = useRoutePaths();
   const { queryId, query, steps, reviews, latestVersion, currentStep, currentUser, can } = useQueryCase();
+  const { run, error, clearError } = useWorkflowAction();
   const approveReview = useWorkflowStore((state) => state.approveReview);
   const requestRevision = useWorkflowStore((state) => state.requestRevision);
   const addReviewLevel = useWorkflowStore((state) => state.addReviewLevel);
@@ -45,14 +49,17 @@ export function ReviewDetailPage() {
     <div>
       <Breadcrumb
         items={[
-          { label: 'Dashboard', path: ROUTE_PATHS.DASHBOARD },
-          { label: 'Reviews', path: ROUTE_PATHS.REVIEWS },
+          { label: 'Dashboard', path: paths.DASHBOARD },
+          { label: 'Reviews', path: paths.REVIEWS },
           { label: query.queryId },
         ]}
       />
 
       <CaseSummaryBar query={query} />
 
+
+
+      <ActionError message={error} onDismiss={clearError} />
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="space-y-6 lg:col-span-2">
           <Card>
@@ -142,7 +149,7 @@ export function ReviewDetailPage() {
                   <Button
                     className="w-full"
                     onClick={() => {
-                      approveReview(queryId, comment, currentUser);
+                      run(() => approveReview(queryId, comment, currentUser));
                       setComment('');
                     }}
                   >
@@ -152,7 +159,7 @@ export function ReviewDetailPage() {
                     variant="secondary"
                     className="w-full"
                     onClick={() => {
-                      requestRevision(queryId, comment, currentUser);
+                      run(() => requestRevision(queryId, comment, currentUser));
                       setComment('');
                     }}
                   >
@@ -238,7 +245,7 @@ export function ReviewDetailPage() {
                       variant="secondary"
                       disabled={!newReviewer}
                       onClick={() => {
-                        addReviewLevel(queryId, newReviewer, currentUser);
+                        run(() => addReviewLevel(queryId, newReviewer, currentUser));
                         setNewReviewer('');
                       }}
                     >
@@ -250,8 +257,7 @@ export function ReviewDetailPage() {
               )}
 
               <p className="text-xs text-muted-foreground">
-                Only a PENDING level can be deleted — a completed review's decision is part of the
-                audit trail. Who may add or delete levels is a client clarification item.
+                Only a PENDING level can be deleted — a completed review's decision is part of the audit trail. Who may add or delete levels is a client clarification item.
               </p>
             </CardBody>
           </Card>
