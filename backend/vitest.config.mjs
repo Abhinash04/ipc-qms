@@ -7,23 +7,25 @@ export default defineConfig({
     include: ['src/**/*.test.js'],
     setupFiles: ['./src/test/setup.js'],
 
-    // Pin the email configuration for tests.
-    //
-    // `config/env.js` loads .env via dotenv, which does NOT overwrite variables
-    // already present in process.env — so setting them here wins. Without this
-    // the suite inherits whatever the developer last put in .env: switching
-    // EMAIL_TRANSPORT=gmail to run the manual Gmail test (docs/EMAIL_MANUAL_TEST.md)
-    // made the tests attempt real network sends and fail.
-    //
-    // Binding constraint: automated tests must never require real Gmail
-    // credentials and must never perform a network send. This is what enforces it.
     env: {
       NODE_ENV: 'test',
       EMAIL_TRANSPORT: 'mock',
       GMAIL_CLIENT_ID: '',
       GMAIL_CLIENT_SECRET: '',
-      GMAIL_REFRESH_TOKEN: '',
+      GMAIL_REFRESH_TOKEN_INQUIRER: '',
+      GMAIL_REFRESH_TOKEN_FRONT_OFFICE: '',
+      GMAIL_REFRESH_TOKEN_OFFICER_IN_CHARGE: '',
       DATABASE_URL: '',
+      MAILBOX_SOURCE: 'auto',
+      INQUIRER_NAME: 'Test Inquirer',
+      INQUIRER_EMAIL: 'inquirer@test.invalid',
+      FRONT_OFFICE_NAME: 'Test Front Officer',
+      FRONT_OFFICE_EMAIL: 'front-office@test.invalid',
+      OFFICER_IN_CHARGE_NAME: 'Test Officer',
+      OFFICER_IN_CHARGE_EMAIL: 'officer@test.invalid',
+      ASSIGNED_OFFICIAL_NAME: 'Test Assigned Official',
+      ASSIGNED_OFFICIAL_EMAIL: 'assigned-official@test.invalid',
+      GMAIL_REFRESH_TOKEN_ASSIGNED_OFFICIAL: '',
     },
   },
 });

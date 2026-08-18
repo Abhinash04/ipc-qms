@@ -1,121 +1,189 @@
-# Manual Email Test Procedure
+# Manual Email Test Procedure — four real Gmail accounts
 
-Two things in this system cannot be proven by the automated suite, and this document is how you prove them yourself:
+Two things cannot be proven by the automated suite, and this document is how you prove them:
 
-1. **The real Gmail send** — automated tests never touch it and never require credentials.
+1. **Real Gmail sends from four different accounts** — tests never touch Gmail and never require a
+   credential.
 2. **The end-to-end workflow in a browser** — the suite drives the engine directly.
 
 ---
 
-## Before you start
+## Who is real, who is mock
 
-```bash
-cd backend  && npm start      # terminal 1 — must print "listening on port 5000"
-cd frontend && npm run dev    # terminal 2 — http://localhost:5173
+| Role              | Person               | Address                     | Sends real mail |
+| ----------------- | -------------------- | --------------------------- | --------------- |
+| Inquirer          | Abhinash Pritiraj    | abhinash.pritiraj@gmail.com | yes             |
+| Front Office      | Bhumika Makker       | bhoomikamakker@gmail.com    | yes             |
+| Officer-in-Charge | Jatin Rawat          | rawatjatin436@gmail.com     | yes             |
+| Assigned Official | **Rawat Jatin**      | jatinrawat55361@gmail.com   | yes             |
+| Assigned Official | Neha Singh           | neha.singh@ipc.example      | no — mock       |
+| Reviewer I        | Amit Mehta           | amit.mehta@ipc.example      | no — mock       |
+| Reviewer II       | Kavita Rao           | kavita.rao@ipc.example      | no — mock       |
+| Admin             | Suresh Gupta         | suresh.gupta@ipc.example    | no — mock       |
+| Super Admin       | System Administrator | admin@ipc.example           | no — mock       |
+
+Mock login password for every user: **`ipc@1234`**. The login page lists them all with a
+**Use Credentials** button.
+
+> **Two similar names, two different people.** _Jatin Rawat_ `rawatjatin436@gmail.com` is the
+> Officer-in-Charge; _Rawat Jatin_ `jatinrawat55361@gmail.com` is the Assigned Official. They are
+> separate accounts with separate roles — the address tells them apart, never the display name.
+>
+> The Assigned Official role holds **two** users: Rawat (real) and Neha Singh (mock). Whether a
+> message is really sent is decided by the acting user's own address, so Neha's actions are never
+> sent from Rawat's Gmail account.
+
+---
+
+## Why each account needs its own authorisation
+
+A Gmail refresh token authenticates **exactly one account**, and the Gmail API sends as the
+authenticated account **regardless of the `From:` header**. There is no header trick that makes
+Abhinash's token send as Bhumika — the recipient would still see Abhinash.
+
+So each of the four people must authorise their own account. A role with no token falls back to
+the mock transport; **no other account is ever used on its behalf**, so the sender the QMS records
+is always the sender Gmail actually used.
+
+`npm run gmail:preflight` enforces this: it fails if any token authenticates as an address other
+than the one configured for that role.
+
+---
+
+## Part 0 — one-time setup (per account)
+
+For **each** of the four people, with that person signed in to Gmail:
+
+1. Open <https://developers.google.com/oauthplayground>.
+2. Gear icon → tick **Use your own OAuth credentials**, paste the shared `GMAIL_CLIENT_ID` and
+   `GMAIL_CLIENT_SECRET`.
+3. Authorise these scopes:
+   - everyone: `https://www.googleapis.com/auth/gmail.send`
+   - **Bhumika only, additionally**: `https://www.googleapis.com/auth/gmail.modify`
+4. Exchange the authorisation code for tokens, copy the **refresh token**.
+5. Paste it into `backend/.env`:
+
+```env
+GMAIL_REFRESH_TOKEN_INQUIRER=...
+GMAIL_REFRESH_TOKEN_FRONT_OFFICE=...
+GMAIL_REFRESH_TOKEN_OFFICER_IN_CHARGE=...
+GMAIL_REFRESH_TOKEN_ASSIGNED_OFFICIAL=...
 ```
 
-Mock login password for every development user: **`ipc@1234`**. The login page lists them all with
-a **Use Credentials** button.
+> **Privacy — read before authorising Bhumika's account.** `gmail.modify` lets the QMS **read her
+> entire inbox**, not only IPC correspondence, and mark messages as read. That access is what makes
+> "the query case is created from the email that actually arrived" true. It is a real grant on a
+> real personal account and needs her informed agreement. If that is not acceptable, leave
+> `MAILBOX_SOURCE=auto`: sends stay real, but enquiries are registered from the local mailbox
+> instead of from her inbox.
 
-| Who                  | Email                       | Role              |
-| ----------------------| -----------------------------| -------------------|
-| Abhinash Pritiraj    | abhinash.pritiraj@gmail.com | Inquirer          |
-| Priya Sharma         | priya.sharma@ipc.example    | Front Office      |
-| Anil Verma           | anil.verma@ipc.example      | Officer-in-Charge |
-| Neha Singh           | neha.singh@ipc.example      | Assigned Official |
-| Amit Mehta           | amit.mehta@ipc.example      | Reviewer          |
-| Kavita Rao           | kavita.rao@ipc.example      | Reviewer          |
-| Suresh Gupta         | suresh.gupta@ipc.example    | Admin             |
-| System Administrator | admin@ipc.example           | Super Admin       |
+`backend/.env` is gitignored. Never commit a token, a client secret, or a password.
 
-To start from nothing: **Reset demo data** in the header clears the workflow domain, and
-`curl -X DELETE http://localhost:5000/api/v1/mailbox` clears the IPC mailbox.
-
----
-
-## Part 1 — Full workflow walkthrough (mock transport, nothing leaves the machine)
-
-| # | Sign in as | Do this | Expect |
-| --- | --- | --- | --- |
-| 1 | Abhinash Pritiraj | **Raise Enquiry** → fill subject + message → Send | "Enquiry sent" with a provider message id. A blue banner states the mock transport sends nothing over the internet. |
-| 2 | Priya Sharma | **IPC Mailbox** → Check IPC mailbox | The message is listed and now shows a Query ID. `QRY-2026-00001` is created and acknowledged. |
-| 3 | Priya Sharma | Open the query → Verify query details | State moves to `FRONT_OFFICE_VERIFICATION`. |
-| 4 | Priya Sharma | Forward to Officer-in-Charge | State `PENDING_ASSIGNMENT`. |
-| 5 | Anil Verma | **Assignments** → open the case | An AI recommendation with a match percent and a reason drawn from *this* enquiry. |
-| 6 | Anil Verma | Accept the recommendation (or override) | State `ASSIGNED`. An override is recorded as its own audit event. |
-| 7 | Neha Singh | **Drafting** → Start drafting | An AI first draft that answers the points the inquirer actually listed. |
-| 8 | Neha Singh | Edit the text → Save | A new version (`v2`); `v1` is retained. |
-| 9 | Neha Singh | Add a review level (choose a reviewer) → Submit for review | State `UNDER_REVIEW`. |
-| 10 | Amit Mehta | **Reviews** → Request changes | State `RETURNED_FOR_REVISION`, back to Neha. |
-| 11 | Neha Singh | Revise → Submit again | Returns to the same review level. |
-| 12 | Amit Mehta | Approve | State `PENDING_FINAL_APPROVAL` (or the next review level, if you added more). |
-| 13 | Anil Verma | **Approvals** → Grant final approval | State `READY_FOR_DISPATCH`; the approved version is locked. |
-| 14 | Priya Sharma | **Dispatch** → Dispatch response | The response email is recorded on the same thread; state `DISPATCHED` then `CLOSED`. |
-| 15 | anyone with access | Open the case | Email thread shows enquiry → acknowledgement → response. Audit history shows every step. |
-
-**Things worth trying deliberately:**
-
-- Paste another role's URL (e.g. `/officer-in-charge/dashboard` while signed in as the inquirer) — expect "Access restricted", not a page.
-- Press **Check IPC mailbox** twice — the second press must report the mail as already registered and must not create a second case.
-- Refresh the browser mid-workflow — the session and the case must both survive.
-
----
-
-## Part 2 — Real Gmail send (manual only)
-
-**This is the only part that sends real email.** Automated tests never do this.
-
-### Preconditions
-- `backend/.env` has `GMAIL_CLIENT_ID`, `GMAIL_CLIENT_SECRET`, `GMAIL_REFRESH_TOKEN` populated.
-- The Gmail API is enabled in the Google Cloud project.
-
-### Step 1 — check the credentials without sending
+### Verify the credentials without sending anything
 
 ```bash
 cd backend && npm run gmail:preflight
 ```
 
-Reports whether the refresh token is accepted, whether the `gmail.send` scope is granted, and which account is authenticated. It composes and sends nothing. All three checks must pass.
-
-### Step 2 — switch the transport
-
-In `backend/.env`:
-
-```
-EMAIL_TRANSPORT=gmail
-```
-
-Restart the backend. The Compose page now shows an **orange** banner saying this sends a real email.
-
-### Step 3 — send
-
-Sign in as Abhinash Pritiraj, raise an enquiry, send.
-
-### Step 4 — confirm
-
-Open the real Gmail account's **Sent** folder and confirm the message is there.
-
-> Until you have seen it in Sent with your own eyes, the Gmail path is reported as
-> **NOT VERIFIED — awaiting manual test**, never as passing.
-
-### Step 5 — switch back
-
-Set `EMAIL_TRANSPORT=mock` and restart. Leave it on `mock` for day-to-day work.
+Every configured role must report **"Authenticated as … — matches the configured address"**. An
+`IDENTITY MISMATCH` is a hard failure: it means that token belongs to a different account, and mail
+the QMS attributes to one person would arrive from another.
 
 ---
 
-## Known asymmetry — read this before you are surprised by it
+## Part 1 — the three-inbox walkthrough
 
-`IPC_QUERY_EMAIL` defaults to `ipc-query-mock@example.com`. **That address can never receive mail**: `example.com` is reserved by RFC 2606 and publishes a null MX. That is deliberate — the mock address must never accidentally reach a real mailbox.
+```bash
+cd backend  && npm start      # must print "listening on port 5000"
+cd frontend && npm run dev    # http://localhost:5173
+```
 
-So with `EMAIL_TRANSPORT=gmail`:
+For real sends set both, then restart the backend:
 
-- the enquiry genuinely leaves your Gmail account and appears in Sent
-- it then **bounces**, because the recipient does not exist
-- nothing lands in the IPC mailbox, because there is no IMAP/Graph reader in this system — the mailbox is fed by the mock transport only
+```env
+EMAIL_TRANSPORT=gmail
+MAILBOX_SOURCE=gmail
+```
 
-Sending to the mock address from your own Gmail client will therefore always bounce, and will never create a query. To exercise the workflow, use the in-app Compose page with `EMAIL_TRANSPORT=mock`.
+To start clean: **Reset demo data** in the header clears the QMS workflow domain. With
+`MAILBOX_SOURCE=gmail` there is no mailbox to reset — Gmail's own read/unread state _is_ the
+mailbox, so mark the test mail unread in Bhumika's inbox to make it registerable again.
+
+| #   | Sign in as                      | Do this                                           | Gmail should show                                                                                                                               | QMS should show                                                                                                                                                                                                      |
+| --- | ------------------------------- | ------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Abhinash                        | **Raise Enquiry** → subject + message → Send      | **Abhinash → Sent**: the enquiry, addressed to bhoomikamakker@gmail.com. **Bhumika → Inbox**: it arrives.                                       | "Enquiry sent" with the Gmail message id                                                                                                                                                                             |
+| 2   | Bhumika                         | **IPC Mailbox** → Check IPC mailbox               | —                                                                                                                                               | `QRY-2026-00001` created; the row shows the Query ID beside the message                                                                                                                                              |
+| 3   | Bhumika                         | (all automatic — the same button press as step 2) | **Bhumika → Sent**: acknowledgement _and_ `Fwd: … [QRY-2026-00001]`. **Abhinash → Inbox**: the acknowledgement. **Jatin → Inbox**: the forward. | Thread shows _Original enquiry → Acknowledgement → Forwarded to Officer-in-Charge_; state `PENDING_ASSIGNMENT`; audit: QUERY RECEIVED, AI SUMMARY GENERATED, ACKNOWLEDGEMENT SENT, QUERY REGISTERED, QUERY FORWARDED |
+| 4   | Jatin                           | **Assignments** → open the case                   | —                                                                                                                                               | Original enquiry, acknowledgement, forward, AI summary, audit trail, current state                                                                                                                                   |
+| 5   | Jatin                           | Accept or override the AI recommendation          | —                                                                                                                                               | State `ASSIGNED`; still `QRY-2026-00001`                                                                                                                                                                             |
+| 6   | Neha (mock) **or** Rawat (real) | **Drafting** → Start drafting → edit → Save       | nothing for Neha (no token). Rawat sends real mail only once he has authorised.                                                                 | v1 and v2 both retained                                                                                                                                                                                              |
+| 7   | Neha                            | Add two review levels → Submit for review         | —                                                                                                                                               | State `UNDER_REVIEW`                                                                                                                                                                                                 |
+| 8   | Amit, then Kavita               | **Reviews** → Approve each                        | —                                                                                                                                               | State `PENDING_FINAL_APPROVAL`                                                                                                                                                                                       |
+| 9   | Jatin                           | **Approvals** → Grant final approval              | —                                                                                                                                               | State `READY_FOR_DISPATCH`; approved version locked                                                                                                                                                                  |
+| 10  | Bhumika                         | **Dispatch** → Dispatch response                  | **Bhumika → Sent**: the response. **Abhinash → Inbox**: he receives it.                                                                         | State `DISPATCHED` → `CLOSED`                                                                                                                                                                                        |
+
+### What to compare at the end
+
+Open the case and check this against the three inboxes:
+
+```
+QRY-2026-00001            ← one id, from step 2 through step 10
+├── Original Query        Abhinash → Bhumika
+├── Acknowledgement       Bhumika  → Abhinash
+├── Forward               Bhumika  → Jatin
+└── Final Response        Bhumika  → Abhinash
+```
+
+All four messages carry the **same Thread ID**. The audit trail names Bhumika and Jatin by their
+real names, and the mock users for the drafting and review steps.
+
+### Things worth trying deliberately
+
+- **Press "Check IPC mailbox" twice.** The second press must report the mail as already registered.
+  No `QRY-2026-00002`.
+- **Have Abhinash reply to the acknowledgement.** It lands in Bhumika's inbox on the same Gmail
+  thread. Registering it must attach the reply to `QRY-2026-00001`, not create a second case.
+- **Open another role's URL** (e.g. `/officer-in-charge/dashboard` while signed in as Abhinash) →
+  "Access restricted", not a page.
+- **Refresh mid-workflow.** Session and case both survive; the Query ID does not change.
+
+---
+
+## Known limitations
+
+- **Only mail from a known inquirer is polled.** The Gmail search is
+  `in:inbox is:unread from:(abhinash.pritiraj@gmail.com)`, and anything slipping past it is dropped
+  after fetch. Bhumika's personal mail can never become a Query Case. Add another inquirer to the
+  identity directory to widen it.
+- **The whole Front Office stage is automatic.** One press of _Check IPC mailbox_ registers,
+  acknowledges, verifies and forwards. Verification is still recorded with Bhumika as the actor —
+  it is the click that disappeared, not the checkpoint. The manual **Forward to Officer-in-Charge**
+  button remains for retries.
+- **Attachments are metadata only** — name, type and size are recorded; file bytes are never
+  downloaded or stored.
+- **The QMS case lives in the browser that registered it.** Query state is held in that browser's
+  IndexedDB, so opening the QMS in another browser or profile shows no cases. Abhinash's device
+  genuinely does not matter — ingestion is server-side and the inquirer comes from the `From`
+  header — but Bhumika should stay in one browser profile for a test run.
+
+- **Only Bhumika's inbox is polled.** Jatin's is deliberately not read — the forwarded mail sitting
+  there belongs to a case that already exists, and registering it would create a duplicate.
+- **The mocked tail sends nothing.** Drafting and review steps are recorded in the QMS only; there
+  is no Gmail trace for Neha, Amit or Kavita. Intended for this phase.
+- **Gmail decides threading.** A reply Gmail places on a new thread (for instance after a heavily
+  edited subject) is treated as a new enquiry.
+- `ipc-query-mock@example.com` remains the mock-mode address and **can never receive mail**:
+  `example.com` is reserved by RFC 2606 with a null MX, so anything sent there bounces. That is
+  deliberate — the mock address must never reach a real mailbox.
+
+## Switching back
+
+Set `EMAIL_TRANSPORT=mock` and `MAILBOX_SOURCE=auto`, restart the backend. Nothing then leaves the
+machine and the local mock mailbox is used again.
 
 ## Mailbox persistence
 
-The IPC mailbox is stored in MongoDB when it is reachable and **survives a backend restart**; message ids stay sequential (`MSG-00001`, `MSG-00002`, …) via a counter document. If Mongo is unavailable the backend still starts and falls back to an in-memory mailbox, which is **cleared on every restart**. Every mailbox API response reports which store served it, in the `persistence` field, so you never have to guess.
+With `MAILBOX_SOURCE=auto` the mailbox is stored in MongoDB when reachable and **survives a backend
+restart**; ids stay sequential (`MSG-00001`, …) via a counter document. Without Mongo the backend
+still starts and falls back to an in-memory mailbox, **cleared on every restart**. Every mailbox API
+response reports which store served it in the `persistence` field.
