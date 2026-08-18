@@ -1,0 +1,19 @@
+export const ROLES = {
+  SUPER_ADMIN: 'SUPER_ADMIN',
+  ADMIN: 'ADMIN',
+  FRONT_OFFICE: 'FRONT_OFFICE',
+  OFFICER_IN_CHARGE: 'OFFICER_IN_CHARGE',
+  ASSIGNED_OFFICIAL: 'ASSIGNED_OFFICIAL',
+  REVIEWER: 'REVIEWER',
+  INQUIRER: 'INQUIRER',
+};
+
+export const ROLE_LABELS = {
+  [ROLES.SUPER_ADMIN]: 'Super Admin',
+  [ROLES.ADMIN]: 'Admin',
+  [ROLES.FRONT_OFFICE]: 'Front Office',
+  [ROLES.OFFICER_IN_CHARGE]: 'Officer-in-Charge',
+  [ROLES.ASSIGNED_OFFICIAL]: 'Assigned Official',
+  [ROLES.REVIEWER]: 'Reviewer',
+  [ROLES.INQUIRER]: 'Inquirer',
+};
