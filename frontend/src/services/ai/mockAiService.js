@@ -1,0 +1,174 @@
+import { MOCK_USERS } from '@/constants/mockUsers';
+import { findDivisionById } from '@/constants/mockDivisions';
+import { ROLES } from '@/constants/roles';
+
+const TOPIC_DIVISIONS = {
+  'monograph': 'DIV-003',
+  'impurity': 'DIV-003',
+  'analytical': 'DIV-003',
+  'reference standard': 'DIV-003',
+  'specification': 'DIV-003',
+  'dissolution': 'DIV-003',
+  'assay': 'DIV-003',
+  'stability': 'DIV-003',
+  'documentation': 'DIV-002',
+  'submission': 'DIV-002',
+  'compliance': 'DIV-002',
+  'regulatory': 'DIV-002',
+  'application form': 'DIV-002',
+  'guideline': 'DIV-002',
+  'training': 'DIV-001',
+  'workshop': 'DIV-001',
+  'certificate': 'DIV-004',
+  'invoice': 'DIV-004',
+  'payment': 'DIV-004',
+};
+
+const STOP_WORDS = new Set([
+  'the', 'and', 'for', 'that', 'this', 'with', 'from', 'would', 'like', 'please',
+  'dear', 'sir', 'madam', 'regards', 'thank', 'you', 'your', 'our', 'are', 'was',
+  'have', 'has', 'been', 'their', 'about', 'also', 'any', 'may', 'can', 'will',
+  'shall', 'should', 'while', 'which', 'whether', 'regarding', 'seek', 'writing',
+]);
+
+function textOf(query) {
+  return `${query?.subject || ''} ${query?.description || ''}`.toLowerCase();
+}
+
+export function detectTopics(query) {
+  const text = textOf(query);
+  return Object.keys(TOPIC_DIVISIONS)
+    .filter((topic) => text.includes(topic))
+    .sort((a, b) => text.indexOf(a) - text.indexOf(b));
+}
+
+export function extractKeyPoints(query, limit = 5) {
+  const body = String(query?.description || '');
+
+  const listed = body
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => /^(\d+[.)]|[-*•])\s+/.test(line))
+    .map((line) => line.replace(/^(\d+[.)]|[-*•])\s+/, '').replace(/[.\s]+$/, ''));
+
+  if (listed.length > 0) return listed.slice(0, limit);
+
+  return body
+    .split(/(?<=[.?!])\s+/)
+    .map((sentence) => sentence.trim())
+    .filter((sentence) => sentence.length > 25 && !/^(dear|regards|thank)/i.test(sentence))
+    .slice(0, limit);
+}
+
+function significantWords(query, limit = 6) {
+  const counts = new Map();
+  for (const word of textOf(query).match(/[a-z][a-z-]{3,}/g) || []) {
+    if (STOP_WORDS.has(word)) continue;
+    counts.set(word, (counts.get(word) || 0) + 1);
+  }
+  return [...counts.entries()]
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .slice(0, limit)
+    .map(([word]) => word);
+}
+
+export function summarise(query) {
+  if (!query) return { text: '', keyPoints: [], topics: [] };
+
+  const topics = detectTopics(query);
+  const keyPoints = extractKeyPoints(query);
+  const words = significantWords(query);
+  const inquirer = query.inquirer?.name || 'the inquirer';
+
+  const subjectLine = query.subject ? `“${query.subject}”` : 'an untitled enquiry';
+  const topicPhrase = topics.length
+    ? `It concerns ${topics.slice(0, 3).join(', ')}.`
+    : `Recurring terms: ${words.slice(0, 4).join(', ')}.`;
+  const pointsPhrase = keyPoints.length
+    ? ` ${keyPoints.length} specific point${keyPoints.length === 1 ? '' : 's'} raised.`
+    : '';
+
+  return {
+    text: `${inquirer} asks about ${subjectLine}. ${topicPhrase}${pointsPhrase}`,
+    keyPoints,
+    topics,
+  };
+}
+export function recommendAssignee(query, users = MOCK_USERS, openQueries = []) {
+  const eligible = users.filter((user) => user.role === ROLES.ASSIGNED_OFFICIAL);
+  if (eligible.length === 0) return null;
+
+  const topics = detectTopics(query);
+  const wantedDivisions = new Set(topics.map((topic) => TOPIC_DIVISIONS[topic]));
+
+  const workload = (userId) => openQueries.filter((q) => q.currentAssigneeId === userId).length;
+  const maxWorkload = Math.max(1, ...eligible.map((user) => workload(user.id)));
+
+  const scored = eligible
+    .map((user) => {
+      const divisionMatch = wantedDivisions.has(user.divisionId);
+      const score =
+        (divisionMatch ? 70 : 0) + Math.round((1 - workload(user.id) / maxWorkload) * 25) + 5;
+      return { user, divisionMatch, load: workload(user.id), score };
+    })
+    .sort((a, b) => b.score - a.score || a.user.id.localeCompare(b.user.id));
+
+  const best = scored[0];
+  const division = findDivisionById(best.user.divisionId);
+
+  const reason = best.divisionMatch
+    ? `${division?.name || 'Their division'} handles ${topics.slice(0, 2).join(' and ')}, and ${best.user.name} currently holds ${best.load} open ${best.load === 1 ? 'query' : 'queries'}.`
+    : `No division is a clear subject-matter match for this enquiry, so ${best.user.name} is suggested on availability alone (${best.load} open ${best.load === 1 ? 'query' : 'queries'}).`;
+
+  return {
+    userId: best.user.id,
+    matchPercent: Math.min(99, best.score),
+    reason,
+    factors: [
+      topics.length ? `Topics detected: ${topics.slice(0, 3).join(', ')}` : 'No known topic matched',
+      `Division: ${division?.name || 'unassigned'}`,
+      `Current workload: ${best.load} open`,
+      'Recommendation only — the Officer-in-Charge decides',
+    ],
+  };
+}
+
+const SIGNATURE = `Regards,
+AR&D Division
+Indian Pharmacopoeia Commission (IPC)
+Ministry of Health & Family Welfare
+Government of India`;
+
+export function draftResponse(query) {
+  if (!query) return '';
+
+  const keyPoints = extractKeyPoints(query);
+  const topics = detectTopics(query);
+  const inquirer = query.inquirer?.name || 'Sir/Madam';
+
+  const pointBlock = keyPoints.length
+    ? keyPoints
+        .map((point, index) => `${index + 1}. ${point}\n   [Response required — refer to the applicable IPC guidance.]`)
+        .join('\n\n')
+    : '[Response required — the enquiry raises no itemised points; summarise the position here.]';
+
+  const topicLine = topics.length
+    ? `Your enquiry has been reviewed by the division responsible for ${topics.slice(0, 3).join(', ')}.`
+    : 'Your enquiry has been reviewed by the concerned division.';
+
+  return `[AI-GENERATED FIRST DRAFT — requires review and editing by the assigned official before it can proceed.]
+
+Dear ${inquirer},
+
+Thank you for your enquiry dated ${new Date(query.createdAt).toLocaleDateString()} regarding "${query.subject}".
+
+${topicLine} Our response to the points you raised follows.
+
+${pointBlock}
+
+Should you require any further clarification, please write back quoting reference ${query.queryId}.
+
+${SIGNATURE}`;
+}
+
+export const mockAiService = { summarise, recommendAssignee, draftResponse, detectTopics, extractKeyPoints };

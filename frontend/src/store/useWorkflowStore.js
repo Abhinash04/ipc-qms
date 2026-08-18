@@ -1,10 +1,21 @@
 import { create } from 'zustand';
 
-import { BUSINESS_STATUS, WORKFLOW_STATE, AUDIT_EVENT } from '@/constants/statusEnums';
-import { deriveBusinessStatus } from '@/constants/workflowRules';
-import { findUserById } from '@/constants/mockUsers';
-import { buildSeedState, AI_DRAFT_TEMPLATE, AI_ASSIGNMENT_RECOMMENDATION } from '@/constants/mockDomain';
+import {
+  BUSINESS_STATUS,
+  WORKFLOW_STATE,
+  AUDIT_EVENT,
+  PRIORITY,
+  RESPONSE_SOURCE,
+  RESPONSE_STATUS,
+} from '@/constants/statusEnums';
+import { deriveBusinessStatus, canPerform, WORKFLOW_ACTION } from '@/constants/workflowRules';
+import { ROLE_LABELS } from '@/constants/roles';
+import { MOCK_USERS, findUserById, findUserByEmail } from '@/constants/mockUsers';
+import { createEmailMessage, EMAIL_DIRECTION, EMAIL_TYPE } from '@/constants/emailModel';
+import { buildSeedState } from '@/constants/mockDomain';
+import { summarise, recommendAssignee, draftResponse } from '@/services/ai/mockAiService';
 import { loadAll, replaceAll, persistTransition, isEmpty } from '@/services/db/db';
+import { sendResponse } from '@/services/api/mailboxService';
 
 const pad = (n) => String(n).padStart(5, '0');
 
@@ -13,17 +24,47 @@ function mintId(counters, prefix) {
   return { id: `${prefix}-${pad(next)}`, prefix, next, bump: { [prefix]: next } };
 }
 
+function mintYearScopedId(counters, prefix, timestamp) {
+  const next = (counters[prefix] || 0) + 1;
+  const year = new Date(timestamp).getUTCFullYear();
+  return { id: `${prefix}-${year}-${pad(next)}`, next, bump: { [prefix]: next } };
+}
+
 const now = () => new Date().toISOString();
 
 const actorName = (user) => user?.name || 'System';
 
 const byQuery = (rows, queryId) => rows.filter((r) => r.queryId === queryId);
 
-/**
- * Pure state transition — computes the next in-memory state from the previous
- * one. Kept side-effect free so persistence can be derived by diffing prev vs
- * next, rather than every action having to describe its own writes.
- */
+function parseAddress(from) {
+  if (!from) return '';
+  const match = String(from).match(/<([^>]+)>/);
+  return (match ? match[1] : String(from)).trim();
+}
+
+function parseDisplayName(from) {
+  if (!from) return '';
+  const match = String(from).match(/^\s*"?([^"<]+?)"?\s*</);
+  return match ? match[1].trim() : '';
+}
+
+function assertCan(state, action, queryId, actor) {
+  const query = state.queries.find((q) => q.queryId === queryId);
+  if (!query) {
+    throw new Error(`${action}: query ${queryId} does not exist`);
+  }
+
+  const role = actor?.role;
+  if (!canPerform(role, action, query.workflowState)) {
+    const who = role ? ROLE_LABELS[role] || role : 'An unauthenticated user';
+    throw new Error(
+      `${who} may not perform ${action} while ${queryId} is ${query.workflowState}`,
+    );
+  }
+
+  return query;
+}
+
 function computeTransition(state, { queryId, event, actor, patch = {}, details, actorLabel, notify, mutate }) {
   const timestamp = now();
   const minted = mintId(state.counters, 'AUD');
@@ -69,10 +110,6 @@ function computeTransition(state, { queryId, event, actor, patch = {}, details, 
   return { next, auditEvent, notification };
 }
 
-/**
- * Write one transition to IndexedDB. Scoped to the affected query, so the
- * transaction stays small regardless of how many queries exist.
- */
 async function persistDelta(prev, next, queryId, auditEvent, notification) {
   const prevStepIds = byQuery(prev.workflowSteps, queryId).map((s) => s.stepId);
   const nextSteps = byQuery(next.workflowSteps, queryId);
@@ -80,6 +117,9 @@ async function persistDelta(prev, next, queryId, auditEvent, notification) {
 
   const prevReviewIds = new Set(byQuery(prev.reviews, queryId).map((r) => r.reviewId));
   const prevVersionIds = new Set(byQuery(prev.responseVersions, queryId).map((v) => v.responseId));
+
+  const prevMessageIds = new Set(prev.emailMessages.map((m) => m.messageId));
+  const prevThreadIds = new Set(prev.emailThreads.map((t) => t.threadId));
 
   await persistTransition({
     query: next.queries.find((q) => q.queryId === queryId) || null,
@@ -90,27 +130,16 @@ async function persistDelta(prev, next, queryId, auditEvent, notification) {
     deleteStepIds: prevStepIds.filter((id) => !nextStepIds.has(id)),
     addReviews: byQuery(next.reviews, queryId).filter((r) => !prevReviewIds.has(r.reviewId)),
     addVersions: byQuery(next.responseVersions, queryId).filter((v) => !prevVersionIds.has(v.responseId)),
+    addThreads: next.emailThreads.filter((t) => !prevThreadIds.has(t.threadId)),
+    addMessages: next.emailMessages.filter((m) => !prevMessageIds.has(m.messageId)),
   });
 }
 
 export const useWorkflowStore = create((set, get) => ({
   ...buildSeedState(),
 
-  /** False until IndexedDB has been read — UI should wait before acting. */
   hydrated: false,
-  /** Set if IndexedDB is unavailable (private mode, quota, etc.). */
   persistenceError: null,
-
-  // -------------------------------------------------------------------------
-  // Getters — for use INSIDE store actions via get(), NOT as component selectors.
-  //
-  // Everything below that filters/sorts allocates a new array per call. Passing
-  // one to `useWorkflowStore(...)` would give useSyncExternalStore a fresh
-  // reference on every snapshot and hang React in an infinite render loop
-  // ("The result of getSnapshot should be cached"). In components, select the
-  // raw slice (e.g. `state.workflowSteps`) and derive with useMemo — see
-  // hooks/useQueryCase.js for the pattern.
-  // -------------------------------------------------------------------------
 
   getQuery: (queryId) => get().queries.find((q) => q.queryId === queryId) || null,
 
@@ -143,12 +172,6 @@ export const useWorkflowStore = create((set, get) => ({
   getNotifications: () =>
     [...get().notifications].sort((a, b) => new Date(b.at) - new Date(a.at)),
 
-  /**
-   * The single writer. Computes the next state purely, commits it to memory
-   * so the UI updates immediately, then persists the delta to IndexedDB.
-   * Because the audit event is produced in the same step as the state
-   * change, a transition can never be recorded without its audit row.
-   */
   applyTransition: (options) => {
     const prev = get();
     const { next, auditEvent, notification } = computeTransition(prev, options);
@@ -160,21 +183,184 @@ export const useWorkflowStore = create((set, get) => ({
     });
   },
 
-  // ---------------------------------------------------------------------
-  // Phase 3 — Front Office intake & verification
-  // ---------------------------------------------------------------------
+  findQueryBySourceMessage: (sourceMessageId) => {
+    const message = get().emailMessages.find((m) => m.sourceMessageId === sourceMessageId);
+    return message ? message.queryId : null;
+  },
 
-  verifyQuery: (queryId, actor) =>
+  ingestEmail: (mailboxMessage) => {
+    const state = get();
+    const sourceMessageId = mailboxMessage.mailboxMessageId || mailboxMessage.providerMessageId;
+    if (!sourceMessageId) {
+      throw new Error('ingestEmail: message must carry a mailboxMessageId or providerMessageId');
+    }
+
+    const existing = state.emailMessages.find((m) => m.sourceMessageId === sourceMessageId);
+    if (existing) {
+      return {
+        queryId: existing.queryId,
+        threadId: existing.threadId,
+        created: false,
+        reason: 'already-ingested',
+      };
+    }
+
+    const timestamp = mailboxMessage.receivedAt || now();
+
+    let counters = state.counters;
+    const queryMint = mintYearScopedId(counters, 'QRY', timestamp);
+    counters = { ...counters, ...queryMint.bump };
+    const threadMint = mintYearScopedId(counters, 'THREAD', timestamp);
+    counters = { ...counters, ...threadMint.bump };
+    const messageMint = mintId(counters, 'MSG');
+
+    const queryId = queryMint.id;
+    const threadId = threadMint.id;
+    const messageId = messageMint.id;
+
+    const inquirerEmail = parseAddress(mailboxMessage.from);
+    const inquirer = {
+      id: findUserByEmail(inquirerEmail)?.id || null,
+      name: parseDisplayName(mailboxMessage.from) || inquirerEmail,
+      email: inquirerEmail,
+    };
+
+    const query = {
+      queryId,
+      threadId,
+      sourceEmailId: messageId,
+      subject: mailboxMessage.subject || '(no subject)',
+      description: mailboxMessage.body || '',
+      source: 'Email',
+      inquirer,
+      category: null,
+      priority: PRIORITY.NORMAL,
+      businessStatus: BUSINESS_STATUS.OPEN,
+      workflowState: WORKFLOW_STATE.RECEIVED,
+      currentAssigneeId: null,
+      currentWorkflowStepId: null,
+      assignmentDecision: null,
+      aiSummary: null,
+      attachments: mailboxMessage.attachments || [],
+      createdAt: timestamp,
+      updatedAt: timestamp,
+      dueDate: null,
+    };
+
+    const thread = {
+      threadId,
+      queryId,
+      subject: query.subject,
+      createdAt: timestamp,
+    };
+
+    const message = createEmailMessage({
+      messageId,
+      threadId,
+      queryId,
+      direction: EMAIL_DIRECTION.INBOUND,
+      emailType: EMAIL_TYPE.INCOMING_QUERY,
+      from: mailboxMessage.from,
+      to: mailboxMessage.to,
+      cc: mailboxMessage.cc || [],
+      bcc: mailboxMessage.bcc || [],
+      subject: query.subject,
+      body: query.description,
+      attachments: query.attachments,
+      timestamp,
+      providerMessageId: mailboxMessage.providerMessageId || null,
+      providerThreadId: mailboxMessage.providerThreadId || null,
+    });
+    message.sourceMessageId = sourceMessageId;
+
     get().applyTransition({
+      queryId,
+      actor: null,
+      actorLabel: 'System',
+      event: AUDIT_EVENT.QUERY_RECEIVED,
+      details: `Query created from email "${query.subject}" received from ${inquirer.email}.`,
+      notify: {
+        recipientRole: 'FRONT_OFFICE',
+        message: `${queryId} received and awaiting Front Office verification.`,
+      },
+      mutate: (base) => ({
+        counters: { ...base.counters, ...queryMint.bump, ...threadMint.bump, ...messageMint.bump },
+        queries: [...base.queries, query],
+        emailThreads: [...base.emailThreads, thread],
+        emailMessages: [...base.emailMessages, message],
+      }),
+    });
+
+    const summary = summarise(query);
+    get().applyTransition({
+      queryId,
+      actor: null,
+      actorLabel: 'AI Summary Assistant',
+      event: AUDIT_EVENT.AI_SUMMARY_GENERATED,
+      patch: { aiSummary: summary },
+      details: summary.text,
+    });
+
+    return { queryId, threadId, messageId, created: true };
+  },
+
+  recordAcknowledgement: ({ queryId, from, to, subject, body, timestamp, providerMessageId }) => {
+    const state = get();
+    const query = state.queries.find((q) => q.queryId === queryId);
+    if (!query) return { messageId: null, created: false, reason: 'unknown-query' };
+
+    const already = state.emailMessages.find(
+      (m) => m.queryId === queryId && m.emailType === EMAIL_TYPE.ACKNOWLEDGEMENT,
+    );
+    if (already) {
+      return { messageId: already.messageId, created: false, reason: 'already-acknowledged' };
+    }
+
+    const at = timestamp || now();
+    const messageMint = mintId(state.counters, 'MSG');
+    const message = createEmailMessage({
+      messageId: messageMint.id,
+      threadId: query.threadId,
+      queryId,
+      direction: EMAIL_DIRECTION.OUTBOUND,
+      emailType: EMAIL_TYPE.ACKNOWLEDGEMENT,
+      from,
+      to,
+      subject,
+      body,
+      timestamp: at,
+      providerMessageId: providerMessageId || null,
+    });
+
+    get().applyTransition({
+      queryId,
+      actor: null,
+      actorLabel: 'System',
+      event: AUDIT_EVENT.ACKNOWLEDGEMENT_SENT,
+      details: `Acknowledgement email sent to ${message.to.join(', ')}.`,
+      mutate: (base) => ({
+        counters: { ...base.counters, ...messageMint.bump },
+        emailMessages: [...base.emailMessages, message],
+      }),
+    });
+
+    return { messageId: message.messageId, created: true };
+  },
+
+  verifyQuery: (queryId, actor) => {
+    assertCan(get(), WORKFLOW_ACTION.VERIFY, queryId, actor);
+    return get().applyTransition({
       queryId,
       actor,
       event: AUDIT_EVENT.QUERY_REGISTERED,
       patch: { workflowState: WORKFLOW_STATE.FRONT_OFFICE_VERIFICATION },
       details: 'Front Office verified the query details and attachments.',
-    }),
+    });
+  },
 
-  forwardToOic: (queryId, actor) =>
-    get().applyTransition({
+  forwardToOic: (queryId, actor) => {
+    assertCan(get(), WORKFLOW_ACTION.FORWARD, queryId, actor);
+    return get().applyTransition({
       queryId,
       actor,
       event: AUDIT_EVENT.QUERY_FORWARDED,
@@ -184,15 +370,32 @@ export const useWorkflowStore = create((set, get) => ({
         recipientRole: 'OFFICER_IN_CHARGE',
         message: `${queryId} is awaiting assignment.`,
       },
-    }),
+    });
+  },
 
-  // ---------------------------------------------------------------------
-  // Phase 4 — OIC assignment (AI recommends, human decides)
-  // ---------------------------------------------------------------------
+  recommendAssigneeFor: (queryId) => {
+    const state = get();
+    const query = state.queries.find((q) => q.queryId === queryId);
+    if (!query) return null;
+    const open = state.queries.filter((q) => q.workflowState !== WORKFLOW_STATE.CLOSED);
+    return recommendAssignee(query, MOCK_USERS, open);
+  },
 
   assignQuery: (queryId, assigneeId, actor) => {
-    const acceptedAi = assigneeId === AI_ASSIGNMENT_RECOMMENDATION.recommendedUserId;
+    assertCan(get(), WORKFLOW_ACTION.ASSIGN, queryId, actor);
+    const recommendation = get().recommendAssigneeFor(queryId);
+    const acceptedAi = recommendation?.userId === assigneeId;
     const assignee = findUserById(assigneeId);
+
+    if (recommendation) {
+      get().applyTransition({
+        queryId,
+        actor: null,
+        actorLabel: 'AI Assignment Assistant',
+        event: AUDIT_EVENT.AI_ASSIGNMENT_RECOMMENDED,
+        details: `Recommended ${findUserById(recommendation.userId)?.name || recommendation.userId} (${recommendation.matchPercent}% match). ${recommendation.reason}`,
+      });
+    }
 
     get().applyTransition({
       queryId,
@@ -214,8 +417,8 @@ export const useWorkflowStore = create((set, get) => ({
       },
     });
 
-    if (!acceptedAi) {
-      const recommended = findUserById(AI_ASSIGNMENT_RECOMMENDATION.recommendedUserId);
+    if (!acceptedAi && recommendation) {
+      const recommended = findUserById(recommendation.userId);
       get().applyTransition({
         queryId,
         actor,
@@ -226,6 +429,7 @@ export const useWorkflowStore = create((set, get) => ({
   },
 
   generateAiDraft: (queryId, actor) => {
+    assertCan(get(), WORKFLOW_ACTION.GENERATE_AI_DRAFT, queryId, actor);
     const state = get();
     const versionNumber = state.getVersions(queryId).length + 1;
     const minted = mintId(state.counters, 'RESP');
@@ -246,10 +450,12 @@ export const useWorkflowStore = create((set, get) => ({
             queryId,
             version: `v${versionNumber}`,
             label: 'AI generated',
-            content: AI_DRAFT_TEMPLATE,
+            content: draftResponse(state.getQuery(queryId)),
             createdBy: 'AI Draft Assistant',
             createdAt: now(),
             aiGenerated: true,
+            source: RESPONSE_SOURCE.AI_GENERATED,
+            status: RESPONSE_STATUS.DRAFT,
           },
         ],
       }),
@@ -257,7 +463,17 @@ export const useWorkflowStore = create((set, get) => ({
   },
 
   saveDraftVersion: (queryId, content, actor, label = 'Officer revision') => {
+    assertCan(get(), WORKFLOW_ACTION.SAVE_DRAFT, queryId, actor);
     const state = get();
+    const locked = state
+      .getVersions(queryId)
+      .find((v) => v.status === RESPONSE_STATUS.FINAL_APPROVED);
+    if (locked) {
+      throw new Error(
+        `${queryId}: response ${locked.version} is locked by final approval and cannot be edited`,
+      );
+    }
+
     const versionNumber = state.getVersions(queryId).length + 1;
     const minted = mintId(state.counters, 'RESP');
 
@@ -280,6 +496,11 @@ export const useWorkflowStore = create((set, get) => ({
             createdBy: actorName(actor),
             createdAt: now(),
             aiGenerated: false,
+            source:
+              label === 'Revision after review'
+                ? RESPONSE_SOURCE.REVIEW_REVISION
+                : RESPONSE_SOURCE.USER_EDITED,
+            status: RESPONSE_STATUS.DRAFT,
           },
         ],
       }),
@@ -287,6 +508,7 @@ export const useWorkflowStore = create((set, get) => ({
   },
 
   submitForReview: (queryId, actor) => {
+    assertCan(get(), WORKFLOW_ACTION.SUBMIT_FOR_REVIEW, queryId, actor);
     const state = get();
     const steps = state.getSteps(queryId);
     let stepCounter = state.counters.STEP || 0;
@@ -362,6 +584,7 @@ export const useWorkflowStore = create((set, get) => ({
   },
 
   addReviewLevel: (queryId, reviewerId, actor) => {
+    assertCan(get(), WORKFLOW_ACTION.ADD_REVIEW_LEVEL, queryId, actor);
     const state = get();
     const steps = state.getSteps(queryId);
     const reviewer = findUserById(reviewerId);
@@ -417,6 +640,7 @@ export const useWorkflowStore = create((set, get) => ({
   },
 
   approveReview: (queryId, comment, actor) => {
+    assertCan(get(), WORKFLOW_ACTION.APPROVE_REVIEW, queryId, actor);
     const state = get();
     const current = state.getCurrentStep(queryId);
     if (!current) return;
@@ -475,6 +699,7 @@ export const useWorkflowStore = create((set, get) => ({
   },
 
   requestRevision: (queryId, comment, actor) => {
+    assertCan(get(), WORKFLOW_ACTION.REQUEST_REVISION, queryId, actor);
     const state = get();
     const current = state.getCurrentStep(queryId);
     if (!current) return;
@@ -517,8 +742,10 @@ export const useWorkflowStore = create((set, get) => ({
   },
 
   grantFinalApproval: (queryId, actor) => {
+    assertCan(get(), WORKFLOW_ACTION.FINAL_APPROVE, queryId, actor);
     const state = get();
     const current = state.getCurrentStep(queryId);
+    const approved = state.getLatestVersion(queryId);
     const timestamp = now();
 
     state.applyTransition({
@@ -526,7 +753,7 @@ export const useWorkflowStore = create((set, get) => ({
       actor,
       event: AUDIT_EVENT.FINAL_APPROVAL_GRANTED,
       patch: { workflowState: WORKFLOW_STATE.READY_FOR_DISPATCH },
-      details: 'Final approval granted; response locked and ready for dispatch.',
+      details: `Final approval granted; ${approved ? `${approved.version} locked` : 'no draft to lock'} and ready for dispatch.`,
       notify: {
         recipientRole: 'FRONT_OFFICE',
         message: `${queryId} is approved and ready for dispatch.`,
@@ -535,12 +762,18 @@ export const useWorkflowStore = create((set, get) => ({
         workflowSteps: base.workflowSteps.map((s) =>
           s.stepId === current?.stepId ? { ...s, status: 'COMPLETED', completedAt: timestamp } : s,
         ),
+        responseVersions: base.responseVersions.map((v) =>
+          v.responseId === approved?.responseId
+            ? { ...v, status: RESPONSE_STATUS.FINAL_APPROVED, approvedAt: timestamp }
+            : v,
+        ),
       }),
     });
   },
 
-  rejectFinalApproval: (queryId, reason, actor) =>
-    get().applyTransition({
+  rejectFinalApproval: (queryId, reason, actor) => {
+    assertCan(get(), WORKFLOW_ACTION.FINAL_REJECT, queryId, actor);
+    return get().applyTransition({
       queryId,
       actor,
       event: AUDIT_EVENT.FINAL_APPROVAL_REJECTED,
@@ -550,10 +783,12 @@ export const useWorkflowStore = create((set, get) => ({
         recipientRole: 'ASSIGNED_OFFICIAL',
         message: `${queryId} was rejected at final approval.`,
       },
-    }),
+    });
+  },
 
-  returnForRevisionFromApproval: (queryId, comment, actor) =>
-    get().applyTransition({
+  returnForRevisionFromApproval: (queryId, comment, actor) => {
+    assertCan(get(), WORKFLOW_ACTION.RETURN_FOR_REVISION, queryId, actor);
+    return get().applyTransition({
       queryId,
       actor,
       event: AUDIT_EVENT.REVISION_REQUESTED,
@@ -563,17 +798,53 @@ export const useWorkflowStore = create((set, get) => ({
         recipientRole: 'ASSIGNED_OFFICIAL',
         message: `${queryId} was returned for revision by the Officer-in-Charge.`,
       },
-    }),
+    });
+  },
 
-  dispatchResponse: (queryId, actor) => {
-    const state = get();
+  dispatchResponse: async (queryId, actor, send = sendResponse) => {
+    const query = assertCan(get(), WORKFLOW_ACTION.DISPATCH, queryId, actor);
 
-    state.applyTransition({
+    const approved = get().getLatestVersion(queryId);
+    if (!approved) {
+      throw new Error(`${queryId}: there is no approved response to dispatch`);
+    }
+
+    const subject = `Re: ${query.subject} [${queryId}]`;
+    const sent = await send({
+      to: query.inquirer.email,
+      subject,
+      body: approved.content,
+      attachments: [],
+      providerThreadId: query.providerThreadId || null,
+    });
+
+    const timestamp = sent?.sentAt || now();
+    const messageMint = mintId(get().counters, 'MSG');
+    const message = createEmailMessage({
+      messageId: messageMint.id,
+      threadId: query.threadId,
+      queryId,
+      direction: EMAIL_DIRECTION.OUTBOUND,
+      emailType: EMAIL_TYPE.OUTGOING_RESPONSE,
+      from: sent?.from || 'Indian Pharmacopoeia Commission',
+      to: sent?.to || [query.inquirer.email],
+      subject: sent?.subject || subject,
+      body: sent?.body || approved.content,
+      timestamp,
+      providerMessageId: sent?.providerMessageId || null,
+      providerThreadId: sent?.providerThreadId || null,
+    });
+
+    get().applyTransition({
       queryId,
       actor,
       event: AUDIT_EVENT.RESPONSE_DISPATCHED,
       patch: { workflowState: WORKFLOW_STATE.DISPATCHED },
-      details: 'Approved response dispatched to the inquirer (mock send — no real email sent).',
+      details: `Approved response ${approved.version} emailed to ${query.inquirer.email}.`,
+      mutate: (base) => ({
+        counters: { ...base.counters, ...messageMint.bump },
+        emailMessages: [...base.emailMessages, message],
+      }),
     });
 
     get().applyTransition({
@@ -587,6 +858,8 @@ export const useWorkflowStore = create((set, get) => ({
         message: `${queryId} has been dispatched and closed.`,
       },
     });
+
+    return { messageId: message.messageId, dispatched: true };
   },
 
   transferQuery: (queryId, newAssigneeId, actor) => {
@@ -600,7 +873,6 @@ export const useWorkflowStore = create((set, get) => ({
     });
   },
 
-  /** Pullback plumbing — destination rules unconfirmed, so no UI calls this yet. */
   pullBackQuery: (queryId, actor, reason) =>
     get().applyTransition({
       queryId,
@@ -609,15 +881,6 @@ export const useWorkflowStore = create((set, get) => ({
       details: reason ? `Query pulled back: ${reason}` : 'Query pulled back.',
     }),
 
-  // ---------------------------------------------------------------------
-  // Demo control
-  // ---------------------------------------------------------------------
-
-  /**
-   * Load from IndexedDB, seeding it on first run. Called once at app start.
-   * If IndexedDB is unavailable the app still works from the in-memory seed —
-   * it just won't survive a reload, which is surfaced via `persistenceError`.
-   */
   hydrate: async () => {
 if (get().hydrated) return;
 try {
@@ -635,6 +898,8 @@ try {
     responseVersions: stored.responseVersions,
     auditEvents: stored.auditEvents,
     notifications: stored.notifications,
+    emailMessages: stored.emailMessages || [],
+    emailThreads: stored.emailThreads || [],
     counters: stored.counters || buildSeedState().counters,
     hydrated: true,
     persistenceError: null,
@@ -645,7 +910,6 @@ try {
 }
   },
 
-  /** Wipe IndexedDB and reseed. */
   resetDemo: async () => {
 const seed = buildSeedState();
 set({ ...seed });

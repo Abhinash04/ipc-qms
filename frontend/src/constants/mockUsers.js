@@ -3,9 +3,9 @@ import { ROLES } from './roles';
 export const MOCK_USERS = [
   {
     id: 'USR-0001',
-    name: 'Rajesh Kumar',
+    name: 'Abhinash Pritiraj',
     role: ROLES.INQUIRER,
-    email: 'rajesh.kumar@example.com',
+    email: 'abhinash.pritiraj@gmail.com',
     divisionId: null,
   },
   {
@@ -59,6 +59,13 @@ export const MOCK_USERS = [
   },
 ];
 
+export const MOCK_PASSWORD = 'ipc@1234';
+
 export function findUserById(id) {
   return MOCK_USERS.find((user) => user.id === id) || null;
+}
+
+export function findUserByEmail(email) {
+  const normalised = String(email || '').trim().toLowerCase();
+  return MOCK_USERS.find((user) => user.email.toLowerCase() === normalised) || null;
 }
