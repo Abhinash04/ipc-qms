@@ -25,6 +25,17 @@ const REVIEWER_B = findUserById('USR-0006');
 const INQUIRER = findUserById('USR-0001');
 const ADMIN = findUserById('USR-0007');
 
+const fakeForward = (payload) =>
+  Promise.resolve({
+    from: 'Test Front Officer <front-office@test.invalid>',
+    to: ['officer@test.invalid'],
+    subject: `Fwd: ${payload.subject} [${payload.queryId}]`,
+    body: payload.body,
+    providerMessageId: 'mock-msg-forward',
+    providerThreadId: payload.providerThreadId || 'mock-thread-1',
+    sentAt: '2026-08-18T10:00:00.000Z',
+  });
+
 const fakeSend = (payload) =>
   Promise.resolve({
     from: 'AR&D Division <arnd-ipc-mock@example.com>',
@@ -60,7 +71,7 @@ async function runTo(stopAt, { reviewers = [REVIEWER_A], message } = {}) {
   s().verifyQuery(queryId, FRONT_OFFICE);
   if (stopAt === WORKFLOW_STATE.FRONT_OFFICE_VERIFICATION) return queryId;
 
-  s().forwardToOic(queryId, FRONT_OFFICE);
+  await s().forwardToOic(queryId, FRONT_OFFICE, fakeForward);
   if (stopAt === WORKFLOW_STATE.PENDING_ASSIGNMENT) return queryId;
 
   s().assignQuery(queryId, OFFICIAL.id, OIC);
@@ -80,10 +91,17 @@ async function runTo(stopAt, { reviewers = [REVIEWER_A], message } = {}) {
   }
   if (stopAt === WORKFLOW_STATE.PENDING_FINAL_APPROVAL) return queryId;
 
-  s().grantFinalApproval(queryId, OIC);
-  if (stopAt === WORKFLOW_STATE.READY_FOR_DISPATCH) return queryId;
+  // Final approval now dispatches automatically. To observe the intermediate
+  // READY_FOR_DISPATCH state — approved but not yet sent — approve with a
+  // sender that fails, which is exactly what a Gmail outage looks like.
+  if (stopAt === WORKFLOW_STATE.READY_FOR_DISPATCH) {
+    await s()
+      .grantFinalApproval(queryId, OIC, () => Promise.reject(new Error('Gmail unavailable')))
+      .catch(() => {});
+    return queryId;
+  }
 
-  await s().dispatchResponse(queryId, FRONT_OFFICE, fakeSend);
+  await s().grantFinalApproval(queryId, OIC, fakeSend);
   return queryId;
 }
 
@@ -136,8 +154,10 @@ describe('the complete lifecycle, end to end', () => {
     const query = s().getQuery(queryId);
     const messages = s().emailMessages.filter((m) => m.queryId === queryId);
 
+    // Enquiry in, forward to the OIC, final response out — one conversation.
     expect(messages.map((m) => m.emailType)).toEqual([
       EMAIL_TYPE.INCOMING_QUERY,
+      EMAIL_TYPE.FORWARD,
       EMAIL_TYPE.OUTGOING_RESPONSE,
     ]);
     expect(new Set(messages.map((m) => m.threadId))).toEqual(new Set([query.threadId]));
@@ -191,7 +211,7 @@ describe('the complete lifecycle, end to end', () => {
 
     expect(stateOf(queryId)).toBe(WORKFLOW_STATE.CLOSED);
     expect(s().getVersions(queryId).length).toBeGreaterThan(0);
-    expect(s().emailMessages.filter((m) => m.queryId === queryId)).toHaveLength(2);
+    expect(s().emailMessages.filter((m) => m.queryId === queryId)).toHaveLength(3);
 
     expect(s().ingestEmail(mailboxMessage()).created).toBe(false);
     expect(s().queries).toHaveLength(1);
@@ -278,8 +298,9 @@ describe('revision cycles', () => {
 
     expect(stateOf(queryId)).toBe(WORKFLOW_STATE.PENDING_FINAL_APPROVAL);
 
-    s().grantFinalApproval(queryId, OIC);
-    expect(stateOf(queryId)).toBe(WORKFLOW_STATE.READY_FOR_DISPATCH);
+    await s().grantFinalApproval(queryId, OIC, fakeSend);
+    // Approval dispatches automatically, so the case runs through to CLOSED.
+    expect(stateOf(queryId)).toBe(WORKFLOW_STATE.CLOSED);
   });
 });
 
@@ -289,7 +310,7 @@ describe('response versioning and locking', () => {
     s().saveDraftVersion(queryId, 'Officer edit A', OFFICIAL);
     s().saveDraftVersion(queryId, 'Officer edit B', OFFICIAL);
     s().submitForReview(queryId, OFFICIAL);
-    s().grantFinalApproval(queryId, OIC);
+    await s().grantFinalApproval(queryId, OIC, fakeSend);
 
     const versions = s().getVersions(queryId);
     expect(versions).toHaveLength(3);
@@ -317,8 +338,8 @@ describe('response versioning and locking', () => {
     const queryId = await runTo(WORKFLOW_STATE.DRAFTING);
     s().saveDraftVersion(queryId, 'The final agreed wording.', OFFICIAL);
     s().submitForReview(queryId, OFFICIAL);
-    s().grantFinalApproval(queryId, OIC);
-    await s().dispatchResponse(queryId, FRONT_OFFICE, fakeSend);
+    // No manual dispatch: approval sends the approved text on its own.
+    await s().grantFinalApproval(queryId, OIC, fakeSend);
 
     const sent = s().emailMessages.find((m) => m.emailType === EMAIL_TYPE.OUTGOING_RESPONSE);
     expect(sent.body).toBe('The final agreed wording.');
@@ -499,7 +520,7 @@ describe('RBAC — the wrong role is refused even at the right stage', () => {
 
   it('the inquirer can do nothing at all to a case', async () => {
     const queryId = await runTo(WORKFLOW_STATE.PENDING_FINAL_APPROVAL);
-    expect(() => s().grantFinalApproval(queryId, INQUIRER)).toThrow();
+    await expect(s().grantFinalApproval(queryId, INQUIRER)).rejects.toThrow();
     expect(() => s().approveReview(queryId, 'ok', INQUIRER)).toThrow();
     expect(() => s().saveDraftVersion(queryId, 'text', INQUIRER)).toThrow();
   });

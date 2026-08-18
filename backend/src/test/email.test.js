@@ -18,8 +18,8 @@ describe('email configuration', () => {
 
   it('exposes non-secret config only — never OAuth credentials', () => {
     const config = emailService.getEmailConfig();
-    expect(config.ipcQueryEmail).toBe('ipc-query-mock@example.com');
-    expect(config.inquirer.email).toBe('abhinash.pritiraj@gmail.com');
+    expect(config.ipcQueryEmail).toBe('front-office@test.invalid');
+    expect(config.inquirer.email).toBe('inquirer@test.invalid');
     expect(JSON.stringify(config)).not.toMatch(/GMAIL_|client_secret|refresh_token/i);
   });
 
@@ -33,7 +33,6 @@ describe('email configuration', () => {
       EMAIL_TRANSPORT: 'gmail',
       GMAIL_CLIENT_ID: '',
       GMAIL_CLIENT_SECRET: '',
-      GMAIL_REFRESH_TOKEN: '',
     });
     expect(errors).toHaveLength(3);
     expect(errors.join(' ')).toMatch(/GMAIL_CLIENT_ID.*required/);
@@ -51,16 +50,16 @@ describe('email configuration', () => {
   });
 });
 
-describe('sendEnquiry — sender identity comes from config, not the caller', () => {
-  it('sends from Abhinash to the configured mock IPC address', async () => {
+describe('sendEnquiry — sender identity comes from the acting stakeholder', () => {
+  it('sends from the inquirer to the Front Officer', async () => {
     const result = await emailService.sendEnquiry({
       subject: 'Clarification on monograph revision',
       body: 'Please confirm the revised timeline.',
       timestamp: '2026-08-17T09:00:00.000Z',
     });
 
-    expect(result.from).toBe('Abhinash Pritiraj <abhinash.pritiraj@gmail.com>');
-    expect(result.to).toEqual(['ipc-query-mock@example.com']);
+    expect(result.from).toBe('Test Inquirer <inquirer@test.invalid>');
+    expect(result.to).toEqual(['front-office@test.invalid']);
     expect(result.transport).toBe('mock');
     expect(result.providerMessageId).toBe('mock-msg-1');
   });
@@ -71,13 +70,13 @@ describe('sendEnquiry — sender identity comes from config, not the caller', ()
       subject: 'Spoof attempt',
       body: 'x',
     });
-    expect(result.from).toBe('Abhinash Pritiraj <abhinash.pritiraj@gmail.com>');
+    expect(result.from).toBe('Test Inquirer <inquirer@test.invalid>');
   });
 
   it('delivers the enquiry into the mock IPC mailbox', async () => {
     await emailService.sendEnquiry({ subject: 'Test enquiry', body: 'Body', timestamp: '2026-08-17T09:00:00.000Z' });
 
-    const messages = await mailbox.list('ipc-query-mock@example.com');
+    const messages = await mailbox.list('front-office@test.invalid');
     expect(messages).toHaveLength(1);
     expect(messages[0].mailboxMessageId).toBe('MSG-00001');
     expect(messages[0].subject).toBe('Test enquiry');
@@ -90,24 +89,24 @@ describe('mock mailbox determinism', () => {
     await emailService.sendEnquiry({ subject: 'One', body: 'a' });
     await emailService.sendEnquiry({ subject: 'Two', body: 'b' });
 
-    expect((await mailbox.list('ipc-query-mock@example.com')).map((m) => m.mailboxMessageId)).toEqual([
+    expect((await mailbox.list('front-office@test.invalid')).map((m) => m.mailboxMessageId)).toEqual([
       'MSG-00001',
       'MSG-00002',
     ]);
 
     await mockTransport.reset();
     await emailService.sendEnquiry({ subject: 'After reset', body: 'c' });
-    expect((await mailbox.list('ipc-query-mock@example.com'))[0].mailboxMessageId).toBe('MSG-00001');
+    expect((await mailbox.list('front-office@test.invalid'))[0].mailboxMessageId).toBe('MSG-00001');
   });
 
   it('preserves delivery order and supports unreadOnly filtering', async () => {
     await emailService.sendEnquiry({ subject: 'First', body: 'a' });
     await emailService.sendEnquiry({ subject: 'Second', body: 'b' });
 
-    await mailbox.markIngested('ipc-query-mock@example.com', 'MSG-00001');
+    await mailbox.markIngested('front-office@test.invalid', 'MSG-00001');
 
-    expect((await mailbox.list('ipc-query-mock@example.com')).map((m) => m.subject)).toEqual(['First', 'Second']);
-    expect((await mailbox.list('ipc-query-mock@example.com', { unreadOnly: true })).map((m) => m.subject)).toEqual([
+    expect((await mailbox.list('front-office@test.invalid')).map((m) => m.subject)).toEqual(['First', 'Second']);
+    expect((await mailbox.list('front-office@test.invalid', { unreadOnly: true })).map((m) => m.subject)).toEqual([
       'Second',
     ]);
   });
@@ -116,14 +115,14 @@ describe('mock mailbox determinism', () => {
 describe('acknowledgement template', () => {
   it('uses the supplied wording and configurable sender', () => {
     const ack = buildAcknowledgement({
-      to: 'abhinash.pritiraj@gmail.com',
+      to: 'inquirer@test.invalid',
       fromEmail: 'arnd-ipc-mock@example.com',
       fromName: 'AR&D Division',
       queryId: 'QRY-2026-00001',
     });
 
     expect(ack.from).toBe('AR&D Division <arnd-ipc-mock@example.com>');
-    expect(ack.to).toEqual(['abhinash.pritiraj@gmail.com']);
+    expect(ack.to).toEqual(['inquirer@test.invalid']);
     expect(ack.subject).toBe(`${ACKNOWLEDGEMENT_SUBJECT} [QRY-2026-00001]`);
     expect(ack.body).toContain('Greetings from the Indian Pharmacopoeia Commission (IPC)!');
     expect(ack.body).toContain('This is an auto-generated email. Please do not reply to this message.');
@@ -140,8 +139,8 @@ describe('email HTTP endpoints', () => {
     const res = await request(app).get('/api/v1/emails/config');
     expect(res.status).toBe(200);
     expect(res.body.transport).toBe('mock');
-    expect(res.body.ipcQueryEmail).toBe('ipc-query-mock@example.com');
-    expect(res.body.inquirer.email).toBe('abhinash.pritiraj@gmail.com');
+    expect(res.body.ipcQueryEmail).toBe('front-office@test.invalid');
+    expect(res.body.inquirer.email).toBe('inquirer@test.invalid');
   });
 
   it('POST /emails/enquiry sends and returns the stored message', async () => {
@@ -150,18 +149,18 @@ describe('email HTTP endpoints', () => {
       .send({ subject: 'Monograph query', body: 'Details here', timestamp: '2026-08-17T09:00:00.000Z' });
 
     expect(res.status).toBe(201);
-    expect(res.body.from).toBe('Abhinash Pritiraj <abhinash.pritiraj@gmail.com>');
-    expect(res.body.to).toEqual(['ipc-query-mock@example.com']);
+    expect(res.body.from).toBe('Test Inquirer <inquirer@test.invalid>');
+    expect(res.body.to).toEqual(['front-office@test.invalid']);
   });
 
   it('POST /emails/acknowledgement sends the acknowledgement', async () => {
     const res = await request(app)
       .post('/api/v1/emails/acknowledgement')
-      .send({ to: 'abhinash.pritiraj@gmail.com', queryId: 'QRY-2026-00001' });
+      .send({ to: 'inquirer@test.invalid', queryId: 'QRY-2026-00001' });
 
     expect(res.status).toBe(201);
     expect(res.body.subject).toContain('Acknowledgement of Query Received');
-    expect(res.body.to).toEqual(['abhinash.pritiraj@gmail.com']);
+    expect(res.body.to).toEqual(['inquirer@test.invalid']);
   });
 
   it('rejects a response with no recipient', async () => {
@@ -172,7 +171,7 @@ describe('email HTTP endpoints', () => {
   it('carries the query id in the acknowledgement subject, so the thread is identifiable', async () => {
     const res = await request(app)
       .post('/api/v1/emails/acknowledgement')
-      .send({ to: 'abhinash.pritiraj@gmail.com', queryId: 'QRY-2026-00042' });
+      .send({ to: 'inquirer@test.invalid', queryId: 'QRY-2026-00042' });
 
     expect(res.body.subject).toContain('[QRY-2026-00042]');
     expect(res.body.providerMessageId).toBeTruthy();
@@ -182,16 +181,16 @@ describe('email HTTP endpoints', () => {
     await emailService.sendEnquiry({ subject: 'Loop check', body: 'a' });
     await request(app)
       .post('/api/v1/emails/acknowledgement')
-      .send({ to: 'abhinash.pritiraj@gmail.com', queryId: 'QRY-2026-00001' });
+      .send({ to: 'inquirer@test.invalid', queryId: 'QRY-2026-00001' });
 
     // The IPC mailbox still holds only the enquiry; re-polling it can never
     // register the acknowledgement as a new query.
-    const ipcInbox = await mailbox.list('ipc-query-mock@example.com');
+    const ipcInbox = await mailbox.list('front-office@test.invalid');
     expect(ipcInbox).toHaveLength(1);
     expect(ipcInbox[0].subject).toBe('Loop check');
 
     // It was delivered to the inquirer instead.
-    const inquirerInbox = await mailbox.list('abhinash.pritiraj@gmail.com');
+    const inquirerInbox = await mailbox.list('inquirer@test.invalid');
     expect(inquirerInbox).toHaveLength(1);
     expect(inquirerInbox[0].subject).toContain('Acknowledgement of Query Received');
   });
@@ -203,7 +202,7 @@ describe('mailbox HTTP endpoints', () => {
 
     const res = await request(app).get('/api/v1/mailbox/messages');
     expect(res.status).toBe(200);
-    expect(res.body.recipient).toBe('ipc-query-mock@example.com');
+    expect(res.body.recipient).toBe('front-office@test.invalid');
     expect(res.body.persistence).toMatch(/cleared on backend restart/);
     expect(res.body.messages).toHaveLength(1);
   });
@@ -215,7 +214,7 @@ describe('mailbox HTTP endpoints', () => {
 
     expect(res.status).toBe(201);
     expect(res.body.mailboxMessageId).toBe('MSG-00001');
-    expect(res.body.to).toBe('ipc-query-mock@example.com');
+    expect(res.body.to).toBe('front-office@test.invalid');
   });
 
   it('rejects a received message with no sender', async () => {
@@ -239,6 +238,6 @@ describe('mailbox HTTP endpoints', () => {
     const res = await request(app).delete('/api/v1/mailbox');
     expect(res.status).toBe(200);
     expect(res.body.reset).toBe(true);
-    expect(await mailbox.list('ipc-query-mock@example.com')).toHaveLength(0);
+    expect(await mailbox.list('front-office@test.invalid')).toHaveLength(0);
   });
 });

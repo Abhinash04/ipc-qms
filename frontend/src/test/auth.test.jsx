@@ -6,9 +6,11 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AppRoutes } from '@/routes/AppRoutes';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useWorkflowStore } from '@/store/useWorkflowStore';
-import { MOCK_USERS, MOCK_PASSWORD } from '@/constants/mockUsers';
-import { ROLE_LABELS } from '@/constants/roles';
+import { MOCK_USERS, MOCK_PASSWORD, findUserById } from '@/constants/mockUsers';
+import { ROLE_LABELS, ROLES } from '@/constants/roles';
 import { roleHome } from '@/constants/routePaths';
+import { navItemsForRole } from '@/constants/navigation';
+import { isRouteAllowedForRole } from '@/constants/permissions';
 
 vi.mock('@/services/api/healthService', () => ({
   fetchHealth: vi.fn().mockResolvedValue({ status: 'healthy' }),
@@ -78,12 +80,12 @@ describe('login form', () => {
 
   it('fills the form from Use Credentials', () => {
     renderApp();
-    const priya = MOCK_USERS.find((u) => u.name === 'Priya Sharma');
+    const frontOfficer = MOCK_USERS.find((u) => u.role === 'FRONT_OFFICE');
 
-    const card = screen.getByText(priya.name).closest('div').parentElement;
+    const card = screen.getByText(frontOfficer.name).closest('div').parentElement;
     fireEvent.click(card.querySelector('button'));
 
-    expect(screen.getByLabelText('Email')).toHaveValue(priya.email);
+    expect(screen.getByLabelText('Email')).toHaveValue(frontOfficer.email);
     expect(screen.getByLabelText('Password')).toHaveValue(MOCK_PASSWORD);
   });
 
@@ -173,6 +175,102 @@ describe('session', () => {
 
   it('a stored id rehydrates into the full user record', () => {
     const rehydrated = useAuthStore.persist.getOptions().merge({ userId: 'USR-0002' }, {});
-    expect(rehydrated.currentUser).toMatchObject({ id: 'USR-0002', name: 'Priya Sharma' });
+    expect(rehydrated.currentUser).toMatchObject({ id: 'USR-0002', name: 'Bhumika Makker' });
+  });
+});
+
+describe('Rawat Jatin — the real Assigned Official', () => {
+  const RAWAT = findUserById('USR-0009');
+
+  it('exists as an ASSIGNED_OFFICIAL with his own address', () => {
+    expect(RAWAT.role).toBe(ROLES.ASSIGNED_OFFICIAL);
+    expect(RAWAT.email).toBe('jatinrawat55361@gmail.com');
+  });
+
+  it('appears on the login page with his role', () => {
+    renderApp();
+    expect(screen.getByText('Rawat Jatin')).toBeInTheDocument();
+  });
+
+  it('logs in with the development credentials', async () => {
+    renderApp();
+    signInThroughForm(RAWAT);
+
+    await waitFor(() => {
+      expect(useAuthStore.getState().currentUser?.id).toBe('USR-0009');
+    });
+    expect(useAuthStore.getState().currentUser.email).toBe(RAWAT.email);
+  });
+
+  it('lands on /assigned-official/dashboard after login', async () => {
+    expect(roleHome(RAWAT.role)).toBe('/assigned-official/dashboard');
+
+    renderApp();
+    signInThroughForm(RAWAT);
+
+    expect(await screen.findByRole('heading', { name: 'Dashboard' })).toBeInTheDocument();
+    expect(screen.queryByText('Access restricted')).not.toBeInTheDocument();
+    expect(screen.getAllByText(/Rawat Jatin/).length).toBeGreaterThan(0);
+  });
+
+  it('sees the Assigned Official navigation', async () => {
+    renderApp();
+    signInThroughForm(RAWAT);
+    await screen.findByRole('heading', { name: 'Dashboard' });
+
+    const labels = navItemsForRole(RAWAT.role).map((item) => item.label);
+    expect(labels).toEqual(['Dashboard', 'Queries', 'My Work', 'Drafting', 'Notifications']);
+
+    // Every offered link is one his role may actually open.
+    for (const item of navItemsForRole(RAWAT.role)) {
+      expect(isRouteAllowedForRole(RAWAT.role, item.path)).toBe(true);
+    }
+  });
+
+  it('is refused every route outside his role', async () => {
+    for (const path of [
+      '/officer-in-charge/dashboard',
+      '/officer-in-charge/approvals',
+      '/front-officer/inbox',
+      '/front-officer/dispatch',
+      '/inquirer/compose',
+      '/super-admin/users',
+      '/reviewer/reviews',
+    ]) {
+      expect(isRouteAllowedForRole(RAWAT.role, path), path).toBe(false);
+    }
+
+    useAuthStore.setState({ currentUser: RAWAT });
+    renderApp('/officer-in-charge/approvals');
+    expect(await screen.findByText('Access restricted')).toBeInTheDocument();
+  });
+
+  it('is a different account from the Officer-in-Charge with the similar name', () => {
+    const jatin = findUserById('USR-0003');
+
+    expect(jatin.name).toBe('Jatin Rawat');
+    expect(RAWAT.name).toBe('Rawat Jatin');
+    expect(jatin.email).not.toBe(RAWAT.email);
+    expect(jatin.role).not.toBe(RAWAT.role);
+
+    // Logging in as one must never resolve to the other.
+    useAuthStore.getState().login('USR-0009');
+    expect(useAuthStore.getState().currentUser.email).toBe(RAWAT.email);
+
+    useAuthStore.getState().login('USR-0003');
+    expect(useAuthStore.getState().currentUser.email).toBe(jatin.email);
+  });
+
+  it('keeps the mock Assigned Official usable alongside him', async () => {
+    const neha = findUserById('USR-0004');
+    expect(neha.role).toBe(ROLES.ASSIGNED_OFFICIAL);
+
+    renderApp();
+    signInThroughForm(neha);
+
+    await waitFor(() => {
+      expect(useAuthStore.getState().currentUser?.id).toBe('USR-0004');
+    });
+    expect(await screen.findByRole('heading', { name: 'Dashboard' })).toBeInTheDocument();
   });
 });
