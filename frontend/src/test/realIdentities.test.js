@@ -100,13 +100,20 @@ describe('the real identities', () => {
     expect(JATIN).toMatchObject({ role: ROLES.OFFICER_IN_CHARGE, email: 'rawatjatin436@gmail.com' });
   });
 
-  it('holds Rawat Jatin as the real Assigned Official', () => {
-    expect(RAWAT).toMatchObject({
-      id: 'USR-0009',
-      role: ROLES.ASSIGNED_OFFICIAL,
-      email: 'jatinrawat55361@gmail.com',
-      divisionId: 'DIV-003',
-    });
+  it('holds Rawat Jatin as a MOCK Assigned Official — no Gmail account', () => {
+    expect(RAWAT).toMatchObject({ id: 'USR-0009', role: ROLES.ASSIGNED_OFFICIAL });
+    expect(RAWAT.email).toBe('rawat.jatin@ipc.example');
+    expect(RAWAT.email).not.toMatch(/gmail/);
+  });
+
+  it('gives every Assigned Official expertise and no real identity', () => {
+    const officials = MOCK_USERS.filter((u) => u.role === ROLES.ASSIGNED_OFFICIAL);
+
+    expect(officials.length).toBeGreaterThanOrEqual(5);
+    for (const official of officials) {
+      expect(official.email, `${official.name} must stay mock`).toMatch(/@ipc\.example$/);
+      expect(official.expertise?.length, `${official.name} needs expertise`).toBeGreaterThan(0);
+    }
   });
 
   it('keeps Rawat Jatin and Jatin Rawat as different people', () => {
@@ -121,19 +128,21 @@ describe('the real identities', () => {
   });
 
   it('leaves every user without a real identity on a mock address', () => {
-    const realAddresses = new Set([ABHINASH.email, BHUMIKA.email, JATIN.email, RAWAT.email]);
+    // Exactly three real participants now; everyone else is mock.
+    const realAddresses = new Set([ABHINASH.email, BHUMIKA.email, JATIN.email]);
     const stillMock = MOCK_USERS.filter((u) => !realAddresses.has(u.email));
 
-    // Neha (the mock Assigned Official), both reviewers, admin, super admin.
-    expect(stillMock).toHaveLength(5);
+    expect(stillMock.length).toBeGreaterThan(0);
     for (const user of stillMock) {
       expect(user.email, `${user.name} must stay mock`).toMatch(/@ipc\.example$/);
     }
   });
 
-  it('keeps a mock Assigned Official alongside the real one', () => {
+  it('offers the AI several officials to choose between', () => {
     const officials = MOCK_USERS.filter((u) => u.role === ROLES.ASSIGNED_OFFICIAL);
-    expect(officials.map((u) => u.id).sort()).toEqual(['USR-0004', 'USR-0009']);
+    expect(officials.length).toBeGreaterThanOrEqual(5);
+    // Spread across divisions, so the recommendation is a real choice.
+    expect(new Set(officials.map((u) => u.divisionId)).size).toBeGreaterThanOrEqual(4);
   });
 });
 
@@ -695,5 +704,69 @@ describe('final approval dispatches automatically', () => {
     await expect(s().dispatchResponse(queryId, NEHA, fakeResponse)).rejects.toThrow(
       /may not perform DISPATCH/,
     );
+  });
+});
+
+describe('assignment recommendation weighs expertise', () => {
+  const officialFor = (subject, body) => {
+    const { queryId } = s().ingestEmail(gmailEnquiry({ subject, body }));
+    return s().recommendAssigneeFor(queryId);
+  };
+
+  it('recommends the microbiology official for a sterility enquiry', () => {
+    const rec = officialFor(
+      'Sterility testing requirements',
+      'Please advise on endotoxin limits and bioburden testing.',
+    );
+
+    expect(findUserById(rec.userId).divisionId).toBe('DIV-007');
+    expect(rec.reason).toMatch(/sterility|endotoxin|bioburden/i);
+    expect(rec.factors.join(' ')).toContain('Expertise matched');
+  });
+
+  it('recommends the pharmacopoeial official for a monograph enquiry', () => {
+    const rec = officialFor(
+      'Monograph revision timelines',
+      'Clarification on the applicable reference standard and specification.',
+    );
+
+    expect(findUserById(rec.userId).divisionId).toBe('DIV-006');
+  });
+
+  it('recommends the regulatory official for a submission enquiry', () => {
+    const rec = officialFor(
+      'Submission documentation requirements',
+      'Which documentation and guideline applies for regulatory compliance?',
+    );
+
+    expect(findUserById(rec.userId).divisionId).toBe('DIV-009');
+  });
+
+  it('still returns somebody when nothing matches, and says so', () => {
+    const rec = officialFor('Office parking', 'Where do visitors park?');
+
+    expect(findUserById(rec.userId).role).toBe(ROLES.ASSIGNED_OFFICIAL);
+    expect(rec.factors.join(' ')).toContain('No declared expertise matched');
+    expect(rec.matchPercent).toBeGreaterThan(0);
+  });
+
+  it('remains advisory — the OIC assigns whoever they choose', async () => {
+    const { queryId } = s().ingestEmail(gmailEnquiry({ subject: 'Sterility testing' }));
+    s().verifyQuery(queryId, BHUMIKA);
+    await s().forwardToOic(queryId, BHUMIKA, fakeForward);
+
+    const recommended = s().recommendAssigneeFor(queryId).userId;
+
+    // Nobody is assigned until the OIC acts...
+    expect(s().getQuery(queryId).currentAssigneeId).toBeNull();
+
+    // ...and the OIC may pick someone else entirely.
+    const other = MOCK_USERS.find(
+      (u) => u.role === ROLES.ASSIGNED_OFFICIAL && u.id !== recommended,
+    );
+    s().assignQuery(queryId, other.id, JATIN);
+
+    expect(s().getQuery(queryId).currentAssigneeId).toBe(other.id);
+    expect(s().getQuery(queryId).assignmentDecision.acceptedAiRecommendation).toBe(false);
   });
 });

@@ -287,19 +287,28 @@ describe('revision cycles', () => {
     expect(versions.slice(1).every((v) => v.source === RESPONSE_SOURCE.REVIEW_REVISION)).toBe(true);
   });
 
-  it('lets the OIC return a case from final approval', async () => {
-    const queryId = await runTo(WORKFLOW_STATE.PENDING_FINAL_APPROVAL);
+  it('lets the OIC return a case, restarting the whole review cycle', async () => {
+    const queryId = await runTo(WORKFLOW_STATE.PENDING_FINAL_APPROVAL, {
+      reviewers: [REVIEWER_A, REVIEWER_B],
+    });
 
     s().returnForRevisionFromApproval(queryId, 'Tone needs softening.', OIC);
     expect(stateOf(queryId)).toBe(WORKFLOW_STATE.RETURNED_FOR_REVISION);
 
-    s().saveDraftVersion(queryId, 'Softened text.', OFFICIAL);
+    s().saveDraftVersion(queryId, 'Softened text.', OFFICIAL, 'Revision after review');
     s().submitForReview(queryId, OFFICIAL);
 
+    // The revised draft must climb the whole ladder again: Reviewer-I first,
+    // not straight back to the OIC.
+    expect(stateOf(queryId)).toBe(WORKFLOW_STATE.UNDER_REVIEW);
+
+    s().approveReview(queryId, 'Level 1 fine', REVIEWER_A);
+    expect(stateOf(queryId)).toBe(WORKFLOW_STATE.UNDER_REVIEW);
+
+    s().approveReview(queryId, 'Level 2 fine', REVIEWER_B);
     expect(stateOf(queryId)).toBe(WORKFLOW_STATE.PENDING_FINAL_APPROVAL);
 
     await s().grantFinalApproval(queryId, OIC, fakeSend);
-    // Approval dispatches automatically, so the case runs through to CLOSED.
     expect(stateOf(queryId)).toBe(WORKFLOW_STATE.CLOSED);
   });
 });
@@ -553,5 +562,148 @@ describe('duplicate ingestion protection still holds', () => {
     expect(replay).toMatchObject({ queryId, created: false, reason: 'already-ingested' });
     expect(s().queries).toHaveLength(1);
     expect(stateOf(queryId)).toBe(WORKFLOW_STATE.UNDER_REVIEW);
+  });
+});
+
+describe('every revision restarts at Reviewer-I', () => {
+  /** Reach UNDER_REVIEW with two reviewers configured. */
+  async function twoLevelReview() {
+    return runTo(WORKFLOW_STATE.UNDER_REVIEW, { reviewers: [REVIEWER_A, REVIEWER_B] });
+  }
+
+  const pendingReviewer = (queryId) => {
+    const step = s().getCurrentStep(queryId);
+    return step?.assignedUserId;
+  };
+
+  it('a Reviewer-II rejection sends the revision back to Reviewer-I, not Reviewer-II', async () => {
+    const queryId = await twoLevelReview();
+
+    s().approveReview(queryId, 'Level 1 fine', REVIEWER_A);
+    expect(pendingReviewer(queryId)).toBe(REVIEWER_B.id);
+
+    // Reviewer-II rejects. Previously the revision went straight back to
+    // Reviewer-II, skipping Reviewer-I entirely.
+    s().requestRevision(queryId, 'Cite the edition.', REVIEWER_B);
+    s().saveDraftVersion(queryId, 'Revised text.', OFFICIAL, 'Revision after review');
+    s().submitForReview(queryId, OFFICIAL);
+
+    expect(pendingReviewer(queryId)).toBe(REVIEWER_A.id);
+
+    // And the full ladder still has to be climbed.
+    s().approveReview(queryId, 'ok', REVIEWER_A);
+    expect(pendingReviewer(queryId)).toBe(REVIEWER_B.id);
+    s().approveReview(queryId, 'ok', REVIEWER_B);
+    expect(stateOf(queryId)).toBe(WORKFLOW_STATE.PENDING_FINAL_APPROVAL);
+  });
+
+  it('a Reviewer-I rejection also re-enters at Reviewer-I', async () => {
+    const queryId = await twoLevelReview();
+
+    s().requestRevision(queryId, 'Needs the monograph reference.', REVIEWER_A);
+    s().saveDraftVersion(queryId, 'Revised.', OFFICIAL, 'Revision after review');
+    s().submitForReview(queryId, OFFICIAL);
+
+    expect(pendingReviewer(queryId)).toBe(REVIEWER_A.id);
+  });
+
+  it('an OIC return re-enters at Reviewer-I and must pass both levels again', async () => {
+    const queryId = await runTo(WORKFLOW_STATE.PENDING_FINAL_APPROVAL, {
+      reviewers: [REVIEWER_A, REVIEWER_B],
+    });
+
+    s().returnForRevisionFromApproval(queryId, 'Soften the tone.', OIC);
+    s().saveDraftVersion(queryId, 'Softened.', OFFICIAL, 'Revision after review');
+    s().submitForReview(queryId, OFFICIAL);
+
+    expect(pendingReviewer(queryId)).toBe(REVIEWER_A.id);
+
+    s().approveReview(queryId, 'ok', REVIEWER_A);
+    expect(pendingReviewer(queryId)).toBe(REVIEWER_B.id);
+  });
+
+  it('survives several loops, retaining every version', async () => {
+    const queryId = await twoLevelReview();
+
+    // Reviewer-I rejects, Reviewer-II rejects, OIC returns — three full laps.
+    s().requestRevision(queryId, 'Round 1', REVIEWER_A);
+    s().saveDraftVersion(queryId, 'v2 text', OFFICIAL, 'Revision after review');
+    s().submitForReview(queryId, OFFICIAL);
+
+    s().approveReview(queryId, 'ok', REVIEWER_A);
+    s().requestRevision(queryId, 'Round 2', REVIEWER_B);
+    s().saveDraftVersion(queryId, 'v3 text', OFFICIAL, 'Revision after review');
+    s().submitForReview(queryId, OFFICIAL);
+
+    s().approveReview(queryId, 'ok', REVIEWER_A);
+    s().approveReview(queryId, 'ok', REVIEWER_B);
+    s().returnForRevisionFromApproval(queryId, 'Round 3', OIC);
+    s().saveDraftVersion(queryId, 'v4 text', OFFICIAL, 'Revision after review');
+    s().submitForReview(queryId, OFFICIAL);
+
+    s().approveReview(queryId, 'ok', REVIEWER_A);
+    s().approveReview(queryId, 'ok', REVIEWER_B);
+    expect(stateOf(queryId)).toBe(WORKFLOW_STATE.PENDING_FINAL_APPROVAL);
+
+    expect(s().getVersions(queryId).map((v) => v.version)).toEqual(['v1', 'v2', 'v3', 'v4']);
+    expect(s().queries).toHaveLength(1);
+  });
+});
+
+describe('review comments', () => {
+  it('are bound to the version that was reviewed', async () => {
+    const queryId = await runTo(WORKFLOW_STATE.UNDER_REVIEW);
+
+    s().requestRevision(queryId, 'Fix the citation.', REVIEWER_A);
+    s().saveDraftVersion(queryId, 'v2 text', OFFICIAL, 'Revision after review');
+    s().submitForReview(queryId, OFFICIAL);
+    s().approveReview(queryId, 'Now correct.', REVIEWER_A);
+
+    const [rejection, approval] = s().getReviews(queryId);
+
+    expect(rejection).toMatchObject({
+      decision: 'CHANGES_REQUESTED',
+      comment: 'Fix the citation.',
+      version: 'v1',
+      reviewerId: REVIEWER_A.id,
+    });
+    expect(approval).toMatchObject({ decision: 'APPROVED', version: 'v2' });
+  });
+
+  it('record the OIC return against the version it rejected', async () => {
+    const queryId = await runTo(WORKFLOW_STATE.PENDING_FINAL_APPROVAL);
+    s().returnForRevisionFromApproval(queryId, 'Needs a softer tone.', OIC);
+
+    const oicReturn = s().getReviews(queryId).at(-1);
+    expect(oicReturn).toMatchObject({
+      decision: 'CHANGES_REQUESTED',
+      comment: 'Needs a softer tone.',
+      version: 'v1',
+      reviewerId: OIC.id,
+    });
+  });
+
+  it('are mandatory when changes are requested', async () => {
+    const queryId = await runTo(WORKFLOW_STATE.UNDER_REVIEW);
+
+    expect(() => s().requestRevision(queryId, '', REVIEWER_A)).toThrow(/requires a comment/);
+    expect(() => s().requestRevision(queryId, '   ', REVIEWER_A)).toThrow(/requires a comment/);
+    expect(() => s().requestRevision(queryId, undefined, REVIEWER_A)).toThrow(/requires a comment/);
+
+    // Nothing was recorded and the case did not move.
+    expect(s().getReviews(queryId)).toHaveLength(0);
+    expect(stateOf(queryId)).toBe(WORKFLOW_STATE.UNDER_REVIEW);
+  });
+
+  it('are mandatory when the OIC returns for revision', async () => {
+    const queryId = await runTo(WORKFLOW_STATE.PENDING_FINAL_APPROVAL);
+
+    expect(() => s().returnForRevisionFromApproval(queryId, '', OIC)).toThrow(/requires a comment/);
+    expect(stateOf(queryId)).toBe(WORKFLOW_STATE.PENDING_FINAL_APPROVAL);
+  });
+
+  it('stay optional on approval', async () => {
+    const queryId = await runTo(WORKFLOW_STATE.UNDER_REVIEW);
+    expect(() => s().approveReview(queryId, '', REVIEWER_A)).not.toThrow();
   });
 });

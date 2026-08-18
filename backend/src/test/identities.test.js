@@ -69,15 +69,24 @@ describe('identity configuration', () => {
 });
 
 describe('identity resolution when a role holds more than one person', () => {
-  // ASSIGNED_OFFICIAL covers the real Rawat Jatin and the mock Neha Singh, so
-  // the acting user's ADDRESS decides who can send, not the role.
+  // Address-first resolution is what keeps a role with several holders honest:
+  // the acting user's own address decides whether they can send, never the role.
+  // ASSIGNED_OFFICIAL now holds six mock officials and no real account at all —
+  // it was briefly a real Gmail identity and that was rolled back — so no
+  // address on that role resolves to a sending account.
 
-  it('resolves the real Assigned Official from his own address', () => {
-    const identity = identityForEmail('assigned-official@test.invalid');
+  it('resolves the Front Officer from her own address', () => {
+    const identity = identityForEmail('front-office@test.invalid');
     expect(identity).toMatchObject({
-      role: IDENTITY_ROLES.ASSIGNED_OFFICIAL,
-      name: 'Test Assigned Official',
+      role: IDENTITY_ROLES.FRONT_OFFICE,
+      name: 'Test Front Officer',
     });
+  });
+
+  it('has no Assigned Official identity — the role is entirely mock', () => {
+    expect(identityForRole(IDENTITY_ROLES.ASSIGNED_OFFICIAL)).toBeNull();
+    expect(identityForEmail('assigned-official@test.invalid')).toBeNull();
+    expect(identityForEmail('rawat.jatin@ipc.example')).toBeNull();
   });
 
   it('returns nothing for a mock user, so they can never borrow an account', () => {
@@ -93,13 +102,13 @@ describe('identity resolution when a role holds more than one person', () => {
     );
   });
 
-  it('keeps the Officer-in-Charge and the Assigned Official separate', () => {
+  it('the Officer-in-Charge sends as himself and no Assigned Official can', () => {
+    // The two roles were held by people with near-identical display names, so
+    // this asserts on addresses: the OIC has an account, the official has none.
     const officer = identityForEmail('officer@test.invalid');
-    const official = identityForEmail('assigned-official@test.invalid');
 
     expect(officer.role).toBe(IDENTITY_ROLES.OFFICER_IN_CHARGE);
-    expect(official.role).toBe(IDENTITY_ROLES.ASSIGNED_OFFICIAL);
-    expect(officer.email).not.toBe(official.email);
+    expect(identityForEmail('rawat.jatin@ipc.example')).toBeNull();
   });
 
   it('sends through the mock transport for a user with no identity', async () => {
@@ -183,12 +192,11 @@ describe('email HTTP surface', () => {
     const res = await request(app).get('/api/v1/emails/config');
 
     expect(res.status).toBe(200);
-    expect(res.body.participants).toHaveLength(4);
+    expect(res.body.participants).toHaveLength(3);
     expect(res.body.participants.map((p) => p.role)).toEqual([
       'INQUIRER',
       'FRONT_OFFICE',
       'OFFICER_IN_CHARGE',
-      'ASSIGNED_OFFICIAL',
     ]);
     expect(JSON.stringify(res.body)).not.toMatch(/GMAIL_|client_secret|refresh_?token/i);
   });

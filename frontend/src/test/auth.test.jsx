@@ -179,12 +179,12 @@ describe('session', () => {
   });
 });
 
-describe('Rawat Jatin — the real Assigned Official', () => {
+describe('Rawat Jatin — a mock Assigned Official', () => {
   const RAWAT = findUserById('USR-0009');
 
-  it('exists as an ASSIGNED_OFFICIAL with his own address', () => {
+  it('exists as an ASSIGNED_OFFICIAL with a mock address', () => {
     expect(RAWAT.role).toBe(ROLES.ASSIGNED_OFFICIAL);
-    expect(RAWAT.email).toBe('jatinrawat55361@gmail.com');
+    expect(RAWAT.email).toBe('rawat.jatin@ipc.example');
   });
 
   it('appears on the login page with his role', () => {
