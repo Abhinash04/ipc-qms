@@ -94,10 +94,42 @@ export function summarise(query) {
     topics,
   };
 }
+/**
+ * Score how well an official's declared expertise fits the enquiry.
+ *
+ * Expertise keywords are matched against the enquiry text directly rather than
+ * through the topic map, so an official can be a match on wording the topic map
+ * has never heard of. Returns the matched keywords so the reason can name them.
+ */
+function expertiseMatch(user, text) {
+  const matched = (user.expertise || []).filter((skill) => text.includes(skill.toLowerCase()));
+  return { matched, score: matched.length };
+}
+
+/**
+ * Recommend an Assigned Official. **Advisory only** — nothing here assigns
+ * anybody; `assignQuery` still requires the Officer-in-Charge's explicit choice.
+ *
+ * ── The swap point for a real model ──────────────────────────────────────────
+ * This function is the entire assignment-intelligence contract:
+ *
+ *     recommendAssignee(query, users, openQueries)
+ *       → { userId, matchPercent, reason, factors } | null
+ *
+ * A Gemma-backed implementation replaces this body and nothing else. The store
+ * (`recommendAssigneeFor`), the Assignment page and the workflow all consume
+ * that shape and never inspect how it was produced, so swapping the reasoning
+ * for a model does not touch the workflow. If the model call becomes async, the
+ * only change is awaiting it in `recommendAssigneeFor`.
+ *
+ * Signals weighed, in the order the user specified: subject and body content,
+ * domain/expertise fit, the official's division, and current workload.
+ */
 export function recommendAssignee(query, users = MOCK_USERS, openQueries = []) {
   const eligible = users.filter((user) => user.role === ROLES.ASSIGNED_OFFICIAL);
   if (eligible.length === 0) return null;
 
+  const text = textOf(query);
   const topics = detectTopics(query);
   const wantedDivisions = new Set(topics.map((topic) => TOPIC_DIVISIONS[topic]));
 
@@ -107,24 +139,42 @@ export function recommendAssignee(query, users = MOCK_USERS, openQueries = []) {
   const scored = eligible
     .map((user) => {
       const divisionMatch = wantedDivisions.has(user.divisionId);
+      const expertise = expertiseMatch(user, text);
+
+      // Expertise is the strongest signal — it is matched against the actual
+      // words of the enquiry — then division, then availability. The floor
+      // keeps a match percent from ever reading as zero.
       const score =
-        (divisionMatch ? 70 : 0) + Math.round((1 - workload(user.id) / maxWorkload) * 25) + 5;
-      return { user, divisionMatch, load: workload(user.id), score };
+        Math.min(60, expertise.score * 20) +
+        (divisionMatch ? 25 : 0) +
+        Math.round((1 - workload(user.id) / maxWorkload) * 10) +
+        5;
+
+      return { user, divisionMatch, expertise, load: workload(user.id), score };
     })
     .sort((a, b) => b.score - a.score || a.user.id.localeCompare(b.user.id));
 
   const best = scored[0];
   const division = findDivisionById(best.user.divisionId);
+  const plural = best.load === 1 ? 'query' : 'queries';
 
-  const reason = best.divisionMatch
-    ? `${division?.name || 'Their division'} handles ${topics.slice(0, 2).join(' and ')}, and ${best.user.name} currently holds ${best.load} open ${best.load === 1 ? 'query' : 'queries'}.`
-    : `No division is a clear subject-matter match for this enquiry, so ${best.user.name} is suggested on availability alone (${best.load} open ${best.load === 1 ? 'query' : 'queries'}).`;
+  let reason;
+  if (best.expertise.score > 0) {
+    reason = `${best.user.name} works on ${best.expertise.matched.slice(0, 3).join(', ')}, which this enquiry asks about, and currently holds ${best.load} open ${plural}.`;
+  } else if (best.divisionMatch) {
+    reason = `${division?.name || 'Their division'} handles ${topics.slice(0, 2).join(' and ')}, and ${best.user.name} currently holds ${best.load} open ${plural}.`;
+  } else {
+    reason = `No official is a clear subject-matter match for this enquiry, so ${best.user.name} is suggested on availability alone (${best.load} open ${plural}).`;
+  }
 
   return {
     userId: best.user.id,
     matchPercent: Math.min(99, best.score),
     reason,
     factors: [
+      best.expertise.score
+        ? `Expertise matched: ${best.expertise.matched.join(', ')}`
+        : 'No declared expertise matched the wording',
       topics.length ? `Topics detected: ${topics.slice(0, 3).join(', ')}` : 'No known topic matched',
       `Division: ${division?.name || 'unassigned'}`,
       `Current workload: ${best.load} open`,
