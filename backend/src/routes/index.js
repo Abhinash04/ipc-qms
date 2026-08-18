@@ -1,8 +1,12 @@
-const express = require('express');
-const healthRoutes = require('./healthRoutes');
+import express from 'express';
+import healthRoutes from './healthRoutes.js';
+import emailRoutes from './emailRoutes.js';
+import mailboxRoutes from './mailboxRoutes.js';
 
 const router = express.Router();
 
 router.use(healthRoutes);
+router.use(emailRoutes);
+router.use(mailboxRoutes);
 
-module.exports = router;
+export default router;

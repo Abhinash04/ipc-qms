@@ -1,18 +1,20 @@
-const express = require('express');
-const cors = require('cors');
-const helmet = require('helmet');
-const morgan = require('morgan');
+import express from 'express';
+import cors from 'cors';
+import helmet from 'helmet';
+import morgan from 'morgan';
 
-const env = require('./config/env');
-const apiRoutes = require('./routes');
-const notFound = require('./middleware/notFound');
-const errorHandler = require('./middleware/errorHandler');
+import env from './config/env.js';
+import apiRoutes from './routes/index.js';
+import notFound from './middleware/notFound.js';
+import errorHandler from './middleware/errorHandler.js';
 
 const app = express();
 
 app.use(helmet());
 app.use(cors({ origin: env.CLIENT_URL }));
-app.use(morgan(env.NODE_ENV === 'development' ? 'dev' : 'combined'));
+if (env.NODE_ENV !== 'test') {
+  app.use(morgan(env.NODE_ENV === 'development' ? 'dev' : 'combined'));
+}
 app.use(express.json());
 
 app.use('/api/v1', apiRoutes);
@@ -20,4 +22,4 @@ app.use('/api/v1', apiRoutes);
 app.use(notFound);
 app.use(errorHandler);
 
-module.exports = app;
+export default app;
