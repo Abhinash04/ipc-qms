@@ -17,7 +17,7 @@ export function StatTile({
   return (
     <div
       className={cn(
-        "flex flex-col rounded-[13px] border p-[18px_20px] shadow-[0_1px_4px_rgba(0,0,0,0.04)] transition-all duration-150 cursor-default hover:shadow-[0_6px_20px_rgba(0,0,0,0.09)] hover:-translate-y-[2px]",
+        "flex flex-col rounded-[13px] border p-[18px_20px] shadow-[0_1px_4px_rgba(0,0,0,0.04)] transition-all duration-150 cursor-default hover:shadow-[0_6px_20px_rgba(0,0,0,0.09)] hover:-translate-y-0.5",
         className
       )}
       style={{
@@ -25,16 +25,16 @@ export function StatTile({
         borderColor: cardBorder,
       }}
     >
-      <div className="flex items-center justify-between mb-[14px]">
+      <div className="flex items-center justify-between mb-3.5">
         <span className="text-[12px] font-medium opacity-80" style={{ color: iconColor }}>
           {label}
         </span>
         {Icon && (
           <div
-            className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-[9px] border"
+            className="flex h-8.5 w-8.5 shrink-0 items-center justify-center rounded-[9px] border"
             style={{ backgroundColor: iconBg, color: iconColor, borderColor: cardBorder }}
           >
-            <Icon className="h-[18px] w-[18px]" strokeWidth={1.8} aria-hidden="true" />
+            <Icon className="h-4.5 w-4.5" strokeWidth={1.8} aria-hidden="true" />
           </div>
         )}
       </div>
@@ -47,7 +47,7 @@ export function StatTile({
       </div>
       
       <div
-        className="mt-2 flex items-center gap-[3px] text-[11.5px] font-medium"
+        className="mt-2 flex items-center gap-0.75 text-[11.5px] font-medium"
         style={{ color: up === true ? '#16a34a' : up === false ? '#dc2626' : '#92400e' }}
       >
         {up === true && '↑ '}
@@ -55,7 +55,7 @@ export function StatTile({
         {delta}
       </div>
       
-      <div className="mt-[14px] h-[3px] w-full overflow-hidden rounded-full" style={{ backgroundColor: cardBorder }}>
+      <div className="mt-3.5 h-0.75 w-full overflow-hidden rounded-full" style={{ backgroundColor: cardBorder }}>
         <div
           className="h-full rounded-full"
           style={{ width: `${Math.min(100, (value / 50) * 100)}%`, backgroundColor: accentBar }}

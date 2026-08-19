@@ -39,50 +39,50 @@ export function Header() {
   const status = isLoading ? 'checking' : isError ? 'offline' : data?.status === 'healthy' ? 'online' : 'offline';
   
   const badgeStyles = {
-    online: 'bg-[#f0fdf4] border-[#bbf7d0] text-[#16a34a]',
-    checking: 'bg-[#f8fafc] border-[#e2e8f0] text-[#64748b]',
-    offline: 'bg-[#fff1f1] border-[#fecaca] text-[#b91c1c]',
+    online: 'bg-status-green-bg border-status-green-line text-status-green-fg',
+    checking: 'bg-muted border-border text-status-gray-fg',
+    offline: 'bg-[#fff1f1] border-error-border text-[#b91c1c]',
   };
   
   const dotStyles = {
     online: 'bg-[#22c55e]',
-    checking: 'bg-[#94a3b8]',
-    offline: 'bg-[#ef4444]',
+    checking: 'bg-muted-foreground',
+    offline: 'bg-destructive',
   };
 
   return (
-    <header className="flex h-[54px] shrink-0 items-center justify-between border-b border-[#e2e8f0] bg-[#fff] px-[26px] shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
+    <header className="flex h-13.5 shrink-0 items-center justify-between border-b border-border bg-[#fff] px-6.5 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
       <div className="flex items-center gap-2.5">
-        <span className={`inline-flex items-center gap-[5px] text-[11.5px] font-semibold border rounded-[6px] px-[10px] py-[3px] ${badgeStyles[status]}`}>
-          <span className={`w-[5px] h-[5px] rounded-full ${dotStyles[status]}`} />
+        <span className={`inline-flex items-center gap-1.25 text-[11.5px] font-semibold border rounded-[6px] px-2.5 py-0.75 ${badgeStyles[status]}`}>
+          <span className={`w-1.25 h-1.25 rounded-full ${dotStyles[status]}`} />
           Backend: {status}
         </span>
         {persistenceError && (
-          <span className={`inline-flex items-center gap-[5px] text-[11.5px] font-semibold border rounded-[6px] px-[10px] py-[3px] ${badgeStyles.offline}`} title={persistenceError}>
+          <span className={`inline-flex items-center gap-1.25 text-[11.5px] font-semibold border rounded-[6px] px-2.5 py-0.75 ${badgeStyles.offline}`} title={persistenceError}>
             Storage unavailable
           </span>
         )}
       </div>
 
-      <div className="flex items-center gap-[10px]">
+      <div className="flex items-center gap-2.5">
         <button
           onClick={resetDemo}
           title="Reset all workflow progress to the seeded starting state"
-          className="flex items-center gap-[6px] rounded-[7px] border border-[#e2e8f0] bg-[#f8fafc] px-[12px] py-[5px] text-[12.5px] font-medium text-[#64748b] cursor-pointer hover:bg-[#f1f5f9] transition-colors"
+          className="flex items-center gap-1.5 rounded-[7px] border border-border bg-muted px-3 py-1.25 text-[12.5px] font-medium text-status-gray-fg cursor-pointer hover:bg-accent transition-colors"
         >
           <RotateCcwIcon className="h-3 w-3" aria-hidden="true" strokeWidth={2} />
           Reset demo data
         </button>
 
-        <div className="w-[1px] h-[18px] bg-[#e2e8f0]" />
+        <div className="w-px h-4.5 bg-border" />
 
-        <div className="flex items-center gap-[7px]">
-          <span className="text-[12px] text-[#94a3b8]">Viewing as</span>
+        <div className="flex items-center gap-1.75">
+          <span className="text-[12px] text-muted-foreground">Viewing as</span>
           <Select value={currentUser?.id || ''} onValueChange={switchUser}>
-            <SelectTrigger className="flex items-center gap-[7px] h-auto border border-[#e2e8f0] bg-[#f8fafc] rounded-[20px] p-[5px_10px_5px_6px] text-[12.5px] font-semibold text-[#1e293b] hover:bg-[#f1f5f9] transition-colors focus:ring-0 focus:ring-offset-0">
+            <SelectTrigger className="flex items-center gap-1.75 h-auto border border-border bg-muted rounded-[20px] p-[5px_10px_5px_6px] text-[12.5px] font-semibold text-accent-foreground hover:bg-accent transition-colors focus:ring-0 focus:ring-offset-0">
               <SelectValue>
-                <div className="flex items-center gap-[7px]">
-                  <div className="w-[24px] h-[24px] rounded-full bg-[#ede9fe] border-[1.5px] border-[#c4b5fd] flex items-center justify-center text-[9.5px] font-bold text-[#7c3aed]">
+                <div className="flex items-center gap-1.75">
+                  <div className="w-6 h-6 rounded-full bg-[#ede9fe] border-[1.5px] border-[#c4b5fd] flex items-center justify-center text-[9.5px] font-bold text-[#7c3aed]">
                     {initials(currentUser?.name)}
                   </div>
                   {currentUser?.name} — {ROLE_LABELS[currentUser?.role]}
@@ -93,7 +93,7 @@ export function Header() {
               {SWITCHABLE_USERS.map((user) => (
                 <SelectItem key={user.id} value={user.id}>
                   <div className="flex items-center gap-2">
-                    <span className="flex h-[22px] w-[22px] items-center justify-center rounded-full bg-[#ede9fe] font-heading text-[9px] font-bold text-[#7c3aed]">
+                    <span className="flex h-5.5 w-5.5 items-center justify-center rounded-full bg-[#ede9fe] font-heading text-[9px] font-bold text-[#7c3aed]">
                       {initials(user.name)}
                     </span>
                     {user.name} — {ROLE_LABELS[user.role]}
