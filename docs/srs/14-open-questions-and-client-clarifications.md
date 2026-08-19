@@ -156,6 +156,7 @@ There is no model behind it yet; the interface is the swap point.
 - Is a reason/justification required when overriding the AI recommendation? — *Client Clarification Required*
 - How heavily should current workload factor into the recommendation (hard constraint vs. soft signal)? — *Client Clarification Required*
 - The recommendation is computed from declared `expertise` keywords, the official's division and their open-query count. The scoring weights are a development stand-in, not a client-agreed formula. — *Proposed Design*
+- The official roster now exists **twice**: `frontend/src/constants/mockUsers.js` (the user records the app authenticates and assigns against) and `backend/src/config/officialsMetadata.js` (what the Gemma recommender scores). They agree today and the backend copy carries a few extra keywords, but nothing enforces that — a division change made in one will silently not reach the other. Unifying them means deciding which side owns the roster, which is a design question, not an integration one. — *Client Clarification Required*
 - `recommendAssignee(query, users, openQueries) → { userId, matchPercent, reason, factors }` is a fixed contract so a model-backed implementation (Gemma is the candidate) can replace the rule-based scorer without changing the store, the pages or the workflow. Which model is approved remains open (see the AI section). — *Proposed Design*
 
 ## Review
@@ -207,7 +208,9 @@ There is no model behind it yet; the interface is the swap point.
 ## AI
 
 - AI recommends, human always decides — for both assignment and drafting. — *Confirmed Requirement*
-- Which LLM/provider is approved for use? — *Client Clarification Required*
+- Which LLM/provider is approved for use? — *Client Clarification Required*. **Gemma** is now wired in as the candidate, called over HTTP at `GEMMA_API_URL` (currently an AICTE-hosted endpoint). It fills the `recommendAssignee` swap point and generates the query summary. This is a development integration, not an approved choice — the question stays open.
+- The Gemma endpoint is a **third party outside IPC's control**, and enquiry subject and body are sent to it. Whether that is acceptable for real enquiry content — and whether an on-prem model is required instead — is unresolved and overlaps the on-prem question below. — *Client Clarification Required*
+- Every Gemma path falls back to the local rule-based scorer on timeout, error or an unparseable reply, so the workflow degrades rather than fails. Whether silent degradation is acceptable, or whether the Officer-in-Charge must be told the recommendation is not model-backed, is not specified. — *Proposed Design*
 - Is an external API call permitted, or must this run on a private/on-prem model? — *Client Clarification Required*
 - What counts as an "approved knowledge source" for draft generation? — *Client Clarification Required*
 - Should previously approved responses be usable as AI context/training examples? — *Client Clarification Required*
