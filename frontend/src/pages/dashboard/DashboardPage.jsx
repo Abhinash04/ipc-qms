@@ -7,7 +7,7 @@ import { EmptyState } from '@/components/common/EmptyState';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useWorkflowStore } from '@/store/useWorkflowStore';
 import { ROLE_LABELS } from '@/constants/roles';
-import { WORKFLOW_STATE } from '@/constants/statusEnums';
+import { WORKFLOW_STATE, AUDIT_EVENT } from '@/constants/statusEnums';
 import { buildPath } from '@/constants/routePaths';
 import { useRoutePaths } from '@/hooks/useRoutePaths';
 
@@ -16,6 +16,21 @@ const DRAFTING_STATES = [
   WORKFLOW_STATE.DRAFTING,
   WORKFLOW_STATE.RETURNED_FOR_REVISION,
 ];
+
+/**
+ * Trends come from the audit trail, which stamps every transition with `at`.
+ * Nothing here is a placeholder: if a period has no activity the tile shows no
+ * trend line rather than an invented one.
+ */
+function since(days) {
+  const d = new Date();
+  d.setDate(d.getDate() - days);
+  return d;
+}
+
+function countSince(auditEvents, event, from) {
+  return auditEvents.filter((e) => e.event === event && new Date(e.at) >= from).length;
+}
 
 const ROW_COLORS = [
   { bg: '#fff9f9', hover: '#fff1f2' },
@@ -28,6 +43,7 @@ export function DashboardPage() {
   const currentUser = useAuthStore((state) => state.currentUser);
   const queries = useWorkflowStore((state) => state.queries);
   const workflowSteps = useWorkflowStore((state) => state.workflowSteps);
+  const auditEvents = useWorkflowStore((state) => state.auditEvents);
 
   const mine = queries.filter((q) => q.currentAssigneeId === currentUser?.id);
   const awaitingMyReview = queries.filter((q) => {
@@ -36,12 +52,16 @@ export function DashboardPage() {
     return step?.assignedUserId === currentUser?.id;
   });
 
+  const assignedThisWeek = countSince(auditEvents, AUDIT_EVENT.QUERY_ASSIGNED, since(7));
+  const closedThisMonth = countSince(auditEvents, AUDIT_EVENT.QUERY_CLOSED, since(30));
+  const receivedThisWeek = countSince(auditEvents, AUDIT_EVENT.QUERY_RECEIVED, since(7));
+
   const kpis = [
     {
       label: 'Assigned to you',
       value: mine.length,
-      delta: '+3 this week',
-      up: true,
+      delta: assignedThisWeek ? `+${assignedThisWeek} assigned this week` : null,
+      up: assignedThisWeek > 0 ? true : null,
       cardBg: '#eff6ff',
       cardBorder: '#bfdbfe',
       iconBg: '#dbeafe',
@@ -53,7 +73,7 @@ export function DashboardPage() {
     {
       label: 'In drafting',
       value: queries.filter((q) => DRAFTING_STATES.includes(q.workflowState)).length,
-      delta: '2 pending review',
+      delta: receivedThisWeek ? `+${receivedThisWeek} received this week` : null,
       up: null,
       cardBg: '#fffbeb',
       cardBorder: '#fde68a',
@@ -66,8 +86,8 @@ export function DashboardPage() {
     {
       label: 'Awaiting review',
       value: awaitingMyReview.length,
-      delta: '3 overdue',
-      up: false,
+      delta: awaitingMyReview.length ? `${awaitingMyReview.length} awaiting your decision` : null,
+      up: null,
       cardBg: '#fff1f2',
       cardBorder: '#fecdd3',
       iconBg: '#ffe4e6',
@@ -79,8 +99,8 @@ export function DashboardPage() {
     {
       label: 'Closed',
       value: queries.filter((q) => q.workflowState === WORKFLOW_STATE.CLOSED).length,
-      delta: '+12 this month',
-      up: true,
+      delta: closedThisMonth ? `+${closedThisMonth} closed in 30 days` : null,
+      up: closedThisMonth > 0 ? true : null,
       cardBg: '#f0fdf4',
       cardBorder: '#bbf7d0',
       iconBg: '#dcfce7',
@@ -119,6 +139,7 @@ export function DashboardPage() {
         {kpis.map((kpi) => (
           <StatTile
             key={kpi.label}
+            total={queries.length}
             {...kpi}
           />
         ))}

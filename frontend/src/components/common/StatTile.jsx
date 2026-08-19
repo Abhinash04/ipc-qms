@@ -12,6 +12,7 @@ export function StatTile({
   numColor,
   up,
   delta,
+  total = 0,
   className
 }) {
   return (
@@ -46,19 +47,29 @@ export function StatTile({
         {value}
       </div>
       
-      <div
-        className="mt-2 flex items-center gap-0.75 text-[11.5px] font-medium"
-        style={{ color: up === true ? '#16a34a' : up === false ? '#dc2626' : '#92400e' }}
-      >
-        {up === true && '↑ '}
-        {up === false && '↓ '}
-        {delta}
-      </div>
-      
+      {/* No trend for a period with no activity — an empty row beats inventing one. */}
+      {delta ? (
+        <div
+          className="mt-2 flex items-center gap-0.75 text-[11.5px] font-medium"
+          style={{ color: up === true ? '#16a34a' : up === false ? '#dc2626' : '#92400e' }}
+        >
+          {up === true && '↑ '}
+          {up === false && '↓ '}
+          {delta}
+        </div>
+      ) : (
+        <div className="mt-2 h-4.25" aria-hidden="true" />
+      )}
+
+      {/* Share of `total`, so the bar means something. Without a total there is
+          nothing to be a share of, and it stays empty rather than implying one. */}
       <div className="mt-3.5 h-0.75 w-full overflow-hidden rounded-full" style={{ backgroundColor: cardBorder }}>
         <div
           className="h-full rounded-full"
-          style={{ width: `${Math.min(100, (value / 50) * 100)}%`, backgroundColor: accentBar }}
+          style={{
+            width: total > 0 ? `${Math.min(100, (value / total) * 100)}%` : '0%',
+            backgroundColor: accentBar,
+          }}
         />
       </div>
     </div>

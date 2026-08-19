@@ -31,11 +31,13 @@ const env = {
   // and must stay empty, which is how the suite keeps off the network. With `||`
   // a blank value silently fell back to the live endpoint.
   GEMMA_API_URL: process.env.GEMMA_API_URL ?? 'https://pravahai.aicte-india.org/llm/api/gemma',
-  // The forward to the Officer-in-Charge awaits a summary, and that forward runs
-  // inside the automatic intake chain — so this is the ceiling on how long
-  // registration can stall when the endpoint is unreachable, not just a request
-  // timeout. gemmaService falls back on abort, so the forward still goes out.
-  GEMMA_TIMEOUT_MS: parseInt(process.env.GEMMA_TIMEOUT_MS || '5000', 10),
+  // Measured: the live endpoint answers a realistic summary prompt in ~5.0s. A
+  // 5000 default sat exactly on that boundary and made real answers abort into
+  // the fallback, so it is 12000 here. This is also the ceiling on how long
+  // registration can stall, because the forward to the Officer-in-Charge awaits
+  // a summary inside the automatic intake chain — gemmaService falls back on
+  // abort, so a dead endpoint delays that forward but never loses it.
+  GEMMA_TIMEOUT_MS: parseInt(process.env.GEMMA_TIMEOUT_MS || '12000', 10),
 };
 
 function validateEmailConfig(config = env) {

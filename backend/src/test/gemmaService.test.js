@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import gemmaService, { generateSummary } from '../services/ai/gemmaService.js';
+import { generateSummary } from '../services/ai/gemmaService.js';
 import env from '../config/env.js';
 
 describe('Gemma AI Service Unit Tests', () => {

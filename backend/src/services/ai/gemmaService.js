@@ -2,6 +2,19 @@ import env from '../../config/env.js';
 import { ASSIGNED_OFFICIALS } from '../../config/officialsMetadata.js';
 
 
+/**
+ * The recommendation prompt carries the whole official roster, so it is far
+ * heavier than the summary prompt. Measured against the live endpoint:
+ * summaries answer in ~5s, recommendations in 6–12s — straddling a 12s ceiling,
+ * which made the model reachable only intermittently.
+ *
+ * The summary keeps GEMMA_TIMEOUT_MS because it is awaited inside the automatic
+ * intake chain, where the wait delays a real forward. The recommendation
+ * renders in a card and blocks no workflow step, so it can afford to wait
+ * longer rather than silently degrade to the rule-based scorer.
+ */
+const RECOMMENDATION_TIMEOUT_FACTOR = 3;
+
 function generateFallbackSummary({ subject = '', body = '', inquirerName = 'The Inquirer' }) {
   const cleanSubject = subject.trim() || 'Untitled Enquiry';
   const sentences = body
@@ -57,7 +70,7 @@ function parseSummaryJson(jsonStr, fallbackData) {
         fallback: false,
       };
     }
-  } catch (_) {
+  } catch {
     if (jsonStr && jsonStr.length > 10) {
       return {
         text: jsonStr,
@@ -106,12 +119,10 @@ ${body.trim() || 'No body content provided.'}
 
 IPC JSON Summary:`;
 
-  const timeoutDuration = env.NODE_ENV === 'test' ? 500 : (env.GEMMA_TIMEOUT_MS || 12000);
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), timeoutDuration);
+  const timeoutId = setTimeout(() => controller.abort(), env.GEMMA_TIMEOUT_MS);
 
   try {
-    console.log(`[Gemma AI] Calling Gemma LLM at ${env.GEMMA_API_URL}...`);
     const response = await fetch(env.GEMMA_API_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -133,7 +144,6 @@ IPC JSON Summary:`;
       const cleaned = cleanApiResponse(rawAnswer);
       const parsed = parseSummaryJson(cleaned, fallback);
       if (parsed) {
-        console.log('[Gemma AI Summary Generated Successfully]');
         return parsed;
       }
     }
@@ -161,7 +171,7 @@ function generateFallbackRecommendations({ subject = '', body = '', summaryText 
     const matchedKeywords = official.expertise.filter((skill) => fullText.includes(skill.toLowerCase()));
     const divisionMatch = fullText.includes(official.divisionName.toLowerCase());
 
-    let matchPercent = 0;
+    let matchPercent;
     if (matchedKeywords.length > 0) {
       // Strong keyword match: 70% base + 12% per additional keyword + division match
       matchPercent = Math.min(98, 70 + (matchedKeywords.length - 1) * 12 + (divisionMatch ? 10 : 0));
@@ -172,7 +182,7 @@ function generateFallbackRecommendations({ subject = '', body = '', summaryText 
       matchPercent = Math.max(25, 55 - idx * 12);
     }
 
-    let reason = `${official.name} belongs to ${official.divisionName}.`;
+    let reason;
     if (matchedKeywords.length > 0) {
       reason = `${official.name} is an expert in ${matchedKeywords.join(', ')} (${official.divisionName}), matching the exact query requirements.`;
     } else if (divisionMatch) {
@@ -261,12 +271,13 @@ STRICT RULES:
 
 IPC AI Recommendations:`;
 
-  const timeoutDuration = env.NODE_ENV === 'test' ? 500 : (env.GEMMA_TIMEOUT_MS || 12000);
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), timeoutDuration);
+  const timeoutId = setTimeout(
+    () => controller.abort(),
+    env.GEMMA_TIMEOUT_MS * RECOMMENDATION_TIMEOUT_FACTOR,
+  );
 
   try {
-    console.log(`[Gemma AI Recommendation] Calling Gemma LLM at ${env.GEMMA_API_URL}...`);
     const response = await fetch(env.GEMMA_API_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -277,6 +288,7 @@ IPC AI Recommendations:`;
     clearTimeout(timeoutId);
 
     if (!response.ok) {
+      console.warn(`[Gemma AI] Recommendation API returned ${response.status}. Using fallback.`);
       return fallbackRecs;
     }
 
@@ -304,15 +316,25 @@ IPC AI Recommendations:`;
               aiGenerated: true,
             };
           });
-          console.log('[Gemma AI Recommendation Generated Successfully]');
           return formatted;
         }
-      } catch (_) {}
+      } catch {
+        // Model replied with something that is not the expected JSON.
+        console.warn('[Gemma AI] Could not parse the recommendation reply. Using fallback.');
+      }
     }
 
     return fallbackRecs;
   } catch (error) {
     clearTimeout(timeoutId);
+    if (error.name === 'AbortError') {
+      console.warn(
+        `[Gemma AI] Recommendation timed out after ` +
+          `${env.GEMMA_TIMEOUT_MS * RECOMMENDATION_TIMEOUT_FACTOR}ms. Using fallback.`,
+      );
+    } else {
+      console.warn(`[Gemma AI] Recommendation call failed: ${error.message}. Using fallback.`);
+    }
     return fallbackRecs;
   }
 }

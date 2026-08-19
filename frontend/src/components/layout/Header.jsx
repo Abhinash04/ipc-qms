@@ -51,7 +51,7 @@ export function Header() {
   };
 
   return (
-    <header className="flex h-13.5 shrink-0 items-center justify-between border-b border-border bg-[#fff] px-6.5 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
+    <header className="flex h-13.5 shrink-0 items-center justify-between border-b border-border bg-[#e5e5e5] px-6.5 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
       <div className="flex items-center gap-2.5">
         <span className={`inline-flex items-center gap-1.25 text-[11.5px] font-semibold border rounded-[6px] px-2.5 py-0.75 ${badgeStyles[status]}`}>
           <span className={`w-1.25 h-1.25 rounded-full ${dotStyles[status]}`} />
