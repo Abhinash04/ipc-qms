@@ -10,6 +10,10 @@ export default defineConfig({
     env: {
       NODE_ENV: 'test',
       EMAIL_TRANSPORT: 'mock',
+      // No test may reach the live Gemma endpoint. Blank short-circuits
+      // gemmaService to its deterministic fallback before any fetch, the same
+      // way EMAIL_TRANSPORT=mock keeps Gmail out of the suite.
+      GEMMA_API_URL: '',
       GMAIL_CLIENT_ID: '',
       GMAIL_CLIENT_SECRET: '',
       GMAIL_REFRESH_TOKEN_INQUIRER: '',

@@ -210,7 +210,11 @@ export const useWorkflowStore = create((set, get) => ({
     return message ? message.queryId : null;
   },
 
-  ingestEmail: (mailboxMessage) => {
+  // `fetchSummary` is the test seam, matching the `send` / `forward` / `client`
+  // pattern used elsewhere in this store. Production callers never pass it; the
+  // suite passes a stub, because a real call has no backend under test and its
+  // rejection logs to the console, which the harness treats as a failure.
+  ingestEmail: (mailboxMessage, fetchSummary = fetchGemmaAiSummary) => {
     const state = get();
     const sourceMessageId = mailboxMessage.mailboxMessageId || mailboxMessage.providerMessageId;
     if (!sourceMessageId) {
@@ -334,7 +338,7 @@ export const useWorkflowStore = create((set, get) => ({
     });
 
     // Asynchronously fetch real Gemma LLM AI summary from backend
-    fetchGemmaAiSummary({
+    fetchSummary({
       subject: query.subject,
       body: query.description,
       inquirerName: query.inquirer?.name,

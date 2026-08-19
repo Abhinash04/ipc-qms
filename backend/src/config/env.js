@@ -27,8 +27,15 @@ const env = {
   GMAIL_CLIENT_SECRET: process.env.GMAIL_CLIENT_SECRET || '',
   GMAIL_REDIRECT_URI: process.env.GMAIL_REDIRECT_URI || 'https://developers.google.com/oauthplayground',
 
-  GEMMA_API_URL: process.env.GEMMA_API_URL || 'https://pravahai.aicte-india.org/llm/api/gemma',
-  GEMMA_TIMEOUT_MS: parseInt(process.env.GEMMA_TIMEOUT_MS || '12000', 10),
+  // `??`, not `||`: an explicitly empty GEMMA_API_URL means "no LLM configured"
+  // and must stay empty, which is how the suite keeps off the network. With `||`
+  // a blank value silently fell back to the live endpoint.
+  GEMMA_API_URL: process.env.GEMMA_API_URL ?? 'https://pravahai.aicte-india.org/llm/api/gemma',
+  // The forward to the Officer-in-Charge awaits a summary, and that forward runs
+  // inside the automatic intake chain — so this is the ceiling on how long
+  // registration can stall when the endpoint is unreachable, not just a request
+  // timeout. gemmaService falls back on abort, so the forward still goes out.
+  GEMMA_TIMEOUT_MS: parseInt(process.env.GEMMA_TIMEOUT_MS || '5000', 10),
 };
 
 function validateEmailConfig(config = env) {

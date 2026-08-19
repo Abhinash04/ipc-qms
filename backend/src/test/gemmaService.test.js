@@ -4,13 +4,20 @@ import env from '../config/env.js';
 
 describe('Gemma AI Service Unit Tests', () => {
   const originalFetch = global.fetch;
+  const originalUrl = env.GEMMA_API_URL;
 
   beforeEach(() => {
     vi.restoreAllMocks();
+    // The suite pins GEMMA_API_URL blank so nothing reaches the live endpoint,
+    // which makes gemmaService short-circuit to its fallback before fetching.
+    // These tests exercise the AI parsing path deliberately, so they opt back in
+    // with an unroutable address — `fetch` is mocked, so no request is made.
+    env.GEMMA_API_URL = 'http://gemma.test.invalid/api';
   });
 
   afterEach(() => {
     global.fetch = originalFetch;
+    env.GEMMA_API_URL = originalUrl;
   });
 
   it('should return a valid AI summary when Gemma API returns a valid JSON string', async () => {

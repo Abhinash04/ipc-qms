@@ -192,7 +192,6 @@ export function recommendTopOfficials(query, users = MOCK_USERS, openQueries = [
   const wantedDivisions = new Set(topics.map((topic) => TOPIC_DIVISIONS[topic]));
 
   const workload = (userId) => openQueries.filter((q) => q.currentAssigneeId === userId).length;
-  const maxWorkload = Math.max(1, ...eligible.map((user) => workload(user.id)));
 
   const scored = eligible
     .map((user, idx) => {
@@ -202,7 +201,7 @@ export function recommendTopOfficials(query, users = MOCK_USERS, openQueries = [
       const load = workload(user.id);
       const plural = load === 1 ? 'query' : 'queries';
 
-      let matchPercent = 0;
+      let matchPercent;
       if (expertise.score > 0) {
         matchPercent = Math.min(98, 70 + (expertise.score - 1) * 12 + (divisionMatch ? 10 : 0));
       } else if (divisionMatch) {

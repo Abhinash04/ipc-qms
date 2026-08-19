@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { SparklesIcon, CheckCircle2Icon, UserCheckIcon, Loader2Icon, RefreshCwIcon, AwardIcon } from 'lucide-react';
 import { Card, CardBody, CardHeader } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -8,37 +8,72 @@ import { recommendTopOfficials } from '@/services/ai/mockAiService';
 import { MOCK_USERS } from '@/constants/mockUsers';
 
 export function AiRecommendationCard({ query, onAssign, currentAssigneeId }) {
-  const [recommendations, setRecommendations] = useState([]);
+  // The local rule-based scorer needs no network, so the Officer-in-Charge gets
+  // a usable top-3 on first paint instead of a spinner. Gemma refines it when
+  // and if it answers; if it never does, what is on screen is already correct.
+  const localRecommendations = useMemo(
+    () => (query ? recommendTopOfficials(query, MOCK_USERS) : []),
+    [query],
+  );
+  // Stamped with the query it belongs to, so a reply for a previous case is
+  // ignored by derivation rather than cleared by an effect.
+  const [gemma, setGemma] = useState({ queryId: null, recs: null });
   const [loading, setLoading] = useState(false);
 
-  const loadRecommendations = async () => {
-    if (!query) return;
+  const recommendations =
+    (gemma.queryId === query?.queryId ? gemma.recs : null) ?? localRecommendations;
+
+  /**
+   * `isCurrent` lets a caller abandon a reply that is no longer wanted: the
+   * request outlives the render that started it, so applying it unconditionally
+   * would write to an unmounted component, and a slow reply for the previous
+   * query could land on top of the current one.
+   *
+   * State is only touched when Gemma actually returns something. A null or empty
+   * reply leaves the local recommendations in place — nothing to re-render.
+   */
+  const loadRecommendations = useCallback(
+    async (isCurrent = () => true) => {
+      if (!query) return;
+      try {
+        const gemmaRecs = await fetchGemmaAiRecommendations({
+          subject: query.subject,
+          body: query.description,
+          summaryText: query.aiSummary?.text || '',
+        });
+        if (isCurrent() && gemmaRecs && gemmaRecs.length > 0) {
+          setGemma({ queryId: query.queryId, recs: gemmaRecs });
+        }
+      } catch (error) {
+        if (isCurrent()) {
+          console.error('[AiRecommendationCard] Error loading recommendations:', error);
+        }
+      }
+    },
+    [query],
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    // Wrapped so the state update is plainly after the await, not synchronous
+    // in the effect body — nothing here re-renders before Gemma answers.
+    void (async () => {
+      await loadRecommendations(() => !cancelled);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [loadRecommendations]);
+
+  /** Explicit re-analyse: user-initiated, so a spinner is warranted here. */
+  const reanalyse = async () => {
     setLoading(true);
     try {
-      const gemmaRecs = await fetchGemmaAiRecommendations({
-        subject: query.subject,
-        body: query.description,
-        summaryText: query.aiSummary?.text || '',
-      });
-
-      if (gemmaRecs && gemmaRecs.length > 0) {
-        setRecommendations(gemmaRecs);
-      } else {
-        const fallbackRecs = recommendTopOfficials(query, MOCK_USERS);
-        setRecommendations(fallbackRecs);
-      }
-    } catch (error) {
-      console.error('[AiRecommendationCard] Error loading recommendations:', error);
-      const fallbackRecs = recommendTopOfficials(query, MOCK_USERS);
-      setRecommendations(fallbackRecs);
+      await loadRecommendations();
     } finally {
       setLoading(false);
     }
   };
-
-  useEffect(() => {
-    loadRecommendations();
-  }, [query?.queryId]);
 
   if (!query) return null;
 
@@ -57,7 +92,7 @@ export function AiRecommendationCard({ query, onAssign, currentAssigneeId }) {
           variant="ghost"
           size="sm"
           className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
-          onClick={loadRecommendations}
+          onClick={reanalyse}
           disabled={loading}
         >
           <RefreshCwIcon className={`h-3 w-3 mr-1 ${loading ? 'animate-spin' : ''}`} />
