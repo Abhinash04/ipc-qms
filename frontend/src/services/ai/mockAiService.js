@@ -183,6 +183,62 @@ export function recommendAssignee(query, users = MOCK_USERS, openQueries = []) {
   };
 }
 
+export function recommendTopOfficials(query, users = MOCK_USERS, openQueries = []) {
+  const eligible = users.filter((user) => user.role === ROLES.ASSIGNED_OFFICIAL);
+  if (eligible.length === 0) return [];
+
+  const text = textOf(query);
+  const topics = detectTopics(query);
+  const wantedDivisions = new Set(topics.map((topic) => TOPIC_DIVISIONS[topic]));
+
+  const workload = (userId) => openQueries.filter((q) => q.currentAssigneeId === userId).length;
+
+  const scored = eligible
+    .map((user, idx) => {
+      const divisionMatch = wantedDivisions.has(user.divisionId);
+      const expertise = expertiseMatch(user, text);
+      const division = findDivisionById(user.divisionId);
+      const load = workload(user.id);
+      const plural = load === 1 ? 'query' : 'queries';
+
+      let matchPercent;
+      if (expertise.score > 0) {
+        matchPercent = Math.min(98, 70 + (expertise.score - 1) * 12 + (divisionMatch ? 10 : 0));
+      } else if (divisionMatch) {
+        matchPercent = 65;
+      } else {
+        matchPercent = Math.max(25, 55 - idx * 12);
+      }
+
+      let reason;
+      if (expertise.score > 0) {
+        reason = `${user.name} specializes in ${expertise.matched.join(', ')} (${division?.name || 'Technical Division'}), matching this enquiry. Holds ${load} open ${plural}.`;
+      } else if (divisionMatch) {
+        reason = `${division?.name || 'Their division'} handles topics like ${topics.slice(0, 2).join(' & ')}. Holds ${load} open ${plural}.`;
+      } else {
+        reason = `Suggested based on division capacity (${division?.name || 'Technical'}) and workload (${load} open ${plural}).`;
+      }
+
+      return {
+        userId: user.id,
+        name: user.name,
+        email: user.email,
+        divisionId: user.divisionId,
+        divisionName: division?.name || 'Technical Division',
+        matchPercent,
+        reason,
+        matchedKeywords: expertise.matched,
+        expertise: user.expertise || [],
+      };
+    })
+    .sort((a, b) => b.matchPercent - a.matchPercent || a.userId.localeCompare(b.userId));
+
+  return scored.slice(0, 3).map((rec, idx) => ({
+    ...rec,
+    rank: idx + 1,
+  }));
+}
+
 const SIGNATURE = `Regards,
 AR&D Division
 Indian Pharmacopoeia Commission (IPC)

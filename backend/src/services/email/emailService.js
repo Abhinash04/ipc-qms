@@ -9,6 +9,7 @@ import {
 import * as mockTransport from './transports/mockTransport.js';
 import * as mailbox from './mailbox/mockIpcMailbox.js';
 import { buildAcknowledgement } from './templates/acknowledgement.js';
+import * as gemmaService from '../ai/gemmaService.js';
 
 /**
  * Email orchestration.
@@ -35,8 +36,7 @@ async function getTransport(name = env.EMAIL_TRANSPORT, asRole = null, asEmail =
   if (name !== EMAIL_TRANSPORTS.GMAIL) return mockTransport;
 
   // The acting user's ADDRESS is the authority, because a role can hold more
-  // than one person — ASSIGNED_OFFICIAL covers a real account and a mock one.
-  // Falling back to the role is safe only for the single-holder roles.
+  // than one person. Falling back to the role is safe only for single-holder roles.
   const identity = asEmail ? identityForEmail(asEmail) : asRole ? identityForRole(asRole) : null;
   if ((asEmail || asRole) && !identity?.canSendReal) return mockTransport;
 
@@ -118,7 +118,7 @@ async function sendAcknowledgement({ to, queryId, timestamp, providerThreadId })
   );
 }
 
-async function forwardToOfficerInCharge({ queryId, subject, body, timestamp, providerThreadId }) {
+async function forwardToOfficerInCharge({ queryId, subject, body, timestamp, providerThreadId, aiSummary = null }) {
   const frontOffice = identityForRole(IDENTITY_ROLES.FRONT_OFFICE);
   const officer = identityForRole(IDENTITY_ROLES.OFFICER_IN_CHARGE);
 
@@ -126,17 +126,38 @@ async function forwardToOfficerInCharge({ queryId, subject, body, timestamp, pro
     throw Object.assign(new Error('No Officer-in-Charge address is configured'), { status: 500 });
   }
 
-  return sendEmail(
+  let summary = aiSummary;
+  if (!summary) {
+    summary = await gemmaService.generateSummary({ subject, body });
+  }
+
+  const formattedSummaryBlock = [
+    '======================================================================',
+    '🤖 GEMMA AI QUERY SUMMARY (For Officer-in-Charge Review):',
+    summary.text,
+    summary.keyPoints?.length ? `Key Points:\n${summary.keyPoints.map((p) => ` • ${p}`).join('\n')}` : '',
+    summary.topics?.length ? `Topics: ${summary.topics.join(', ')}` : '',
+    '======================================================================',
+    '',
+  ]
+    .filter(Boolean)
+    .join('\n');
+
+  const fullBody = `${formattedSummaryBlock}\n${body || ''}`;
+
+  const sent = await sendEmail(
     {
       from: formatSender(frontOffice),
       to: [officer.email],
       subject: `Fwd: ${subject} [${queryId}]`,
-      body,
+      body: fullBody,
       timestamp,
       providerThreadId,
     },
     { asRole: IDENTITY_ROLES.FRONT_OFFICE },
   );
+
+  return { ...sent, aiSummary: summary };
 }
 
 async function sendResponse({ to, subject, body, attachments = [], cc = [], timestamp, providerThreadId }) {

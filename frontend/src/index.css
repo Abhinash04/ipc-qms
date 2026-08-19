@@ -1,77 +1,102 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Inter:wght@300;400;500;600;700&family=DM+Serif+Display&display=swap');
 @import "tailwindcss";
 
 :root {
-  --color-bg: #f7f8fa;
+  --color-bg: #f1f5f9;
   --color-surface: #ffffff;
-  --color-text: #0a0a0a;
-  --color-text-muted: #5f5f5f;
+  --color-text: #111827;
+  --color-text-muted: #64748b;
 }
 
 @theme {
-  --font-sans: 'DM Sans', system-ui, 'Segoe UI', Roboto, sans-serif;
+  --font-sans: 'Inter', 'DM Sans', system-ui, 'Segoe UI', Roboto, sans-serif;
+  --font-serif: 'DM Serif Display', Georgia, serif;
+  --font-heading: 'Outfit', sans-serif;
 
   --radius-md: 0.5rem;
 
-  --color-primary: #0a0a0a;
+  --color-primary: #4f46e5;
   --color-primary-foreground: #ffffff;
-  --color-primary-hover: #222222;
+  --color-primary-hover: #4338ca;
+
+  /*
+   * Sidebar chrome. Deliberately its own scale rather than the surface and
+   * status tokens below: the sidebar is dark whatever the page behind it does,
+   * and several of these values happen to equal a light-surface or status
+   * token. Reusing those would mean a status-badge restyle repaints the
+   * navigation.
+   */
+  --color-sidebar-from: #0a1930;
+  --color-sidebar-to: #15388c;
+  --color-sidebar-fg: #94a3b8;
+  --color-sidebar-nav: #bfdbfe;
+  --color-sidebar-active: #2563eb;
+  /*
+   * The active nav surface. Translucent rather than a solid fill so it sits on
+   * the gradient instead of punching a flat blue hole in it, and quiet enough
+   * that the accent rail beside it does the signalling.
+   */
+  --color-sidebar-active-soft: rgba(37, 99, 235, 0.28);
+  --color-sidebar-accent: #60a5fa;
+  --color-sidebar-border: #1e293b;
+  --color-sidebar-tooltip-line: #334155;
 
   --color-secondary: #ffffff;
-  --color-secondary-foreground: #0a0a0a;
-  --color-accent: #f7f8fa;
+  --color-secondary-foreground: #0f172a;
+  --color-accent: #f1f5f9;
 
-  --color-muted: #f2f3f5;
-  --color-muted-foreground: #5f5f5f;
+  --color-muted: #f8fafc;
+  --color-muted-foreground: #94a3b8;
 
-  --color-accent-foreground: #0a0a0a;
+  --color-accent-foreground: #1e293b;
 
   --color-popover: #ffffff;
-  --color-popover-foreground: #0a0a0a;
+  --color-popover-foreground: #0f172a;
 
-  --color-background: #ffffff;
-  --color-foreground: #0a0a0a;
+  --color-background: #f1f5f9;
+  --color-foreground: #111827;
 
   --color-card: #ffffff;
-  --color-card-foreground: #0a0a0a;
+  --color-card-foreground: #0f172a;
 
-  --color-border: #e5e7eb;
-  --color-ring: #1d4ed8;
+  --color-border: #e2e8f0;
+  --color-ring: #6366f1;
 
-  --color-destructive: #b91c1c;
+  --color-destructive: #ef4444;
   --color-destructive-foreground: #ffffff;
-  --color-error-border: #d45656;
+  --color-error-border: #fecaca;
 
-  --color-status-green-bg: #ecfdf5;
-  --color-status-green-line: #a7f3d0;
-  --color-status-green-fg: #047857;
+  --color-status-green-bg: #f0fdf4;
+  --color-status-green-line: #bbf7d0;
+  --color-status-green-fg: #16a34a;
 
   --color-status-amber-bg: #fffbeb;
   --color-status-amber-line: #fde68a;
-  --color-status-amber-fg: #b45309;
+  --color-status-amber-fg: #d97706;
 
   --color-status-blue-bg: #eff6ff;
   --color-status-blue-line: #bfdbfe;
-  --color-status-blue-fg: #1d4ed8;
+  --color-status-blue-fg: #2563eb;
 
-  --color-status-red-bg: #fef2f2;
-  --color-status-red-line: #fecaca;
-  --color-status-red-fg: #b91c1c;
+  --color-status-red-bg: #fff1f2;
+  --color-status-red-line: #fecdd3;
+  --color-status-red-fg: #e11d48;
 
-  --color-status-gray-bg: #f2f3f5;
-  --color-status-gray-line: #e5e7eb;
-  --color-status-gray-fg: #45515e;
+  --color-status-gray-bg: #f8fafc;
+  --color-status-gray-line: #e2e8f0;
+  --color-status-gray-fg: #64748b;
 
   --color-status-indigo-bg: #eef2ff;
   --color-status-indigo-line: #c7d2fe;
-  --color-status-indigo-fg: #4338ca;
+  --color-status-indigo-fg: #4f46e5;
 
-  --color-status-purple-bg: #f5f3ff;
-  --color-status-purple-line: #ddd6fe;
-  --color-status-purple-fg: #6d28d9;
+  --color-status-purple-bg: #faf5ff;
+  --color-status-purple-line: #e9d5ff;
+  --color-status-purple-fg: #9333ea;
 
   --color-status-orange-bg: #fff7ed;
   --color-status-orange-line: #fed7aa;
-  --color-status-orange-fg: #c2410c;
+  --color-status-orange-fg: #ea580c;
 }
 
 body {
@@ -79,4 +104,16 @@ body {
   color: var(--color-text);
   background: var(--color-bg);
   font-family: var(--font-sans);
+}
+
+/* Custom scrollbar matching design */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 3px;
 }

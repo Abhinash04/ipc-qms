@@ -1,0 +1,62 @@
+export const IPC_DIVISIONS = [
+  { id: 'DIV-001', name: 'Training & Development' },
+  { id: 'DIV-002', name: 'Policy & Compliance' },
+  { id: 'DIV-003', name: 'Technical Operations' },
+  { id: 'DIV-004', name: 'Administration' },
+  { id: 'DIV-005', name: 'Analytical & Quality Control' },
+  { id: 'DIV-006', name: 'Pharmacopoeial Standards' },
+  { id: 'DIV-007', name: 'Microbiology' },
+  { id: 'DIV-008', name: 'Pharmaceutical Chemistry' },
+  { id: 'DIV-009', name: 'Regulatory Affairs & Compliance' },
+];
+
+export const ASSIGNED_OFFICIALS = [
+  {
+    userId: 'USR-0004',
+    name: 'Neha Singh',
+    email: 'neha.singh@ipc.example',
+    divisionId: 'DIV-005',
+    divisionName: 'Analytical & Quality Control',
+    expertise: ['assay', 'dissolution', 'impurity', 'method validation', 'chromatography', 'hplc'],
+  },
+  {
+    userId: 'USR-0010',
+    name: 'Meera Iyer',
+    email: 'meera.iyer@ipc.example',
+    divisionId: 'DIV-006',
+    divisionName: 'Pharmacopoeial Standards',
+    expertise: ['monograph', 'reference standard', 'pharmacopoeia', 'specification', 'iprs'],
+  },
+  {
+    userId: 'USR-0011',
+    name: 'Arjun Nair',
+    email: 'arjun.nair@ipc.example',
+    divisionId: 'DIV-007',
+    divisionName: 'Microbiology',
+    expertise: ['sterility', 'endotoxin', 'microbial limits', 'bioburden', 'contamination', 'lal'],
+  },
+  {
+    userId: 'USR-0012',
+    name: 'Sana Qureshi',
+    email: 'sana.qureshi@ipc.example',
+    divisionId: 'DIV-008',
+    divisionName: 'Pharmaceutical Chemistry',
+    expertise: ['synthesis', 'degradation', 'stability', 'excipient', 'formulation', 'api'],
+  },
+  {
+    userId: 'USR-0013',
+    name: 'Vikram Desai',
+    email: 'vikram.desai@ipc.example',
+    divisionId: 'DIV-009',
+    divisionName: 'Regulatory Affairs & Compliance',
+    expertise: ['submission', 'documentation', 'regulatory', 'guideline', 'compliance', 'dossier'],
+  },
+  {
+    userId: 'USR-0009',
+    name: 'Rawat Jatin',
+    email: 'rawat.jatin@ipc.example',
+    divisionId: 'DIV-003',
+    divisionName: 'Technical Operations',
+    expertise: ['instrumentation', 'calibration', 'laboratory operations', 'equipment', 'glp'],
+  },
+];

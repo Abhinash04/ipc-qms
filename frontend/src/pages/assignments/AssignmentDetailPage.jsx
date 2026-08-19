@@ -1,21 +1,20 @@
 import { useState } from 'react';
-import SparklesIcon from 'lucide-react/dist/esm/icons/sparkles.mjs';
 import { Breadcrumb } from '@/components/common/Breadcrumb';
 import { EmptyState } from '@/components/common/EmptyState';
 import { CaseSummaryBar } from '@/components/workflow/CaseSummaryBar';
 import { Card, CardBody, CardHeader } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select';
 import { useQueryCase } from '@/hooks/useQueryCase';
 import { useWorkflowStore } from '@/store/useWorkflowStore';
 import { WORKFLOW_ACTION } from '@/constants/workflowRules';
-import { MOCK_USERS, findUserById } from '@/constants/mockUsers';
+import { MOCK_USERS } from '@/constants/mockUsers';
 import { ROLES, ROLE_LABELS } from '@/constants/roles';
 import { useRoutePaths } from '@/hooks/useRoutePaths';
 import { useWorkflowAction } from '@/hooks/useWorkflowAction';
 import { ActionError } from '@/components/workflow/ActionError';
+import { AiRecommendationCard } from '@/components/ai/AiRecommendationCard';
 
 const ELIGIBLE_ASSIGNEES = MOCK_USERS.filter((u) => u.role === ROLES.ASSIGNED_OFFICIAL);
 
@@ -24,17 +23,18 @@ export function AssignmentDetailPage() {
   const { queryId, query, currentUser, assignee, can } = useQueryCase();
   const { run, error, clearError } = useWorkflowAction();
   const assignQuery = useWorkflowStore((state) => state.assignQuery);
-  const recommendAssigneeFor = useWorkflowStore((state) => state.recommendAssigneeFor);
   const [override, setOverride] = useState('');
 
   if (!query) return <EmptyState title="Query not found" />;
 
-  const recommendation = recommendAssigneeFor(queryId);
-  const recommended = recommendation ? findUserById(recommendation.userId) : null;
   const canAssign = can(WORKFLOW_ACTION.ASSIGN);
 
+  const handleAssignToOfficial = (officialId) => {
+    run(() => assignQuery(queryId, officialId, currentUser));
+  };
+
   return (
-    <div>
+    <div className="space-y-6">
       <Breadcrumb
         items={[
           { label: 'Dashboard', path: paths.DASHBOARD },
@@ -45,83 +45,73 @@ export function AssignmentDetailPage() {
 
       <CaseSummaryBar query={query} />
 
-
-
       <ActionError message={error} onDismiss={clearError} />
-      <Card>
-        <CardHeader className="flex items-center gap-2">
-          <SparklesIcon className="h-4 w-4 text-status-indigo-fg" aria-hidden="true" />
-          <h2 className="text-sm font-semibold text-foreground">AI assignment recommendation</h2>
-        </CardHeader>
-        <CardBody className="space-y-4">
-          <div className="flex items-center justify-between">
+
+      {assignee && (
+        <Card className="border-emerald-200 bg-emerald-50/50 dark:bg-emerald-950/20">
+          <CardBody className="p-4 flex items-center justify-between">
             <div>
-              <p className="text-xs text-muted-foreground">Recommended official</p>
-              <p className="text-base font-semibold text-foreground">{recommended?.name}</p>
+              <p className="text-xs font-semibold text-emerald-800 dark:text-emerald-300">
+                Official Assigned
+              </p>
+              <p className="text-base font-bold text-foreground mt-0.5">
+                {assignee.name} ({assignee.email})
+              </p>
             </div>
-            <Badge variant="status-indigo" className="text-sm">
-              {recommendation?.matchPercent ?? 0}% match
-            </Badge>
-          </div>
-
-          <p className="text-sm text-muted-foreground">
-            {recommendation?.reason}
-          </p>
-
-          {assignee && (
-            <p className="rounded-md border border-status-green-line bg-status-green-bg px-3 py-2 text-sm text-status-green-fg">
-              Assigned to {assignee.name}
-              {query.assignmentDecision &&
-                (query.assignmentDecision.acceptedAiRecommendation
-                  ? ' — AI recommendation accepted.'
-                  : ' — AI recommendation overridden by the OIC.')}
+            <p className="text-xs text-muted-foreground">
+              {query.assignmentDecision?.acceptedAiRecommendation
+                ? 'AI Recommendation accepted by OIC'
+                : 'Selected & assigned by Officer-in-Charge'}
             </p>
-          )}
+          </CardBody>
+        </Card>
+      )}
 
-          {canAssign ? (
-            <div className="space-y-3 pt-1">
-              <Button onClick={() => run(() => assignQuery(queryId, recommended.id, currentUser))}>
-                Accept recommendation — assign {recommended?.name}
-              </Button>
+      {/* Top 3 AI Recommendations */}
+      <AiRecommendationCard
+        query={query}
+        currentAssigneeId={query.currentAssigneeId}
+        onAssign={canAssign ? handleAssignToOfficial : null}
+      />
 
-              <div className="space-y-1.5 border-t border-border pt-3">
-                <Label htmlFor="override-assignee">Or override and choose another official</Label>
-                <div className="flex gap-2">
-                  <Select id="override-assignee" value={override} onValueChange={setOverride}>
-                    <SelectTrigger className="w-64">
-                      <SelectValue placeholder="Select an official" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {ELIGIBLE_ASSIGNEES.map((user) => (
-                        <SelectItem key={user.id} value={user.id}>
-                          {user.name} — {ROLE_LABELS[user.role]}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <Button
-                    variant="secondary"
-                    disabled={!override}
-                    onClick={() => run(() => assignQuery(queryId, override, currentUser))}
-                  >
-                    Assign
-                  </Button>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  AI recommends; the Officer-in-Charge always decides. An override is recorded as an
-                  ASSIGNMENT_OVERRIDDEN audit event.
-                </p>
+      {/* Manual Override Selection */}
+      {canAssign && (
+        <Card>
+          <CardHeader>
+            <h2 className="text-sm font-semibold text-foreground">Or Manual Assignment</h2>
+          </CardHeader>
+          <CardBody className="space-y-3">
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="flex-1 min-w-[240px]">
+                <Label htmlFor="override-assignee" className="text-xs text-muted-foreground mb-1 block">
+                  Choose from full directory
+                </Label>
+                <Select id="override-assignee" value={override} onValueChange={setOverride}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select an official" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {ELIGIBLE_ASSIGNEES.map((user) => (
+                      <SelectItem key={user.id} value={user.id}>
+                        {user.name} — {ROLE_LABELS[user.role]}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
+
+              <Button
+                variant="secondary"
+                disabled={!override}
+                onClick={() => handleAssignToOfficial(override)}
+                className="mt-5"
+              >
+                Assign Selected Official
+              </Button>
             </div>
-          ) : (
-            <p className="rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
-              {assignee
-                ? 'This query has already been assigned.'
-                : 'Assignment is available to the Officer-in-Charge once the query reaches PENDING_ASSIGNMENT.'}
-            </p>
-          )}
-        </CardBody>
-      </Card>
+          </CardBody>
+        </Card>
+      )}
     </div>
   );
 }

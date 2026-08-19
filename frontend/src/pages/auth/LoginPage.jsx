@@ -1,16 +1,24 @@
 import { useState } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
-import LogInIcon from 'lucide-react/dist/esm/icons/log-in.mjs';
 
-import { Card, CardBody, CardHeader } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Badge } from '@/components/ui/badge';
 import { MOCK_USERS, MOCK_PASSWORD, findUserByEmail } from '@/constants/mockUsers';
 import { ROLE_LABELS } from '@/constants/roles';
 import { roleHome } from '@/constants/routePaths';
 import { useAuthStore } from '@/store/useAuthStore';
+
+const roleColors = {
+  'Inquirer':           { bg: '#eff6ff', text: '#2563eb', border: '#bfdbfe' },
+  'Front Office':     { bg: '#f0fdf4', text: '#16a34a', border: '#bbf7d0' },
+  'Officer-in-Charge':{ bg: '#fffbeb', text: '#d97706', border: '#fde68a' },
+  'Assigned Official':{ bg: '#f5f3ff', text: '#7c3aed', border: '#ddd6fe' },
+  'Reviewer':           { bg: '#fdf2f8', text: '#db2777', border: '#fbcfe8' },
+  'Admin':              { bg: '#fff1f2', text: '#e11d48', border: '#fecdd3' },
+  'Super Admin':      { bg: '#fff7ed', text: '#ea580c', border: '#fed7aa' },
+};
+
+function getInitials(name) {
+  return name.split(' ').map(n => n[0]).slice(0, 2).join('');
+}
 
 export function LoginPage() {
   const currentUser = useAuthStore((state) => state.currentUser);
@@ -19,109 +27,289 @@ export function LoginPage() {
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [activeUser, setActiveUser] = useState(null);
   const [error, setError] = useState(null);
+  const [showMocks, setShowMocks] = useState(false);
 
   if (currentUser) return <Navigate to={roleHome(currentUser.role)} replace />;
+
+  const submit = (event) => {
+    event.preventDefault();
+    setLoading(true);
+    setError(null);
+    
+    // Simulate loading for the UI effect
+    setTimeout(() => {
+      setLoading(false);
+      const user = findUserByEmail(email);
+
+      if (!user || password !== MOCK_PASSWORD) {
+        setError('Incorrect email or password.');
+        return;
+      }
+
+      login(user.id);
+      navigate(roleHome(user.role), { replace: true });
+    }, 600);
+  };
 
   const applyCredentials = (user) => {
     setEmail(user.email);
     setPassword(MOCK_PASSWORD);
+    setActiveUser(user.name);
     setError(null);
-  };
-
-  const submit = (event) => {
-    event.preventDefault();
-    const user = findUserByEmail(email);
-
-    if (!user || password !== MOCK_PASSWORD) {
-      setError('Incorrect email or password.');
-      return;
-    }
-
-    login(user.id);
-    navigate(roleHome(user.role), { replace: true });
+    setShowMocks(false);
   };
 
   return (
-    <div className="grid w-full max-w-4xl grid-cols-1 gap-6 p-6 lg:grid-cols-2">
-      <Card>
-        <CardHeader>
-          <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-            Query Management System
-          </p>
-          <h1 className="mt-1 text-lg font-semibold text-foreground">Sign in</h1>
-        </CardHeader>
-        <CardBody>
-          <form className="space-y-4" onSubmit={submit}>
-            <div className="space-y-1.5">
-              <Label htmlFor="login-email">Email</Label>
-              <Input
-                id="login-email"
-                type="email"
-                autoComplete="username"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@ipc.example"
-              />
+    <div
+      className="min-h-screen flex items-center justify-center p-6 w-full"
+      style={{ background: '#eef2f7', position: 'relative', overflow: 'hidden' }}
+    >
+      {/* Background blobs */}
+      <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 0 }}>
+        <div style={{ position: 'absolute', top: '-10%', left: '-5%', width: 520, height: 520, borderRadius: '50%', background: 'radial-gradient(circle, rgba(99,102,241,0.12) 0%, transparent 70%)' }} />
+        <div style={{ position: 'absolute', bottom: '-12%', right: '-6%', width: 480, height: 480, borderRadius: '50%', background: 'radial-gradient(circle, rgba(59,130,246,0.10) 0%, transparent 70%)' }} />
+        <div style={{ position: 'absolute', top: '40%', right: '15%', width: 280, height: 280, borderRadius: '50%', background: 'radial-gradient(circle, rgba(139,92,246,0.07) 0%, transparent 70%)' }} />
+        <div style={{
+          position: 'absolute', inset: 0,
+          backgroundImage: 'radial-gradient(circle, rgba(99,102,241,0.07) 1px, transparent 1px)',
+          backgroundSize: '30px 30px',
+        }} />
+      </div>
+
+      {/* Single card */}
+      <div
+        style={{
+          width: '100%', maxWidth: 520,
+          background: '#ffffff',
+          borderRadius: 20,
+          boxShadow: '0 4px 6px rgba(0,0,0,0.04), 0 20px 60px rgba(0,0,0,0.08), 0 0 0 1px rgba(0,0,0,0.06)',
+          overflow: 'hidden',
+          position: 'relative', zIndex: 1,
+        }}
+      >
+        {/* ── Top accent bar ── */}
+        <div style={{ height: 4, background: 'linear-gradient(90deg, #3b82f6 0%, #6366f1 50%, #8b5cf6 100%)' }} />
+
+        {/* ── Login section ── */}
+        <div style={{ padding: '2.25rem 2.25rem 2rem' }}>
+          {/* Brand */}
+          <div className="flex items-center gap-3 mb-7">
+            <div style={{
+              width: 42, height: 42, borderRadius: 11, flexShrink: 0,
+              background: 'linear-gradient(135deg, #3b82f6, #6366f1)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              boxShadow: '0 4px 12px rgba(99,102,241,0.3)',
+            }}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                <path d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </div>
+            <div>
+              <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '0.1em', color: '#94a3b8', textTransform: 'uppercase' }}>Query Management System</div>
+              <div style={{ fontSize: 13, color: '#64748b', marginTop: 1 }}>Integrated Processing Centre</div>
+            </div>
+          </div>
+
+          <h1 style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 32, fontWeight: 400, color: '#0f172a', lineHeight: 1.15, margin: '0 0 6px' }}>
+            Sign in
+          </h1>
+          <p style={{ fontSize: 14, color: '#94a3b8', margin: '0 0 1.75rem' }}>Enter your credentials to continue</p>
+
+          {/* ── Mock Credentials Dropdown ── */}
+          <div style={{ marginBottom: 20, background: '#f8fafc', border: '1.5px solid #e2e8f0', borderRadius: 10, overflow: 'hidden' }}>
+            <button
+              type="button"
+              onClick={() => setShowMocks(!showMocks)}
+              style={{ width: '100%', padding: '12px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'none', border: 'none', cursor: 'pointer', outline: 'none' }}
+            >
+              <div className="flex items-center gap-2">
+                <div style={{ width: 7, height: 7, borderRadius: '50%', background: '#f59e0b', boxShadow: '0 0 5px rgba(245,158,11,0.5)', flexShrink: 0 }} />
+                <span style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>Mock Credentials (Dev Only)</span>
+              </div>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ transform: showMocks ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>
+                <polyline points="6 9 12 15 18 9"/>
+              </svg>
+            </button>
+            
+            {showMocks && (
+              <div style={{ padding: '0 14px 14px', borderTop: '1.5px solid #e2e8f0' }}>
+                <p style={{ fontSize: 12.5, color: '#94a3b8', margin: '10px 0' }}>
+                  All accounts use password{' '}
+                  <code style={{ fontFamily: 'monospace', fontSize: 11.5, padding: '2px 7px', background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: 5, color: '#6366f1' }}>{MOCK_PASSWORD}</code>
+                </p>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 5, maxHeight: 220, overflowY: 'auto', paddingRight: 2 }}>
+                  {MOCK_USERS.map(user => {
+                    const roleLabel = ROLE_LABELS[user.role] || user.role;
+                    const c = roleColors[roleLabel] ?? { bg: '#f8fafc', text: '#64748b', border: '#e2e8f0' };
+                    const isActive = activeUser === user.name;
+                    return (
+                      <div
+                        key={user.id}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: 11,
+                          padding: '9px 11px', borderRadius: 10,
+                          background: isActive ? '#f0f4ff' : '#fafbff',
+                          border: `1.5px solid ${isActive ? '#c7d2fe' : '#f1f5f9'}`,
+                          transition: 'background 0.12s, border-color 0.12s',
+                          cursor: 'default',
+                        }}
+                        onMouseEnter={e => !isActive && (e.currentTarget.style.background = '#f1f5f9')}
+                        onMouseLeave={e => !isActive && (e.currentTarget.style.background = '#fafbff')}
+                      >
+                        {/* Avatar */}
+                        <div style={{
+                          width: 34, height: 34, borderRadius: 9, flexShrink: 0,
+                          background: c.bg, border: `1px solid ${c.border}`,
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          fontSize: 12, fontWeight: 700, color: c.text,
+                        }}>
+                          {getInitials(user.name)}
+                        </div>
+
+                        {/* Name + role */}
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 13.5, fontWeight: 500, color: '#0f172a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{user.name}</div>
+                          <span style={{ display: 'inline-block', marginTop: 3, fontSize: 10.5, fontWeight: 600, padding: '1.5px 7px', borderRadius: 20, background: c.bg, color: c.text, border: `1px solid ${c.border}` }}>{roleLabel}</span>
+                        </div>
+
+                        {/* Button */}
+                        <button
+                          type="button"
+                          aria-label={`Use Credentials for ${user.name}`}
+                          onClick={() => applyCredentials(user)}
+                          style={{
+                            flexShrink: 0, padding: '5px 13px', borderRadius: 7,
+                            fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                            transition: 'all 0.12s',
+                            background: isActive ? '#e0e7ff' : '#ffffff',
+                            border: `1.5px solid ${isActive ? '#6366f1' : '#e2e8f0'}`,
+                            color: isActive ? '#4f46e5' : '#64748b',
+                            whiteSpace: 'nowrap',
+                          }}
+                          onMouseEnter={e => !isActive && Object.assign(e.currentTarget.style, { background: '#f1f5f9', borderColor: '#cbd5e1', color: '#374151' })}
+                          onMouseLeave={e => !isActive && Object.assign(e.currentTarget.style, { background: '#ffffff', borderColor: '#e2e8f0', color: '#64748b' })}
+                        >
+                          {isActive ? '✓ Selected' : 'Use'}
+                        </button>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+
+          <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <div>
+              <label htmlFor="login-email" style={{ display: 'block', fontSize: 13, fontWeight: 500, color: '#374151', marginBottom: 7 }}>Email</label>
+              <div style={{ position: 'relative' }}>
+                <input
+                  id="login-email"
+                  type="email"
+                  value={email}
+                  onChange={e => setEmail(e.target.value)}
+                  placeholder="you@ipc.example"
+                  required
+                  style={{
+                    width: '100%', padding: '11px 14px 11px 42px',
+                    background: '#f8fafc', border: '1.5px solid #e2e8f0',
+                    borderRadius: 10, color: '#0f172a', fontSize: 14,
+                    outline: 'none', transition: 'border-color 0.15s, box-shadow 0.15s',
+                    boxSizing: 'border-box',
+                  }}
+                  onFocus={e => { e.target.style.borderColor = '#6366f1'; e.target.style.boxShadow = '0 0 0 3px rgba(99,102,241,0.1)'; e.target.style.background = '#fff' }}
+                  onBlur={e => { e.target.style.borderColor = '#e2e8f0'; e.target.style.boxShadow = 'none'; e.target.style.background = '#f8fafc' }}
+                />
+                <svg style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/>
+                </svg>
+              </div>
             </div>
 
-            <div className="space-y-1.5">
-              <Label htmlFor="login-password">Password</Label>
-              <Input
-                id="login-password"
-                type="password"
-                autoComplete="current-password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-              />
+            <div>
+              <label htmlFor="login-password" style={{ display: 'block', fontSize: 13, fontWeight: 500, color: '#374151', marginBottom: 7 }}>Password</label>
+              <div style={{ position: 'relative' }}>
+                <input
+                  id="login-password"
+                  type={showPassword ? 'text' : 'password'}
+                  value={password}
+                  onChange={e => setPassword(e.target.value)}
+                  placeholder="••••••••"
+                  required
+                  style={{
+                    width: '100%', padding: '11px 42px 11px 42px',
+                    background: '#f8fafc', border: '1.5px solid #e2e8f0',
+                    borderRadius: 10, color: '#0f172a', fontSize: 14,
+                    outline: 'none', transition: 'border-color 0.15s, box-shadow 0.15s',
+                    boxSizing: 'border-box',
+                  }}
+                  onFocus={e => { e.target.style.borderColor = '#6366f1'; e.target.style.boxShadow = '0 0 0 3px rgba(99,102,241,0.1)'; e.target.style.background = '#fff' }}
+                  onBlur={e => { e.target.style.borderColor = '#e2e8f0'; e.target.style.boxShadow = 'none'; e.target.style.background = '#f8fafc' }}
+                />
+                <svg style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/>
+                </svg>
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(s => !s)}
+                  style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', padding: 0, display: 'flex' }}
+                >
+                  {showPassword ? (
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+                  ) : (
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                  )}
+                </button>
+              </div>
             </div>
 
             {error && (
-              <p role="alert" className="text-sm text-status-red-fg">
+              <p role="alert" style={{ fontSize: 13, color: '#ef4444', margin: '4px 0 0' }}>
                 {error}
               </p>
             )}
 
-            <Button type="submit" className="w-full">
-              <LogInIcon aria-hidden="true" />
-              Login
-            </Button>
-          </form>
-        </CardBody>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <h2 className="text-sm font-semibold text-foreground">Mock Credentials</h2>
-          <p className="mt-0.5 text-xs text-muted-foreground">
-            Development users. Every account uses the password{' '}
-            <span className="font-medium text-foreground">{MOCK_PASSWORD}</span>.
-          </p>
-        </CardHeader>
-        <CardBody className="space-y-2">
-          {MOCK_USERS.map((user) => (
-            <div
-              key={user.id}
-              className="flex items-center justify-between gap-3 rounded-md border border-border px-3 py-2"
+            <button
+              type="submit"
+              disabled={loading}
+              style={{
+                marginTop: 4,
+                width: '100%', padding: '13px',
+                background: loading ? '#818cf8' : 'linear-gradient(135deg, #3b82f6 0%, #6366f1 100%)',
+                border: 'none', borderRadius: 10, color: 'white',
+                fontSize: 15, fontWeight: 600, cursor: loading ? 'not-allowed' : 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                boxShadow: loading ? 'none' : '0 4px 16px rgba(99,102,241,0.35)',
+                transition: 'opacity 0.15s, box-shadow 0.15s',
+              }}
+              onMouseEnter={e => !loading && (e.currentTarget.style.opacity = '0.9')}
+              onMouseLeave={e => !loading && (e.currentTarget.style.opacity = '1')}
             >
-              <div className="min-w-0">
-                <p className="truncate text-sm font-medium text-foreground">{user.name}</p>
-                <Badge variant="secondary" className="mt-1">
-                  {ROLE_LABELS[user.role]}
-                </Badge>
-              </div>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => applyCredentials(user)}
-              >
-                Use Credentials
-              </Button>
-            </div>
-          ))}
-        </CardBody>
-      </Card>
+              {loading ? (
+                <>
+                  <svg style={{ animation: 'spin 1s linear infinite' }} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+                  Signing in...
+                </>
+              ) : (
+                <>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M15 3h4a2 2 0 012 2v14a2 2 0 01-2 2h-4M10 17l5-5-5-5M15 12H3"/></svg>
+                  Sign in
+                </>
+              )}
+            </button>
+          </form>
+        </div>
+      </div>
+
+      <style>{`
+        @keyframes spin { to { transform: rotate(360deg); } }
+        input::placeholder { color: #cbd5e1; }
+      `}</style>
     </div>
   );
 }
+

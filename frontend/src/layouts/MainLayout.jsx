@@ -4,11 +4,11 @@ import { Header } from '@/components/layout/Header';
 
 export function MainLayout() {
   return (
-    <div className="flex h-screen bg-muted">
+    <div className="flex h-screen bg-accent">
       <Sidebar />
       <div className="flex flex-1 flex-col overflow-hidden">
         <Header />
-        <main className="flex-1 overflow-y-auto p-6">
+        <main className="flex-1 overflow-y-auto p-7 pb-12">
           <Outlet />
         </main>
       </div>
