@@ -26,6 +26,9 @@ const env = {
   GMAIL_CLIENT_ID: process.env.GMAIL_CLIENT_ID || '',
   GMAIL_CLIENT_SECRET: process.env.GMAIL_CLIENT_SECRET || '',
   GMAIL_REDIRECT_URI: process.env.GMAIL_REDIRECT_URI || 'https://developers.google.com/oauthplayground',
+
+  GEMMA_API_URL: process.env.GEMMA_API_URL || 'https://pravahai.aicte-india.org/llm/api/gemma',
+  GEMMA_TIMEOUT_MS: parseInt(process.env.GEMMA_TIMEOUT_MS || '12000', 10),
 };
 
 function validateEmailConfig(config = env) {

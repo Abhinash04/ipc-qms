@@ -16,6 +16,7 @@ import { buildSeedState } from '@/constants/mockDomain';
 import { summarise, recommendAssignee, draftResponse } from '@/services/ai/mockAiService';
 import { loadAll, replaceAll, persistTransition, isEmpty } from '@/services/db/db';
 import { sendResponse, forwardQuery } from '@/services/api/mailboxService';
+import { fetchGemmaAiSummary } from '@/services/api/aiService';
 
 const pad = (n) => String(n).padStart(5, '0');
 
@@ -331,6 +332,24 @@ export const useWorkflowStore = create((set, get) => ({
       patch: { aiSummary: summary },
       details: summary.text,
     });
+
+    // Asynchronously fetch real Gemma LLM AI summary from backend
+    fetchGemmaAiSummary({
+      subject: query.subject,
+      body: query.description,
+      inquirerName: query.inquirer?.name,
+    }).then((gemmaSummary) => {
+      if (gemmaSummary) {
+        get().applyTransition({
+          queryId,
+          actor: null,
+          actorLabel: 'Gemma AI Summary Assistant',
+          event: AUDIT_EVENT.AI_SUMMARY_GENERATED,
+          patch: { aiSummary: gemmaSummary },
+          details: gemmaSummary.text,
+        });
+      }
+    }).catch(() => {});
 
     return { queryId, threadId, messageId, created: true };
   },
