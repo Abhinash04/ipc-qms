@@ -55,7 +55,7 @@ export function LoginPage() {
     }, 600);
   };
 
-  const useCredentials = (user) => {
+  const applyCredentials = (user) => {
     setEmail(user.email);
     setPassword(MOCK_PASSWORD);
     setActiveUser(user.name);
@@ -178,7 +178,9 @@ export function LoginPage() {
 
                         {/* Button */}
                         <button
-                          onClick={() => useCredentials(user)}
+                          type="button"
+                          aria-label={`Use Credentials for ${user.name}`}
+                          onClick={() => applyCredentials(user)}
                           style={{
                             flexShrink: 0, padding: '5px 13px', borderRadius: 7,
                             fontSize: 12, fontWeight: 600, cursor: 'pointer',
@@ -203,9 +205,10 @@ export function LoginPage() {
 
           <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             <div>
-              <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: '#374151', marginBottom: 7 }}>Email address</label>
+              <label htmlFor="login-email" style={{ display: 'block', fontSize: 13, fontWeight: 500, color: '#374151', marginBottom: 7 }}>Email</label>
               <div style={{ position: 'relative' }}>
                 <input
+                  id="login-email"
                   type="email"
                   value={email}
                   onChange={e => setEmail(e.target.value)}
@@ -228,9 +231,10 @@ export function LoginPage() {
             </div>
 
             <div>
-              <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: '#374151', marginBottom: 7 }}>Password</label>
+              <label htmlFor="login-password" style={{ display: 'block', fontSize: 13, fontWeight: 500, color: '#374151', marginBottom: 7 }}>Password</label>
               <div style={{ position: 'relative' }}>
                 <input
+                  id="login-password"
                   type={showPassword ? 'text' : 'password'}
                   value={password}
                   onChange={e => setPassword(e.target.value)}

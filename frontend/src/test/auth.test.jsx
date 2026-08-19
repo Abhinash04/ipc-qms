@@ -40,10 +40,19 @@ function renderApp(path = '/login') {
   );
 }
 
+/**
+ * The mock-credentials list sits behind a disclosure in the redesigned login
+ * page. Every user is still listed with their role and a Use Credentials
+ * button — it just has to be opened first.
+ */
+function openMockCredentials() {
+  fireEvent.click(screen.getByRole('button', { name: /Mock Credentials/i }));
+}
+
 function signInThroughForm(user, password = MOCK_PASSWORD) {
   fireEvent.change(screen.getByLabelText('Email'), { target: { value: user.email } });
   fireEvent.change(screen.getByLabelText('Password'), { target: { value: password } });
-  fireEvent.click(screen.getByRole('button', { name: 'Login' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Sign in' }));
 }
 
 beforeEach(async () => {
@@ -69,10 +78,11 @@ describe('login form', () => {
 
   it('lists every mock user with their role', () => {
     renderApp();
+    openMockCredentials();
     for (const user of MOCK_USERS) {
       expect(screen.getByText(user.name)).toBeInTheDocument();
     }
-    expect(screen.getAllByRole('button', { name: 'Use Credentials' })).toHaveLength(
+    expect(screen.getAllByRole('button', { name: /^Use Credentials for / })).toHaveLength(
       MOCK_USERS.length,
     );
     expect(screen.getAllByText(ROLE_LABELS.REVIEWER).length).toBeGreaterThan(0);
@@ -80,10 +90,12 @@ describe('login form', () => {
 
   it('fills the form from Use Credentials', () => {
     renderApp();
+    openMockCredentials();
     const frontOfficer = MOCK_USERS.find((u) => u.role === 'FRONT_OFFICE');
 
-    const card = screen.getByText(frontOfficer.name).closest('div').parentElement;
-    fireEvent.click(card.querySelector('button'));
+    fireEvent.click(
+      screen.getByRole('button', { name: `Use Credentials for ${frontOfficer.name}` }),
+    );
 
     expect(screen.getByLabelText('Email')).toHaveValue(frontOfficer.email);
     expect(screen.getByLabelText('Password')).toHaveValue(MOCK_PASSWORD);
@@ -189,6 +201,7 @@ describe('Rawat Jatin — a mock Assigned Official', () => {
 
   it('appears on the login page with his role', () => {
     renderApp();
+    openMockCredentials();
     expect(screen.getByText('Rawat Jatin')).toBeInTheDocument();
   });
 

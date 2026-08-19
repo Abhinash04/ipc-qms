@@ -107,18 +107,10 @@ function NavItem({ item, open }) {
         )
       }
     >
-      {({ isActive }) => (
-        <>
-          <span className="shrink-0 flex items-center justify-center">
-            <Icon className="h-[18px] w-[18px] transition-colors" strokeWidth={1.8} aria-hidden="true" />
-          </span>
-          {open && (
-            <span className="truncate flex-1">
-              {label}
-            </span>
-          )}
-        </>
-      )}
+      <span className="shrink-0 flex items-center justify-center">
+        <Icon className="h-[18px] w-[18px] transition-colors" strokeWidth={1.8} aria-hidden="true" />
+      </span>
+      {open && <span className="truncate flex-1">{label}</span>}
     </NavLink>
   );
 
