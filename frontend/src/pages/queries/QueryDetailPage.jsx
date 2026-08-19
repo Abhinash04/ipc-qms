@@ -13,6 +13,8 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@
 import { useQueryCase } from '@/hooks/useQueryCase';
 import { useRoutePaths } from '@/hooks/useRoutePaths';
 
+import { useWorkflowStore } from '@/store/useWorkflowStore';
+
 function InfoRow({ label, value }) {
   return (
     <div className="flex justify-between border-b border-border py-2 text-sm last:border-0">
@@ -59,7 +61,19 @@ export function QueryDetailPage() {
             </CardBody>
           </Card>
 
-          <AiSummaryCard summary={query.aiSummary} />
+          <AiSummaryCard
+            summary={query.aiSummary}
+            query={query}
+            onSummaryUpdated={(newSummary) => {
+              useWorkflowStore.getState().applyTransition({
+                queryId: query.queryId,
+                actor: null,
+                actorLabel: 'Gemma AI Summary Assistant',
+                patch: { aiSummary: newSummary },
+                details: newSummary.text,
+              });
+            }}
+          />
 
           <EmailThread messages={messages} />
 
