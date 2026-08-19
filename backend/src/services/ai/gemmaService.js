@@ -71,17 +71,21 @@ export async function generateSummary({ subject = '', body = '', inquirerName = 
     return fallback;
   }
 
-  const prompt = `You are an expert AI summary assistant for the Indian Pharmacopoeia Commission (IPC) Query Management System. Your task is to provide a concise, factual summary of the following incoming enquiry email for the Officer-in-Charge (OIC).
+  const prompt = `You are an expert AI Assistant specialized in the Indian Pharmacopoeia Commission (IPC) domain, Ministry of Health & Family Welfare, Government of India.
 
-STRICT RULES:
-1. Rely ONLY on the facts mentioned in the input text. Do NOT assume, extrapolate, or invent any information.
-2. Output strictly valid JSON with the following structure:
+Your task is to analyze the following incoming enquiry email and generate a crisp, domain-specific summary tailored for the IPC Officer-in-Charge (OIC) and technical officers.
+
+IPC CONTEXT & RULES:
+1. Focus on IPC operational domain: Drug Monographs, Indian Pharmacopoeia (IP) Standards, Reference Standards (IPRS), Impurities, Analytical Testing (Dissolution, Assay, HPLC, Stability), and Regulatory Compliance.
+2. Identify the specific Drug/Monograph name, the exact technical request/issue, and the relevant IPC technical domain.
+3. Do NOT assume, extrapolate, or invent facts not present in the original enquiry text.
+4. Output strictly valid JSON with the following structure:
 {
-  "text": "A clear 1-2 sentence core summary of the main enquiry and request.",
-  "keyPoints": ["Key point 1", "Key point 2"],
-  "topics": ["Topic 1", "Topic 2"]
+  "text": "1-2 sentence professional technical summary highlighting the drug/monograph name and exact request for IPC officers.",
+  "keyPoints": ["Technical Point 1", "Technical Point 2"],
+  "topics": ["Drug/Monograph Name", "IPC Domain e.g., Dissolution / Impurity / Monograph"]
 }
-3. Return ONLY the JSON object. Do NOT wrap in explanation, introductory text, or markdown code blocks outside JSON.
+5. Return ONLY the JSON object. Do NOT include markdown wrappers, explanations, or text outside the JSON.
 
 Enquiry Subject: "${subject.trim() || 'Untitled Enquiry'}"
 Enquiry Body:
@@ -89,7 +93,7 @@ Enquiry Body:
 ${body.trim() || 'No body content provided.'}
 """
 
-JSON Summary:`;
+IPC JSON Summary:`;
 
   const timeoutDuration = env.NODE_ENV === 'test' ? 500 : (env.GEMMA_TIMEOUT_MS || 12000);
   const controller = new AbortController();
