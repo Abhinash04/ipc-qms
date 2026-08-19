@@ -31,6 +31,13 @@
   --color-sidebar-fg: #94a3b8;
   --color-sidebar-nav: #bfdbfe;
   --color-sidebar-active: #2563eb;
+  /*
+   * The active nav surface. Translucent rather than a solid fill so it sits on
+   * the gradient instead of punching a flat blue hole in it, and quiet enough
+   * that the accent rail beside it does the signalling.
+   */
+  --color-sidebar-active-soft: rgba(37, 99, 235, 0.28);
+  --color-sidebar-accent: #60a5fa;
   --color-sidebar-border: #1e293b;
   --color-sidebar-tooltip-line: #334155;
 
