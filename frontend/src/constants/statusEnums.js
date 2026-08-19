@@ -63,3 +63,33 @@ export const AUDIT_EVENT = {
   RESPONSE_DISPATCHED: 'RESPONSE_DISPATCHED',
   QUERY_CLOSED: 'QUERY_CLOSED',
 };
+
+/**
+ * Human wording for the audit trail, following EMAIL_TYPE_LABELS and
+ * ROLE_LABELS. The UI never shows a raw enum, and `QUERY_FORWARDED` split on
+ * underscores is not a label — it is an enum with the underscores taken out.
+ *
+ * Every AUDIT_EVENT must appear here; a missing one would render blank in the
+ * activity feed, so the dashboard suite asserts the map is complete.
+ */
+export const AUDIT_EVENT_LABELS = {
+  [AUDIT_EVENT.QUERY_RECEIVED]: 'Enquiry received',
+  [AUDIT_EVENT.ACKNOWLEDGEMENT_SENT]: 'Acknowledgement sent to the inquirer',
+  [AUDIT_EVENT.AI_SUMMARY_GENERATED]: 'AI summary generated',
+  [AUDIT_EVENT.AI_ASSIGNMENT_RECOMMENDED]: 'AI recommended an official',
+  [AUDIT_EVENT.QUERY_REGISTERED]: 'Query verified and registered',
+  [AUDIT_EVENT.QUERY_FORWARDED]: 'Forwarded to the Officer-in-Charge',
+  [AUDIT_EVENT.QUERY_ASSIGNED]: 'Assigned to an official',
+  [AUDIT_EVENT.ASSIGNMENT_OVERRIDDEN]: 'Assignment overridden',
+  [AUDIT_EVENT.DRAFT_GENERATED]: 'Draft response generated',
+  [AUDIT_EVENT.DRAFT_UPDATED]: 'Draft response updated',
+  [AUDIT_EVENT.REVIEW_ADDED]: 'Sent for review',
+  [AUDIT_EVENT.REVIEW_COMPLETED]: 'Review approved',
+  [AUDIT_EVENT.REVISION_REQUESTED]: 'Changes requested',
+  [AUDIT_EVENT.QUERY_TRANSFERRED]: 'Transferred',
+  [AUDIT_EVENT.QUERY_PULLED_BACK]: 'Pulled back',
+  [AUDIT_EVENT.FINAL_APPROVAL_GRANTED]: 'Final approval granted',
+  [AUDIT_EVENT.FINAL_APPROVAL_REJECTED]: 'Final approval rejected',
+  [AUDIT_EVENT.RESPONSE_DISPATCHED]: 'Response sent to the inquirer',
+  [AUDIT_EVENT.QUERY_CLOSED]: 'Query closed',
+};

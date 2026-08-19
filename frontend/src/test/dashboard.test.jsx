@@ -1,13 +1,20 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
+
+const navigateSpy = vi.fn();
+vi.mock('react-router-dom', async (importOriginal) => ({
+  ...(await importOriginal()),
+  useNavigate: () => navigateSpy,
+}));
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 import { DashboardPage } from '@/pages/dashboard/DashboardPage';
 import { useWorkflowStore } from '@/store/useWorkflowStore';
 import { useAuthStore } from '@/store/useAuthStore';
-import { findUserById } from '@/constants/mockUsers';
-import { WORKFLOW_STATE } from '@/constants/statusEnums';
+import { findUserById, MOCK_USERS } from '@/constants/mockUsers';
+import { WORKFLOW_STATE, AUDIT_EVENT, AUDIT_EVENT_LABELS } from '@/constants/statusEnums';
+import { ROLES } from '@/constants/roles';
 
 /**
  * The dashboard KPI tiles.
@@ -59,6 +66,7 @@ function ingest(n) {
 }
 
 beforeEach(async () => {
+  navigateSpy.mockClear();
   await useWorkflowStore.getState().hydrate();
   await useWorkflowStore.getState().resetDemo();
   useAuthStore.setState({ currentUser: OIC });
@@ -178,6 +186,167 @@ describe('no mock query data reaches the dashboard', () => {
 
     renderDashboard();
     expect(screen.getByText('Nothing waiting on you')).toBeInTheDocument();
+  });
+});
+
+// --- the rest of the dashboard ---
+
+/** Close `queryId` and record the audit event the panels read. */
+function close(queryId, at = new Date()) {
+  useWorkflowStore.setState((s) => ({
+    queries: s.queries.map((q) =>
+      q.queryId === queryId ? { ...q, workflowState: WORKFLOW_STATE.CLOSED } : q,
+    ),
+    auditEvents: [
+      ...s.auditEvents,
+      {
+        auditId: `AUD-CLOSE-${queryId}`,
+        queryId,
+        event: AUDIT_EVENT.QUERY_CLOSED,
+        actor: 'System',
+        at: at.toISOString(),
+      },
+    ],
+  }));
+}
+
+describe('the dashboard invents nothing', () => {
+  it('shows none of the hard-coded rows it used to ship with', () => {
+    renderDashboard();
+
+    for (const invented of [
+      'Q-2034', 'Q-2031', 'Q-2028', 'Q-2041', 'Q-2038', 'Q-2035',
+      'Staff access request for new ERP module',
+      'Compliance report Q2 amendment required',
+      'Vendor invoice mismatch — July batch',
+      'Bhumika added a comment on Q-2038',
+      '91%', '87%', '72%', 'Tech Ops', 'Legal', 'Finance',
+    ]) {
+      expect(screen.queryByText(invented)).toBeNull();
+    }
+  });
+
+  it('shows empty states rather than filler on a fresh store', () => {
+    renderDashboard();
+    expect(screen.getByText('Nothing closed yet')).toBeInTheDocument();
+    expect(screen.getByText('No activity yet')).toBeInTheDocument();
+  });
+
+  it('reports no resolution rate for a period with no enquiries', () => {
+    renderDashboard();
+    expect(screen.getAllByText('No data')).toHaveLength(3);
+  });
+});
+
+describe('Recently closed reads the audit trail', () => {
+  it('lists a real closed query by id and subject', () => {
+    const queryId = ingest(1);
+    close(queryId);
+    renderDashboard();
+
+    expect(screen.queryByText('Nothing closed yet')).toBeNull();
+    expect(screen.getByText('Dashboard fixture 1')).toBeInTheDocument();
+    // The id shows in Recently closed and again in the activity feed.
+    expect(screen.getAllByText(new RegExp(queryId)).length).toBeGreaterThan(0);
+  });
+
+  it('does not list a query that is still open', () => {
+    ingest(1);
+    renderDashboard();
+    expect(screen.getByText('Nothing closed yet')).toBeInTheDocument();
+  });
+});
+
+describe('Resolution rate is computed, not asserted', () => {
+  it('reports the share of received enquiries that are closed', () => {
+    const a = ingest(1);
+    ingest(2);
+    close(a);
+
+    renderDashboard();
+    // Two received this week, one of them closed.
+    // Both 'this month' and 'this week' cover the same two enquiries.
+    expect(screen.getAllByText('1 of 2 closed').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('50%').length).toBeGreaterThan(0);
+  });
+});
+
+describe('Activity feed shows real transitions in words', () => {
+  it('renders the audit trail newest first, with labels not enums', () => {
+    ingest(1);
+    renderDashboard();
+
+    expect(screen.queryByText('No activity yet')).toBeNull();
+    expect(screen.getByText(/Enquiry received/)).toBeInTheDocument();
+    // The raw enum must never reach the screen.
+    expect(screen.queryByText(/QUERY_RECEIVED/)).toBeNull();
+  });
+
+  it('has a label for every audit event, so none can render blank', () => {
+    for (const event of Object.values(AUDIT_EVENT)) {
+      expect(AUDIT_EVENT_LABELS[event], `no label for ${event}`).toBeTruthy();
+    }
+  });
+});
+
+describe('an Inquirer sees only their own queries', () => {
+  const INQUIRER = MOCK_USERS.find((u) => u.role === ROLES.INQUIRER);
+
+  it('shows the inquirer their own closed query', () => {
+    const queryId = ingest(1);          // ingested from the inquirer's address
+    close(queryId);
+    useAuthStore.setState({ currentUser: INQUIRER });
+
+    renderDashboard();
+    expect(screen.getByText('Dashboard fixture 1')).toBeInTheDocument();
+  });
+
+  it("hides another inquirer's query from them", () => {
+    const queryId = useWorkflowStore.getState().ingestEmail(
+      {
+        mailboxMessageId: 'MSG-OTHER',
+        to: 'ipc-query-mock@example.com',
+        from: 'Someone Else <someone.else@example.com>',
+        subject: 'Not your enquiry',
+        body: 'Body.',
+        receivedAt: new Date().toISOString(),
+      },
+      async () => null,
+    ).queryId;
+    close(queryId);
+    useAuthStore.setState({ currentUser: INQUIRER });
+
+    renderDashboard();
+    expect(screen.queryByText('Not your enquiry')).toBeNull();
+    expect(screen.getByText('Nothing closed yet')).toBeInTheDocument();
+  });
+
+  it('offers no "View all" link, having no queries list', () => {
+    useAuthStore.setState({ currentUser: INQUIRER });
+    renderDashboard();
+    expect(screen.queryByText('View all')).toBeNull();
+  });
+});
+
+describe("New Query is the Inquirer's alone", () => {
+  const INQUIRER = MOCK_USERS.find((u) => u.role === ROLES.INQUIRER);
+
+  it('renders for the Inquirer and points at their compose page', () => {
+    useAuthStore.setState({ currentUser: INQUIRER });
+    renderDashboard();
+
+    const button = screen.getByRole('button', { name: /New Query/ });
+    fireEvent.click(button);
+    expect(navigateSpy).toHaveBeenCalledWith('/inquirer/compose');
+  });
+
+  it.each(
+    [ROLES.FRONT_OFFICE, ROLES.OFFICER_IN_CHARGE, ROLES.ASSIGNED_OFFICIAL,
+     ROLES.REVIEWER, ROLES.ADMIN, ROLES.SUPER_ADMIN],
+  )('is hidden for %s', (role) => {
+    useAuthStore.setState({ currentUser: MOCK_USERS.find((u) => u.role === role) });
+    renderDashboard();
+    expect(screen.queryByRole('button', { name: /New Query/ })).toBeNull();
   });
 });
 
