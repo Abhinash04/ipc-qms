@@ -21,4 +21,17 @@ async function generateSummary(req, res, next) {
   }
 }
 
-export { generateSummary };
+async function recommendOfficial(req, res, next) {
+  try {
+    const { subject, body, summaryText } = req.body || {};
+    const recommendations = await gemmaService.recommendOfficial({ subject, body, summaryText });
+    return res.status(HTTP_STATUS.OK).json({
+      success: true,
+      recommendations,
+    });
+  } catch (error) {
+    return next(error);
+  }
+}
+
+export { generateSummary, recommendOfficial };

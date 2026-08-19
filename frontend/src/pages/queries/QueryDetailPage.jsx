@@ -12,8 +12,9 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
 import { useQueryCase } from '@/hooks/useQueryCase';
 import { useRoutePaths } from '@/hooks/useRoutePaths';
-
 import { useWorkflowStore } from '@/store/useWorkflowStore';
+import { WORKFLOW_ACTION } from '@/constants/workflowRules';
+import { AiRecommendationCard } from '@/components/ai/AiRecommendationCard';
 
 function InfoRow({ label, value }) {
   return (
@@ -26,8 +27,10 @@ function InfoRow({ label, value }) {
 
 export function QueryDetailPage() {
   const paths = useRoutePaths();
-  const { queryId, query, steps, versions, latestVersion, audit, messages, currentStep } =
+  const { queryId, query, currentUser, can, steps, versions, latestVersion, audit, messages, currentStep } =
     useQueryCase();
+  const canAssign = can(WORKFLOW_ACTION.ASSIGN);
+  const assignQuery = useWorkflowStore((state) => state.assignQuery);
 
   if (!query) {
     return (
@@ -73,6 +76,12 @@ export function QueryDetailPage() {
                 details: newSummary.text,
               });
             }}
+          />
+
+          <AiRecommendationCard
+            query={query}
+            currentAssigneeId={query.currentAssigneeId}
+            onAssign={canAssign ? (officialId) => assignQuery(query.queryId, officialId, currentUser) : null}
           />
 
           <EmailThread messages={messages} />
