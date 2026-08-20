@@ -7,7 +7,7 @@ export function PageHeader({ greeting, title, purpose, actions }) {
             {greeting}
           </div>
         )}
-        <h1 className="font-heading text-[52px] sm:text-[60px] font-black tracking-tight text-transparent bg-clip-text bg-linear-to-r from-slate-900 via-[#0f285d] to-blue-900 m-0 leading-none drop-shadow-2xs">
+        <h1 className="font-heading text-[52px] sm:text-[60px] font-black tracking-tight text-transparent bg-clip-text bg-linear-to-r from-slate-900 via-sidebar-tooltip to-blue-900 m-0 leading-none drop-shadow-2xs">
           {title}
         </h1>
         {purpose && (

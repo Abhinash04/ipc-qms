@@ -40,14 +40,13 @@ export function QueryTable({ title, purpose, breadcrumbItems, detailPath, filter
     <div className="space-y-6">
       {breadcrumbItems && <Breadcrumb items={breadcrumbItems} />}
 
-      {/* Page Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-4">
           <div className="flex h-13 w-13 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600 border border-emerald-100 shadow-2xs">
             <Archive className="h-6.5 w-6.5" strokeWidth={2} />
           </div>
           <div>
-            <h1 className="font-heading text-[52px] sm:text-[60px] font-black tracking-tight text-transparent bg-clip-text bg-linear-to-r from-slate-900 via-[#0f285d] to-blue-900 m-0 leading-none drop-shadow-2xs">
+            <h1 className="font-heading text-[52px] sm:text-[60px] font-black tracking-tight text-transparent bg-clip-text bg-linear-to-r from-slate-900 via-sidebar-tooltip to-blue-900 m-0 leading-none drop-shadow-2xs">
               {title || 'Queries'}
             </h1>
             <p className="m-0 text-[14.5px] font-medium text-slate-400 mt-2">

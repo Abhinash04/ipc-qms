@@ -39,7 +39,6 @@ export function WorkflowTimeline({ steps, currentStepId }) {
 
         return (
           <li key={step.stepId} className="flex gap-4">
-            {/* Timeline Dot Indicator */}
             <div className="flex flex-col items-center">
               <div
                 className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 border ${
@@ -60,11 +59,10 @@ export function WorkflowTimeline({ steps, currentStepId }) {
               </div>
 
               {index < ordered.length - 1 && (
-                <span className={`w-0.5 my-1.5 flex-1 min-h-[24px] ${isCompleted ? 'bg-emerald-400' : 'bg-slate-200'}`} />
+                <span className={`w-0.5 my-1.5 flex-1 min-h-6 ${isCompleted ? 'bg-emerald-400' : 'bg-slate-200'}`} />
               )}
             </div>
 
-            {/* Step Content */}
             <div className="pb-3 flex-1 min-w-0">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-[15px] font-black text-slate-800">{label}</span>
