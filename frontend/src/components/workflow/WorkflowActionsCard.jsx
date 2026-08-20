@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Lock, ShieldAlert, ArrowRight, Zap } from 'lucide-react';
+import { Lock, ArrowRight, Zap } from 'lucide-react';
 import { useQueryCase } from '@/hooks/useQueryCase';
 import { useWorkflowStore } from '@/store/useWorkflowStore';
 import { WORKFLOW_ACTION, CLARIFICATION_REQUIRED_ACTIONS } from '@/constants/workflowRules';

@@ -227,3 +227,4 @@ describe('mailbox ingestion trigger', () => {
     expect(await screen.findByText('Mailbox unreachable')).toBeInTheDocument();
   });
 });
+

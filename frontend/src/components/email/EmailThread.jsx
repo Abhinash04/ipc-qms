@@ -1,4 +1,4 @@
-import MailIcon from 'lucide-react/dist/esm/icons/mail.mjs';
+import { MailIcon } from 'lucide-react';
 import { Card, CardBody, CardHeader } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { EmptyState } from '@/components/common/EmptyState';

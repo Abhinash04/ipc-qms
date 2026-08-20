@@ -5,10 +5,8 @@ import {
   ClipboardCheck as ClipboardCheckIcon, 
   CheckCircle2 as CheckCircle2Icon, 
   Plus as PlusIcon,
-  ChevronRight,
   TrendingUp,
   Activity,
-  Send,
   UserCheck,
   Calendar,
   CalendarClock,
@@ -20,20 +18,19 @@ import {
   Clock,
   ShieldCheck,
   MoreVertical,
-  ArrowRight,
   Pencil,
   XCircle
 } from 'lucide-react';
+import { cn } from '@/utils/cn';
 import { PageHeader } from '@/components/common/PageHeader';
 import { StatTile } from '@/components/common/StatTile';
-import { StatusBadge } from '@/components/common/StatusBadge';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useWorkflowStore } from '@/store/useWorkflowStore';
 import { ROLE_LABELS, ROLES } from '@/constants/roles';
 import { RoleGate } from '@/components/common/RoleGate';
 import { findUserById } from '@/constants/mockUsers';
 import { findDivisionById } from '@/constants/mockDivisions';
-import { WORKFLOW_STATE, AUDIT_EVENT } from '@/constants/statusEnums';
+import { WORKFLOW_STATE, AUDIT_EVENT, AUDIT_EVENT_LABELS } from '@/constants/statusEnums';
 import { buildPath } from '@/constants/routePaths';
 import { useRoutePaths } from '@/hooks/useRoutePaths';
 import { ROLE_SLUG } from '@/constants/permissions';
@@ -63,6 +60,21 @@ function relativeTime(iso) {
   if (hours < 24) return `${hours}h ago`;
   if (hours < 48) return 'Yesterday';
   return then.toLocaleDateString();
+}
+
+const RATE_ROW_STYLES = [
+  { icon: Calendar, text: 'text-blue-600', bar: 'bg-blue-600' },
+  { icon: CalendarClock, text: 'text-purple-600', bar: 'bg-purple-600' },
+  { icon: CalendarCheck, text: 'text-emerald-600', bar: 'bg-emerald-500' },
+];
+
+function closureRate(auditEvents, closedQueryIds, from, to = new Date()) {
+  const received = auditEvents.filter(
+    (e) => e.event === AUDIT_EVENT.QUERY_RECEIVED && new Date(e.at) >= from && new Date(e.at) < to,
+  );
+  if (received.length === 0) return null;
+  const closed = received.filter((e) => closedQueryIds.has(e.queryId)).length;
+  return { percent: Math.round((closed / received.length) * 100), received: received.length, closed };
 }
 
 function newestFirst(events) {
@@ -98,17 +110,32 @@ export function DashboardPage() {
     return step?.assignedUserId === currentUser?.id;
   });
 
-  const totalCount = queries.length;
-  const closedCount = queries.filter((q) => q.workflowState === WORKFLOW_STATE.CLOSED).length;
-  const activeCount = queries.filter((q) => q.workflowState !== WORKFLOW_STATE.CLOSED).length;
-  const draftsCount = queries.filter((q) => DRAFTING_STATES.includes(q.workflowState)).length;
-  const resolutionPct = totalCount > 0 ? Math.round((closedCount / totalCount) * 100) : 0;
+  const closedCount = visibleQueries.filter((q) => q.workflowState === WORKFLOW_STATE.CLOSED).length;
+  const activeCount = visibleQueries.filter((q) => q.workflowState !== WORKFLOW_STATE.CLOSED).length;
+  const draftsCount = visibleQueries.filter((q) => DRAFTING_STATES.includes(q.workflowState)).length;
+
+  const closedQueryIds = new Set(
+    visibleQueries.filter((q) => q.workflowState === WORKFLOW_STATE.CLOSED).map((q) => q.queryId),
+  );
+
+  const startOfMonth = new Date();
+  startOfMonth.setDate(1);
+  const rates = [
+    { label: 'This month', rate: closureRate(visibleAudit, closedQueryIds, startOfMonth) },
+    { label: 'This week', rate: closureRate(visibleAudit, closedQueryIds, since(7)) },
+    { label: 'Last week', rate: closureRate(visibleAudit, closedQueryIds, since(14), since(7)) },
+  ];
+
+  const assignedThisWeek = countSince(visibleAudit, AUDIT_EVENT.QUERY_ASSIGNED, since(7));
+  const receivedThisWeek = countSince(visibleAudit, AUDIT_EVENT.QUERY_RECEIVED, since(7));
+  const closedThisMonth = countSince(visibleAudit, AUDIT_EVENT.QUERY_CLOSED, since(30));
 
   const kpis = [
     {
       label: 'Assigned to you',
+      caption: 'Cases you own',
       value: mine.length,
-      trendText: '↗ 12%',
+      trendText: assignedThisWeek ? `+${assignedThisWeek} this week` : null,
       trendType: 'up',
       subtextMain: `↑ ${mine.length} assigned to you`,
       subtextColor: 'text-emerald-600',
@@ -120,8 +147,9 @@ export function DashboardPage() {
     },
     {
       label: 'In drafting',
+      caption: 'Being written',
       value: draftsCount,
-      trendText: '↗ 8%',
+      trendText: receivedThisWeek ? `+${receivedThisWeek} received this week` : null,
       trendType: 'up',
       subtextMain: `↑ ${draftsCount} in draft state`,
       subtextColor: 'text-amber-600',
@@ -133,8 +161,9 @@ export function DashboardPage() {
     },
     {
       label: 'Awaiting review',
+      caption: 'Your review queue',
       value: awaitingMyReview.length,
-      trendText: '↘ 5%',
+      trendText: null,
       trendType: 'down',
       subtextMain: `↓ ${awaitingMyReview.length} awaiting review`,
       subtextColor: 'text-rose-600',
@@ -146,8 +175,9 @@ export function DashboardPage() {
     },
     {
       label: 'Closed',
+      caption: 'Completed cases',
       value: closedCount,
-      trendText: '↑ 18%',
+      trendText: closedThisMonth ? `+${closedThisMonth} in 30 days` : null,
       trendType: 'up',
       subtextMain: `↑ ${closedCount} total closed`,
       subtextColor: 'text-emerald-600',
@@ -158,6 +188,8 @@ export function DashboardPage() {
       icon: CheckCircle2Icon,
     },
   ];
+
+  const activity = newestFirst(visibleAudit).slice(0, 5);
 
   const recentlyClosed = newestFirst(visibleAudit.filter((e) => e.event === AUDIT_EVENT.QUERY_CLOSED))
     .slice(0, 3)
@@ -186,7 +218,6 @@ export function DashboardPage() {
     return `/${slug}/queries/${queryId}`;
   };
 
-  const queueToRender = myQueue.length > 0 ? myQueue : visibleQueries.slice(0, 5);
 
   const firstName = currentUser?.name ? currentUser.name.split(' ')[0] : 'User';
 
@@ -214,7 +245,6 @@ export function DashboardPage() {
         }
       />
 
-      {/* Stat cards row */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {kpis.map((kpi) => (
           <StatTile
@@ -224,13 +254,12 @@ export function DashboardPage() {
         ))}
       </div>
 
-      {/* Middle section — Waiting on you + Resolution rate */}
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_450px] gap-4">
-        {/* Waiting on you Card (Neumorphic Soft UI) */}
-        <div className="bg-[#f1f5fa] rounded-3xl border border-white/80 overflow-hidden shadow-[12px_12px_24px_#d0d7e5,-12px_-12px_24px_#ffffff] flex flex-col justify-between">
+        {/* Waiting on you Card (Subtle Liquid Glassmorphism) */}
+        <div className="liquid-glass-card rounded-3xl overflow-hidden flex flex-col justify-between">
           <div>
             {/* Card Top Header */}
-            <div className="relative p-6 border-b border-white/60 flex justify-between items-center bg-[#f1f5fa]">
+            <div className="relative p-6 border-b border-white/60 flex justify-between items-center bg-[#f1f5fa]/60 backdrop-blur-md">
               <div className="flex items-center gap-4 relative z-10">
                 <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[#f1f5fa] text-purple-600 border border-white shadow-[5px_5px_10px_#d0d7e5,-5px_-5px_10px_#ffffff]">
                   <FileText className="h-7 w-7" strokeWidth={2} />
@@ -241,14 +270,14 @@ export function DashboardPage() {
                 </div>
               </div>
 
-              <div className="relative z-10 flex items-center gap-2 rounded-xl bg-[#f1f5fa] px-4 py-2 text-[12.5px] font-extrabold text-purple-700 border border-white shadow-[4px_4px_8px_#d0d7e5,-4px_-4px_8px_#ffffff]">
+              <div className="relative z-10 flex items-center gap-2 rounded-xl bg-[#f1f5fa]/80 backdrop-blur-md px-4 py-2 text-[12.5px] font-extrabold text-purple-700 border border-white shadow-[4px_4px_8px_#d0d7e5,-4px_-4px_8px_#ffffff]">
                 <InboxIcon className="h-4 w-4 text-purple-600" />
-                <span>{myQueue.length || 1} open</span>
+                <span>{myQueue.length} open</span>
               </div>
             </div>
 
             {/* Column headers */}
-            <div className="grid grid-cols-[160px_1fr_210px_130px_36px] gap-3 px-6 py-3 bg-[#e8eef5] shadow-[inset_2px_2px_4px_#c8cfde,inset_-2px_-2px_4px_#ffffff] text-[11px] font-extrabold text-slate-400 tracking-wider uppercase">
+            <div className="grid grid-cols-[160px_1fr_210px_130px_36px] gap-3 px-6 py-3 bg-[#e8eef5]/80 backdrop-blur-md shadow-[inset_2px_2px_4px_#c8cfde,inset_-2px_-2px_4px_#ffffff] text-[11px] font-extrabold text-slate-400 tracking-wider uppercase">
               <span>ID</span>
               <span>TITLE</span>
               <span className="text-center">STATUS</span>
@@ -256,19 +285,22 @@ export function DashboardPage() {
               <span></span>
             </div>
 
-            {/* Table Rows */}
             <div className="p-4 space-y-3">
-              {queueToRender.map((query) => (
+              {myQueue.length === 0 && (
+                <p className="py-6 text-center text-[13px] font-medium text-slate-400">
+                  Nothing waiting on you. Queries appear here when they reach a stage you own.
+                </p>
+              )}
+              {myQueue.map((query) => (
                 <Link
                   key={query.queryId}
                   to={getQueryDetailPath(query.queryId)}
-                  className="group relative flex items-center justify-between gap-3 neu-row rounded-2xl p-3.5 transition-all overflow-hidden cursor-pointer"
+                  className="group relative flex items-center justify-between gap-3 liquid-glass-row rounded-2xl p-3.5 transition-all overflow-hidden cursor-pointer"
                 >
                   {/* Left Accent Indicator Bar */}
-                  <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-purple-600 rounded-l-2xl" />
+                  <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-gradient-to-b from-purple-500 to-indigo-600 rounded-l-2xl shadow-xs" />
 
-                  {/* ID */}
-                  <div className="flex items-center gap-3 w-[160px] shrink-0 pl-2">
+                  <div className="flex items-center gap-3 w-40 shrink-0 pl-2">
                     <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#f1f5fa] text-purple-600 shadow-[3px_3px_6px_#d0d7e5,-3px_-3px_6px_#ffffff] border border-white">
                       <FileText className="h-5 w-5" strokeWidth={1.8} />
                     </div>
@@ -279,39 +311,35 @@ export function DashboardPage() {
 
                   <div className="h-8 w-px bg-slate-200/60 shrink-0" />
 
-                  {/* Title */}
                   <div className="flex items-center gap-3 flex-1 min-w-0 px-2">
                     <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#f1f5fa] text-blue-600 shadow-[3px_3px_6px_#d0d7e5,-3px_-3px_6px_#ffffff] border border-white">
                       <Mail className="h-4.5 w-4.5" strokeWidth={1.8} />
                     </div>
                     <div className="min-w-0">
                       <div className="text-[13.5px] font-bold text-slate-800 truncate group-hover:text-purple-700">
-                        {query.subject}
+                        {query.subject || '(No Subject)'}
                       </div>
                       <div className="text-[11px] font-medium text-slate-400 mt-0.5">
-                        Received 19 Aug 2026 • 09:30 AM
+                        Received {query.createdAt ? new Date(query.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '19 Aug 2026'} • {query.createdAt ? new Date(query.createdAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '09:30 AM'}
                       </div>
                     </div>
                   </div>
 
-                  {/* Status Badge */}
                   <div className="w-[210px] shrink-0 flex justify-center">
-                    <span className="inline-flex items-center gap-1.5 rounded-full bg-[#f1f5fa] px-3.5 py-1.5 text-[11px] font-extrabold text-purple-700 shadow-[inset_2px_2px_4px_#d0d7e5,inset_-2px_-2px_4px_#ffffff] border border-white/60">
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-[#f1f5fa]/90 backdrop-blur-sm px-3.5 py-1.5 text-[11px] font-extrabold text-purple-700 shadow-[inset_2px_2px_4px_#d0d7e5,inset_-2px_-2px_4px_#ffffff] border border-white/80">
                       <Clock className="h-3.5 w-3.5 text-purple-600" />
                       {query.businessStatus || query.workflowState || 'PENDING FINAL APPROVAL'}
                     </span>
                   </div>
 
-                  {/* Priority Badge */}
                   <div className="w-[130px] shrink-0 flex justify-center">
-                    <span className="inline-flex items-center gap-1.5 rounded-full bg-[#f1f5fa] px-3.5 py-1.5 text-[11px] font-extrabold text-blue-700 shadow-[inset_2px_2px_4px_#d0d7e5,inset_-2px_-2px_4px_#ffffff] border border-white/60">
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-[#f1f5fa]/90 backdrop-blur-sm px-3.5 py-1.5 text-[11px] font-extrabold text-blue-700 shadow-[inset_2px_2px_4px_#d0d7e5,inset_-2px_-2px_4px_#ffffff] border border-white/80">
                       <ShieldCheck className="h-3.5 w-3.5 text-blue-600" />
                       {query.priority || 'NORMAL'}
                     </span>
                   </div>
 
-                  {/* Menu */}
-                  <div className="w-[36px] shrink-0 flex justify-end">
+                  <div className="w-9 shrink-0 flex justify-end">
                     <div className="p-1 rounded-lg text-slate-400 group-hover:text-slate-600 transition-colors">
                       <MoreVertical className="h-4 w-4" />
                     </div>
@@ -321,20 +349,19 @@ export function DashboardPage() {
             </div>
           </div>
 
-          {/* Footer Bar */}
           <div className="p-5 border-t border-white/60 flex items-center justify-between bg-[#f1f5fa]">
             <div className="flex items-center gap-2">
               <Info className="h-5 w-5 text-purple-600 shrink-0" />
-              <span className="text-[12px] font-semibold text-slate-600">Showing 1 of 1 item</span>
+              <span className="text-[12px] font-semibold text-slate-600">
+                Showing {myQueue.length} of {queries.length} item{queries.length === 1 ? '' : 's'}
+              </span>
             </div>
           </div>
         </div>
 
 
-        {/* Resolution rate Card (Neumorphic Soft UI) */}
         <div className="bg-[#f1f5fa] rounded-3xl border border-white/80 p-6 shadow-[12px_12px_24px_#d0d7e5,-12px_-12px_24px_#ffffff] flex flex-col justify-between">
           <div>
-            {/* Top Header */}
             <div className="flex justify-between items-start mb-6">
               <div className="flex gap-4 items-start">
                 <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-[#f1f5fa] text-blue-600 border border-white shadow-[5px_5px_10px_#d0d7e5,-5px_-5px_10px_#ffffff]">
@@ -342,13 +369,12 @@ export function DashboardPage() {
                 </div>
                 <div>
                   <h3 className="font-heading text-[26px] font-black text-slate-900 m-0 leading-tight">Resolution rate</h3>
-                  <p className="text-[14px] font-normal text-slate-400 m-0 mt-1 max-w-[240px] leading-relaxed">
+                  <p className="text-[14px] font-normal text-slate-400 m-0 mt-1 max-w-60 leading-relaxed">
                     Share of enquiries received in each period that are now closed
                   </p>
                 </div>
               </div>
 
-              {/* Vector graphic chart illustration in top right */}
               <div className="relative w-22 h-14 shrink-0 pointer-events-none select-none hidden sm:block">
                 <svg width="50" height="50" viewBox="0 0 60 60" className="absolute top-0 left-0 opacity-80">
                   <circle cx="30" cy="30" r="22" stroke="#dbeafe" strokeWidth="10" fill="none" />
@@ -368,73 +394,48 @@ export function DashboardPage() {
               </div>
             </div>
 
-            {/* 3 Progress Rows */}
             <div className="space-y-4">
-              {/* Row 1: This month */}
-              <div>
-                <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#f1f5fa] text-blue-600 shadow-[3px_3px_6px_#d0d7e5,-3px_-3px_6px_#ffffff] border border-white">
-                    <Calendar className="h-5 w-5" strokeWidth={1.8} />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex justify-between items-center mb-1">
-                      <span className="text-[14px] font-bold text-slate-800">This month</span>
-                      <span className="text-[14px] font-extrabold text-blue-600">{resolutionPct}%</span>
-                    </div>
-                    <div className="h-3 rounded-full bg-[#e6ebf2] shadow-[inset_2px_2px_4px_#c8cfde,inset_-2px_-2px_4px_#ffffff] overflow-hidden w-full p-0.5">
-                      <div className="h-full rounded-full bg-blue-600 transition-all duration-500" style={{ width: `${resolutionPct}%` }} />
-                    </div>
-                    <div className="mt-1 text-[12px] font-medium text-slate-400">{closedCount} of {totalCount} closed</div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="h-px bg-slate-200/50" />
-
-              {/* Row 2: This week */}
-              <div>
-                <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#f1f5fa] text-purple-600 shadow-[3px_3px_6px_#d0d7e5,-3px_-3px_6px_#ffffff] border border-white">
-                    <CalendarClock className="h-5 w-5" strokeWidth={1.8} />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex justify-between items-center mb-1">
-                      <span className="text-[14px] font-bold text-slate-800">This week</span>
-                      <span className="text-[14px] font-extrabold text-purple-600">{resolutionPct}%</span>
-                    </div>
-                    <div className="h-3 rounded-full bg-[#e6ebf2] shadow-[inset_2px_2px_4px_#c8cfde,inset_-2px_-2px_4px_#ffffff] overflow-hidden w-full p-0.5">
-                      <div className="h-full rounded-full bg-purple-600 transition-all duration-500" style={{ width: `${resolutionPct}%` }} />
-                    </div>
-                    <div className="mt-1 text-[12px] font-medium text-slate-400">{closedCount} of {totalCount} closed</div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="h-px bg-slate-200/50" />
-
-              {/* Row 3: Last week */}
-              <div>
-                <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#f1f5fa] text-emerald-600 shadow-[3px_3px_6px_#d0d7e5,-3px_-3px_6px_#ffffff] border border-white">
-                    <CalendarCheck className="h-5 w-5" strokeWidth={1.8} />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex justify-between items-center mb-1">
-                      <span className="text-[14px] font-bold text-slate-800">Last week</span>
-                      <span className="text-[14px] font-extrabold text-emerald-600">{totalCount > 0 ? `${resolutionPct}%` : 'No data'}</span>
-                    </div>
-                    <div className="h-3 rounded-full bg-[#e6ebf2] shadow-[inset_2px_2px_4px_#c8cfde,inset_-2px_-2px_4px_#ffffff] overflow-hidden w-full p-0.5">
-                      <div className="h-full rounded-full bg-emerald-500 transition-all duration-500" style={{ width: `${resolutionPct}%` }} />
+              {rates.map(({ label, rate }, i) => {
+                const { icon: RowIcon, text, bar } = RATE_ROW_STYLES[i];
+                return (
+                  <div key={label}>
+                    {i > 0 && <div className="h-px bg-slate-200/50 mb-4" />}
+                    <div className="flex items-center gap-3">
+                      <div className={cn(
+                        'flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#f1f5fa] shadow-[3px_3px_6px_#d0d7e5,-3px_-3px_6px_#ffffff] border border-white',
+                        text,
+                      )}>
+                        <RowIcon className="h-5 w-5" strokeWidth={1.8} />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex justify-between items-center mb-1">
+                          <span className="text-[14px] font-bold text-slate-800">{label}</span>
+                          <span className={cn('text-[14px] font-extrabold', rate ? text : 'text-slate-400')}>
+                            {rate ? `${rate.percent}%` : 'No data'}
+                          </span>
+                        </div>
+                        <div className="h-3 rounded-full bg-[#e6ebf2] shadow-[inset_2px_2px_4px_#c8cfde,inset_-2px_-2px_4px_#ffffff] overflow-hidden w-full p-0.5">
+                          {rate && (
+                            <div
+                              className={cn('h-full rounded-full transition-all duration-500', bar)}
+                              style={{ width: `${rate.percent}%` }}
+                            />
+                          )}
+                        </div>
+                        {rate && (
+                          <div className="mt-1 text-[12px] font-medium text-slate-400">
+                            {rate.closed} of {rate.received} closed
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
-                </div>
-              </div>
+                );
+              })}
             </div>
           </div>
 
-          {/* 3 Stat cards at bottom (Neumorphic Mini Cards) */}
           <div className="grid grid-cols-3 gap-3 my-5">
-            {/* Card 1: Closed */}
             <div className="rounded-2xl p-3.5 bg-[#f1f5fa] border border-white/90 flex items-center gap-3 shadow-[6px_6px_12px_#d0d7e5,-6px_-6px_12px_#ffffff] hover:shadow-[8px_8px_16px_#c8cfde,-8px_-8px_16px_#ffffff] transition-all">
               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#f1f5fa] text-emerald-600 shadow-[inset_2px_2px_4px_#d0d7e5,inset_-2px_-2px_4px_#ffffff]">
                 <CheckCircle2Icon className="h-5 w-5 text-emerald-600" strokeWidth={2.2} />
@@ -445,7 +446,6 @@ export function DashboardPage() {
               </div>
             </div>
 
-            {/* Card 2: Active */}
             <div className="rounded-2xl p-3.5 bg-[#f1f5fa] border border-white/90 flex items-center gap-3 shadow-[6px_6px_12px_#d0d7e5,-6px_-6px_12px_#ffffff] hover:shadow-[8px_8px_16px_#c8cfde,-8px_-8px_16px_#ffffff] transition-all">
               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#f1f5fa] text-blue-600 shadow-[inset_2px_2px_4px_#d0d7e5,inset_-2px_-2px_4px_#ffffff]">
                 <User className="h-5 w-5 text-blue-600" strokeWidth={2} />
@@ -456,7 +456,6 @@ export function DashboardPage() {
               </div>
             </div>
 
-            {/* Card 3: Drafts */}
             <div className="rounded-2xl p-3.5 bg-[#f1f5fa] border border-white/90 flex items-center gap-3 shadow-[6px_6px_12px_#d0d7e5,-6px_-6px_12px_#ffffff] hover:shadow-[8px_8px_16px_#c8cfde,-8px_-8px_16px_#ffffff] transition-all">
               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#f1f5fa] text-amber-600 shadow-[inset_2px_2px_4px_#d0d7e5,inset_-2px_-2px_4px_#ffffff]">
                 <FileText className="h-5 w-5 text-amber-600" strokeWidth={2} />
@@ -468,25 +467,21 @@ export function DashboardPage() {
             </div>
           </div>
 
-          {/* Footer Bar */}
           <div className="pt-2 border-t border-slate-100/80 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Info className="h-5 w-5 text-blue-500 shrink-0" />
               <div className="flex flex-col text-left leading-tight">
                 <span className="text-[11px] font-normal italic text-slate-400">Auto-updated</span>
-                <span className="text-[11px] font-medium text-slate-500">Today, 09:30 AM</span>
+                <span className="text-[11px] font-medium text-slate-500">Today, {new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}</span>
               </div>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Bottom section — Recently closed + Activity feed */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* Recently closed Card */}
         <div className="bg-white rounded-3xl border border-slate-200/70 p-6 shadow-sm flex flex-col justify-between">
           <div>
-            {/* Card Header */}
             <div className="flex justify-between items-center mb-6">
               <div className="flex items-center gap-4">
                 <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-emerald-600 border border-emerald-100/60 shadow-2xs">
@@ -494,17 +489,15 @@ export function DashboardPage() {
                 </div>
                 <div>
                   <h3 className="font-heading text-[26px] font-black text-slate-900 m-0 leading-tight">Recently closed</h3>
-                  <p className="text-[14px] font-normal text-slate-400 m-0 mt-1 max-w-[280px]">
+                  <p className="text-[14px] font-normal text-slate-400 m-0 mt-1 max-w-70">
                     Closed queries appear here once a response has been dispatched.
                   </p>
                 </div>
               </div>
             </div>
 
-            {/* Content Area */}
             {recentlyClosed.length === 0 ? (
               <div className="my-4 rounded-2xl border border-dashed border-emerald-200/80 bg-[#f8fcf9] p-8 flex flex-col items-center justify-center text-center">
-                {/* Custom Green Graphic Illustration */}
                 <div className="relative w-44 h-32 flex items-center justify-center select-none pointer-events-none mb-2">
                   <div className="absolute w-32 h-16 bg-emerald-200/40 rounded-full blur-xl" />
                   <svg width="150" height="110" viewBox="0 0 160 120" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -559,10 +552,8 @@ export function DashboardPage() {
           </div>
         </div>
 
-        {/* Activity feed Card */}
         <div className="bg-white rounded-3xl border border-slate-200/70 p-6 shadow-sm flex flex-col justify-between">
           <div>
-            {/* Card Header */}
             <div className="flex justify-between items-center mb-6">
               <div className="flex items-center gap-4">
                 <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-blue-50 text-blue-600 border border-blue-100/60 shadow-2xs">
@@ -584,24 +575,21 @@ export function DashboardPage() {
               </button>
             </div>
 
-            {/* Timeline Feed Items */}
             <div className="relative pl-3 space-y-0 my-2">
-              {[
-                { id: '1', queryId: 'QRY-2026-00001', action: 'Draft response updated', user: 'Neha Singh', time: '7m ago', type: 'edit' },
-                { id: '2', queryId: 'QRY-2026-00001', action: 'Draft response updated', user: 'Neha Singh', time: '7m ago', type: 'edit' },
-                { id: '3', queryId: 'QRY-2026-00001', action: 'Final approval rejected', user: 'Jatin Rawat', time: '8m ago', type: 'reject' },
-                { id: '4', queryId: 'QRY-2026-00001', action: 'Draft response updated', user: 'Neha Singh', time: '8m ago', type: 'edit' },
-                { id: '5', queryId: 'QRY-2026-00001', action: 'Draft response updated', user: 'Neha Singh', time: '8m ago', type: 'edit' },
-              ].map((item, i, arr) => (
-                <div key={item.id} className="relative flex items-center gap-4 py-3 border-b border-slate-100/70 last:border-none">
-                  {/* Vertical connecting line */}
-                  {i < arr.length - 1 && (
-                    <div className="absolute left-[19px] top-[40px] bottom-[-12px] w-0.5 bg-slate-100 z-0" />
+              {activity.length === 0 ? (
+                <p className="py-6 text-center text-[13px] font-medium text-slate-400">
+                  No activity yet. Every workflow transition appears here as it happens.
+                </p>
+              ) : (
+                activity.map((event, i) => (
+                <div key={event.auditId} className="relative flex items-center gap-4 py-3 border-b border-slate-100/70 last:border-none">
+                  {i < activity.length - 1 && (
+                    <div className="absolute left-4.75 top-10 -bottom-3 w-0.5 bg-slate-100 z-0" />
                   )}
 
-                  {/* Node Icon */}
                   <div className="relative z-10 shrink-0">
-                    {item.type === 'reject' ? (
+                    {event.event === AUDIT_EVENT.FINAL_APPROVAL_REJECTED ||
+                    event.event === AUDIT_EVENT.REVISION_REQUESTED ? (
                       <div className="flex h-10 w-10 items-center justify-center rounded-full bg-red-50 text-red-500 border border-red-100">
                         <XCircle className="h-5 w-5" strokeWidth={2} />
                       </div>
@@ -612,23 +600,24 @@ export function DashboardPage() {
                     )}
                   </div>
 
-                  {/* Content */}
                   <div className="flex-1 min-w-0">
                     <div className="text-[13.5px] leading-snug">
-                      <span className="font-extrabold text-blue-600 hover:underline cursor-pointer">{item.queryId}</span>
-                      <span className="font-bold text-slate-800"> — {item.action}</span>
+                      <span className="font-extrabold text-blue-600">{event.queryId}</span>
+                      <span className="font-bold text-slate-800">
+                        {' '}— {AUDIT_EVENT_LABELS[event.event] || event.event}
+                      </span>
                     </div>
                     <div className="text-[12px] font-medium text-slate-400 mt-0.5">
-                      {item.user}
+                      {event.actor}
                     </div>
                   </div>
 
-                  {/* Time */}
                   <div className="text-[12px] font-medium text-slate-400 shrink-0">
-                    {item.time}
+                    {relativeTime(event.at)}
                   </div>
                 </div>
-              ))}
+                ))
+              )}
             </div>
           </div>
 
@@ -638,6 +627,3 @@ export function DashboardPage() {
     </div>
   );
 }
-
-
-

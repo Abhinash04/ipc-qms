@@ -59,7 +59,7 @@ export function AiRecommendationCard({ query, onAssign, currentAssigneeId }) {
   if (!query) return null;
 
   return (
-    <div className="bg-gradient-to-br from-indigo-50/80 via-purple-50/30 to-white rounded-3xl border border-indigo-200/80 p-6 shadow-sm select-none">
+    <div className="bg-linear-to-br from-indigo-50/80 via-purple-50/30 to-white rounded-3xl border border-indigo-200/80 p-6 shadow-sm select-none">
       {/* Header Row */}
       <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-indigo-100">
         <div className="flex items-center gap-2.5">
@@ -86,7 +86,6 @@ export function AiRecommendationCard({ query, onAssign, currentAssigneeId }) {
         </button>
       </div>
 
-      {/* Recommendations Body */}
       <div className="pt-4 space-y-3.5">
         {loading ? (
           <div className="flex flex-col items-center justify-center py-8 space-y-2">

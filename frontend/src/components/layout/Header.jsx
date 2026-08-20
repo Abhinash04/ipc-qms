@@ -1,11 +1,11 @@
 import { useNavigate } from 'react-router-dom';
-import { RotateCcwIcon, Calendar as CalendarIcon } from 'lucide-react';
+import { RotateCcwIcon } from 'lucide-react';
 
 import { roleHome } from '@/constants/routePaths';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useWorkflowStore } from '@/store/useWorkflowStore';
 import { useHealthCheck } from '@/hooks/useHealthCheck';
-import { ROLE_LABELS, ROLES } from '@/constants/roles';
+import { ROLE_LABELS } from '@/constants/roles';
 import { MOCK_USERS, findUserById } from '@/constants/mockUsers';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select';
 import { IpcLogo } from '@/components/common/IpcLogo';
@@ -44,7 +44,7 @@ export function Header() {
     checking: 'bg-slate-100 border-slate-200 text-slate-600',
     offline: 'bg-red-50 border-red-200 text-red-700',
   };
-  
+
   const dotStyles = {
     online: 'bg-emerald-500',
     checking: 'bg-slate-400',
@@ -53,7 +53,6 @@ export function Header() {
 
   return (
     <header className="flex h-20 shrink-0 items-center justify-between border-b border-slate-200/80 bg-white/95 backdrop-blur-md px-6 shadow-xs z-20">
-      {/* Left side — IPC Emblem & Government Logo */}
       <div className="flex items-center gap-6">
         <IpcLogo size="md" variant="light" />
 
@@ -70,7 +69,6 @@ export function Header() {
         </div>
       </div>
 
-      {/* Right side — Controls & User Switcher */}
       <div className="flex items-center gap-3">
         <button
           onClick={resetDemo}
@@ -95,11 +93,11 @@ export function Header() {
                 </div>
               </SelectValue>
             </SelectTrigger>
-            <SelectContent className="w-[310px] max-h-96 p-1.5 rounded-2xl shadow-xl border border-slate-200/80 bg-white z-50">
+            <SelectContent className="w-77.5 max-h-96 p-1.5 rounded-2xl shadow-xl border border-slate-200/80 bg-white z-50">
               {SWITCHABLE_USERS.map((user) => (
                 <SelectItem key={user.id} value={user.id} className="py-2.5 px-3 rounded-xl cursor-pointer hover:bg-slate-50 transition-colors">
                   <div className="flex items-center gap-3">
-                    <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[#f3e8ff] text-[#9333ea] text-[11px] font-extrabold shrink-0 border border-purple-200/50">
+                    <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[#f3e8ff] text-status-purple-fg text-[11px] font-extrabold shrink-0 border border-purple-200/50">
                       {initials(user.name)}
                     </span>
                     <span className="text-[13px] font-extrabold text-slate-800 leading-tight">

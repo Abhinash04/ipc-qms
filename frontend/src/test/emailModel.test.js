@@ -124,3 +124,4 @@ describe('sortThreadMessages', () => {
     expect(input[0].messageId).toBe('MSG-00003');
   });
 });
+

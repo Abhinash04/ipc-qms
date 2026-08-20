@@ -13,15 +13,6 @@ import { navItemsForRole } from '@/constants/navigation';
 import { MOCK_USERS } from '@/constants/mockUsers';
 import { ROLES, ROLE_LABELS } from '@/constants/roles';
 
-/**
- * The sidebar.
- *
- * Nothing rendered this component before — only `navItemsForRole` was asserted,
- * as a pure function — which is why a 2px geometry error shipped as a visible
- * horizontal scrollbar across the collapsed rail, and why collapsing the
- * sidebar silently removed the only way to sign out.
- */
-
 const STORAGE_KEY = 'qms.sidebar.collapsed';
 const EVERY_ROLE = Object.values(ROLES);
 const userFor = (role) => MOCK_USERS.find((u) => u.role === role);
@@ -35,7 +26,6 @@ function renderSidebar({ collapsed = false } = {}) {
   );
 }
 
-/** The nav landmark, so assertions cannot accidentally match a bottom control. */
 const nav = () => screen.getByRole('navigation', { name: 'Primary' });
 
 beforeEach(() => {
@@ -45,8 +35,7 @@ beforeEach(() => {
 
 describe('collapsed geometry adds up', () => {
   it('leaves a content box exactly the width of a rail item', () => {
-    // The equation that broke: a 42px item in a 40px box overflowed by 2px, and
-    // `overflow-y-auto` forced overflow-x to auto, painting a scrollbar.
+
     expect(WIDTH_CLOSED - RAIL_PADDING * 2).toBe(RAIL_ITEM);
   });
 
@@ -177,7 +166,6 @@ describe('collapsing and expanding', () => {
     const [first] = navItemsForRole(ROLES.SUPER_ADMIN);
     renderSidebar({ collapsed: true });
 
-    // The name survives for assistive tech; the text does not take up space.
     expect(within(nav()).queryByText(first.label)).toBeNull();
     expect(within(nav()).getByRole('link', { name: first.label })).toBeInTheDocument();
     expect(screen.queryByText('Main Menu')).toBeNull();
@@ -197,3 +185,4 @@ describe('collapsing and expanding', () => {
     expect(screen.queryByRole('button', { name: 'Collapse sidebar' })).toBeNull();
   });
 });
+

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { LogOut, FileText, ChevronLeft, ChevronRight } from 'lucide-react';
+import { LogOut, ChevronLeft, ChevronRight } from 'lucide-react';
 
 import { navItemsForRole } from '@/constants/navigation';
 import { ROLE_LABELS } from '@/constants/roles';
@@ -48,7 +48,7 @@ function RailTooltip({ open, label, children }) {
       <TooltipContent
         side="right"
         sideOffset={12}
-        className="bg-[#0f285d] text-white border-blue-500/30 font-medium"
+        className="bg-sidebar-tooltip text-white border-blue-500/30 font-medium"
       >
         {label}
       </TooltipContent>
@@ -81,21 +81,18 @@ export function Sidebar() {
         initial={false}
         animate={{ width: open ? WIDTH_OPEN : WIDTH_CLOSED }}
         transition={{ duration: 0.2, ease: 'easeInOut' }}
-        className="relative z-10 flex h-screen shrink-0 flex-col overflow-hidden border-r border-blue-900/40 bg-gradient-to-b from-[#0f2557] via-[#1d4ed8] to-[#0c204d] text-white shadow-xl shadow-blue-950/20 transition-all duration-200 select-none"
+        className="relative z-10 flex h-screen shrink-0 flex-col overflow-hidden border-r border-blue-900/40 bg-linear-to-b from-sidebar-from via-sidebar-via to-sidebar-to text-white shadow-xl shadow-blue-950/20 transition-all duration-200 select-none"
       >
-        {/* Background Vector Graphic Art Watermark */}
         <div className="pointer-events-none absolute bottom-0 left-0 z-0 select-none opacity-15">
           <svg width="240" height="240" viewBox="0 0 240 240" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <circle cx="60" cy="180" r="120" stroke="#60a5fa" strokeWidth="16" strokeDasharray="12 12" />
-            <circle cx="60" cy="180" r="80" stroke="#93c5fd" strokeWidth="8" />
+            <circle cx="60" cy="180" r="120" stroke="var(--color-sidebar-accent)" strokeWidth="16" strokeDasharray="12 12" />
+            <circle cx="60" cy="180" r="80" stroke="var(--color-sidebar-accent-soft)" strokeWidth="8" />
           </svg>
         </div>
 
-        {/* Zone 1 — brand */}
         <TitleSection open={open} />
         <ZoneDivider open={open} />
 
-        {/* Zone 2 — navigation */}
         {open && (
           <div className="px-4 pt-1 pb-1 text-[10.5px] font-extrabold uppercase tracking-widest text-blue-200/60 select-none">
             Main Menu
@@ -113,7 +110,6 @@ export function Sidebar() {
           ))}
         </nav>
 
-        {/* Zone 3 — user and sidebar controls */}
         <div className="relative z-10 mt-auto">
           <ZoneDivider open={open} />
           <div className={cn('flex flex-col pb-4', open ? 'px-3.5' : 'items-center px-3.5')}>
@@ -162,7 +158,7 @@ function NavItem({ item, open }) {
           FOCUS_RING,
           open ? 'gap-3.5 justify-start px-4 py-3.5' : `${RAIL_SQUARE} justify-center`,
           isActive
-            ? 'bg-gradient-to-r from-[#2563eb] to-[#3b82f6] font-bold text-white shadow-lg shadow-blue-900/40'
+            ? 'bg-linear-to-r from-sidebar-active to-sidebar-active-to font-bold text-white shadow-lg shadow-blue-900/40'
             : 'font-semibold text-blue-100/90 hover:bg-white/12 hover:text-white',
         )
       }
@@ -201,7 +197,7 @@ function TitleSection({ open }) {
       )}
     >
       <div className="flex items-center gap-3 min-w-0">
-        <div className="flex h-9.5 w-9.5 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-blue-400 via-blue-600 to-indigo-700 text-white shadow-lg shadow-blue-950/40 border border-white/25">
+        <div className="flex h-9.5 w-9.5 shrink-0 items-center justify-center rounded-xl bg-linear-to-br from-blue-400 via-blue-600 to-indigo-700 text-white shadow-lg shadow-blue-950/40 border border-white/25">
           <span className="font-heading text-[17px] font-black tracking-tight text-white drop-shadow-xs">Q</span>
         </div>
         <AnimatePresence>

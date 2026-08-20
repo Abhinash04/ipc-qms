@@ -6,14 +6,13 @@ export function StatTile({
   icon: Icon,
   cardBg,
   cardBorder,
-  iconBg,
-  iconColor,
   numColor,
   trendText,
-  trendType, // 'up' | 'down'
+  trendType,
   subtextMain,
+  caption,
   subtextColor,
-  illustrationType, // 'assigned' | 'drafting' | 'review' | 'closed'
+  illustrationType,
   className
 }) {
   const blobColors = {
@@ -36,14 +35,13 @@ export function StatTile({
   return (
     <div
       className={cn(
-        "relative overflow-hidden rounded-[28px] p-[2px] transition-all duration-300 cursor-pointer select-none group shadow-[10px_10px_22px_#d0d7e5,-10px_-10px_22px_#ffffff] hover:shadow-[14px_14px_28px_#c8cfde,-14px_-14px_28px_#ffffff] hover:-translate-y-1",
+        "relative overflow-hidden rounded-[28px] p-0.5 transition-all duration-300 cursor-pointer select-none group shadow-[10px_10px_22px_#d0d7e5,-10px_-10px_22px_#ffffff] hover:shadow-[14px_14px_28px_#c8cfde,-14px_-14px_28px_#ffffff] hover:-translate-y-1",
         className
       )}
       style={{
         background: cardBorder ? `linear-gradient(135deg, ${cardBorder} 0%, #ffffff 100%)` : '#e2e8f0',
       }}
     >
-      {/* Background Animated Liquid Blob (Behind Glass Surface) */}
       <div
         className="absolute top-1/2 left-1/2 w-44 h-44 rounded-full opacity-70 filter blur-xl pointer-events-none z-0 animate-blob"
         style={{
@@ -51,7 +49,6 @@ export function StatTile({
         }}
       />
 
-      {/* Glassmorphism Inner Content Card (Front Surface) */}
       <div
         className="relative z-10 flex flex-col justify-between h-full w-full rounded-[26px] p-5 sm:p-6 backdrop-blur-2xl transition-colors duration-300"
         style={{
@@ -59,7 +56,6 @@ export function StatTile({
           outline: '2px solid rgba(255, 255, 255, 0.95)',
         }}
       >
-      {/* Top Header Row */}
       <div className="flex items-start justify-between gap-3 z-10">
         <div className="flex items-center gap-3.5">
           {Icon && (
@@ -76,13 +72,14 @@ export function StatTile({
             <h3 className="font-heading text-[15px] font-black text-slate-800 m-0 leading-tight">
               {label}
             </h3>
-            <p className="text-[11.5px] font-semibold text-slate-400 m-0 mt-0.5">
-              Total queries
-            </p>
+            {caption && (
+              <p className="text-[11.5px] font-semibold text-slate-400 m-0 mt-0.5">
+                {caption}
+              </p>
+            )}
           </div>
         </div>
 
-        {/* Trend Pill */}
         {trendText && (
           <span
             className={cn(
@@ -97,10 +94,8 @@ export function StatTile({
         )}
       </div>
 
-      {/* Bottom Section (Giant Stat Number + Subtext + 3D Illustration) */}
       <div className="flex items-end justify-between mt-6 z-10">
         <div className="flex flex-col justify-end">
-          {/* Stat Value Number */}
           <div
             className="font-heading text-[50px] sm:text-[54px] font-black leading-none tracking-tight"
             style={{ color: numColor || '#1e293b' }}
@@ -108,19 +103,15 @@ export function StatTile({
             {value}
           </div>
 
-          {/* Subtext */}
           <div className="mt-2.5 space-y-0.5">
             <div className={cn("text-[12px] font-black flex items-center gap-1", subtextColor || "text-slate-600")}>
               {subtextMain}
             </div>
-            <div className="text-[11px] font-semibold text-slate-400">
-              vs last week
-            </div>
+
           </div>
         </div>
 
-        {/* 3D Vector Illustration Graphic Badge */}
-        <div className="w-[84px] h-[84px] shrink-0 pointer-events-none group-hover:scale-105 transition-transform duration-300 flex items-center justify-center -mr-1 -mb-1">
+        <div className="w-21 h-21 shrink-0 pointer-events-none group-hover:scale-105 transition-transform duration-300 flex items-center justify-center -mr-1 -mb-1">
           {illustrationType === 'assigned' && (
             <svg width="82" height="82" viewBox="0 0 100 100" fill="none">
               <defs>
@@ -137,14 +128,12 @@ export function StatTile({
                 </filter>
               </defs>
               <g filter="url(#shadow3d)">
-                {/* 3D Paper Sheet */}
                 <rect x="20" y="24" width="46" height="54" rx="10" fill="url(#blueCardGrad)" stroke="#bfdbfe" strokeWidth="1.5" transform="rotate(-6 43 51)" />
                 <rect x="28" y="36" width="28" height="5" rx="2.5" fill="#93c5fd" transform="rotate(-6 42 38.5)" />
                 <circle cx="33" cy="48" r="3" fill="#3b82f6" transform="rotate(-6 33 48)" />
                 <rect x="40" y="47" width="16" height="4" rx="2" fill="#bfdbfe" transform="rotate(-6 48 49)" />
                 <circle cx="32" cy="58" r="3" fill="#3b82f6" transform="rotate(-6 32 58)" />
                 <rect x="39" y="57" width="14" height="4" rx="2" fill="#bfdbfe" transform="rotate(-6 46 59)" />
-                {/* 3D Blue Check Badge */}
                 <circle cx="68" cy="64" r="16" fill="url(#blueBadgeGrad)" stroke="#ffffff" strokeWidth="2.5" />
                 <path d="M60 64L66 70L76 59" stroke="white" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" />
               </g>
@@ -167,15 +156,12 @@ export function StatTile({
                 </filter>
               </defs>
               <g filter="url(#shadow3dYellow)">
-                {/* 3D Tray */}
                 <rect x="18" y="44" width="56" height="34" rx="10" fill="url(#trayGrad)" />
                 <rect x="22" y="50" width="48" height="24" rx="6" fill="#b45309" opacity="0.35" />
-                {/* Paper Sheet */}
                 <rect x="24" y="24" width="42" height="48" rx="8" fill="#ffffff" stroke="#fde68a" strokeWidth="1.5" />
                 <rect x="30" y="32" width="24" height="4" rx="2" fill="#93c5fd" />
                 <rect x="30" y="40" width="28" height="4" rx="2" fill="#e0f2fe" />
                 <rect x="30" y="48" width="18" height="4" rx="2" fill="#e0f2fe" />
-                {/* Pencil */}
                 <g transform="translate(48, 22) rotate(35)">
                   <rect x="0" y="0" width="10" height="36" rx="4" fill="url(#pencilGrad)" stroke="#ffffff" strokeWidth="1.5" />
                   <path d="M0 36L5 45L10 36H0Z" fill="#78350f" />
@@ -203,7 +189,6 @@ export function StatTile({
                 </filter>
               </defs>
               <g filter="url(#shadow3dPink)">
-                {/* 3D Clipboard */}
                 <rect x="22" y="24" width="46" height="56" rx="10" fill="url(#clipGrad)" />
                 <rect x="35" y="18" width="20" height="10" rx="4" fill="#cbd5e1" stroke="#ffffff" strokeWidth="1.5" />
                 <rect x="39" y="21" width="12" height="4" rx="2" fill="#94a3b8" />
@@ -214,7 +199,6 @@ export function StatTile({
                 <rect x="38" y="47" width="14" height="4" rx="2" fill="#fecdd3" />
                 <circle cx="32" cy="58" r="2.5" fill="#f43f5e" />
                 <rect x="38" y="56" width="16" height="4" rx="2" fill="#fecdd3" />
-                {/* Clock Badge */}
                 <circle cx="68" cy="64" r="16" fill="url(#clockGrad)" stroke="#ffffff" strokeWidth="2.5" />
                 <path d="M68 56V64L73 67" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
               </g>
@@ -241,11 +225,9 @@ export function StatTile({
                 </filter>
               </defs>
               <g filter="url(#shadow3dGreen)">
-                {/* 3D Pedestal */}
                 <ellipse cx="50" cy="74" rx="28" ry="10" fill="#047857" />
                 <ellipse cx="50" cy="70" rx="28" ry="10" fill="url(#pedestalGrad)" />
                 <ellipse cx="50" cy="68" rx="24" ry="7" fill="#6ee7b7" opacity="0.6" />
-                {/* 3D Shield */}
                 <path
                   d="M50 20C50 20 68 24 68 40C68 56 50 66 50 66C50 66 32 56 32 40C32 24 50 20 50 20Z"
                   fill="url(#shieldGrad)"

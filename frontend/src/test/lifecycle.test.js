@@ -91,9 +91,6 @@ async function runTo(stopAt, { reviewers = [REVIEWER_A], message } = {}) {
   }
   if (stopAt === WORKFLOW_STATE.PENDING_FINAL_APPROVAL) return queryId;
 
-  // Final approval now dispatches automatically. To observe the intermediate
-  // READY_FOR_DISPATCH state — approved but not yet sent — approve with a
-  // sender that fails, which is exactly what a Gmail outage looks like.
   if (stopAt === WORKFLOW_STATE.READY_FOR_DISPATCH) {
     await s()
       .grantFinalApproval(queryId, OIC, () => Promise.reject(new Error('Gmail unavailable')))
@@ -154,7 +151,6 @@ describe('the complete lifecycle, end to end', () => {
     const query = s().getQuery(queryId);
     const messages = s().emailMessages.filter((m) => m.queryId === queryId);
 
-    // Enquiry in, forward to the OIC, final response out — one conversation.
     expect(messages.map((m) => m.emailType)).toEqual([
       EMAIL_TYPE.INCOMING_QUERY,
       EMAIL_TYPE.FORWARD,
@@ -298,8 +294,6 @@ describe('revision cycles', () => {
     s().saveDraftVersion(queryId, 'Softened text.', OFFICIAL, 'Revision after review');
     s().submitForReview(queryId, OFFICIAL);
 
-    // The revised draft must climb the whole ladder again: Reviewer-I first,
-    // not straight back to the OIC.
     expect(stateOf(queryId)).toBe(WORKFLOW_STATE.UNDER_REVIEW);
 
     s().approveReview(queryId, 'Level 1 fine', REVIEWER_A);
@@ -347,7 +341,7 @@ describe('response versioning and locking', () => {
     const queryId = await runTo(WORKFLOW_STATE.DRAFTING);
     s().saveDraftVersion(queryId, 'The final agreed wording.', OFFICIAL);
     s().submitForReview(queryId, OFFICIAL);
-    // No manual dispatch: approval sends the approved text on its own.
+
     await s().grantFinalApproval(queryId, OIC, fakeSend);
 
     const sent = s().emailMessages.find((m) => m.emailType === EMAIL_TYPE.OUTGOING_RESPONSE);
@@ -566,7 +560,7 @@ describe('duplicate ingestion protection still holds', () => {
 });
 
 describe('every revision restarts at Reviewer-I', () => {
-  /** Reach UNDER_REVIEW with two reviewers configured. */
+
   async function twoLevelReview() {
     return runTo(WORKFLOW_STATE.UNDER_REVIEW, { reviewers: [REVIEWER_A, REVIEWER_B] });
   }
@@ -582,15 +576,12 @@ describe('every revision restarts at Reviewer-I', () => {
     s().approveReview(queryId, 'Level 1 fine', REVIEWER_A);
     expect(pendingReviewer(queryId)).toBe(REVIEWER_B.id);
 
-    // Reviewer-II rejects. Previously the revision went straight back to
-    // Reviewer-II, skipping Reviewer-I entirely.
     s().requestRevision(queryId, 'Cite the edition.', REVIEWER_B);
     s().saveDraftVersion(queryId, 'Revised text.', OFFICIAL, 'Revision after review');
     s().submitForReview(queryId, OFFICIAL);
 
     expect(pendingReviewer(queryId)).toBe(REVIEWER_A.id);
 
-    // And the full ladder still has to be climbed.
     s().approveReview(queryId, 'ok', REVIEWER_A);
     expect(pendingReviewer(queryId)).toBe(REVIEWER_B.id);
     s().approveReview(queryId, 'ok', REVIEWER_B);
@@ -625,7 +616,6 @@ describe('every revision restarts at Reviewer-I', () => {
   it('survives several loops, retaining every version', async () => {
     const queryId = await twoLevelReview();
 
-    // Reviewer-I rejects, Reviewer-II rejects, OIC returns — three full laps.
     s().requestRevision(queryId, 'Round 1', REVIEWER_A);
     s().saveDraftVersion(queryId, 'v2 text', OFFICIAL, 'Revision after review');
     s().submitForReview(queryId, OFFICIAL);
@@ -690,7 +680,6 @@ describe('review comments', () => {
     expect(() => s().requestRevision(queryId, '   ', REVIEWER_A)).toThrow(/requires a comment/);
     expect(() => s().requestRevision(queryId, undefined, REVIEWER_A)).toThrow(/requires a comment/);
 
-    // Nothing was recorded and the case did not move.
     expect(s().getReviews(queryId)).toHaveLength(0);
     expect(stateOf(queryId)).toBe(WORKFLOW_STATE.UNDER_REVIEW);
   });
@@ -707,3 +696,4 @@ describe('review comments', () => {
     expect(() => s().approveReview(queryId, '', REVIEWER_A)).not.toThrow();
   });
 });
+
