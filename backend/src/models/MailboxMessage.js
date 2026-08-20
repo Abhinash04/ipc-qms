@@ -12,6 +12,7 @@ const mailboxMessageSchema = new mongoose.Schema(
     attachments: { type: Array, default: [] },
     receivedAt: { type: String, required: true },
     ingested: { type: Boolean, default: false, index: true },
+    aiSummary: { type: Object, default: null },
   },
   { versionKey: false },
 );

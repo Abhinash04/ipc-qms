@@ -155,6 +155,9 @@ There is no model behind it yet; the interface is the swap point.
 - AI recommendation criteria: category, subject, expertise, history, workload, division, availability. — *Proposed Design*
 - Is a reason/justification required when overriding the AI recommendation? — *Client Clarification Required*
 - How heavily should current workload factor into the recommendation (hard constraint vs. soft signal)? — *Client Clarification Required*
+- The recommendation is computed from declared `expertise` keywords, the official's division and their open-query count. The scoring weights are a development stand-in, not a client-agreed formula. — *Proposed Design*
+- The official roster now exists **twice**: `frontend/src/constants/mockUsers.js` (the user records the app authenticates and assigns against) and `backend/src/config/officialsMetadata.js` (what the Gemma recommender scores). They agree today and the backend copy carries a few extra keywords, but nothing enforces that — a division change made in one will silently not reach the other. Unifying them means deciding which side owns the roster, which is a design question, not an integration one. — *Client Clarification Required*
+- `recommendAssignee(query, users, openQueries) → { userId, matchPercent, reason, factors }` is a fixed contract so a model-backed implementation (Gemma is the candidate) can replace the rule-based scorer without changing the store, the pages or the workflow. Which model is approved remains open (see the AI section). — *Proposed Design*
 
 ## Review
 
@@ -164,7 +167,11 @@ There is no model behind it yet; the interface is the swap point.
 - Who can reorder review levels? — *Client Clarification Required*
 - Who assigns which reviewer to which level — the OIC, the assigned official, or auto-assignment? — *Client Clarification Required*
 - Can a reviewer directly edit the draft, or only comment/approve/return? — *Client Clarification Required*
-- What happens to the workflow position after a review is returned — does it restart at the same level or an earlier one? — *Proposed Design*: returns to the assigned official, then re-enters the same review level once revised (as shown in [05-workflow-and-state-machine.md](./05-workflow-and-state-machine.md)); not confirmed.
+- What happens to the workflow position after a review is returned — does it restart at the same level or an earlier one? — **Answered by user direction**: the revision returns to the assigned official and then re-enters at **Reviewer-I**, climbing the full ladder again. A Reviewer-II rejection therefore does not go straight back to Reviewer-II. This supersedes the earlier *Proposed Design* reading of [05-workflow-and-state-machine.md](./05-workflow-and-state-machine.md), which showed re-entry at the same level. — *User-Directed Proposed Behaviour*, still to be confirmed with the client.
+- A return for revision from **final approval** restarts the complete cycle too: every review level *and* the final-approval step reset to pending, so the revised response passes Reviewer-I → Reviewer-II → OIC again. — *User-Directed Proposed Behaviour*
+- A comment is **mandatory** whenever changes are requested, on both the reviewer path and the OIC's return-for-revision path; the action is refused without one. Approval comments stay optional. The SRS states that a `CHANGE_REQUIRED` decision records the reviewer and comments but does not say the comment is enforced. — *User-Directed Proposed Behaviour*
+- Every review decision is bound to the **response version it reviewed** (`responseId` + `version` on the review row), so a comment can never be read against text written after it. The data model does not specify this link. — *User-Directed Proposed Behaviour*
+- Reviewer-II cannot forward a response to the OIC after requesting changes — the request resets the cycle, and only a Reviewer-II approval on a subsequent version reaches final approval. — *User-Directed Proposed Behaviour*
 
 ## Transfer
 
@@ -201,7 +208,9 @@ There is no model behind it yet; the interface is the swap point.
 ## AI
 
 - AI recommends, human always decides — for both assignment and drafting. — *Confirmed Requirement*
-- Which LLM/provider is approved for use? — *Client Clarification Required*
+- Which LLM/provider is approved for use? — *Client Clarification Required*. **Gemma** is now wired in as the candidate, called over HTTP at `GEMMA_API_URL` (currently an AICTE-hosted endpoint). It fills the `recommendAssignee` swap point and generates the query summary. This is a development integration, not an approved choice — the question stays open.
+- The Gemma endpoint is a **third party outside IPC's control**, and enquiry subject and body are sent to it. Whether that is acceptable for real enquiry content — and whether an on-prem model is required instead — is unresolved and overlaps the on-prem question below. — *Client Clarification Required*
+- Every Gemma path falls back to the local rule-based scorer on timeout, error or an unparseable reply, so the workflow degrades rather than fails. Whether silent degradation is acceptable, or whether the Officer-in-Charge must be told the recommendation is not model-backed, is not specified. — *Proposed Design*
 - Is an external API call permitted, or must this run on a private/on-prem model? — *Client Clarification Required*
 - What counts as an "approved knowledge source" for draft generation? — *Client Clarification Required*
 - Should previously approved responses be usable as AI context/training examples? — *Client Clarification Required*

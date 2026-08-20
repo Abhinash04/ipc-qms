@@ -116,13 +116,20 @@ export function ApprovalDetailPage() {
                   <Button
                     variant="secondary"
                     className="w-full"
+                    disabled={!comment.trim()}
                     onClick={() => {
-                      returnForRevision(queryId, comment, currentUser);
+                      // Wrapped, like every other action: returning without a
+                      // comment throws, and an uncaught throw blanks the page.
+                      run(() => returnForRevision(queryId, comment, currentUser));
                       setComment('');
                     }}
                   >
                     Return for revision
                   </Button>
+                  <p className="text-xs text-muted-foreground">
+                    A comment is required. Returning restarts the full review cycle — the revised
+                    response passes Reviewer-I and Reviewer-II again before returning here.
+                  </p>
                   <Button
                     variant="destructive"
                     className="w-full"

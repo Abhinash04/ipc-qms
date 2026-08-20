@@ -16,6 +16,7 @@ import { buildSeedState } from '@/constants/mockDomain';
 import { summarise, recommendAssignee, draftResponse } from '@/services/ai/mockAiService';
 import { loadAll, replaceAll, persistTransition, isEmpty } from '@/services/db/db';
 import { sendResponse, forwardQuery } from '@/services/api/mailboxService';
+import { fetchGemmaAiSummary } from '@/services/api/aiService';
 
 const pad = (n) => String(n).padStart(5, '0');
 
@@ -63,6 +64,27 @@ function assertCan(state, action, queryId, actor) {
   }
 
   return query;
+}
+
+/**
+ * Reset every review level so a revised draft re-enters the cycle at the first
+ * one.
+ *
+ * Required by the workflow: a revision requested by Reviewer-II, or by the
+ * Officer-in-Charge at final approval, must still pass Reviewer-I before
+ * reaching Reviewer-II again. Previously only the rejecting step was reset, so
+ * a Reviewer-II rejection went straight back to Reviewer-II, and an OIC return
+ * skipped both reviewers entirely.
+ *
+ * `submitForReview` picks the lowest-sequence PENDING review step, so resetting
+ * them all is the whole mechanism — no ordering special cases.
+ */
+function reopenReviewCycle(steps, queryId) {
+  return steps.map((step) =>
+    step.queryId === queryId && (step.stepType === 'REVIEW' || step.stepType === 'FINAL_APPROVAL')
+      ? { ...step, status: 'PENDING', startedAt: null, completedAt: null }
+      : step,
+  );
 }
 
 function computeTransition(state, { queryId, event, actor, patch = {}, details, actorLabel, notify, mutate }) {
@@ -188,7 +210,11 @@ export const useWorkflowStore = create((set, get) => ({
     return message ? message.queryId : null;
   },
 
-  ingestEmail: (mailboxMessage) => {
+  // `fetchSummary` is the test seam, matching the `send` / `forward` / `client`
+  // pattern used elsewhere in this store. Production callers never pass it; the
+  // suite passes a stub, because a real call has no backend under test and its
+  // rejection logs to the console, which the harness treats as a failure.
+  ingestEmail: (mailboxMessage, fetchSummary = fetchGemmaAiSummary) => {
     const state = get();
     const sourceMessageId = mailboxMessage.mailboxMessageId || mailboxMessage.providerMessageId;
     if (!sourceMessageId) {
@@ -310,6 +336,24 @@ export const useWorkflowStore = create((set, get) => ({
       patch: { aiSummary: summary },
       details: summary.text,
     });
+
+    // Asynchronously fetch real Gemma LLM AI summary from backend
+    fetchSummary({
+      subject: query.subject,
+      body: query.description,
+      inquirerName: query.inquirer?.name,
+    }).then((gemmaSummary) => {
+      if (gemmaSummary) {
+        get().applyTransition({
+          queryId,
+          actor: null,
+          actorLabel: 'Gemma AI Summary Assistant',
+          event: AUDIT_EVENT.AI_SUMMARY_GENERATED,
+          patch: { aiSummary: gemmaSummary },
+          details: gemmaSummary.text,
+        });
+      }
+    }).catch(() => {});
 
     return { queryId, threadId, messageId, created: true };
   },
@@ -747,6 +791,7 @@ export const useWorkflowStore = create((set, get) => ({
   approveReview: (queryId, comment, actor) => {
     assertCan(get(), WORKFLOW_ACTION.APPROVE_REVIEW, queryId, actor);
     const state = get();
+    const approvedVersion = state.getLatestVersion(queryId);
     const current = state.getCurrentStep(queryId);
     if (!current) return;
 
@@ -786,6 +831,8 @@ export const useWorkflowStore = create((set, get) => ({
             stepId: current.stepId,
             decision: 'APPROVED',
             comment: comment || null,
+            responseId: approvedVersion?.responseId || null,
+            version: approvedVersion?.version || null,
             reviewerId: actor?.id || null,
             at: timestamp,
           },
@@ -805,6 +852,11 @@ export const useWorkflowStore = create((set, get) => ({
 
   requestRevision: (queryId, comment, actor) => {
     assertCan(get(), WORKFLOW_ACTION.REQUEST_REVISION, queryId, actor);
+    // A rejection without a reason is not actionable by the drafter.
+    if (!String(comment || '').trim()) {
+      throw new Error('Requesting changes requires a comment explaining what must change');
+    }
+    const reviewed = get().getLatestVersion(queryId);
     const state = get();
     const current = state.getCurrentStep(queryId);
     if (!current) return;
@@ -834,14 +886,16 @@ export const useWorkflowStore = create((set, get) => ({
             queryId,
             stepId: current.stepId,
             decision: 'CHANGES_REQUESTED',
-            comment: comment || null,
+            comment,
+            // Bind the comment to the text it was written about, so it stays
+            // meaningful after later revisions supersede that version.
+            responseId: reviewed?.responseId || null,
+            version: reviewed?.version || null,
             reviewerId: actor?.id || null,
             at: timestamp,
           },
         ],
-        workflowSteps: base.workflowSteps.map((s) =>
-          s.stepId === current.stepId ? { ...s, status: 'PENDING', startedAt: null } : s,
-        ),
+        workflowSteps: reopenReviewCycle(base.workflowSteps, queryId),
       }),
     });
   },
@@ -905,18 +959,55 @@ export const useWorkflowStore = create((set, get) => ({
     });
   },
 
+  /**
+   * OIC sends the response back for revision.
+   *
+   * The revised draft must climb the whole ladder again — Reviewer-I, then
+   * Reviewer-II, then final approval — so every review level is reopened, not
+   * just the approval step.
+   */
   returnForRevisionFromApproval: (queryId, comment, actor) => {
     assertCan(get(), WORKFLOW_ACTION.RETURN_FOR_REVISION, queryId, actor);
+    if (!String(comment || '').trim()) {
+      throw new Error('Returning for revision requires a comment explaining what must change');
+    }
+
+    const state = get();
+    const reviewed = state.getLatestVersion(queryId);
+    const reviewMint = mintId(state.counters, 'REV');
+    const timestamp = now();
+
     return get().applyTransition({
       queryId,
       actor,
       event: AUDIT_EVENT.REVISION_REQUESTED,
-      patch: { workflowState: WORKFLOW_STATE.RETURNED_FOR_REVISION },
-      details: comment ? `Returned for revision by OIC: ${comment}` : 'Returned for revision by OIC.',
+      patch: {
+        workflowState: WORKFLOW_STATE.RETURNED_FOR_REVISION,
+        currentWorkflowStepId: null,
+      },
+      details: `Returned for revision by the Officer-in-Charge: ${comment}`,
       notify: {
         recipientRole: 'ASSIGNED_OFFICIAL',
         message: `${queryId} was returned for revision by the Officer-in-Charge.`,
       },
+      mutate: (base) => ({
+        counters: { ...base.counters, ...reviewMint.bump },
+        reviews: [
+          ...base.reviews,
+          {
+            reviewId: reviewMint.id,
+            queryId,
+            stepId: null,
+            decision: 'CHANGES_REQUESTED',
+            comment,
+            responseId: reviewed?.responseId || null,
+            version: reviewed?.version || null,
+            reviewerId: actor?.id || null,
+            at: timestamp,
+          },
+        ],
+        workflowSteps: reopenReviewCycle(base.workflowSteps, queryId),
+      }),
     });
   },
 

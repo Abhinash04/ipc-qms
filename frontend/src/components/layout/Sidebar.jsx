@@ -11,9 +11,17 @@ import { useAuthStore } from '@/store/useAuthStore';
 import { cn } from '@/utils/cn';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
+
 const STORAGE_KEY = 'qms.sidebar.collapsed';
 const WIDTH_OPEN = 240;
-const WIDTH_CLOSED = 72;
+
+export const RAIL_ITEM = 44;
+export const RAIL_PADDING = 16;
+export const WIDTH_CLOSED = RAIL_ITEM + RAIL_PADDING * 2;
+
+const RAIL_SQUARE = 'h-11 w-11 shrink-0 items-center justify-center rounded-[10px]';
+const FOCUS_RING =
+  'outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-0';
 
 function readCollapsed() {
   try {
@@ -23,9 +31,33 @@ function readCollapsed() {
   }
 }
 
+function ZoneDivider({ open }) {
+  return (
+    <div
+      aria-hidden="true"
+      className={cn('h-px bg-blue-400/20', open ? 'mx-4 my-3' : 'mx-auto my-3 w-8')}
+    />
+  );
+}
+
+function RailTooltip({ open, label, children }) {
+  if (open) return children;
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>{children}</TooltipTrigger>
+      <TooltipContent
+        side="right"
+        sideOffset={12}
+        className="bg-[#0f285d] text-white border-blue-500/30 font-medium"
+      >
+        {label}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
 export function Sidebar() {
   const currentUser = useAuthStore((state) => state.currentUser);
-  const items = navItemsForRole(currentUser?.role);
   const [collapsed, setCollapsed] = useState(readCollapsed);
   const open = !collapsed;
 
@@ -35,55 +67,80 @@ export function Sidebar() {
       try {
         localStorage.setItem(STORAGE_KEY, String(next));
       } catch {
-        /* storage unavailable */
+        // ignore storage errors
       }
       return next;
     });
   };
 
-  return (
-    <TooltipProvider>
-      <motion.aside
-        layout
-        style={{ width: open ? WIDTH_OPEN : WIDTH_CLOSED }}
-        className="relative flex shrink-0 flex-col bg-[linear-gradient(180deg,#0a1930_0%,#15388c_100%)] text-[#94a3b8] overflow-hidden transition-all duration-200 z-10 shadow-lg border-r border-[#1e293b]"
-      >
-        <TitleSection open={open} />
+  const items = navItemsForRole(currentUser?.role);
 
-        <div className={cn("px-4 pt-6 pb-2", open ? "block" : "hidden")}>
-          <div className="text-[10px] font-bold text-[#94a3b8] tracking-wider uppercase ml-1">
+  return (
+    <TooltipProvider delayDuration={150}>
+      <motion.aside
+        initial={false}
+        animate={{ width: open ? WIDTH_OPEN : WIDTH_CLOSED }}
+        transition={{ duration: 0.2, ease: 'easeInOut' }}
+        className="relative z-10 flex h-screen shrink-0 flex-col overflow-hidden border-r border-blue-900/40 bg-gradient-to-b from-[#0f2557] via-[#1d4ed8] to-[#0c204d] text-white shadow-xl shadow-blue-950/20 transition-all duration-200 select-none"
+      >
+        {/* Background Vector Graphic Art Watermark */}
+        <div className="pointer-events-none absolute bottom-0 left-0 z-0 select-none opacity-15">
+          <svg width="240" height="240" viewBox="0 0 240 240" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="60" cy="180" r="120" stroke="#60a5fa" strokeWidth="16" strokeDasharray="12 12" />
+            <circle cx="60" cy="180" r="80" stroke="#93c5fd" strokeWidth="8" />
+          </svg>
+        </div>
+
+        {/* Zone 1 — brand */}
+        <TitleSection open={open} />
+        <ZoneDivider open={open} />
+
+        {/* Zone 2 — navigation */}
+        {open && (
+          <div className="px-4 pt-1 pb-1 text-[10.5px] font-extrabold uppercase tracking-widest text-blue-200/60 select-none">
             Main Menu
           </div>
-        </div>
-        {!open && <div className="h-8" />}
-
-        <nav className="flex-1 px-4 py-1 flex flex-col gap-1 overflow-y-auto" aria-label="Primary">
+        )}
+        <nav
+          aria-label="Primary"
+          className={cn(
+            'relative z-10 flex flex-1 flex-col gap-2.5 overflow-y-auto overflow-x-hidden px-3.5 py-2',
+            !open && 'items-center',
+          )}
+        >
           {items.map((item) => (
             <NavItem key={item.path} item={item} open={open} />
           ))}
         </nav>
 
-        <div className="mt-auto flex flex-col px-4 pb-4">
-          <div className="h-[1px] bg-white/10 mb-4" />
-          {currentUser && <UserFooter open={open} user={currentUser} />}
-          
-          <button
-            onClick={toggle}
-            className={cn(
-              "flex items-center text-[#94a3b8] hover:text-white transition-colors bg-transparent mt-2",
-              open ? "h-[32px] justify-start gap-3" : "h-[32px] justify-center"
-            )}
-            title={open ? "Collapse sidebar" : "Expand sidebar"}
-          >
-            {open ? (
-              <>
-                <ChevronLeft className="h-[16px] w-[16px]" />
-                <span className="text-[12px] font-medium">Collapse sidebar</span>
-              </>
-            ) : (
-              <ChevronRight className="h-[16px] w-[16px]" />
-            )}
-          </button>
+        {/* Zone 3 — user and sidebar controls */}
+        <div className="relative z-10 mt-auto">
+          <ZoneDivider open={open} />
+          <div className={cn('flex flex-col pb-4', open ? 'px-3.5' : 'items-center px-3.5')}>
+            {currentUser && <UserFooter open={open} user={currentUser} />}
+
+            <RailTooltip open={open} label="Expand sidebar">
+              <button
+                type="button"
+                onClick={toggle}
+                aria-label={open ? 'Collapse sidebar' : 'Expand sidebar'}
+                className={cn(
+                  'mt-2.5 flex text-blue-200/80 transition-colors hover:bg-white/10 hover:text-white',
+                  FOCUS_RING,
+                  open ? 'h-9 items-center justify-start gap-3 rounded-[10px] px-3' : RAIL_SQUARE + ' flex',
+                )}
+              >
+                {open ? (
+                  <>
+                    <ChevronLeft className="h-4 w-4" aria-hidden="true" />
+                    <span className="text-[12px] font-medium">Collapse sidebar</span>
+                  </>
+                ) : (
+                  <ChevronRight className="h-4 w-4" aria-hidden="true" />
+                )}
+              </button>
+            </RailTooltip>
+          </div>
         </div>
       </motion.aside>
     </TooltipProvider>
@@ -92,29 +149,35 @@ export function Sidebar() {
 
 function NavItem({ item, open }) {
   const { label, path, icon: Icon, section } = item;
+  const isNotifications = section === SECTION.NOTIFICATIONS;
 
   const link = (
     <NavLink
       to={path}
       end={section === SECTION.DASHBOARD}
+      aria-label={label}
       className={({ isActive }) =>
         cn(
-          'relative flex items-center gap-3 rounded-[10px] text-[13.5px] transition-all overflow-hidden border-none outline-none group',
-          open ? 'py-[11px] px-[14px] justify-start' : 'py-[12px] px-0 justify-center mx-auto w-[42px]',
+          'relative flex items-center rounded-2xl text-[15px] transition-all duration-150',
+          FOCUS_RING,
+          open ? 'gap-3.5 justify-start px-4 py-3.5' : `${RAIL_SQUARE} justify-center`,
           isActive
-            ? 'bg-[#2563eb] text-white font-medium shadow-[0_0_15px_rgba(37,99,235,0.3)]'
-            : 'text-[#bfdbfe] hover:bg-white/10 hover:text-white font-normal'
+            ? 'bg-gradient-to-r from-[#2563eb] to-[#3b82f6] font-bold text-white shadow-lg shadow-blue-900/40'
+            : 'font-semibold text-blue-100/90 hover:bg-white/12 hover:text-white',
         )
       }
     >
       {({ isActive }) => (
         <>
-          <span className="shrink-0 flex items-center justify-center">
-            <Icon className="h-[18px] w-[18px] transition-colors" strokeWidth={1.8} aria-hidden="true" />
-          </span>
+          <Icon className={cn("h-5 w-5 shrink-0", isActive ? "text-white" : "text-blue-200")} strokeWidth={2} aria-hidden="true" />
           {open && (
-            <span className="truncate flex-1">
+            <span className="flex-1 truncate leading-none tracking-wide">
               {label}
+            </span>
+          )}
+          {open && isNotifications && (
+            <span className="ml-auto flex h-5.5 min-w-5.5 items-center justify-center rounded-full bg-blue-400/40 px-2 text-[12px] font-extrabold text-white shadow-xs">
+              3
             </span>
           )}
         </>
@@ -122,36 +185,44 @@ function NavItem({ item, open }) {
     </NavLink>
   );
 
-  if (open) return link;
-
   return (
-    <Tooltip>
-      <TooltipTrigger asChild>{link}</TooltipTrigger>
-      <TooltipContent side="right" className="bg-[#1e293b] text-white border-[#334155]">{label}</TooltipContent>
-    </Tooltip>
+    <RailTooltip open={open} label={label}>
+      {link}
+    </RailTooltip>
   );
 }
 
 function TitleSection({ open }) {
   return (
-    <div className={cn("flex items-center gap-3 shrink-0", open ? "px-4 py-[24px]" : "px-3 py-[24px] justify-center")}>
-      <div className="flex h-[40px] w-[40px] shrink-0 items-center justify-center rounded-[10px] bg-[#2563eb] text-white shadow-sm">
-        <FileText className="h-[20px] w-[20px]" strokeWidth={2} />
+    <div
+      className={cn(
+        'relative z-10 flex shrink-0 items-center py-4.5 transition-all',
+        open ? 'px-4' : 'justify-center px-2',
+      )}
+    >
+      <div className="flex items-center gap-3 min-w-0">
+        <div className="flex h-9.5 w-9.5 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-blue-400 via-blue-600 to-indigo-700 text-white shadow-lg shadow-blue-950/40 border border-white/25">
+          <span className="font-heading text-[17px] font-black tracking-tight text-white drop-shadow-xs">Q</span>
+        </div>
+        <AnimatePresence>
+          {open && (
+            <motion.div
+              initial={{ opacity: 0, x: -5 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -5 }}
+              transition={{ duration: 0.15 }}
+              className="flex min-w-0 flex-col justify-center"
+            >
+              <div className="font-heading text-[20px] font-black leading-none tracking-tight text-white">
+                QMS
+              </div>
+              <div className="mt-1 text-[10.5px] font-semibold leading-tight text-blue-200/80 truncate">
+                Query Management System
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
-      <AnimatePresence>
-        {open && (
-          <motion.div
-            initial={{ opacity: 0, x: -5 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -5 }}
-            transition={{ duration: 0.15 }}
-            className="min-w-0 flex flex-col justify-center"
-          >
-            <div className="font-heading text-[18px] font-bold text-white tracking-tight leading-[1.1]">QMS</div>
-            <div className="text-[9px] font-semibold text-[#94a3b8] tracking-widest uppercase mt-[3px] leading-none">Query Mgmt.</div>
-          </motion.div>
-        )}
-      </AnimatePresence>
     </div>
   );
 }
@@ -177,29 +248,68 @@ function UserFooter({ open, user }) {
     navigate(ROUTE_PATHS.LOGIN);
   };
 
-  return (
-    <div className={cn(
-      "flex items-center gap-3 transition-colors group",
-      open ? "justify-start" : "justify-center"
-    )}>
-      <div className="flex h-[36px] w-[36px] shrink-0 items-center justify-center rounded-full bg-[#2563eb] text-[13px] font-bold text-white shadow-md">
-        {initials(user.name)}
-      </div>
-      {open && (
-        <>
-          <div className="flex-1 min-w-0 overflow-hidden">
-            <div className="text-[13px] font-semibold text-white truncate leading-tight">{user.name}</div>
-            <div className="text-[11px] font-medium text-[#94a3b8] mt-[3px] truncate leading-tight">{ROLE_LABELS[user.role]}</div>
-          </div>
-          <button
-            onClick={handleLogout}
-            title="Sign out"
-            className="shrink-0 rounded-[6px] p-[6px] text-[#94a3b8] hover:text-white hover:bg-white/10 transition-colors"
+  const role = ROLE_LABELS[user.role];
+
+  const avatar = (
+    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-blue-600 border border-blue-300/40 text-[13px] font-bold text-white shadow-sm">
+      {initials(user.name)}
+    </div>
+  );
+
+  if (!open) {
+    return (
+      <>
+        <RailTooltip open={open} label={`${user.name} · ${role}`}>
+          <div
+            tabIndex={0}
+            role="img"
+            aria-label={`Signed in as ${user.name}, ${role}`}
+            className={cn('flex transition-opacity hover:opacity-80', RAIL_SQUARE, FOCUS_RING)}
           >
-            <LogOut className="h-[15px] w-[15px]" strokeWidth={2} aria-hidden="true" />
+            {avatar}
+          </div>
+        </RailTooltip>
+
+        <RailTooltip open={open} label="Sign out">
+          <button
+            type="button"
+            onClick={handleLogout}
+            aria-label="Sign out"
+            className={cn(
+              'mt-1 flex text-blue-200 transition-colors hover:bg-white/10 hover:text-white',
+              RAIL_SQUARE,
+              FOCUS_RING,
+            )}
+          >
+            <LogOut className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
           </button>
-        </>
-      )}
+        </RailTooltip>
+      </>
+    );
+  }
+
+  return (
+    <div className="group flex items-center justify-between gap-2.5 rounded-xl border border-white/15 bg-white/10 p-2.5 backdrop-blur-xs transition-colors hover:bg-white/15">
+      <div className="flex items-center gap-2.5 min-w-0">
+        {avatar}
+        <div className="min-w-0 flex-1 overflow-hidden">
+          <div className="truncate text-[13px] font-bold leading-tight text-white">
+            {user.name}
+          </div>
+          <div className="mt-0.5 truncate text-[11px] font-medium leading-tight text-blue-200/80">
+            {role}
+          </div>
+        </div>
+      </div>
+      <button
+        type="button"
+        onClick={handleLogout}
+        title="Sign out"
+        aria-label="Sign out"
+        className="flex h-8 w-8 items-center justify-center rounded-lg text-blue-200/80 hover:bg-white/15 hover:text-white transition-colors cursor-pointer shrink-0"
+      >
+        <LogOut className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
+      </button>
     </div>
   );
 }

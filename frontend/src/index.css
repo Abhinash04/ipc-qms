@@ -19,9 +19,27 @@
   --color-primary-foreground: #ffffff;
   --color-primary-hover: #4338ca;
 
-  --color-sidebar: #1e1b4b;
-  --color-sidebar-hover: rgba(255, 255, 255, 0.07);
-  --color-sidebar-active: rgba(79, 70, 229, 0.12);
+  /*
+   * Sidebar chrome. Deliberately its own scale rather than the surface and
+   * status tokens below: the sidebar is dark whatever the page behind it does,
+   * and several of these values happen to equal a light-surface or status
+   * token. Reusing those would mean a status-badge restyle repaints the
+   * navigation.
+   */
+  --color-sidebar-from: #0a1930;
+  --color-sidebar-to: #15388c;
+  --color-sidebar-fg: #94a3b8;
+  --color-sidebar-nav: #bfdbfe;
+  --color-sidebar-active: #2563eb;
+  /*
+   * The active nav surface. Translucent rather than a solid fill so it sits on
+   * the gradient instead of punching a flat blue hole in it, and quiet enough
+   * that the accent rail beside it does the signalling.
+   */
+  --color-sidebar-active-soft: rgba(37, 99, 235, 0.28);
+  --color-sidebar-accent: #60a5fa;
+  --color-sidebar-border: #1e293b;
+  --color-sidebar-tooltip-line: #334155;
 
   --color-secondary: #ffffff;
   --color-secondary-foreground: #0f172a;
@@ -98,4 +116,57 @@ body {
 ::-webkit-scrollbar-thumb {
   background: #cbd5e1;
   border-radius: 3px;
+}
+
+/* Animated Liquid Blob Glassmorphism Effect */
+@keyframes blob-bounce {
+  0% {
+    transform: translate(-50%, -50%) translate3d(0, 0, 0);
+  }
+  25% {
+    transform: translate(-50%, -50%) translate3d(45px, -25px, 0);
+  }
+  50% {
+    transform: translate(-50%, -50%) translate3d(25px, 35px, 0);
+  }
+  75% {
+    transform: translate(-50%, -50%) translate3d(-35px, 15px, 0);
+  }
+  100% {
+    transform: translate(-50%, -50%) translate3d(0, 0, 0);
+  }
+}
+
+.animate-blob {
+  animation: blob-bounce 7s infinite ease-in-out;
+}
+
+/* Neumorphism (Soft UI) Utilities */
+.neu-flat {
+  background: #f1f5fa;
+  box-shadow: 10px 10px 22px #d0d7e5, -10px -10px 22px #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.7);
+}
+
+.neu-pressed {
+  background: #f1f5fa;
+  box-shadow: inset 4px 4px 8px #d0d7e5, inset -4px -4px 8px #ffffff;
+}
+
+.neu-badge {
+  background: #f1f5fa;
+  box-shadow: 5px 5px 10px #d0d7e5, -5px -5px 10px #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.8);
+}
+
+.neu-row {
+  background: #f1f5fa;
+  box-shadow: 6px 6px 14px #d0d7e5, -6px -6px 14px #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  transition: all 0.25s ease;
+}
+
+.neu-row:hover {
+  box-shadow: 8px 8px 18px #c8cfde, -8px -8px 18px #ffffff;
+  transform: translateY(-2px);
 }

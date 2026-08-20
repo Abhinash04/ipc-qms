@@ -110,6 +110,11 @@ export function ReviewDetailPage() {
                         {r.decision.replace(/_/g, ' ')}
                       </Badge>
                       <span className="text-foreground">{findUserById(r.reviewerId)?.name || 'Unknown'}</span>
+                      {r.version && (
+                        <Badge variant="outline" title="The response version this decision was made against">
+                          {r.version}
+                        </Badge>
+                      )}
                       <span className="text-xs text-muted-foreground">
                         {new Date(r.at).toLocaleString()}
                       </span>
@@ -158,6 +163,7 @@ export function ReviewDetailPage() {
                   <Button
                     variant="secondary"
                     className="w-full"
+                    disabled={!comment.trim()}
                     onClick={() => {
                       run(() => requestRevision(queryId, comment, currentUser));
                       setComment('');
@@ -165,6 +171,10 @@ export function ReviewDetailPage() {
                   >
                     Return for revision
                   </Button>
+                  <p className="text-xs text-muted-foreground">
+                    A comment is required to return a response — it is what the assigned official
+                    works from. Returning restarts the review cycle at the first reviewer.
+                  </p>
                 </>
               ) : (
                 <p className="rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
