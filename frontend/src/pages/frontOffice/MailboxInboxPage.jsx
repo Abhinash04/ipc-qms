@@ -190,12 +190,12 @@ export function MailboxInboxPage() {
                           Not registered
                         </span>
                       )}
-                    </div>
-                  </div>
+                    </TableCell>
+                  </TableRow>
                 );
               })}
-            </div>
-          </div>
+            </TableBody>
+          </Table>
         )}
       </div>
     </div>
