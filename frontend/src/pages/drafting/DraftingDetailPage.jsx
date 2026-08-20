@@ -1,6 +1,5 @@
 import { useState } from 'react';
-import SparklesIcon from 'lucide-react/dist/esm/icons/sparkles.mjs';
-
+import { SparklesIcon } from 'lucide-react';
 import { Breadcrumb } from '@/components/common/Breadcrumb';
 import { EmptyState } from '@/components/common/EmptyState';
 import { CaseSummaryBar } from '@/components/workflow/CaseSummaryBar';
@@ -99,7 +98,7 @@ export function DraftingDetailPage() {
                         currentUser,
                         wasReturned ? 'Reviewer requested revision' : 'Officer revision',
                       );
-                      setEdited(null); // snap back to mirroring the newly saved version
+                      setEdited(null);
                     }}
                   >
                     Save new version

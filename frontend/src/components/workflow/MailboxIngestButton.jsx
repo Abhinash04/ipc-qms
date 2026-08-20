@@ -13,6 +13,9 @@ export function MailboxIngestButton() {
             ? `${lastResult.created.length} new case${lastResult.created.length > 1 ? 's' : ''} registered`
             : 'No new mail'}
           {lastResult.skipped.length > 0 && ` · ${lastResult.skipped.length} already registered`}
+          {lastResult.acknowledged.length > 0 &&
+            ` · ${lastResult.acknowledged.length} acknowledged`}
+          {lastResult.forwarded.length > 0 && ` · ${lastResult.forwarded.length} forwarded`}
         </span>
       )}
       <button

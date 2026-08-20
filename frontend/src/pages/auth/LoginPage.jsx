@@ -9,16 +9,13 @@ import {
   LayoutGrid, 
   ChevronDown, 
   CheckCircle2, 
-  Loader2,
-  ShieldCheck,
-  FileText
+  Loader2
 } from 'lucide-react';
 
 import { MOCK_USERS, MOCK_PASSWORD, findUserByEmail } from '@/constants/mockUsers';
 import { ROLE_LABELS } from '@/constants/roles';
 import { roleHome } from '@/constants/routePaths';
 import { useAuthStore } from '@/store/useAuthStore';
-import { IpcLogo } from '@/components/common/IpcLogo';
 
 const roleColors = {
   'Inquirer':           { bg: '#eff6ff', text: '#2563eb', border: '#bfdbfe' },
@@ -79,17 +76,12 @@ export function LoginPage() {
   return (
     <div className="h-screen w-screen flex flex-col md:flex-row overflow-hidden bg-white select-none">
       
-      {/* Left Column — Deep Sapphire Indigo Hero Panel (Clean, no background circles) */}
-      <div className="w-full md:w-5/12 lg:w-5/12 h-full bg-gradient-to-br from-[#0f172a] via-[#1e1b4b] to-[#312e81] text-white p-8 sm:p-12 lg:p-16 flex flex-col justify-between items-center text-center relative overflow-hidden shrink-0 shadow-2xl z-10">
+      <div className="w-full md:w-5/12 lg:w-5/12 h-full bg-linear-to-br from-[#0f172a] via-[#1e1b4b] to-[#312e81] text-white p-8 sm:p-12 lg:p-16 flex flex-col justify-between items-center text-center relative overflow-hidden shrink-0 shadow-2xl z-10">
         
-        {/* Subtle Ambient Radial Glow (No circles) */}
         <div className="pointer-events-none absolute -top-32 -left-32 w-96 h-96 rounded-full bg-indigo-500/15 blur-3xl" />
         <div className="pointer-events-none absolute -bottom-32 -right-32 w-96 h-96 rounded-full bg-purple-500/15 blur-3xl" />
 
-        {/* Top Section */}
         <div className="relative z-10 w-full flex flex-col items-center text-center my-auto">
-
-
           <div className="text-[13.5px] font-black tracking-[0.3em] text-indigo-300 uppercase mb-3 text-center">
             Query Management System
           </div>
@@ -98,12 +90,11 @@ export function LoginPage() {
             Welcome back!
           </h1>
           
-          <p className="text-[17.5px] font-medium text-slate-300/90 leading-relaxed max-w-[480px] mx-auto text-center mb-10">
+          <p className="text-[17.5px] font-medium text-slate-300/90 leading-relaxed max-w-120 mx-auto text-center mb-10">
             Sign in to access your dashboard, track query workflows, review drafting documents, and manage Indian Pharmacopoeia Commission operations.
           </p>
 
-          {/* Highlights */}
-          <div className="w-full max-w-[460px] mx-auto space-y-4 border-t border-white/10 pt-8 text-left">
+          <div className="w-full max-w-115 mx-auto space-y-4 border-t border-white/10 pt-8 text-left">
             <div className="flex items-center gap-3.5 bg-white/10 backdrop-blur-md p-4 rounded-2xl border border-white/10 shadow-lg">
               <div className="w-8.5 h-8.5 rounded-full bg-indigo-500/30 text-indigo-300 border border-indigo-400/30 flex items-center justify-center shrink-0 shadow-inner">
                 <CheckCircle2 className="h-5 w-5 text-indigo-300" strokeWidth={2.5} />
@@ -127,16 +118,14 @@ export function LoginPage() {
           </div>
         </div>
 
-        {/* Bottom Footer */}
         <div className="relative z-10 pt-6 border-t border-white/10 text-[13.5px] font-semibold text-slate-400/80 text-center w-full">
           © 2026 Integrated Processing Centre • Indian Pharmacopoeia Commission
         </div>
       </div>
 
-        {/* Right Column — Full Height Form Panel */}
         <div className="w-full md:w-7/12 lg:w-7/12 h-full bg-white p-8 sm:p-12 lg:p-16 flex flex-col justify-center items-center overflow-y-auto">
           
-          <div className="w-full max-w-[480px] my-auto space-y-7">
+          <div className="w-full max-w-120 my-auto space-y-7">
             <div className="text-center">
               <h2 className="font-heading text-[44px] sm:text-[52px] font-black text-slate-900 leading-none mb-3 tracking-tight text-center">
                 Sign in
@@ -146,7 +135,6 @@ export function LoginPage() {
               </p>
             </div>
 
-          {/* Mock Credentials Dropdown (Absolute Floating Overlay to prevent card resizing) */}
           <div className="relative z-30">
             <button
               type="button"
@@ -183,8 +171,7 @@ export function LoginPage() {
                     return (
                       <div
                         key={user.id}
-                        onClick={() => applyCredentials(user)}
-                        className={`flex items-center justify-between p-3 rounded-xl border transition-all cursor-pointer ${
+                        className={`flex items-center justify-between p-3 rounded-xl border transition-all ${
                           isActive 
                             ? 'bg-indigo-50/90 border-indigo-200 shadow-2xs' 
                             : 'bg-white border-slate-200/60 hover:border-slate-300 hover:bg-slate-50'
@@ -209,7 +196,9 @@ export function LoginPage() {
 
                         <button
                           type="button"
-                          className={`px-3.5 py-1.5 rounded-lg text-[12.5px] font-black transition-all shrink-0 ml-2 ${
+                          onClick={() => applyCredentials(user)}
+                          aria-label={`Use Credentials for ${user.name}`}
+                          className={`px-3.5 py-1.5 rounded-lg text-[12.5px] font-black transition-all shrink-0 ml-2 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
                             isActive 
                               ? 'bg-indigo-600 text-white shadow-xs' 
                               : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
@@ -248,7 +237,6 @@ export function LoginPage() {
                 </div>
               </div>
 
-              {/* Password Input */}
               <div>
                 <label htmlFor="login-password" className="block text-[16px] font-black text-slate-800 mb-2.5">
                   Password
@@ -276,18 +264,19 @@ export function LoginPage() {
                 </div>
               </div>
 
-              {/* Error Message */}
               {error && (
-                <div className="p-4 rounded-2xl bg-red-50 border border-red-200 text-red-600 text-[13.5px] font-bold">
+                <div
+                  role="alert"
+                  className="p-4 rounded-2xl bg-red-50 border border-red-200 text-red-600 text-[13.5px] font-bold"
+                >
                   {error}
                 </div>
               )}
 
-              {/* Submit Button */}
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full py-4.5 px-8 rounded-2xl bg-gradient-to-r from-[#4f46e5] via-[#6366f1] to-[#8b5cf6] text-white font-black text-[17px] shadow-xl shadow-indigo-500/30 hover:opacity-95 active:scale-[0.99] transition-all cursor-pointer flex items-center justify-center gap-3 mt-3 disabled:opacity-70 disabled:cursor-not-allowed"
+                className="w-full py-4.5 px-8 rounded-2xl bg-linear-to-r from-[#4f46e5] via-ring to-[#8b5cf6] text-white font-black text-[17px] shadow-xl shadow-indigo-500/30 hover:opacity-95 active:scale-[0.99] transition-all cursor-pointer flex items-center justify-center gap-3 mt-3 disabled:opacity-70 disabled:cursor-not-allowed"
               >
                 {loading ? (
                   <>

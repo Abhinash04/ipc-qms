@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { 
   Bell, 
@@ -13,72 +12,15 @@ import {
 } from 'lucide-react';
 import { Breadcrumb } from '@/components/common/Breadcrumb';
 import { useWorkflowStore } from '@/store/useWorkflowStore';
-import { useAuthStore } from '@/store/useAuthStore';
 import { ROLE_LABELS } from '@/constants/roles';
 import { buildPath } from '@/constants/routePaths';
 import { useRoutePaths } from '@/hooks/useRoutePaths';
 
 export function NotificationsPage() {
   const paths = useRoutePaths();
-  const currentUser = useAuthStore((state) => state.currentUser);
   const notifications = useWorkflowStore((state) => state.notifications);
-  const [filterType, setFilterType] = useState('ALL');
-
   const storeOrdered = [...notifications].sort((a, b) => new Date(b.at) - new Date(a.at));
-
-  // Screenshot reference dataset for full visual accuracy
-  const sampleNotifications = [
-    {
-      notificationId: 'n1',
-      message: 'QRY-2026-00001 is awaiting final approval.',
-      recipientRole: 'OFFICER_IN_CHARGE',
-      queryId: 'QRY-2026-00001',
-      at: '2026-08-19T15:10:19Z',
-      type: 'hourglass',
-    },
-    {
-      notificationId: 'n2',
-      message: 'QRY-2026-00001 was rejected at final approval.',
-      recipientRole: 'ASSIGNED_OFFICIAL',
-      queryId: 'QRY-2026-00001',
-      at: '2026-08-19T14:44:14Z',
-      type: 'rejected',
-    },
-    {
-      notificationId: 'n3',
-      message: 'QRY-2026-00001 is awaiting final approval.',
-      recipientRole: 'OFFICER_IN_CHARGE',
-      queryId: 'QRY-2026-00001',
-      at: '2026-08-19T14:30:32Z',
-      type: 'hourglass',
-    },
-    {
-      notificationId: 'n4',
-      message: 'QRY-2026-00001 was assigned to Neha Singh.',
-      recipientRole: 'ASSIGNED_OFFICIAL',
-      queryId: 'QRY-2026-00001',
-      at: '2026-08-19T14:00:04Z',
-      type: 'user',
-    },
-    {
-      notificationId: 'n5',
-      message: 'QRY-2026-00001 is awaiting assignment.',
-      recipientRole: 'OFFICER_IN_CHARGE',
-      queryId: 'QRY-2026-00001',
-      at: '2026-08-19T12:38:23Z',
-      type: 'hourglass',
-    },
-    {
-      notificationId: 'n6',
-      message: 'QRY-2026-00001 received and awaiting Front Office verification.',
-      recipientRole: 'FRONT_OFFICE',
-      queryId: 'QRY-2026-00001',
-      at: '2026-08-19T12:38:20Z',
-      type: 'verified',
-    },
-  ];
-
-  const displayList = storeOrdered.length > 0 ? storeOrdered : sampleNotifications;
+  const displayList = storeOrdered;
 
   const getNodeConfig = (item) => {
     const msg = (item.message || '').toLowerCase();
@@ -131,23 +73,21 @@ export function NotificationsPage() {
     <div className="space-y-6">
       <Breadcrumb items={[{ label: 'Dashboard', path: paths.DASHBOARD }, { label: 'Notifications' }]} />
 
-      {/* Page Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-4">
           <div className="flex h-13 w-13 items-center justify-center rounded-2xl bg-blue-50 text-blue-600 border border-blue-100/60 shadow-2xs">
             <Bell className="h-6.5 w-6.5" strokeWidth={2} />
           </div>
           <div>
-            <h1 className="font-heading text-[52px] sm:text-[60px] font-black tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-slate-900 via-[#0f285d] to-blue-900 m-0 leading-none drop-shadow-2xs">
+            <h1 className="font-heading text-[52px] sm:text-[60px] font-black tracking-tight text-transparent bg-clip-text bg-linear-to-r from-slate-900 via-sidebar-tooltip to-blue-900 m-0 leading-none drop-shadow-2xs">
               Notification Center
             </h1>
             <p className="m-0 text-[14.5px] font-medium text-slate-400 mt-2">
-              Track the real-time status of QRY-2026-00001
+              Workflow events raised for the cases you are involved in
             </p>
           </div>
         </div>
 
-        {/* Filter Pill */}
         <div className="relative shrink-0">
           <div className="flex items-center gap-2 rounded-2xl bg-white border border-slate-200/80 px-4 py-2.5 text-[13px] font-bold text-slate-700 shadow-2xs hover:bg-slate-50 cursor-pointer transition-colors">
             <Filter className="h-4 w-4 text-slate-500" />
@@ -157,9 +97,7 @@ export function NotificationsPage() {
         </div>
       </div>
 
-      {/* Main Notification Card Container */}
       <div className="bg-white rounded-3xl border border-slate-200/70 p-6 shadow-sm">
-        {/* Timeline Items List */}
         <div className="relative pl-3 space-y-6 my-2">
           {displayList.map((item, index) => {
             const config = getNodeConfig(item);
@@ -168,20 +106,15 @@ export function NotificationsPage() {
 
             return (
               <div key={item.notificationId || index} className="relative flex items-center gap-4 group">
-                {/* Vertical Dashed Guide Line */}
                 {index < displayList.length - 1 && (
-                  <div className="absolute left-[21px] top-[48px] bottom-[-24px] w-0.5 border-l-2 border-dashed border-slate-200 z-0" />
+                  <div className="absolute left-5.25 top-12 -bottom-6 w-0.5 border-l-2 border-dashed border-slate-200 z-0" />
                 )}
-
-                {/* Node Icon Box */}
                 <div className={`relative z-10 flex h-11 w-11 shrink-0 items-center justify-center rounded-full border shadow-2xs ${config.boxBg}`}>
                   <Icon className="h-5 w-5" strokeWidth={2} />
                 </div>
 
-                {/* Small Color Dot on Line */}
                 <div className={`relative z-10 h-2.5 w-2.5 shrink-0 rounded-full ${config.dotBg} ring-4 ring-white`} />
 
-                {/* Notification Floating Card */}
                 <div className="flex-1 bg-white rounded-2xl border border-slate-200/80 p-4 shadow-2xs hover:shadow-md hover:border-purple-200 transition-all flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                   <div>
                     <p className="font-extrabold text-slate-900 text-[14.5px] leading-snug m-0">
@@ -203,7 +136,6 @@ export function NotificationsPage() {
                     </div>
                   </div>
 
-                  {/* Timestamp */}
                   <div className="flex items-center gap-1.5 text-[12px] font-medium text-slate-400 shrink-0 self-start sm:self-center">
                     <Calendar className="h-3.5 w-3.5 text-slate-400" />
                     <span>{formatTimestamp(item.at)}</span>
@@ -214,7 +146,6 @@ export function NotificationsPage() {
           })}
         </div>
 
-        {/* Footer Info Banner */}
         <div className="mt-8 rounded-2xl bg-blue-50/50 p-4 flex items-start gap-3 border border-blue-100/60">
           <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-blue-100 text-blue-600">
             <Info className="h-3.5 w-3.5" strokeWidth={2.5} />

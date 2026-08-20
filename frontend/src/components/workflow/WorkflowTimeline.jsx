@@ -1,7 +1,7 @@
 import { StatusBadge } from '@/components/common/StatusBadge';
 import { EmptyState } from '@/components/common/EmptyState';
 import { findUserById } from '@/constants/mockUsers';
-import { ListChecksIcon, CheckCircle2, Clock, CircleDot } from 'lucide-react';
+import { ListChecksIcon, CheckCircle2, CircleDot } from 'lucide-react';
 
 const STEP_LABEL = {
   DRAFT: 'Draft',

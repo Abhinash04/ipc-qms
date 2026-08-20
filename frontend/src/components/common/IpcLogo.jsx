@@ -1,5 +1,3 @@
-import React from 'react';
-
 /**
  * State Emblem of India (Ashoka Lions Capital) + Satyameva Jayate SVG Component
  */
@@ -219,5 +217,3 @@ export function IpcLogo({
     </div>
   );
 }
-
-export default IpcLogo;

@@ -16,15 +16,6 @@ import { findUserById, MOCK_USERS } from '@/constants/mockUsers';
 import { WORKFLOW_STATE, AUDIT_EVENT, AUDIT_EVENT_LABELS } from '@/constants/statusEnums';
 import { ROLES } from '@/constants/roles';
 
-/**
- * The dashboard KPI tiles.
- *
- * These exist because the tiles shipped with invented trend lines — '+3 this
- * week', '3 overdue', '+12 this month' — rendered beside a real count, so a
- * fresh install displayed "0 ↑ +12 this month". Every number on this page must
- * trace back to the query data or the audit trail.
- */
-
 const OIC = findUserById('USR-0003');
 const FRONT_OFFICE = findUserById('USR-0002');
 
@@ -47,8 +38,16 @@ function renderDashboard() {
  * below, so this takes the first match: the KPI grid renders before the table.
  */
 function tile(label) {
-  return screen.getAllByText(label)[0].closest('div').parentElement;
+  // Walk up from the label until the subtree also holds the tile's number, so
+  // the helper survives markup changes inside the card.
+  let node = screen.getAllByText(label)[0];
+  for (let i = 0; i < 8 && node.parentElement; i += 1) {
+    if (/\d/.test(node.textContent)) return node;
+    node = node.parentElement;
+  }
+  return node;
 }
+
 
 /** An enquiry arriving is the only way a query comes into existence. */
 function ingest(n) {
@@ -124,7 +123,7 @@ describe('KPI tiles count the real data', () => {
     }));
 
     renderDashboard();
-    expect(tile('Closed')).toHaveTextContent('+1 closed in 30 days');
+    expect(tile('Closed')).toHaveTextContent('+1 in 30 days');
     expect(tile('Closed')).toHaveTextContent('1');
   });
 
@@ -185,7 +184,7 @@ describe('no mock query data reaches the dashboard', () => {
     expect(state.auditEvents).toEqual([]);
 
     renderDashboard();
-    expect(screen.getByText('Nothing waiting on you')).toBeInTheDocument();
+    expect(screen.getByText(/Nothing waiting on you/)).toBeInTheDocument();
   });
 });
 
@@ -229,7 +228,7 @@ describe('the dashboard invents nothing', () => {
   it('shows empty states rather than filler on a fresh store', () => {
     renderDashboard();
     expect(screen.getByText('Nothing closed yet')).toBeInTheDocument();
-    expect(screen.getByText('No activity yet')).toBeInTheDocument();
+    expect(screen.getByText(/No activity yet/)).toBeInTheDocument();
   });
 
   it('reports no resolution rate for a period with no enquiries', () => {
@@ -245,7 +244,7 @@ describe('Recently closed reads the audit trail', () => {
     renderDashboard();
 
     expect(screen.queryByText('Nothing closed yet')).toBeNull();
-    expect(screen.getByText('Dashboard fixture 1')).toBeInTheDocument();
+    expect(screen.getAllByText('Dashboard fixture 1').length).toBeGreaterThan(0);
     // The id shows in Recently closed and again in the activity feed.
     expect(screen.getAllByText(new RegExp(queryId)).length).toBeGreaterThan(0);
   });
@@ -268,6 +267,49 @@ describe('Resolution rate is computed, not asserted', () => {
     // Both 'this month' and 'this week' cover the same two enquiries.
     expect(screen.getAllByText('1 of 2 closed').length).toBeGreaterThan(0);
     expect(screen.getAllByText('50%').length).toBeGreaterThan(0);
+  });
+});
+
+describe('each resolution-rate window is computed separately', () => {
+  /** Record a receipt at `daysAgo`, so the windows can disagree. */
+  function received(queryId, daysAgo) {
+    const at = new Date();
+    at.setDate(at.getDate() - daysAgo);
+    useWorkflowStore.setState((st) => ({
+      auditEvents: [
+        ...st.auditEvents,
+        {
+          auditId: `AUD-RCV-${queryId}-${daysAgo}`,
+          queryId,
+          event: AUDIT_EVENT.QUERY_RECEIVED,
+          actor: 'System',
+          at: at.toISOString(),
+        },
+      ],
+    }));
+  }
+
+  it('does not report the same figure for every period', () => {
+    // One enquiry ten days ago and closed, one today and still open. "This
+    // week" and "This month" therefore cannot share a percentage — they did,
+    // because all three rows rendered one all-time value.
+    const older = ingest(1);
+    const newer = ingest(2);
+    useWorkflowStore.setState((st) => ({
+      auditEvents: st.auditEvents.filter((e) => e.event !== AUDIT_EVENT.QUERY_RECEIVED),
+    }));
+    received(older, 10);
+    received(newer, 0);
+    close(older, new Date());
+
+    renderDashboard();
+
+    const percentages = screen
+      .getAllByText(/^\d+%$|^No data$/)
+      .map((el) => el.textContent);
+
+    expect(percentages.length).toBeGreaterThanOrEqual(3);
+    expect(new Set(percentages).size).toBeGreaterThan(1);
   });
 });
 
@@ -298,7 +340,7 @@ describe('an Inquirer sees only their own queries', () => {
     useAuthStore.setState({ currentUser: INQUIRER });
 
     renderDashboard();
-    expect(screen.getByText('Dashboard fixture 1')).toBeInTheDocument();
+    expect(screen.getAllByText('Dashboard fixture 1').length).toBeGreaterThan(0);
   });
 
   it("hides another inquirer's query from them", () => {

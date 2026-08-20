@@ -1,6 +1,6 @@
 import { StatusBadge } from '@/components/common/StatusBadge';
 import { findUserById } from '@/constants/mockUsers';
-import { User, Calendar, Clock } from 'lucide-react';
+import { User, Calendar } from 'lucide-react';
 
 export function CaseSummaryBar({ query }) {
   if (!query) return null;

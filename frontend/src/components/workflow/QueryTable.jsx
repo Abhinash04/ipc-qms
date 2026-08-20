@@ -7,7 +7,7 @@ import {
   FileText, 
   Mail, 
   Clock, 
-  ShieldCheck, 
+  Inbox, 
   Calendar, 
   Copy, 
   MoreVertical, 
@@ -17,6 +17,7 @@ import {
   Archive
 } from 'lucide-react';
 import { Breadcrumb } from '@/components/common/Breadcrumb';
+import { EmptyState } from '@/components/common/EmptyState';
 import { useWorkflowStore } from '@/store/useWorkflowStore';
 import { findUserById } from '@/constants/mockUsers';
 import { buildPath } from '@/constants/routePaths';
@@ -26,15 +27,13 @@ export function QueryTable({ title, purpose, breadcrumbItems, detailPath, filter
   const allQueries = useWorkflowStore((state) => state.queries);
   const queries = filter ? allQueries.filter(filter) : allQueries;
   const [searchQuery, setSearchQuery] = useState('');
-  const [priorityFilter, setPriorityFilter] = useState('ALL');
 
   const filteredQueries = queries.filter((q) => {
     const matchSearch =
       !searchQuery ||
       q.queryId.toLowerCase().includes(searchQuery.toLowerCase()) ||
       q.subject.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchPriority = priorityFilter === 'ALL' || q.priority === priorityFilter;
-    return matchSearch && matchPriority;
+    return matchSearch;
   });
 
   return (
@@ -48,7 +47,7 @@ export function QueryTable({ title, purpose, breadcrumbItems, detailPath, filter
             <Archive className="h-6.5 w-6.5" strokeWidth={2} />
           </div>
           <div>
-            <h1 className="font-heading text-[52px] sm:text-[60px] font-black tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-slate-900 via-[#0f285d] to-blue-900 m-0 leading-none drop-shadow-2xs">
+            <h1 className="font-heading text-[52px] sm:text-[60px] font-black tracking-tight text-transparent bg-clip-text bg-linear-to-r from-slate-900 via-[#0f285d] to-blue-900 m-0 leading-none drop-shadow-2xs">
               {title || 'Queries'}
             </h1>
             <p className="m-0 text-[14.5px] font-medium text-slate-400 mt-2">
@@ -60,10 +59,8 @@ export function QueryTable({ title, purpose, breadcrumbItems, detailPath, filter
         {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
       </div>
 
-      {/* Main Queries Card */}
       <div className="bg-white rounded-3xl border border-slate-200/70 overflow-hidden shadow-sm flex flex-col justify-between">
         <div className="p-6">
-          {/* Search & Filter Bar */}
           <div className="flex flex-col sm:flex-row items-center justify-between gap-3 mb-6">
             <div className="relative flex-1 w-full">
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4.5 w-4.5 text-slate-400" />
@@ -87,7 +84,6 @@ export function QueryTable({ title, purpose, breadcrumbItems, detailPath, filter
             </div>
           </div>
 
-          {/* Table Headers */}
           <div className="grid grid-cols-[170px_1fr_150px_220px_180px_150px_32px] gap-3 px-6 py-3.5 bg-[#f9f9fe] border-b border-slate-100/80 rounded-2xl text-[12px] font-extrabold text-slate-700 tracking-wider">
             <div className="flex items-center gap-1.5 cursor-pointer">
               <span>Query ID</span>
@@ -116,7 +112,6 @@ export function QueryTable({ title, purpose, breadcrumbItems, detailPath, filter
             <span></span>
           </div>
 
-          {/* Table Body / Row Cards */}
           <div className="space-y-3.5 mt-3.5">
             {filteredQueries.length > 0 ? (
               filteredQueries.map((query) => {
@@ -129,12 +124,10 @@ export function QueryTable({ title, purpose, breadcrumbItems, detailPath, filter
                   <Link
                     key={query.queryId}
                     to={detailPath ? buildPath(detailPath, { queryId: query.queryId }) : '#'}
-                    className="group relative flex items-center justify-between gap-3 bg-white rounded-2xl border border-slate-200/80 p-4 shadow-2xs hover:shadow-md hover:border-purple-200 transition-all overflow-hidden grid grid-cols-[170px_1fr_150px_220px_180px_150px_32px] gap-3 items-center"
+                    className="group relative grid grid-cols-[170px_1fr_150px_220px_180px_150px_32px] items-center gap-3 bg-white rounded-2xl border border-slate-200/80 p-4 shadow-2xs hover:shadow-md hover:border-purple-200 transition-all overflow-hidden"
                   >
-                    {/* Left Vertical Purple Indicator Bar */}
                     <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-purple-600 rounded-l-2xl" />
 
-                    {/* Column 1: Query ID */}
                     <div className="flex items-center gap-3 shrink-0 pl-2">
                       <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-purple-50 text-purple-600">
                         <FileText className="h-5 w-5" strokeWidth={1.8} />
@@ -149,7 +142,6 @@ export function QueryTable({ title, purpose, breadcrumbItems, detailPath, filter
                       </div>
                     </div>
 
-                    {/* Column 2: Subject */}
                     <div className="min-w-0 px-2">
                       <div className="text-[14px] font-bold text-slate-900 truncate group-hover:text-purple-700">
                         {query.subject || 'test mail'}
@@ -160,7 +152,6 @@ export function QueryTable({ title, purpose, breadcrumbItems, detailPath, filter
                       </div>
                     </div>
 
-                    {/* Column 3: Priority Badge */}
                     <div className="flex justify-center">
                       <span className="inline-flex items-center gap-2 rounded-full bg-blue-100/70 px-4 py-1.5 text-[11.5px] font-extrabold text-blue-700 border border-blue-200/80 shadow-2xs">
                         <span className="h-2 w-2 rounded-full bg-blue-600" />
@@ -168,7 +159,6 @@ export function QueryTable({ title, purpose, breadcrumbItems, detailPath, filter
                       </span>
                     </div>
 
-                    {/* Column 4: Status Badge */}
                     <div className="flex justify-center">
                       <span className="inline-flex items-center gap-2 rounded-full bg-purple-100/70 px-4 py-1.5 text-[11.5px] font-extrabold text-purple-700 border border-purple-200/80 shadow-2xs">
                         <Clock className="h-3.5 w-3.5 text-purple-600" />
@@ -176,14 +166,13 @@ export function QueryTable({ title, purpose, breadcrumbItems, detailPath, filter
                       </span>
                     </div>
 
-                    {/* Column 5: Assignee */}
                     <div className="flex items-center gap-2.5">
                       <div className="flex h-8.5 w-8.5 shrink-0 items-center justify-center rounded-full bg-purple-100 text-purple-700 font-extrabold text-[12px]">
                         {initials}
                       </div>
                       <div className="min-w-0">
                         <div className="text-[13px] font-bold text-slate-800 truncate">
-                          {assignee?.name || 'Neha Singh'}
+                          {assignee?.name || 'Unassigned'}
                         </div>
                         <div className="text-[11px] font-medium text-slate-400">
                           {assignee?.role ? ROLE_LABELS[assignee.role] : 'Assigned Official'}
@@ -191,7 +180,6 @@ export function QueryTable({ title, purpose, breadcrumbItems, detailPath, filter
                       </div>
                     </div>
 
-                    {/* Column 6: Received On */}
                     <div>
                       <div className="flex items-center gap-1.5 text-[13px] font-bold text-slate-800">
                         <Calendar className="h-3.5 w-3.5 text-slate-400" />
@@ -212,94 +200,15 @@ export function QueryTable({ title, purpose, breadcrumbItems, detailPath, filter
                 );
               })
             ) : (
-              /* Sample Fallback Card matching screenshot */
-              <Link
-                to={detailPath ? buildPath(detailPath, { queryId: 'QRY-2026-00001' }) : '#'}
-                className="group relative flex items-center justify-between gap-3 bg-white rounded-2xl border border-slate-200/80 p-4 shadow-2xs hover:shadow-md hover:border-purple-200 transition-all overflow-hidden grid grid-cols-[170px_1fr_150px_220px_180px_150px_32px] gap-3 items-center"
-              >
-                {/* Left Vertical Purple Indicator Bar */}
-                <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-purple-600 rounded-l-2xl" />
-
-                {/* Column 1: Query ID */}
-                <div className="flex items-center gap-3 shrink-0 pl-2">
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-purple-50 text-purple-600">
-                    <FileText className="h-5 w-5" strokeWidth={1.8} />
-                  </div>
-                  <div>
-                    <div className="font-heading text-[13.5px] font-extrabold text-purple-700 group-hover:underline">
-                      QRY-2026-00001
-                    </div>
-                    <div className="flex items-center gap-1 text-[11px] font-medium text-slate-400 mt-0.5">
-                      <Copy className="h-3 w-3 text-purple-500" />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Column 2: Subject */}
-                <div className="min-w-0 px-2">
-                  <div className="text-[14px] font-bold text-slate-900 truncate group-hover:text-purple-700">
-                    test mail
-                  </div>
-                  <div className="flex items-center gap-1.5 text-[11.5px] font-medium text-slate-400 mt-0.5">
-                    <Mail className="h-3.5 w-3.5 text-purple-500" />
-                    <span>Mail received</span>
-                  </div>
-                </div>
-
-                {/* Column 3: Priority Badge */}
-                <div className="flex justify-center">
-                  <span className="inline-flex items-center gap-2 rounded-full bg-blue-100/70 px-4 py-1.5 text-[11.5px] font-extrabold text-blue-700 border border-blue-200/80 shadow-2xs">
-                    <span className="h-2 w-2 rounded-full bg-blue-600" />
-                    NORMAL
-                  </span>
-                </div>
-
-                {/* Column 4: Status Badge */}
-                <div className="flex justify-center">
-                  <span className="inline-flex items-center gap-2 rounded-full bg-purple-100/70 px-4 py-1.5 text-[11.5px] font-extrabold text-purple-700 border border-purple-200/80 shadow-2xs">
-                    <Clock className="h-3.5 w-3.5 text-purple-600" />
-                    PENDING FINAL APPROVAL
-                  </span>
-                </div>
-
-                {/* Column 5: Assignee */}
-                <div className="flex items-center gap-2.5">
-                  <div className="flex h-8.5 w-8.5 shrink-0 items-center justify-center rounded-full bg-purple-100 text-purple-700 font-extrabold text-[12px]">
-                    NS
-                  </div>
-                  <div className="min-w-0">
-                    <div className="text-[13px] font-bold text-slate-800 truncate">
-                      Neha Singh
-                    </div>
-                    <div className="text-[11px] font-medium text-slate-400">
-                      Assigned Official
-                    </div>
-                  </div>
-                </div>
-
-                {/* Column 6: Received On */}
-                <div>
-                  <div className="flex items-center gap-1.5 text-[13px] font-bold text-slate-800">
-                    <Calendar className="h-3.5 w-3.5 text-slate-400" />
-                    <span>19 Aug 2026</span>
-                  </div>
-                  <div className="text-[11px] font-medium text-slate-400 pl-5 mt-0.5">
-                    09:30 AM
-                  </div>
-                </div>
-
-                {/* Column 7: Menu */}
-                <div className="flex justify-end">
-                  <div className="p-1 rounded-lg text-slate-400 group-hover:text-slate-600 transition-colors">
-                    <MoreVertical className="h-4.5 w-4.5" />
-                  </div>
-                </div>
-              </Link>
+              <EmptyState
+                icon={Inbox}
+                title="No queries to show"
+                description={emptyMessage || "Queries appear here once an enquiry has been registered."}
+              />
             )}
           </div>
         </div>
 
-        {/* Footer / Pagination Bar */}
         <div className="px-6 py-4 border-t border-slate-100/80 flex items-center justify-between bg-white">
           <span className="text-[13px] font-medium text-slate-500">
             Showing {filteredQueries.length || 1} of {filteredQueries.length || 1} result

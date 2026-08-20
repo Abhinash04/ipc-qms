@@ -14,32 +14,18 @@
   --font-heading: 'Outfit', sans-serif;
 
   --radius-md: 0.5rem;
-
+  
   --color-primary: #4f46e5;
   --color-primary-foreground: #ffffff;
   --color-primary-hover: #4338ca;
-
-  /*
-   * Sidebar chrome. Deliberately its own scale rather than the surface and
-   * status tokens below: the sidebar is dark whatever the page behind it does,
-   * and several of these values happen to equal a light-surface or status
-   * token. Reusing those would mean a status-badge restyle repaints the
-   * navigation.
-   */
-  --color-sidebar-from: #0a1930;
-  --color-sidebar-to: #15388c;
-  --color-sidebar-fg: #94a3b8;
-  --color-sidebar-nav: #bfdbfe;
+  --color-sidebar-from: #0f2557;
+  --color-sidebar-via: #1d4ed8;
+  --color-sidebar-to: #0c204d;
   --color-sidebar-active: #2563eb;
-  /*
-   * The active nav surface. Translucent rather than a solid fill so it sits on
-   * the gradient instead of punching a flat blue hole in it, and quiet enough
-   * that the accent rail beside it does the signalling.
-   */
-  --color-sidebar-active-soft: rgba(37, 99, 235, 0.28);
+  --color-sidebar-active-to: #3b82f6;
   --color-sidebar-accent: #60a5fa;
-  --color-sidebar-border: #1e293b;
-  --color-sidebar-tooltip-line: #334155;
+  --color-sidebar-accent-soft: #93c5fd;
+  --color-sidebar-tooltip: #0f285d;
 
   --color-secondary: #ffffff;
   --color-secondary-foreground: #0f172a;
@@ -106,7 +92,6 @@ body {
   font-family: var(--font-sans);
 }
 
-/* Custom scrollbar matching design */
 ::-webkit-scrollbar {
   width: 6px;
 }
@@ -118,7 +103,6 @@ body {
   border-radius: 3px;
 }
 
-/* Animated Liquid Blob Glassmorphism Effect */
 @keyframes blob-bounce {
   0% {
     transform: translate(-50%, -50%) translate3d(0, 0, 0);
@@ -141,7 +125,6 @@ body {
   animation: blob-bounce 7s infinite ease-in-out;
 }
 
-/* Neumorphism (Soft UI) Utilities */
 .neu-flat {
   background: #f1f5fa;
   box-shadow: 10px 10px 22px #d0d7e5, -10px -10px 22px #ffffff;
