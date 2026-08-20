@@ -297,3 +297,4 @@ describe('the email thread on the case workspace', () => {
     expect(screen.getByText('ACKNOWLEDGEMENT SENT')).toBeInTheDocument();
   });
 });
+
