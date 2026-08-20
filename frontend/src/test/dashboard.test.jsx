@@ -30,16 +30,8 @@ function renderDashboard() {
   );
 }
 
-/**
- * The trend arrow renders as its own text node, so the trend line is split
- * across elements — assert on the tile as a whole instead of the text.
- *
- * A label like "Closed" also appears on the status badges in the queue table
- * below, so this takes the first match: the KPI grid renders before the table.
- */
 function tile(label) {
-  // Walk up from the label until the subtree also holds the tile's number, so
-  // the helper survives markup changes inside the card.
+
   let node = screen.getAllByText(label)[0];
   for (let i = 0; i < 8 && node.parentElement; i += 1) {
     if (/\d/.test(node.textContent)) return node;
@@ -48,8 +40,6 @@ function tile(label) {
   return node;
 }
 
-
-/** An enquiry arriving is the only way a query comes into existence. */
 function ingest(n) {
   return useWorkflowStore.getState().ingestEmail(
     {
@@ -77,11 +67,10 @@ describe('KPI tiles show no trend when nothing has happened', () => {
 
     expect(useWorkflowStore.getState().queries).toHaveLength(0);
 
-    // The exact strings that used to be hard-coded.
     for (const invented of ['+3 this week', '2 pending review', '3 overdue', '+12 this month']) {
       expect(screen.queryByText(invented)).toBeNull();
     }
-    // Nor any trend at all — there is no activity to describe.
+
     expect(screen.queryByText(/this week|this month|in 30 days|awaiting your decision/)).toBeNull();
   });
 
@@ -105,7 +94,6 @@ describe('KPI tiles count the real data', () => {
   it('moves the closed count and its trend together when a query closes', async () => {
     const queryId = ingest(1);
 
-    // Close it directly on the record; the tile reads state, not a fixture.
     useWorkflowStore.setState((s) => ({
       queries: s.queries.map((q) =>
         q.queryId === queryId ? { ...q, workflowState: WORKFLOW_STATE.CLOSED } : q,
@@ -151,7 +139,7 @@ describe('KPI tiles count the real data', () => {
 });
 
 describe('KPI tiles are filtered to the signed-in user', () => {
-  /** Assign the one query to `userId`, then read the tile as that user. */
+
   function assignTo(userId, viewer) {
     const queryId = ingest(1);
     useWorkflowStore.setState((s) => ({
@@ -188,9 +176,6 @@ describe('no mock query data reaches the dashboard', () => {
   });
 });
 
-// --- the rest of the dashboard ---
-
-/** Close `queryId` and record the audit event the panels read. */
 function close(queryId, at = new Date()) {
   useWorkflowStore.setState((s) => ({
     queries: s.queries.map((q) =>
@@ -245,7 +230,7 @@ describe('Recently closed reads the audit trail', () => {
 
     expect(screen.queryByText('Nothing closed yet')).toBeNull();
     expect(screen.getAllByText('Dashboard fixture 1').length).toBeGreaterThan(0);
-    // The id shows in Recently closed and again in the activity feed.
+
     expect(screen.getAllByText(new RegExp(queryId)).length).toBeGreaterThan(0);
   });
 
@@ -263,15 +248,14 @@ describe('Resolution rate is computed, not asserted', () => {
     close(a);
 
     renderDashboard();
-    // Two received this week, one of them closed.
-    // Both 'this month' and 'this week' cover the same two enquiries.
+
     expect(screen.getAllByText('1 of 2 closed').length).toBeGreaterThan(0);
     expect(screen.getAllByText('50%').length).toBeGreaterThan(0);
   });
 });
 
 describe('each resolution-rate window is computed separately', () => {
-  /** Record a receipt at `daysAgo`, so the windows can disagree. */
+
   function received(queryId, daysAgo) {
     const at = new Date();
     at.setDate(at.getDate() - daysAgo);
@@ -290,9 +274,7 @@ describe('each resolution-rate window is computed separately', () => {
   }
 
   it('does not report the same figure for every period', () => {
-    // One enquiry ten days ago and closed, one today and still open. "This
-    // week" and "This month" therefore cannot share a percentage — they did,
-    // because all three rows rendered one all-time value.
+
     const older = ingest(1);
     const newer = ingest(2);
     useWorkflowStore.setState((st) => ({
@@ -320,7 +302,7 @@ describe('Activity feed shows real transitions in words', () => {
 
     expect(screen.queryByText('No activity yet')).toBeNull();
     expect(screen.getByText(/Enquiry received/)).toBeInTheDocument();
-    // The raw enum must never reach the screen.
+
     expect(screen.queryByText(/QUERY_RECEIVED/)).toBeNull();
   });
 
@@ -335,7 +317,7 @@ describe('an Inquirer sees only their own queries', () => {
   const INQUIRER = MOCK_USERS.find((u) => u.role === ROLES.INQUIRER);
 
   it('shows the inquirer their own closed query', () => {
-    const queryId = ingest(1);          // ingested from the inquirer's address
+    const queryId = ingest(1);          
     close(queryId);
     useAuthStore.setState({ currentUser: INQUIRER });
 
@@ -392,8 +374,6 @@ describe("New Query is the Inquirer's alone", () => {
   });
 });
 
-// The Gemma client has no backend under test; the store takes it as an
-// injected parameter, and `ingest` above passes a stub.
 vi.mock('@/services/api/mailboxService', () => ({
   fetchEmailConfig: vi.fn().mockResolvedValue({}),
   fetchMailboxMessages: vi.fn().mockResolvedValue({ messages: [] }),
@@ -401,3 +381,4 @@ vi.mock('@/services/api/mailboxService', () => ({
   sendEnquiry: vi.fn().mockResolvedValue({}),
   sendAcknowledgement: vi.fn().mockResolvedValue({}),
 }));
+
