@@ -193,3 +193,4 @@ describe('workflow actions respect the role namespace', () => {
     expect(paths[SECTION.DISPATCH_DETAIL]).toBe('/front-officer/dispatch/:queryId');
   });
 });
+
