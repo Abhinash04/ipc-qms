@@ -117,3 +117,56 @@ body {
   background: #cbd5e1;
   border-radius: 3px;
 }
+
+/* Animated Liquid Blob Glassmorphism Effect */
+@keyframes blob-bounce {
+  0% {
+    transform: translate(-50%, -50%) translate3d(0, 0, 0);
+  }
+  25% {
+    transform: translate(-50%, -50%) translate3d(45px, -25px, 0);
+  }
+  50% {
+    transform: translate(-50%, -50%) translate3d(25px, 35px, 0);
+  }
+  75% {
+    transform: translate(-50%, -50%) translate3d(-35px, 15px, 0);
+  }
+  100% {
+    transform: translate(-50%, -50%) translate3d(0, 0, 0);
+  }
+}
+
+.animate-blob {
+  animation: blob-bounce 7s infinite ease-in-out;
+}
+
+/* Neumorphism (Soft UI) Utilities */
+.neu-flat {
+  background: #f1f5fa;
+  box-shadow: 10px 10px 22px #d0d7e5, -10px -10px 22px #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.7);
+}
+
+.neu-pressed {
+  background: #f1f5fa;
+  box-shadow: inset 4px 4px 8px #d0d7e5, inset -4px -4px 8px #ffffff;
+}
+
+.neu-badge {
+  background: #f1f5fa;
+  box-shadow: 5px 5px 10px #d0d7e5, -5px -5px 10px #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.8);
+}
+
+.neu-row {
+  background: #f1f5fa;
+  box-shadow: 6px 6px 14px #d0d7e5, -6px -6px 14px #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  transition: all 0.25s ease;
+}
+
+.neu-row:hover {
+  box-shadow: 8px 8px 18px #c8cfde, -8px -8px 18px #ffffff;
+  transform: translateY(-2px);
+}

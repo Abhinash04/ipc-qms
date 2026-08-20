@@ -1,10 +1,24 @@
 import { useState } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
+import { 
+  Mail, 
+  Lock, 
+  Eye, 
+  EyeOff, 
+  LogIn, 
+  LayoutGrid, 
+  ChevronDown, 
+  CheckCircle2, 
+  Loader2,
+  ShieldCheck,
+  FileText
+} from 'lucide-react';
 
 import { MOCK_USERS, MOCK_PASSWORD, findUserByEmail } from '@/constants/mockUsers';
 import { ROLE_LABELS } from '@/constants/roles';
 import { roleHome } from '@/constants/routePaths';
 import { useAuthStore } from '@/store/useAuthStore';
+import { IpcLogo } from '@/components/common/IpcLogo';
 
 const roleColors = {
   'Inquirer':           { bg: '#eff6ff', text: '#2563eb', border: '#bfdbfe' },
@@ -17,7 +31,7 @@ const roleColors = {
 };
 
 function getInitials(name) {
-  return name.split(' ').map(n => n[0]).slice(0, 2).join('');
+  return (name || '').split(' ').map(n => n[0]).slice(0, 2).join('');
 }
 
 export function LoginPage() {
@@ -40,7 +54,6 @@ export function LoginPage() {
     setLoading(true);
     setError(null);
     
-    // Simulate loading for the UI effect
     setTimeout(() => {
       setLoading(false);
       const user = findUserByEmail(email);
@@ -64,252 +77,234 @@ export function LoginPage() {
   };
 
   return (
-    <div
-      className="min-h-screen flex items-center justify-center p-6 w-full"
-      style={{ background: '#eef2f7', position: 'relative', overflow: 'hidden' }}
-    >
-      {/* Background blobs */}
-      <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 0 }}>
-        <div style={{ position: 'absolute', top: '-10%', left: '-5%', width: 520, height: 520, borderRadius: '50%', background: 'radial-gradient(circle, rgba(99,102,241,0.12) 0%, transparent 70%)' }} />
-        <div style={{ position: 'absolute', bottom: '-12%', right: '-6%', width: 480, height: 480, borderRadius: '50%', background: 'radial-gradient(circle, rgba(59,130,246,0.10) 0%, transparent 70%)' }} />
-        <div style={{ position: 'absolute', top: '40%', right: '15%', width: 280, height: 280, borderRadius: '50%', background: 'radial-gradient(circle, rgba(139,92,246,0.07) 0%, transparent 70%)' }} />
-        <div style={{
-          position: 'absolute', inset: 0,
-          backgroundImage: 'radial-gradient(circle, rgba(99,102,241,0.07) 1px, transparent 1px)',
-          backgroundSize: '30px 30px',
-        }} />
-      </div>
+    <div className="h-screen w-screen flex flex-col md:flex-row overflow-hidden bg-white select-none">
+      
+      {/* Left Column — Deep Sapphire Indigo Hero Panel (Clean, no background circles) */}
+      <div className="w-full md:w-5/12 lg:w-5/12 h-full bg-gradient-to-br from-[#0f172a] via-[#1e1b4b] to-[#312e81] text-white p-8 sm:p-12 lg:p-16 flex flex-col justify-between items-center text-center relative overflow-hidden shrink-0 shadow-2xl z-10">
+        
+        {/* Subtle Ambient Radial Glow (No circles) */}
+        <div className="pointer-events-none absolute -top-32 -left-32 w-96 h-96 rounded-full bg-indigo-500/15 blur-3xl" />
+        <div className="pointer-events-none absolute -bottom-32 -right-32 w-96 h-96 rounded-full bg-purple-500/15 blur-3xl" />
 
-      {/* Single card */}
-      <div
-        style={{
-          width: '100%', maxWidth: 520,
-          background: '#ffffff',
-          borderRadius: 20,
-          boxShadow: '0 4px 6px rgba(0,0,0,0.04), 0 20px 60px rgba(0,0,0,0.08), 0 0 0 1px rgba(0,0,0,0.06)',
-          overflow: 'hidden',
-          position: 'relative', zIndex: 1,
-        }}
-      >
-        {/* ── Top accent bar ── */}
-        <div style={{ height: 4, background: 'linear-gradient(90deg, #3b82f6 0%, #6366f1 50%, #8b5cf6 100%)' }} />
+        {/* Top Section */}
+        <div className="relative z-10 w-full flex flex-col items-center text-center my-auto">
 
-        {/* ── Login section ── */}
-        <div style={{ padding: '2.25rem 2.25rem 2rem' }}>
-          {/* Brand */}
-          <div className="flex items-center gap-3 mb-7">
-            <div style={{
-              width: 42, height: 42, borderRadius: 11, flexShrink: 0,
-              background: 'linear-gradient(135deg, #3b82f6, #6366f1)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              boxShadow: '0 4px 12px rgba(99,102,241,0.3)',
-            }}>
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-                <path d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
+
+          <div className="text-[13.5px] font-black tracking-[0.3em] text-indigo-300 uppercase mb-3 text-center">
+            Query Management System
+          </div>
+          
+          <h1 className="font-heading text-[52px] sm:text-[62px] font-black tracking-tight text-white leading-none mb-5 text-center drop-shadow-md">
+            Welcome back!
+          </h1>
+          
+          <p className="text-[17.5px] font-medium text-slate-300/90 leading-relaxed max-w-[480px] mx-auto text-center mb-10">
+            Sign in to access your dashboard, track query workflows, review drafting documents, and manage Indian Pharmacopoeia Commission operations.
+          </p>
+
+          {/* Highlights */}
+          <div className="w-full max-w-[460px] mx-auto space-y-4 border-t border-white/10 pt-8 text-left">
+            <div className="flex items-center gap-3.5 bg-white/10 backdrop-blur-md p-4 rounded-2xl border border-white/10 shadow-lg">
+              <div className="w-8.5 h-8.5 rounded-full bg-indigo-500/30 text-indigo-300 border border-indigo-400/30 flex items-center justify-center shrink-0 shadow-inner">
+                <CheckCircle2 className="h-5 w-5 text-indigo-300" strokeWidth={2.5} />
+              </div>
+              <span className="text-[16px] font-bold text-white">Real-time multi-role workflow tracking</span>
             </div>
-            <div>
-              <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '0.1em', color: '#94a3b8', textTransform: 'uppercase' }}>Query Management System</div>
-              <div style={{ fontSize: 13, color: '#64748b', marginTop: 1 }}>Integrated Processing Centre</div>
+
+            <div className="flex items-center gap-3.5 bg-white/10 backdrop-blur-md p-4 rounded-2xl border border-white/10 shadow-lg">
+              <div className="w-8.5 h-8.5 rounded-full bg-indigo-500/30 text-indigo-300 border border-indigo-400/30 flex items-center justify-center shrink-0 shadow-inner">
+                <CheckCircle2 className="h-5 w-5 text-indigo-300" strokeWidth={2.5} />
+              </div>
+              <span className="text-[16px] font-bold text-white">Role-based access control (RBAC) security</span>
+            </div>
+
+            <div className="flex items-center gap-3.5 bg-white/10 backdrop-blur-md p-4 rounded-2xl border border-white/10 shadow-lg">
+              <div className="w-8.5 h-8.5 rounded-full bg-indigo-500/30 text-indigo-300 border border-indigo-400/30 flex items-center justify-center shrink-0 shadow-inner">
+                <CheckCircle2 className="h-5 w-5 text-indigo-300" strokeWidth={2.5} />
+              </div>
+              <span className="text-[16px] font-bold text-white">Automated dispatch & audit trail history</span>
             </div>
           </div>
+        </div>
 
-          <h1 style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 32, fontWeight: 400, color: '#0f172a', lineHeight: 1.15, margin: '0 0 6px' }}>
-            Sign in
-          </h1>
-          <p style={{ fontSize: 14, color: '#94a3b8', margin: '0 0 1.75rem' }}>Enter your credentials to continue</p>
+        {/* Bottom Footer */}
+        <div className="relative z-10 pt-6 border-t border-white/10 text-[13.5px] font-semibold text-slate-400/80 text-center w-full">
+          © 2026 Integrated Processing Centre • Indian Pharmacopoeia Commission
+        </div>
+      </div>
 
-          {/* ── Mock Credentials Dropdown ── */}
-          <div style={{ marginBottom: 20, background: '#f8fafc', border: '1.5px solid #e2e8f0', borderRadius: 10, overflow: 'hidden' }}>
+        {/* Right Column — Full Height Form Panel */}
+        <div className="w-full md:w-7/12 lg:w-7/12 h-full bg-white p-8 sm:p-12 lg:p-16 flex flex-col justify-center items-center overflow-y-auto">
+          
+          <div className="w-full max-w-[480px] my-auto space-y-7">
+            <div className="text-center">
+              <h2 className="font-heading text-[44px] sm:text-[52px] font-black text-slate-900 leading-none mb-3 tracking-tight text-center">
+                Sign in
+              </h2>
+              <p className="text-[17.5px] font-bold text-slate-500 text-center">
+                Enter your credentials to continue to your workspace.
+              </p>
+            </div>
+
+          {/* Mock Credentials Dropdown (Absolute Floating Overlay to prevent card resizing) */}
+          <div className="relative z-30">
             <button
               type="button"
               onClick={() => setShowMocks(!showMocks)}
-              style={{ width: '100%', padding: '12px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'none', border: 'none', cursor: 'pointer', outline: 'none' }}
+              className="w-full flex items-center justify-between px-4.5 py-4 rounded-2xl bg-indigo-50/70 hover:bg-indigo-100/70 border border-indigo-200/90 text-[15.5px] font-black text-slate-800 transition-all shadow-2xs cursor-pointer"
             >
-              <div className="flex items-center gap-2">
-                <div style={{ width: 7, height: 7, borderRadius: '50%', background: '#f59e0b', boxShadow: '0 0 5px rgba(245,158,11,0.5)', flexShrink: 0 }} />
-                <span style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>Mock Credentials (Dev Only)</span>
+              <div className="flex items-center gap-3">
+                <div className="w-8.5 h-8.5 rounded-xl bg-indigo-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                  <LayoutGrid className="w-5 h-5" strokeWidth={2.2} />
+                </div>
+                <div className="flex items-center gap-2">
+                  <span>Mock Credentials</span>
+                  <span className="text-[11.5px] font-black uppercase px-2.5 py-0.5 rounded-full bg-indigo-200/80 text-indigo-900 tracking-wider">Dev Only</span>
+                </div>
               </div>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ transform: showMocks ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>
-                <polyline points="6 9 12 15 18 9"/>
-              </svg>
+              <ChevronDown className={`w-5.5 h-5.5 text-indigo-600 transition-transform duration-200 ${showMocks ? 'rotate-180' : ''}`} />
             </button>
-            
+
             {showMocks && (
-              <div style={{ padding: '0 14px 14px', borderTop: '1.5px solid #e2e8f0' }}>
-                <p style={{ fontSize: 12.5, color: '#94a3b8', margin: '10px 0' }}>
-                  All accounts use password{' '}
-                  <code style={{ fontFamily: 'monospace', fontSize: 11.5, padding: '2px 7px', background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: 5, color: '#6366f1' }}>{MOCK_PASSWORD}</code>
-                </p>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 5, maxHeight: 220, overflowY: 'auto', paddingRight: 2 }}>
-                  {MOCK_USERS.map(user => {
+              <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-2xl border border-slate-200/90 shadow-2xl p-3.5 z-50 animate-in fade-in-50 zoom-in-95">
+                <div className="p-2 border-b border-slate-100 mb-2 flex justify-between items-center">
+                  <span className="text-[13px] font-extrabold text-slate-600">Quick select demo user:</span>
+                  <span className="text-[12px] font-mono font-black bg-slate-100 px-2.5 py-1 rounded-lg text-indigo-700">
+                    Password: {MOCK_PASSWORD}
+                  </span>
+                </div>
+
+                <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+                  {MOCK_USERS.map((user) => {
                     const roleLabel = ROLE_LABELS[user.role] || user.role;
                     const c = roleColors[roleLabel] ?? { bg: '#f8fafc', text: '#64748b', border: '#e2e8f0' };
                     const isActive = activeUser === user.name;
+
                     return (
                       <div
                         key={user.id}
-                        style={{
-                          display: 'flex', alignItems: 'center', gap: 11,
-                          padding: '9px 11px', borderRadius: 10,
-                          background: isActive ? '#f0f4ff' : '#fafbff',
-                          border: `1.5px solid ${isActive ? '#c7d2fe' : '#f1f5f9'}`,
-                          transition: 'background 0.12s, border-color 0.12s',
-                          cursor: 'default',
-                        }}
-                        onMouseEnter={e => !isActive && (e.currentTarget.style.background = '#f1f5f9')}
-                        onMouseLeave={e => !isActive && (e.currentTarget.style.background = '#fafbff')}
+                        onClick={() => applyCredentials(user)}
+                        className={`flex items-center justify-between p-3 rounded-xl border transition-all cursor-pointer ${
+                          isActive 
+                            ? 'bg-indigo-50/90 border-indigo-200 shadow-2xs' 
+                            : 'bg-white border-slate-200/60 hover:border-slate-300 hover:bg-slate-50'
+                        }`}
                       >
-                        {/* Avatar */}
-                        <div style={{
-                          width: 34, height: 34, borderRadius: 9, flexShrink: 0,
-                          background: c.bg, border: `1px solid ${c.border}`,
-                          display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          fontSize: 12, fontWeight: 700, color: c.text,
-                        }}>
-                          {getInitials(user.name)}
+                        <div className="flex items-center gap-3 min-w-0">
+                          <span 
+                            className="w-8.5 h-8.5 rounded-full flex items-center justify-center font-black text-[12.5px] shrink-0 border shadow-2xs"
+                            style={{ backgroundColor: c.bg, color: c.text, borderColor: c.border }}
+                          >
+                            {getInitials(user.name)}
+                          </span>
+                          <div className="min-w-0 flex-1 truncate">
+                            <div className="text-[14.5px] font-black text-slate-800 truncate leading-tight">
+                              {user.name}
+                            </div>
+                            <div className="text-[12.5px] font-bold text-slate-500 truncate mt-0.5">
+                              {roleLabel}
+                            </div>
+                          </div>
                         </div>
 
-                        {/* Name + role */}
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontSize: 13.5, fontWeight: 500, color: '#0f172a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{user.name}</div>
-                          <span style={{ display: 'inline-block', marginTop: 3, fontSize: 10.5, fontWeight: 600, padding: '1.5px 7px', borderRadius: 20, background: c.bg, color: c.text, border: `1px solid ${c.border}` }}>{roleLabel}</span>
-                        </div>
-
-                        {/* Button */}
                         <button
                           type="button"
-                          aria-label={`Use Credentials for ${user.name}`}
-                          onClick={() => applyCredentials(user)}
-                          style={{
-                            flexShrink: 0, padding: '5px 13px', borderRadius: 7,
-                            fontSize: 12, fontWeight: 600, cursor: 'pointer',
-                            transition: 'all 0.12s',
-                            background: isActive ? '#e0e7ff' : '#ffffff',
-                            border: `1.5px solid ${isActive ? '#6366f1' : '#e2e8f0'}`,
-                            color: isActive ? '#4f46e5' : '#64748b',
-                            whiteSpace: 'nowrap',
-                          }}
-                          onMouseEnter={e => !isActive && Object.assign(e.currentTarget.style, { background: '#f1f5f9', borderColor: '#cbd5e1', color: '#374151' })}
-                          onMouseLeave={e => !isActive && Object.assign(e.currentTarget.style, { background: '#ffffff', borderColor: '#e2e8f0', color: '#64748b' })}
+                          className={`px-3.5 py-1.5 rounded-lg text-[12.5px] font-black transition-all shrink-0 ml-2 ${
+                            isActive 
+                              ? 'bg-indigo-600 text-white shadow-xs' 
+                              : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                          }`}
                         >
                           {isActive ? '✓ Selected' : 'Use'}
                         </button>
                       </div>
-                    )
+                    );
                   })}
                 </div>
               </div>
             )}
           </div>
 
-          <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            <div>
-              <label htmlFor="login-email" style={{ display: 'block', fontSize: 13, fontWeight: 500, color: '#374151', marginBottom: 7 }}>Email</label>
-              <div style={{ position: 'relative' }}>
-                <input
-                  id="login-email"
-                  type="email"
-                  value={email}
-                  onChange={e => setEmail(e.target.value)}
-                  placeholder="you@ipc.example"
-                  required
-                  style={{
-                    width: '100%', padding: '11px 14px 11px 42px',
-                    background: '#f8fafc', border: '1.5px solid #e2e8f0',
-                    borderRadius: 10, color: '#0f172a', fontSize: 14,
-                    outline: 'none', transition: 'border-color 0.15s, box-shadow 0.15s',
-                    boxSizing: 'border-box',
-                  }}
-                  onFocus={e => { e.target.style.borderColor = '#6366f1'; e.target.style.boxShadow = '0 0 0 3px rgba(99,102,241,0.1)'; e.target.style.background = '#fff' }}
-                  onBlur={e => { e.target.style.borderColor = '#e2e8f0'; e.target.style.boxShadow = 'none'; e.target.style.background = '#f8fafc' }}
-                />
-                <svg style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/>
-                </svg>
+            {/* Login Form */}
+            <form onSubmit={submit} className="space-y-6">
+              {/* Email Input */}
+              <div>
+                <label htmlFor="login-email" className="block text-[16px] font-black text-slate-800 mb-2.5">
+                  Email
+                </label>
+                <div className="relative">
+                  <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">
+                    <Mail className="w-5.5 h-5.5" strokeWidth={2.2} />
+                  </div>
+                  <input
+                    id="login-email"
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="you@ipc.example"
+                    required
+                    className="w-full pl-13 pr-4 py-4.5 rounded-2xl border border-slate-200/90 bg-slate-50/50 hover:bg-white focus:bg-white text-[17px] sm:text-[18px] font-bold text-slate-900 placeholder-slate-400 outline-none transition-all focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 shadow-2xs"
+                  />
+                </div>
               </div>
-            </div>
 
-            <div>
-              <label htmlFor="login-password" style={{ display: 'block', fontSize: 13, fontWeight: 500, color: '#374151', marginBottom: 7 }}>Password</label>
-              <div style={{ position: 'relative' }}>
-                <input
-                  id="login-password"
-                  type={showPassword ? 'text' : 'password'}
-                  value={password}
-                  onChange={e => setPassword(e.target.value)}
-                  placeholder="••••••••"
-                  required
-                  style={{
-                    width: '100%', padding: '11px 42px 11px 42px',
-                    background: '#f8fafc', border: '1.5px solid #e2e8f0',
-                    borderRadius: 10, color: '#0f172a', fontSize: 14,
-                    outline: 'none', transition: 'border-color 0.15s, box-shadow 0.15s',
-                    boxSizing: 'border-box',
-                  }}
-                  onFocus={e => { e.target.style.borderColor = '#6366f1'; e.target.style.boxShadow = '0 0 0 3px rgba(99,102,241,0.1)'; e.target.style.background = '#fff' }}
-                  onBlur={e => { e.target.style.borderColor = '#e2e8f0'; e.target.style.boxShadow = 'none'; e.target.style.background = '#f8fafc' }}
-                />
-                <svg style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/>
-                </svg>
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(s => !s)}
-                  style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', padding: 0, display: 'flex' }}
-                >
-                  {showPassword ? (
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
-                  ) : (
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-                  )}
-                </button>
+              {/* Password Input */}
+              <div>
+                <label htmlFor="login-password" className="block text-[16px] font-black text-slate-800 mb-2.5">
+                  Password
+                </label>
+                <div className="relative">
+                  <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">
+                    <Lock className="w-5.5 h-5.5" strokeWidth={2.2} />
+                  </div>
+                  <input
+                    id="login-password"
+                    type={showPassword ? 'text' : 'password'}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="••••••••"
+                    required
+                    className="w-full pl-13 pr-12 py-4.5 rounded-2xl border border-slate-200/90 bg-slate-50/50 hover:bg-white focus:bg-white text-[17px] sm:text-[18px] font-bold text-slate-900 placeholder-slate-400 outline-none transition-all focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 shadow-2xs"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
+                  >
+                    {showPassword ? <EyeOff className="w-5.5 h-5.5" /> : <Eye className="w-5.5 h-5.5" />}
+                  </button>
+                </div>
               </div>
-            </div>
 
-            {error && (
-              <p role="alert" style={{ fontSize: 13, color: '#ef4444', margin: '4px 0 0' }}>
-                {error}
-              </p>
-            )}
-
-            <button
-              type="submit"
-              disabled={loading}
-              style={{
-                marginTop: 4,
-                width: '100%', padding: '13px',
-                background: loading ? '#818cf8' : 'linear-gradient(135deg, #3b82f6 0%, #6366f1 100%)',
-                border: 'none', borderRadius: 10, color: 'white',
-                fontSize: 15, fontWeight: 600, cursor: loading ? 'not-allowed' : 'pointer',
-                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-                boxShadow: loading ? 'none' : '0 4px 16px rgba(99,102,241,0.35)',
-                transition: 'opacity 0.15s, box-shadow 0.15s',
-              }}
-              onMouseEnter={e => !loading && (e.currentTarget.style.opacity = '0.9')}
-              onMouseLeave={e => !loading && (e.currentTarget.style.opacity = '1')}
-            >
-              {loading ? (
-                <>
-                  <svg style={{ animation: 'spin 1s linear infinite' }} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
-                  Signing in...
-                </>
-              ) : (
-                <>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M15 3h4a2 2 0 012 2v14a2 2 0 01-2 2h-4M10 17l5-5-5-5M15 12H3"/></svg>
-                  Sign in
-                </>
+              {/* Error Message */}
+              {error && (
+                <div className="p-4 rounded-2xl bg-red-50 border border-red-200 text-red-600 text-[13.5px] font-bold">
+                  {error}
+                </div>
               )}
+
+              {/* Submit Button */}
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full py-4.5 px-8 rounded-2xl bg-gradient-to-r from-[#4f46e5] via-[#6366f1] to-[#8b5cf6] text-white font-black text-[17px] shadow-xl shadow-indigo-500/30 hover:opacity-95 active:scale-[0.99] transition-all cursor-pointer flex items-center justify-center gap-3 mt-3 disabled:opacity-70 disabled:cursor-not-allowed"
+              >
+                {loading ? (
+                  <>
+                    <Loader2 className="w-5.5 h-5.5 animate-spin" />
+                    <span>Signing in…</span>
+                  </>
+                ) : (
+                  <>
+                    <LogIn className="w-5.5 h-5.5" strokeWidth={2.2} />
+                    <span>Sign in</span>
+                  </>
+                )}
             </button>
           </form>
         </div>
-      </div>
 
-      <style>{`
-        @keyframes spin { to { transform: rotate(360deg); } }
-        input::placeholder { color: #cbd5e1; }
-      `}</style>
+      </div>
     </div>
   );
 }
-
