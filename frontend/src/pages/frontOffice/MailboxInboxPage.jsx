@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
+import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
 import { useMailboxIngestion } from '@/hooks/useMailboxIngestion';
 import { useRoutePaths } from '@/hooks/useRoutePaths';
 import { useWorkflowStore } from '@/store/useWorkflowStore';
@@ -110,7 +111,7 @@ export function MailboxInboxPage() {
           <Table>
             <TableHeader>
               <TableRow hoverable={false}>
-                <TableHead>Message</TableHead>
+                <TableHead className="w-[60px] text-center">S.No.</TableHead>
                 <TableHead>From</TableHead>
                 <TableHead>Subject</TableHead>
                 <TableHead>Received</TableHead>
@@ -118,17 +119,32 @@ export function MailboxInboxPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {messages.map((message) => {
+              {messages.map((message, index) => {
                 const queryId = queryIdFor(message.mailboxMessageId);
                 const known = queryId && queries.some((q) => q.queryId === queryId);
 
                 return (
                   <TableRow key={message.mailboxMessageId}>
-                    <TableCell className="font-medium text-foreground">
-                      {message.mailboxMessageId}
+                    <TableCell className="text-black text-center">
+                      {index + 1}
                     </TableCell>
-                    <TableCell className="text-muted-foreground">{message.from}</TableCell>
-                    <TableCell className="text-foreground">{message.subject}</TableCell>
+                    <TableCell className="font-medium text-foreground">
+                      {message.from.split('<')[0].trim()}
+                    </TableCell>
+                    <TableCell className="text-foreground">
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <div className="truncate cursor-default" style={{ maxWidth: '200px' }}>
+                              {message.subject}
+                            </div>
+                          </TooltipTrigger>
+                          <TooltipContent className="max-w-[400px] break-words">
+                            {message.subject}
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </TableCell>
                     <TableCell className="text-muted-foreground">
                       {new Date(message.receivedAt).toLocaleString()}
                     </TableCell>

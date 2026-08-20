@@ -6,7 +6,7 @@ import { StatusBadge } from '@/components/common/StatusBadge';
 import { EmptyState } from '@/components/common/EmptyState';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useWorkflowStore } from '@/store/useWorkflowStore';
-import { ROLE_LABELS } from '@/constants/roles';
+import { ROLE_LABELS, ROLES } from '@/constants/roles';
 import { WORKFLOW_STATE } from '@/constants/statusEnums';
 import { buildPath } from '@/constants/routePaths';
 import { useRoutePaths } from '@/hooks/useRoutePaths';
@@ -107,10 +107,16 @@ export function DashboardPage() {
           </>
         }
         actions={
-          <button className="flex items-center gap-[6px] text-[13px] font-semibold text-white bg-[#4f46e5] border-none rounded-[9px] px-[16px] py-[8px] cursor-pointer shadow-[0_2px_8px_rgba(79,70,229,0.35)] hover:bg-[#4338ca] transition-colors">
-            <PlusIcon className="h-4 w-4" strokeWidth={2.5} />
-            New Query
-          </button>
+          currentUser?.role === ROLES.INQUIRER ? (
+            <Link
+              to={paths.COMPOSE || '/inquirer/compose'}
+              style={{ textDecoration: 'none' }}
+              className="flex items-center gap-[6px] text-[13px] font-semibold text-white bg-[#4f46e5] border-none rounded-[9px] px-[16px] py-[8px] cursor-pointer shadow-[0_2px_8px_rgba(79,70,229,0.35)] hover:bg-[#4338ca] transition-colors"
+            >
+              <PlusIcon className="h-4 w-4" strokeWidth={2.5} />
+              New Query
+            </Link>
+          ) : null
         }
       />
 
