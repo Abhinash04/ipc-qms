@@ -1,8 +1,6 @@
 import { Link } from 'react-router-dom';
 import { 
   Bell, 
-  Filter, 
-  ChevronDown, 
   Hourglass, 
   XCircle, 
   User, 
@@ -19,6 +17,7 @@ import { useRoutePaths } from '@/hooks/useRoutePaths';
 export function NotificationsPage() {
   const paths = useRoutePaths();
   const notifications = useWorkflowStore((state) => state.notifications);
+
   const storeOrdered = [...notifications].sort((a, b) => new Date(b.at) - new Date(a.at));
   const displayList = storeOrdered;
 
@@ -85,14 +84,6 @@ export function NotificationsPage() {
             <p className="m-0 text-[14.5px] font-medium text-slate-400 mt-2">
               Workflow events raised for the cases you are involved in
             </p>
-          </div>
-        </div>
-
-        <div className="relative shrink-0">
-          <div className="flex items-center gap-2 rounded-2xl bg-white border border-slate-200/80 px-4 py-2.5 text-[13px] font-bold text-slate-700 shadow-2xs hover:bg-slate-50 cursor-pointer transition-colors">
-            <Filter className="h-4 w-4 text-slate-500" />
-            <span>All Activities</span>
-            <ChevronDown className="h-4 w-4 text-slate-400 ml-1" />
           </div>
         </div>
       </div>
