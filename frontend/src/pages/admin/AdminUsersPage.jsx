@@ -31,8 +31,8 @@ export function AdminUsersPage() {
                 <TableCell>
                   <Badge variant="status-blue">{ROLE_LABELS[user.role]}</Badge>
                 </TableCell>
-                <TableCell className="text-muted-foreground">{findDivisionById(user.divisionId)?.name || '—'}</TableCell>
-                <TableCell className="text-muted-foreground">{user.email}</TableCell>
+                <TableCell className="text-foreground">{findDivisionById(user.divisionId)?.name || '—'}</TableCell>
+                <TableCell className="text-foreground">{user.email}</TableCell>
               </TableRow>
             ))}
           </TableBody>

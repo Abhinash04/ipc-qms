@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import { MailIcon, RefreshCwIcon, Clock, ShieldAlert, CheckCircle2, ArrowRight } from 'lucide-react';
+import { MailIcon, RefreshCwIcon, ShieldAlert, CheckCircle2, ArrowRight } from 'lucide-react';
 
 import { Breadcrumb } from '@/components/common/Breadcrumb';
 import { PageHeader } from '@/components/common/PageHeader';
@@ -20,10 +20,10 @@ import { ROLE_SLUG } from '@/constants/permissions';
 
 const AUTO_REFRESH_MS = 15000;
 
-function cleanSubject(subject) {
-  if (!subject) return '(No Subject)';
-  return subject.replace(/[\u00C0-\u024F\uFF00-\uFFFF]+/g, '').trim() || subject;
-}
+// function cleanSubject(subject) {
+//   if (!subject) return '(No Subject)';
+//   return subject.replace(/[\u00C0-\u024F\uFF00-\uFFFF]+/g, '').trim() || subject;
+// }
 
 export function MailboxInboxPage() {
   const paths = useRoutePaths();
@@ -65,7 +65,7 @@ export function MailboxInboxPage() {
       <Breadcrumb
         items={[{ label: 'Dashboard', path: paths.DASHBOARD }, { label: 'IPC Mailbox' }]}
       />
-      
+
       <PageHeader
         greeting="IPC Live Mailbox 📬"
         title="IPC Mailbox Inbox"
@@ -82,7 +82,7 @@ export function MailboxInboxPage() {
                 Auto-refresh (15s)
               </Label>
             </div>
-            
+
             <button
               type="button"
               onClick={registerAll}

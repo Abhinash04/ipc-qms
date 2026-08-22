@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Sparkles, RefreshCw, Loader2, Bot } from 'lucide-react';
 import { fetchGemmaAiSummary } from '@/services/api/aiService';
 
-export function AiSummaryCard({ summary: initialSummary, query, onSummaryUpdated }) {
+export function AiSummaryCard({ summary: initialSummary, query, onSummaryUpdated, variant = 'card' }) {
   const [summary, setSummary] = useState(initialSummary);
   const [loading, setLoading] = useState(false);
 
@@ -31,8 +31,12 @@ export function AiSummaryCard({ summary: initialSummary, query, onSummaryUpdated
 
   const currentSummary = summary || initialSummary;
 
+  const outerClass = variant === 'embedded'
+    ? "select-none h-full"
+    : "bg-linear-to-br from-indigo-50/80 via-purple-50/30 to-white rounded-3xl border border-indigo-200/80 p-6 shadow-sm select-none h-full";
+
   return (
-    <div className="bg-linear-to-br from-indigo-50/80 via-purple-50/30 to-white rounded-3xl border border-indigo-200/80 p-6 shadow-sm select-none">
+    <div className={outerClass}>
       {/* Header Row */}
       <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-indigo-100">
         <div className="flex items-center gap-2.5">
@@ -43,13 +47,13 @@ export function AiSummaryCard({ summary: initialSummary, query, onSummaryUpdated
               <Sparkles className="h-4 w-4" strokeWidth={2.2} />
             )}
           </div>
-          <h2 className="font-heading text-[16px] font-black text-slate-900 m-0">
-            {loading ? 'Generating Gemma AI Summary...' : 'AI Summary (Gemma LLM)'}
+          <h2 className="font-heading text-[20px] font-black text-slate-900 m-0">
+            {loading ? 'Generating Gemma AI Summary...' : 'AI Summary '}
           </h2>
         </div>
 
         <div className="flex items-center gap-2">
-          {currentSummary?.fallback ? (
+          {/* {currentSummary?.fallback ? (
             <span className="text-[11.5px] font-bold text-amber-700 bg-amber-50 px-2.5 py-1 rounded-full border border-amber-200">
               Rule Fallback
             </span>
@@ -58,7 +62,7 @@ export function AiSummaryCard({ summary: initialSummary, query, onSummaryUpdated
               <Bot className="h-3.5 w-3.5" />
               Gemma AI
             </span>
-          )}
+          )} */}
 
           <button
             type="button"
@@ -96,16 +100,16 @@ export function AiSummaryCard({ summary: initialSummary, query, onSummaryUpdated
           </div>
         ) : (
           <>
-            <p className="text-[14px] font-semibold text-slate-800 leading-relaxed m-0">
+            <p className="text-[16px] font-semibold text-slate-800 leading-relaxed m-0">
               {currentSummary.text}
             </p>
 
             {currentSummary.keyPoints?.length > 0 && (
               <div className="rounded-2xl bg-white/90 p-4 border border-purple-100 shadow-2xs space-y-2">
-                <p className="text-[12.5px] font-black text-slate-900 m-0">Key Points Raised:</p>
+                <p className="text-[15px] font-black text-slate-900 m-0">Key Points Raised:</p>
                 <ul className="space-y-1.5 pl-0 m-0 list-none">
                   {currentSummary.keyPoints.map((point, index) => (
-                    <li key={index} className="flex items-start gap-2 text-[12.5px] font-medium text-slate-600 leading-snug">
+                    <li key={index} className="flex items-start gap-2 text-[14.5px] font-medium text-slate-600 leading-snug">
                       <span className="w-1.5 h-1.5 rounded-full bg-purple-500 shrink-0 mt-1.5" />
                       <span>{point}</span>
                     </li>
@@ -116,9 +120,9 @@ export function AiSummaryCard({ summary: initialSummary, query, onSummaryUpdated
 
             {currentSummary.topics?.length > 0 && (
               <div className="flex flex-wrap items-center gap-2 pt-1">
-                <span className="text-[12px] font-bold text-slate-400">Topics:</span>
+                <span className="text-[14px] font-bold text-slate-400">Topics:</span>
                 {currentSummary.topics.map((topic, index) => (
-                  <span key={index} className="text-[11.5px] font-bold text-purple-700 bg-purple-50 px-2.5 py-1 rounded-lg border border-purple-100">
+                  <span key={index} className="text-[13px] font-bold text-purple-700 bg-purple-50 px-2.5 py-1 rounded-lg border border-purple-100">
                     {topic}
                   </span>
                 ))}

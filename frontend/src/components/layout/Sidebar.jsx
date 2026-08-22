@@ -1,13 +1,14 @@
 import { useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { LogOut, ChevronLeft, ChevronRight } from 'lucide-react';
+import { LogOut, ChevronLeft, ChevronRight, Menu } from 'lucide-react';
 
 import { navItemsForRole } from '@/constants/navigation';
 import { ROLE_LABELS } from '@/constants/roles';
 import { SECTION } from '@/constants/routeSections';
 import { ROUTE_PATHS } from '@/constants/routePaths';
 import { useAuthStore } from '@/store/useAuthStore';
+import { useWorkflowStore } from '@/store/useWorkflowStore';
 import { cn } from '@/utils/cn';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
@@ -58,8 +59,11 @@ function RailTooltip({ open, label, children }) {
 
 export function Sidebar() {
   const currentUser = useAuthStore((state) => state.currentUser);
+  const notifications = useWorkflowStore((state) => state.notifications);
   const [collapsed, setCollapsed] = useState(readCollapsed);
   const open = !collapsed;
+
+  const notifCount = notifications.filter(n => n.recipientRole === currentUser?.role).length;
 
   const toggle = () => {
     setCollapsed((prev) => {
@@ -81,16 +85,25 @@ export function Sidebar() {
         initial={false}
         animate={{ width: open ? WIDTH_OPEN : WIDTH_CLOSED }}
         transition={{ duration: 0.2, ease: 'easeInOut' }}
-        className="relative z-10 flex h-screen shrink-0 flex-col overflow-hidden border-r border-blue-900/40 bg-linear-to-b from-sidebar-from via-sidebar-via to-sidebar-to text-white shadow-xl shadow-blue-950/20 transition-all duration-200 select-none"
+        className="relative z-10 flex h-screen shrink-0 flex-col overflow-hidden border-r border-white/10 bg-[linear-gradient(180deg,#112a67_0%,#1b48a7_48%,#10285f_100%)] text-white shadow-[0_28px_60px_rgba(15,23,42,0.28)] transition-all duration-200 select-none"
       >
-        <div className="pointer-events-none absolute bottom-0 left-0 z-0 select-none opacity-15">
-          <svg width="240" height="240" viewBox="0 0 240 240" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <circle cx="60" cy="180" r="120" stroke="var(--color-sidebar-accent)" strokeWidth="16" strokeDasharray="12 12" />
-            <circle cx="60" cy="180" r="80" stroke="var(--color-sidebar-accent-soft)" strokeWidth="8" />
+        <div className="pointer-events-none absolute inset-0 z-0">
+          <div className="absolute left-[-20%] top-[12%] h-56 w-56 rounded-full bg-blue-300/10 blur-3xl" />
+          <div className="absolute right-[-22%] top-[36%] h-64 w-64 rounded-full bg-violet-400/10 blur-3xl" />
+        </div>
+        <div className="pointer-events-none absolute bottom-0 left-0 z-0 select-none opacity-18">
+          <svg width="240" height="270" viewBox="0 0 240 270" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M28 228H212" stroke="rgba(191,219,254,0.38)" strokeWidth="1.2" />
+            <path d="M47 228V178H193V228" stroke="rgba(147,197,253,0.25)" strokeWidth="1.2" />
+            <path d="M58 178H182L170 156H70L58 178Z" stroke="rgba(191,219,254,0.34)" strokeWidth="1.2" />
+            <path d="M84 156V130H156V156" stroke="rgba(191,219,254,0.3)" strokeWidth="1.2" />
+            <path d="M120 116L162 130H78L120 116Z" stroke="rgba(191,219,254,0.32)" strokeWidth="1.2" />
+            <path d="M90 178V228M120 178V228M150 178V228" stroke="rgba(147,197,253,0.24)" strokeWidth="1.2" />
+            <path d="M36 246H204" stroke="rgba(191,219,254,0.2)" strokeWidth="1.2" strokeDasharray="4 6" />
           </svg>
         </div>
 
-        <TitleSection open={open} />
+        <TitleSection open={open} onToggle={toggle} />
         <ZoneDivider open={open} />
 
         {open && (
@@ -106,7 +119,7 @@ export function Sidebar() {
           )}
         >
           {items.map((item) => (
-            <NavItem key={item.path} item={item} open={open} />
+            <NavItem key={item.path} item={item} open={open} notifCount={notifCount} />
           ))}
         </nav>
 
@@ -114,28 +127,6 @@ export function Sidebar() {
           <ZoneDivider open={open} />
           <div className={cn('flex flex-col pb-4', open ? 'px-3.5' : 'items-center px-3.5')}>
             {currentUser && <UserFooter open={open} user={currentUser} />}
-
-            <RailTooltip open={open} label="Expand sidebar">
-              <button
-                type="button"
-                onClick={toggle}
-                aria-label={open ? 'Collapse sidebar' : 'Expand sidebar'}
-                className={cn(
-                  'mt-2.5 flex text-blue-200/80 transition-colors hover:bg-white/10 hover:text-white',
-                  FOCUS_RING,
-                  open ? 'h-9 items-center justify-start gap-3 rounded-[10px] px-3' : RAIL_SQUARE + ' flex',
-                )}
-              >
-                {open ? (
-                  <>
-                    <ChevronLeft className="h-4 w-4" aria-hidden="true" />
-                    <span className="text-[12px] font-medium">Collapse sidebar</span>
-                  </>
-                ) : (
-                  <ChevronRight className="h-4 w-4" aria-hidden="true" />
-                )}
-              </button>
-            </RailTooltip>
           </div>
         </div>
       </motion.aside>
@@ -143,7 +134,7 @@ export function Sidebar() {
   );
 }
 
-function NavItem({ item, open }) {
+function NavItem({ item, open, notifCount }) {
   const { label, path, icon: Icon, section } = item;
   const isNotifications = section === SECTION.NOTIFICATIONS;
 
@@ -154,12 +145,12 @@ function NavItem({ item, open }) {
       aria-label={label}
       className={({ isActive }) =>
         cn(
-          'relative flex items-center rounded-2xl text-[15px] transition-all duration-150',
+          'relative flex items-center rounded-2xl text-[15px] transition-all duration-200',
           FOCUS_RING,
           open ? 'gap-3.5 justify-start px-4 py-3.5' : `${RAIL_SQUARE} justify-center`,
           isActive
-            ? 'bg-linear-to-r from-sidebar-active to-sidebar-active-to font-bold text-white shadow-lg shadow-blue-900/40'
-            : 'font-semibold text-blue-100/90 hover:bg-white/12 hover:text-white',
+            ? 'bg-[linear-gradient(135deg,rgba(52,120,246,0.95),rgba(68,145,255,0.88))] font-bold text-white border border-white/18 shadow-[0_14px_26px_rgba(12,20,56,0.34)] backdrop-blur-md before:absolute before:inset-[1px] before:rounded-[15px] before:border before:border-white/15 before:content-[""]'
+            : 'font-semibold text-blue-100/92 hover:bg-white/10 hover:text-white',
         )
       }
     >
@@ -171,9 +162,9 @@ function NavItem({ item, open }) {
               {label}
             </span>
           )}
-          {open && isNotifications && (
+          {open && isNotifications && notifCount > 0 && (
             <span className="ml-auto flex h-5.5 min-w-5.5 items-center justify-center rounded-full bg-blue-400/40 px-2 text-[12px] font-extrabold text-white shadow-xs">
-              3
+              {notifCount}
             </span>
           )}
         </>
@@ -188,16 +179,16 @@ function NavItem({ item, open }) {
   );
 }
 
-function TitleSection({ open }) {
+function TitleSection({ open, onToggle }) {
   return (
     <div
       className={cn(
         'relative z-10 flex shrink-0 items-center py-4.5 transition-all',
-        open ? 'px-4' : 'justify-center px-2',
+        open ? 'px-4 justify-between' : 'flex-col justify-center gap-3 px-2',
       )}
     >
       <div className="flex items-center gap-3 min-w-0">
-        <div className="flex h-9.5 w-9.5 shrink-0 items-center justify-center rounded-xl bg-linear-to-br from-blue-400 via-blue-600 to-indigo-700 text-white shadow-lg shadow-blue-950/40 border border-white/25">
+        <div className="flex h-9.5 w-9.5 shrink-0 items-center justify-center rounded-xl border border-white/25 bg-[linear-gradient(180deg,rgba(255,255,255,0.22),rgba(255,255,255,0.08))] text-white shadow-[0_14px_24px_rgba(8,15,40,0.3)] backdrop-blur-md">
           <span className="font-heading text-[17px] font-black tracking-tight text-white drop-shadow-xs">Q</span>
         </div>
         <AnimatePresence>
@@ -212,13 +203,23 @@ function TitleSection({ open }) {
               <div className="font-heading text-[20px] font-black leading-none tracking-tight text-white">
                 QMS
               </div>
-              <div className="mt-1 text-[10.5px] font-semibold leading-tight text-blue-200/80 truncate">
+              <div className="mt-1 text-[10.5px] font-semibold leading-tight text-blue-100/72 truncate">
                 Query Management System
               </div>
             </motion.div>
           )}
         </AnimatePresence>
       </div>
+      
+      <button
+        type="button"
+        onClick={onToggle}
+        title={open ? "Collapse sidebar" : "Expand sidebar"}
+        aria-label={open ? "Collapse sidebar" : "Expand sidebar"}
+        className="flex items-center justify-center h-8 w-8 rounded-lg text-blue-200/80 hover:bg-white/10 hover:text-white transition-colors cursor-pointer shrink-0"
+      >
+        <Menu className="h-5 w-5" />
+      </button>
     </div>
   );
 }
@@ -285,7 +286,7 @@ function UserFooter({ open, user }) {
   }
 
   return (
-    <div className="group flex items-center justify-between gap-2.5 rounded-xl border border-white/15 bg-white/10 p-2.5 backdrop-blur-xs transition-colors hover:bg-white/15">
+    <div className="group flex items-center justify-between gap-2.5 rounded-[20px] border border-white/14 bg-white/12 p-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.18),0_16px_24px_rgba(5,11,38,0.16)] backdrop-blur-md transition-colors hover:bg-white/16">
       <div className="flex items-center gap-2.5 min-w-0">
         {avatar}
         <div className="min-w-0 flex-1 overflow-hidden">

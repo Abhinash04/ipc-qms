@@ -4,7 +4,7 @@ import { fetchGemmaAiRecommendations } from '@/services/api/aiService';
 import { recommendTopOfficials } from '@/services/ai/mockAiService';
 import { MOCK_USERS } from '@/constants/mockUsers';
 
-export function AiRecommendationCard({ query, onAssign, currentAssigneeId }) {
+export function AiRecommendationCard({ query, onAssign, currentAssigneeId, variant = 'card' }) {
   const localRecommendations = useMemo(
     () => (query ? recommendTopOfficials(query, MOCK_USERS) : []),
     [query],
@@ -12,6 +12,7 @@ export function AiRecommendationCard({ query, onAssign, currentAssigneeId }) {
 
   const [gemma, setGemma] = useState({ queryId: null, recs: null });
   const [loading, setLoading] = useState(false);
+  const [showAll, setShowAll] = useState(false);
 
   const recommendations =
     (gemma.queryId === query?.queryId ? gemma.recs : null) ?? localRecommendations;
@@ -58,21 +59,25 @@ export function AiRecommendationCard({ query, onAssign, currentAssigneeId }) {
 
   if (!query) return null;
 
+  const outerClass = variant === 'embedded'
+    ? "select-none h-full"
+    : "bg-linear-to-br from-indigo-50/80 via-purple-50/30 to-white rounded-3xl border border-indigo-200/80 p-6 shadow-sm select-none h-full";
+
   return (
-    <div className="bg-linear-to-br from-indigo-50/80 via-purple-50/30 to-white rounded-3xl border border-indigo-200/80 p-6 shadow-sm select-none">
+    <div className={outerClass}>
       {/* Header Row */}
       <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-indigo-100">
         <div className="flex items-center gap-2.5">
           <div className="w-8 h-8 rounded-xl bg-purple-600 text-white flex items-center justify-center shadow-2xs">
             <Sparkles className="h-4 w-4" strokeWidth={2.2} />
           </div>
-          <h2 className="font-heading text-[16px] font-black text-slate-900 m-0">
-            AI Official Recommendations (Top 3)
+          <h2 className="font-heading text-[20px] font-black text-slate-900 m-0">
+            AI Official Recommendations
           </h2>
-          <span className="inline-flex items-center gap-1 text-[11px] font-black text-purple-700 bg-purple-100/90 px-2.5 py-0.5 rounded-full border border-purple-200 shadow-2xs">
+          {/* <span className="inline-flex items-center gap-1 text-[11px] font-black text-purple-700 bg-purple-100/90 px-2.5 py-0.5 rounded-full border border-purple-200 shadow-2xs">
             <Bot className="h-3 w-3" />
             Gemma Match Engine
-          </span>
+          </span> */}
         </div>
 
         <button
@@ -97,7 +102,7 @@ export function AiRecommendationCard({ query, onAssign, currentAssigneeId }) {
           </div>
         ) : (
           <div className="space-y-3.5">
-            {recommendations.map((rec) => {
+            {(showAll ? recommendations : recommendations.slice(0, 2)).map((rec) => {
               const isAssigned = currentAssigneeId === rec.userId;
               const isRank1 = rec.rank === 1;
 
@@ -115,11 +120,11 @@ export function AiRecommendationCard({ query, onAssign, currentAssigneeId }) {
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <div className="flex flex-wrap items-center gap-2">
                       {isRank1 && <Award className="h-4 w-4 text-amber-500" />}
-                      <span className="text-[12px] font-black text-slate-400 uppercase tracking-wider">
+                      <span className="text-[14px] font-black text-slate-400 uppercase tracking-wider">
                         #{rec.rank} Match
                       </span>
-                      <h3 className="font-heading text-[15px] font-black text-slate-900 m-0">{rec.name}</h3>
-                      <span className="text-[11.5px] font-black text-purple-700 bg-purple-100/90 px-2.5 py-0.5 rounded-full border border-purple-200">
+                      <h3 className="font-heading text-[18px] font-black text-slate-900 m-0">{rec.name}</h3>
+                      <span className="text-[13px] font-black text-purple-700 bg-purple-100/90 px-2.5 py-0.5 rounded-full border border-purple-200">
                         {rec.matchPercent}% Match
                       </span>
                     </div>
@@ -152,25 +157,21 @@ export function AiRecommendationCard({ query, onAssign, currentAssigneeId }) {
                     )}
                   </div>
 
-                  <div className="mt-1 text-[12px] font-semibold text-slate-400 flex items-center gap-2">
+                  <div className="mt-1 text-[14px] font-semibold text-slate-400 flex items-center gap-2">
                     <span className="font-extrabold text-slate-700">{rec.divisionName}</span>
                     <span>•</span>
                     <span>{rec.email}</span>
                   </div>
 
-                  <p className="mt-2.5 text-[13px] font-medium text-slate-700 leading-relaxed bg-white/90 p-3 rounded-xl border border-slate-200/60 m-0">
-                    {rec.reason}
-                  </p>
-
                   {rec.expertise?.length > 0 && (
                     <div className="mt-3 flex flex-wrap items-center gap-1.5">
-                      <span className="text-[11.5px] font-bold text-slate-400">Expertise:</span>
+                      <span className="text-[14px] font-bold text-slate-400">Expertise:</span>
                       {rec.expertise.map((exp) => {
                         const isMatched = rec.matchedKeywords?.includes(exp.toLowerCase());
                         return (
                           <span
                             key={exp}
-                            className={`text-[11px] font-bold px-2 py-0.5 rounded-lg border ${
+                            className={`text-[13px] font-bold px-2 py-0.5 rounded-lg border ${
                               isMatched
                                 ? 'bg-purple-100 text-purple-800 border-purple-200'
                                 : 'bg-slate-100 text-slate-500 border-slate-200'
@@ -185,6 +186,16 @@ export function AiRecommendationCard({ query, onAssign, currentAssigneeId }) {
                 </div>
               );
             })}
+
+            {recommendations.length > 2 && (
+              <button
+                type="button"
+                onClick={() => setShowAll(!showAll)}
+                className="w-full mt-2 py-2 text-[12.5px] font-bold text-slate-500 bg-slate-50 hover:bg-slate-100 hover:text-slate-700 border border-slate-200/60 rounded-xl transition-colors cursor-pointer"
+              >
+                {showAll ? 'Show less' : `Show ${recommendations.length - 2} more matches`}
+              </button>
+            )}
           </div>
         )}
       </div>

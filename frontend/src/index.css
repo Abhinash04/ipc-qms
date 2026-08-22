@@ -2,10 +2,14 @@
 @import "tailwindcss";
 
 :root {
-  --color-bg: #f1f5f9;
+  --color-bg: #eef4ff;
   --color-surface: #ffffff;
   --color-text: #111827;
   --color-text-muted: #64748b;
+  --aurora-blue: rgba(52, 120, 246, 0.22);
+  --aurora-violet: rgba(124, 77, 255, 0.18);
+  --aurora-cyan: rgba(34, 211, 238, 0.16);
+  --aurora-lavender: rgba(196, 181, 253, 0.18);
 }
 
 @theme {
@@ -88,8 +92,14 @@
 body {
   margin: 0;
   color: var(--color-text);
-  background: var(--color-bg);
+  background:
+    radial-gradient(circle at 12% 18%, var(--aurora-blue), transparent 30%),
+    radial-gradient(circle at 78% 12%, var(--aurora-violet), transparent 28%),
+    radial-gradient(circle at 82% 72%, var(--aurora-cyan), transparent 26%),
+    radial-gradient(circle at 24% 78%, var(--aurora-lavender), transparent 30%),
+    linear-gradient(180deg, #f6f9ff 0%, #eef4ff 52%, #f9fbff 100%);
   font-family: var(--font-sans);
+  min-height: 100vh;
 }
 
 ::-webkit-scrollbar {
@@ -196,4 +206,130 @@ body {
   box-shadow: 
     inset 2px 2px 5px #d0d7e5,
     inset -2px -2px 5px #ffffff;
+}
+
+.app-shell-aurora {
+  position: relative;
+  isolation: isolate;
+}
+
+.app-shell-aurora::before,
+.app-shell-aurora::after {
+  content: "";
+  position: absolute;
+  inset: auto;
+  pointer-events: none;
+  filter: blur(70px);
+  z-index: -1;
+}
+
+.app-shell-aurora::before {
+  top: 4%;
+  right: 6%;
+  width: 22rem;
+  height: 22rem;
+  background: radial-gradient(circle, rgba(124, 77, 255, 0.22) 0%, rgba(124, 77, 255, 0) 70%);
+}
+
+.app-shell-aurora::after {
+  left: 20%;
+  bottom: 8%;
+  width: 26rem;
+  height: 26rem;
+  background: radial-gradient(circle, rgba(52, 120, 246, 0.15) 0%, rgba(52, 120, 246, 0) 70%);
+}
+
+.glass-panel {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.82) 0%, rgba(248, 251, 255, 0.74) 100%);
+  backdrop-filter: blur(24px) saturate(165%);
+  -webkit-backdrop-filter: blur(24px) saturate(165%);
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  box-shadow:
+    0 22px 54px rgba(30, 64, 175, 0.08),
+    0 8px 18px rgba(15, 23, 42, 0.04),
+    inset 0 1px 0 rgba(255, 255, 255, 0.95),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.4);
+}
+
+.glass-panel-soft {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.76) 0%, rgba(245, 249, 255, 0.68) 100%);
+  backdrop-filter: blur(18px) saturate(150%);
+  -webkit-backdrop-filter: blur(18px) saturate(150%);
+  border: 1px solid rgba(255, 255, 255, 0.85);
+  box-shadow:
+    0 16px 40px rgba(59, 130, 246, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.92);
+}
+
+.glass-control {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.78) 0%, rgba(246, 249, 255, 0.68) 100%);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid rgba(255, 255, 255, 0.88);
+  box-shadow:
+    0 10px 24px rgba(15, 23, 42, 0.05),
+    inset 0 1px 0 rgba(255, 255, 255, 0.96),
+    6px 6px 16px rgba(208, 215, 229, 0.55),
+    -6px -6px 16px rgba(255, 255, 255, 0.7);
+}
+
+.glass-pill {
+  background: rgba(255, 255, 255, 0.74);
+  border: 1px solid rgba(255, 255, 255, 0.88);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  box-shadow:
+    0 10px 24px rgba(15, 23, 42, 0.04),
+    inset 0 1px 0 rgba(255, 255, 255, 0.96);
+}
+
+.clay-icon-surface {
+  position: relative;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.92) 0%, rgba(239, 245, 255, 0.82) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.92);
+  box-shadow:
+    10px 10px 24px rgba(191, 203, 224, 0.4),
+    -8px -8px 20px rgba(255, 255, 255, 0.82),
+    inset 0 2px 2px rgba(255, 255, 255, 0.95);
+}
+
+.clay-icon-surface::after {
+  content: "";
+  position: absolute;
+  inset: 1px;
+  border-radius: inherit;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0));
+  pointer-events: none;
+}
+
+.bento-card {
+  position: relative;
+  overflow: hidden;
+  border-radius: 24px;
+}
+
+.bento-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.44), rgba(255, 255, 255, 0) 36%);
+}
+
+.aurora-panel {
+  position: relative;
+  overflow: hidden;
+}
+
+.aurora-panel::after {
+  content: "";
+  position: absolute;
+  top: -22%;
+  right: -12%;
+  width: 42%;
+  height: 58%;
+  border-radius: 9999px;
+  background: radial-gradient(circle, rgba(124, 77, 255, 0.12) 0%, rgba(34, 211, 238, 0.08) 36%, rgba(255, 255, 255, 0) 70%);
+  filter: blur(16px);
+  pointer-events: none;
 }
