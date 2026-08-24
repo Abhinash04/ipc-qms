@@ -1,5 +1,6 @@
 import env from '../../config/env.js';
 import { ASSIGNED_OFFICIALS } from '../../config/officialsMetadata.js';
+import { selectContext, formatContextForPrompt } from '../../data/ipcContextBrain.js';
 
 
 /**
@@ -339,5 +340,186 @@ IPC AI Recommendations:`;
   }
 }
 
-export const gemmaService = { generateSummary, recommendOfficial };
+/**
+ * Drafting asks the model for several paragraphs of prose plus a structured
+ * envelope, so it is the heaviest of the three prompts. Like the recommendation
+ * it renders into a card and blocks no workflow step, so it waits rather than
+ * degrading to the template draft.
+ */
+const DRAFT_TIMEOUT_FACTOR = 3;
+
+const MAX_BODY_CHARS = 4000;
+
+function fenceSafe(value, limit = MAX_BODY_CHARS) {
+  return String(value || '')
+    .replace(/"""/g, '"​""')
+    .trim()
+    .slice(0, limit);
+}
+
+function generateFallbackDraft({ subject = '', body = '', contextUsed = [] }) {
+  const cleanSubject = subject.trim() || 'your enquiry';
+
+  const bullets = body
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => /^(\d+[.)]|[-*•])\s+/.test(line))
+    .map((line) => line.replace(/^(\d+[.)]|[-*•])\s+/, ''));
+
+  const sentences = body
+    .split(/(?<=[.?!।])\s+/)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 25 && !/^(dear|regards|thank|hi|hello)/i.test(s));
+
+  const points = bullets.length ? bullets : sentences.slice(0, 3);
+
+  const paragraphs = [
+    `Thank you for your enquiry regarding "${cleanSubject}".`,
+    'Your enquiry has been received and reviewed by the concerned division. A detailed response to the points you raised follows below.',
+  ];
+
+  return {
+    subject: `Response regarding ${cleanSubject}`,
+    paragraphs,
+    unanswered: points.length
+      ? points.map((point) => `${point} — a substantive response is still required from the assigned official.`)
+      : ['The enquiry raises no itemised points; the assigned official must summarise the position.'],
+    termsUsed: [],
+    contextUsed,
+    aiGenerated: false,
+    fallback: true,
+  };
+}
+
+function parseDraftJson(jsonStr, { subject, contextUsed }) {
+  try {
+    const parsed = JSON.parse(jsonStr);
+    const paragraphs = Array.isArray(parsed?.paragraphs)
+      ? parsed.paragraphs.map((p) => String(p).trim()).filter(Boolean)
+      : [];
+
+    if (paragraphs.length === 0) return null;
+
+    return {
+      subject:
+        typeof parsed.subject === 'string' && parsed.subject.trim()
+          ? parsed.subject.trim()
+          : `Response regarding ${subject.trim() || 'your enquiry'}`,
+      paragraphs,
+      unanswered: Array.isArray(parsed.unanswered)
+        ? parsed.unanswered.map((u) => String(u).trim()).filter(Boolean)
+        : [],
+      termsUsed: Array.isArray(parsed.termsUsed)
+        ? parsed.termsUsed.map((t) => String(t).trim()).filter(Boolean)
+        : [],
+      contextUsed,
+      aiGenerated: true,
+      fallback: false,
+    };
+  } catch {
+    return null;
+  }
+}
+
+export async function generateDraft({
+  subject = '',
+  body = '',
+  inquirerName = '',
+  summaryText = '',
+  keyPoints = [],
+}) {
+  const contextEntries = selectContext(`${subject} ${body} ${summaryText}`);
+  const contextUsed = contextEntries.map((entry) => entry.id);
+  const fallback = generateFallbackDraft({ subject, body, contextUsed });
+
+  if (!env.GEMMA_API_URL) {
+    console.warn('[Gemma AI] GEMMA_API_URL is not configured. Returning fallback draft.');
+    return fallback;
+  }
+
+  const pointsBlock = Array.isArray(keyPoints) && keyPoints.length
+    ? keyPoints.map((point) => `- ${String(point).trim()}`).join('\n')
+    : '- No key points were extracted.';
+
+  const prompt = `You are an expert AI Assistant drafting an official reply on behalf of the Indian Pharmacopoeia Commission (IPC), Ministry of Health & Family Welfare, Government of India.
+
+Your task is to draft the body of a professional reply email answering the enquiry below. An IPC officer will review and edit your draft before it is sent.
+
+RULES:
+1. Answer ONLY from the ORIGINAL ENQUIRY, the AI QUERY SUMMARY and the IPC CONTEXT given below.
+2. Do NOT invent drug names, monograph numbers, batch numbers, regulations, standards, prices, dates, references or citations. If a fact is not in the material below, it does not exist for this reply.
+3. Anything the enquiry asks that the material below cannot answer must go into "unanswered" as a short plain statement of what is missing. Never guess it in a paragraph.
+4. Be concise and specific. No filler, no generic explanations of what IPC is, no restating the whole enquiry back.
+5. Use the IPC CONTEXT terminology correctly where it is relevant. An entry marked UNVERIFIED must not be presented as authoritative.
+6. Do NOT write a greeting, a salutation, a sign-off, a signature, a designation or any person's name. Those are added by the system. Write body paragraphs only.
+7. Output strictly valid JSON with this structure:
+{
+  "subject": "Response regarding <short restatement of the enquiry subject>",
+  "paragraphs": ["First body paragraph.", "Second body paragraph."],
+  "unanswered": ["Short statement of information the enquiry needs but the material does not provide."],
+  "termsUsed": ["IPC glossary terms you actually relied on"]
+}
+8. Return ONLY the JSON object. No markdown wrappers, no commentary outside the JSON.
+
+ORIGINAL ENQUIRY
+Subject: "${fenceSafe(subject, 300) || 'Untitled Enquiry'}"
+From: ${fenceSafe(inquirerName, 120) || 'the inquirer'}
+Body:
+"""
+${fenceSafe(body) || 'No body content provided.'}
+"""
+
+AI QUERY SUMMARY
+${fenceSafe(summaryText, 1000) || 'No summary available.'}
+Key points:
+${pointsBlock}
+
+IPC CONTEXT
+${formatContextForPrompt(contextEntries)}
+
+IPC JSON Draft:`;
+
+  const timeoutMs = env.GEMMA_TIMEOUT_MS * DRAFT_TIMEOUT_FACTOR;
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetch(env.GEMMA_API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt }),
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      console.warn(`[Gemma AI] Draft API returned status ${response.status}. Using fallback.`);
+      return fallback;
+    }
+
+    const data = await response.json();
+    const rawAnswer = data?.answer || data?.response || data?.text || null;
+
+    if (rawAnswer) {
+      const parsed = parseDraftJson(cleanApiResponse(rawAnswer), { subject, contextUsed });
+      if (parsed) {
+        return parsed;
+      }
+    }
+
+    console.warn('[Gemma AI] Could not parse the draft reply. Using fallback.');
+    return fallback;
+  } catch (error) {
+    clearTimeout(timeoutId);
+    if (error.name === 'AbortError') {
+      console.warn(`[Gemma AI] Draft timed out after ${timeoutMs}ms. Using fallback.`);
+    } else {
+      console.warn(`[Gemma AI] Draft call failed: ${error.message}. Using fallback.`);
+    }
+    return fallback;
+  }
+}
+
+export const gemmaService = { generateSummary, recommendOfficial, generateDraft };
 export default gemmaService;
