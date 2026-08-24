@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { SparklesIcon, PlusIcon, Trash2Icon } from 'lucide-react';
+import { SparklesIcon, PlusIcon, Trash2Icon, Loader2 } from 'lucide-react';
 import { Breadcrumb } from '@/components/common/Breadcrumb';
 import { EmptyState } from '@/components/common/EmptyState';
 import { CaseSummaryBar } from '@/components/workflow/CaseSummaryBar';
@@ -33,7 +33,7 @@ export function DraftingDetailPage() {
   const paths = useRoutePaths();
   const { queryId, query, versions, latestVersion, reviews, steps, currentUser, can } =
     useQueryCase();
-  const { run, error, clearError } = useWorkflowAction();
+  const { run, running, error, clearError } = useWorkflowAction();
   const generateAiDraft = useWorkflowStore((state) => state.generateAiDraft);
   const saveDraftVersion = useWorkflowStore((state) => state.saveDraftVersion);
   const submitForReview = useWorkflowStore((state) => state.submitForReview);
@@ -107,9 +107,17 @@ export function DraftingDetailPage() {
               {can(WORKFLOW_ACTION.SAVE_DRAFT) ? (
                 <div className="flex flex-wrap gap-2">
                   {can(WORKFLOW_ACTION.GENERATE_AI_DRAFT) && (
-                    <Button variant="secondary" onClick={() => run(() => generateAiDraft(queryId, currentUser))}>
-                      <SparklesIcon className="h-4 w-4" aria-hidden="true" />
-                      Generate AI draft
+                    <Button
+                      variant="secondary"
+                      disabled={running}
+                      onClick={() => run(() => generateAiDraft(queryId, currentUser))}
+                    >
+                      {running ? (
+                        <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                      ) : (
+                        <SparklesIcon className="h-4 w-4" aria-hidden="true" />
+                      )}
+                      {running ? 'Generating…' : 'Generate AI draft'}
                     </Button>
                   )}
                   <Button

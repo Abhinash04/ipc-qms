@@ -16,7 +16,8 @@ import { buildSeedState } from '@/constants/mockDomain';
 import { summarise, recommendAssignee, draftResponse } from '@/services/ai/mockAiService';
 import { loadAll, replaceAll, persistTransition, isEmpty } from '@/services/db/db';
 import { sendResponse, forwardQuery } from '@/services/api/mailboxService';
-import { fetchGemmaAiSummary } from '@/services/api/aiService';
+import { fetchGemmaAiSummary, fetchGemmaAiDraft } from '@/services/api/aiService';
+import { assembleDraftEmail } from '@/services/ai/draftComposer';
 
 const pad = (n) => String(n).padStart(5, '0');
 
@@ -571,8 +572,28 @@ export const useWorkflowStore = create((set, get) => ({
     }
   },
 
-  generateAiDraft: (queryId, actor) => {
+  generateAiDraft: async (queryId, actor, fetchDraft = fetchGemmaAiDraft) => {
     assertCan(get(), WORKFLOW_ACTION.GENERATE_AI_DRAFT, queryId, actor);
+    const query = get().getQuery(queryId);
+
+    let draft;
+    try {
+      draft = await fetchDraft({
+        subject: query.subject,
+        body: query.description,
+        inquirerName: query.inquirer?.name,
+        summaryText: query.aiSummary?.text || '',
+        keyPoints: query.aiSummary?.keyPoints || [],
+      });
+    } catch {
+      draft = null;
+    }
+
+    const composed = draft ? assembleDraftEmail({ query: get().getQuery(queryId), draft }) : '';
+    const content = composed || draftResponse(get().getQuery(queryId));
+    const fromGemma = Boolean(composed) && draft?.fallback !== true;
+    const createdBy = fromGemma ? 'Gemma AI Draft Assistant' : 'AI Draft Assistant';
+
     const state = get();
     const versionNumber = state.getVersions(queryId).length + 1;
     const minted = mintId(state.counters, 'RESP');
@@ -580,7 +601,7 @@ export const useWorkflowStore = create((set, get) => ({
     state.applyTransition({
       queryId,
       actor,
-      actorLabel: 'AI Draft Assistant',
+      actorLabel: createdBy,
       event: AUDIT_EVENT.DRAFT_GENERATED,
       patch: { workflowState: WORKFLOW_STATE.DRAFTING },
       details: `AI generated response version v${versionNumber}.`,
@@ -593,8 +614,8 @@ export const useWorkflowStore = create((set, get) => ({
             queryId,
             version: `v${versionNumber}`,
             label: 'AI generated',
-            content: draftResponse(state.getQuery(queryId)),
-            createdBy: 'AI Draft Assistant',
+            content,
+            createdBy,
             createdAt: now(),
             aiGenerated: true,
             source: RESPONSE_SOURCE.AI_GENERATED,

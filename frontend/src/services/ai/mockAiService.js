@@ -1,6 +1,7 @@
 import { MOCK_USERS } from '@/constants/mockUsers';
 import { findDivisionById } from '@/constants/mockDivisions';
 import { ROLES } from '@/constants/roles';
+import { IPC_SIGNATURE } from '@/services/ai/draftComposer';
 
 const TOPIC_DIVISIONS = {
   'monograph': 'DIV-003',
@@ -209,11 +210,7 @@ export function recommendTopOfficials(query, users = MOCK_USERS, openQueries = [
   }));
 }
 
-const SIGNATURE = `Regards,
-AR&D Division
-Indian Pharmacopoeia Commission (IPC)
-Ministry of Health & Family Welfare
-Government of India`;
+const SIGNATURE = IPC_SIGNATURE;
 
 export function draftResponse(query) {
   if (!query) return '';
