@@ -9,7 +9,7 @@ import {
   RESPONSE_STATUS,
 } from '@/constants/statusEnums';
 import { deriveBusinessStatus, canPerform, WORKFLOW_ACTION } from '@/constants/workflowRules';
-import { ROLE_LABELS } from '@/constants/roles';
+import { ROLES, ROLE_LABELS } from '@/constants/roles';
 import { MOCK_USERS, findUserById, findUserByEmail } from '@/constants/mockUsers';
 import { createEmailMessage, EMAIL_DIRECTION, EMAIL_TYPE } from '@/constants/emailModel';
 import { buildSeedState } from '@/constants/mockDomain';
@@ -65,6 +65,18 @@ function assertCan(state, action, queryId, actor) {
 
   return query;
 }
+
+function assertOwnsStep(step, actor, action) {
+  if (step.assignedUserId && step.assignedUserId !== actor?.id) {
+    const owner = findUserById(step.assignedUserId);
+    throw new Error(
+      `${action}: this review level is assigned to ${owner?.name || step.assignedUserId}, not ${actorName(actor)}`,
+    );
+  }
+}
+
+const officerInChargeId = () =>
+  MOCK_USERS.find((u) => u.role === ROLES.OFFICER_IN_CHARGE)?.id || null;
 
 function reopenReviewCycle(steps, queryId) {
   return steps.map((step) =>
@@ -642,11 +654,18 @@ export const useWorkflowStore = create((set, get) => ({
     assertCan(get(), WORKFLOW_ACTION.SUBMIT_FOR_REVIEW, queryId, actor);
     const state = get();
     const steps = state.getSteps(queryId);
+
+    if (!steps.some((s) => s.stepType === 'REVIEW')) {
+      throw new Error(
+        `${queryId} cannot be submitted: add at least one review level before sending for review`,
+      );
+    }
+
     let stepCounter = state.counters.STEP || 0;
     const newSteps = [];
     const timestamp = now();
 
-    if (steps.length === 0) {
+    if (!steps.some((s) => s.stepType === 'DRAFT')) {
       const draftMint = mintId({ STEP: stepCounter }, 'STEP');
       stepCounter = draftMint.next;
       newSteps.push({
@@ -660,7 +679,9 @@ export const useWorkflowStore = create((set, get) => ({
         startedAt: timestamp,
         completedAt: timestamp,
       });
+    }
 
+    if (!steps.some((s) => s.stepType === 'FINAL_APPROVAL')) {
       const approvalMint = mintId({ STEP: stepCounter }, 'STEP');
       stepCounter = approvalMint.next;
       newSteps.push({
@@ -668,7 +689,7 @@ export const useWorkflowStore = create((set, get) => ({
         queryId,
         stepType: 'FINAL_APPROVAL',
         sequence: 1000,
-        assignedUserId: 'USR-0003',
+        assignedUserId: officerInChargeId(),
         status: 'PENDING',
         createdAt: timestamp,
         startedAt: null,
@@ -681,32 +702,23 @@ export const useWorkflowStore = create((set, get) => ({
       .filter((s) => s.stepType === 'REVIEW' && s.status === 'PENDING')
       .sort((a, b) => a.sequence - b.sequence)[0];
 
-    const target = firstPendingReview
-      ? { step: firstPendingReview, workflowState: WORKFLOW_STATE.UNDER_REVIEW }
-      : {
-          step: allSteps.find((s) => s.stepType === 'FINAL_APPROVAL'),
-          workflowState: WORKFLOW_STATE.PENDING_FINAL_APPROVAL,
-        };
-
     state.applyTransition({
       queryId,
       actor,
       event: AUDIT_EVENT.DRAFT_UPDATED,
       patch: {
-        workflowState: target.workflowState,
-        currentWorkflowStepId: target.step?.stepId || null,
+        workflowState: WORKFLOW_STATE.UNDER_REVIEW,
+        currentWorkflowStepId: firstPendingReview?.stepId || null,
       },
-      details: firstPendingReview
-        ? 'Draft submitted for review.'
-        : 'Draft submitted directly for final approval (no review levels configured).',
+      details: 'Draft submitted for review.',
       notify: {
-        recipientRole: firstPendingReview ? 'REVIEWER' : 'OFFICER_IN_CHARGE',
-        message: `${queryId} is awaiting ${firstPendingReview ? 'review' : 'final approval'}.`,
+        recipientRole: 'REVIEWER',
+        message: `${queryId} is awaiting review.`,
       },
       mutate: (base) => ({
         counters: { ...base.counters, STEP: stepCounter },
         workflowSteps: [...base.workflowSteps, ...newSteps].map((s) =>
-          s.stepId === target.step?.stepId
+          s.stepId === firstPendingReview?.stepId
             ? { ...s, status: 'IN_PROGRESS', startedAt: s.startedAt || timestamp }
             : s,
         ),
@@ -776,6 +788,7 @@ export const useWorkflowStore = create((set, get) => ({
     const approvedVersion = state.getLatestVersion(queryId);
     const current = state.getCurrentStep(queryId);
     if (!current) return;
+    assertOwnsStep(current, actor, WORKFLOW_ACTION.APPROVE_REVIEW);
 
     const steps = state.getSteps(queryId);
     const nextReview = steps
@@ -842,6 +855,7 @@ export const useWorkflowStore = create((set, get) => ({
     const state = get();
     const current = state.getCurrentStep(queryId);
     if (!current) return;
+    assertOwnsStep(current, actor, WORKFLOW_ACTION.REQUEST_REVISION);
 
     const reviewMint = mintId(state.counters, 'REV');
     const timestamp = now();
@@ -926,6 +940,9 @@ export const useWorkflowStore = create((set, get) => ({
         recipientRole: 'ASSIGNED_OFFICIAL',
         message: `${queryId} was rejected at final approval.`,
       },
+      mutate: (base) => ({
+        workflowSteps: reopenReviewCycle(base.workflowSteps, queryId),
+      }),
     });
   },
 
