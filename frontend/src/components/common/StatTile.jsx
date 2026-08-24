@@ -23,10 +23,10 @@ export function StatTile({
   };
 
   const badgeGradients = {
-    assigned: 'bg-gradient-to-br from-blue-500 via-blue-600 to-blue-700 shadow-md shadow-blue-500/30',
-    drafting: 'bg-gradient-to-br from-amber-400 via-amber-500 to-amber-600 shadow-md shadow-amber-500/30',
-    review: 'bg-gradient-to-br from-rose-400 via-rose-500 to-rose-600 shadow-md shadow-rose-500/30',
-    closed: 'bg-gradient-to-br from-emerald-400 via-emerald-500 to-emerald-600 shadow-md shadow-emerald-500/30',
+    assigned: 'bg-[linear-gradient(135deg,#3478F6,#173B9C)] shadow-[0_12px_20px_rgba(52,120,246,0.28)]',
+    drafting: 'bg-[linear-gradient(135deg,#F59E0B,#EA580C)] shadow-[0_12px_20px_rgba(245,158,11,0.26)]',
+    review: 'bg-[linear-gradient(135deg,#FB7185,#E11D48)] shadow-[0_12px_20px_rgba(244,63,94,0.24)]',
+    closed: 'bg-[linear-gradient(135deg,#34D399,#059669)] shadow-[0_12px_20px_rgba(16,185,129,0.24)]',
   };
 
   const currentBadgeGrad = badgeGradients[illustrationType] || badgeGradients.assigned;
@@ -35,33 +35,32 @@ export function StatTile({
   return (
     <div
       className={cn(
-        "relative overflow-hidden rounded-[28px] p-0.5 transition-all duration-300 cursor-pointer select-none group shadow-[10px_10px_22px_#d0d7e5,-10px_-10px_22px_#ffffff] hover:shadow-[14px_14px_28px_#c8cfde,-14px_-14px_28px_#ffffff] hover:-translate-y-1",
+        "glass-panel aurora-panel bento-card group relative cursor-pointer select-none overflow-hidden rounded-[28px] p-5 sm:p-6 transition-all duration-300 hover:-translate-y-1",
         className
       )}
-      style={{
-        background: cardBorder ? `linear-gradient(135deg, ${cardBorder} 0%, #ffffff 100%)` : '#e2e8f0',
-      }}
+      style={{ borderColor: cardBorder || 'rgba(255,255,255,0.9)' }}
     >
       <div
-        className="absolute top-1/2 left-1/2 w-44 h-44 rounded-full opacity-70 filter blur-xl pointer-events-none z-0 animate-blob"
+        className="animate-blob absolute -right-8 top-0 h-36 w-36 rounded-full opacity-45 blur-2xl pointer-events-none"
         style={{
-          backgroundColor: currentBlobColor,
+          background: `radial-gradient(circle, ${currentBlobColor} 0%, rgba(255,255,255,0) 72%)`,
         }}
       />
-
       <div
-        className="relative z-10 flex flex-col justify-between h-full w-full rounded-[26px] p-5 sm:p-6 backdrop-blur-2xl transition-colors duration-300"
+        className="pointer-events-none absolute inset-0 opacity-70"
         style={{
-          background: cardBg || 'rgba(255, 255, 255, 0.88)',
-          outline: '2px solid rgba(255, 255, 255, 0.95)',
+          background: cardBg || 'linear-gradient(180deg, rgba(255,255,255,0.85) 0%, rgba(247,250,255,0.78) 100%)',
         }}
-      >
+      />
+      <div className="pointer-events-none absolute inset-x-6 top-0 h-14 rounded-b-[40px] bg-[linear-gradient(180deg,rgba(255,255,255,0.5),rgba(255,255,255,0))]" />
+
+      <div className="relative z-10 flex h-full w-full flex-col justify-between">
       <div className="flex items-start justify-between gap-3 z-10">
         <div className="flex items-center gap-3.5">
           {Icon && (
             <div
               className={cn(
-                "flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl text-white group-hover:scale-105 transition-transform duration-300",
+                "flex h-12 w-12 shrink-0 items-center justify-center rounded-[18px] text-white transition-transform duration-300 group-hover:scale-105 border border-white/20",
                 currentBadgeGrad
               )}
             >
@@ -83,10 +82,10 @@ export function StatTile({
         {trendText && (
           <span
             className={cn(
-              "inline-flex items-center gap-1 rounded-full px-3 py-1 text-[11.5px] font-extrabold shadow-2xs shrink-0 border",
+              "glass-pill inline-flex shrink-0 items-center gap-1 rounded-full border px-3 py-1 text-[11.5px] font-extrabold",
               trendType === 'down'
-                ? "bg-rose-50/90 text-rose-600 border-rose-200/80"
-                : "bg-emerald-50/90 text-emerald-600 border-emerald-200/80"
+                ? "text-rose-600"
+                : "text-emerald-600"
             )}
           >
             {trendText}
@@ -111,7 +110,7 @@ export function StatTile({
           </div>
         </div>
 
-        <div className="w-21 h-21 shrink-0 pointer-events-none group-hover:scale-105 transition-transform duration-300 flex items-center justify-center -mr-1 -mb-1">
+        <div className="flex h-21 w-21 shrink-0 items-center justify-center -mr-1 -mb-1 pointer-events-none transition-transform duration-300 group-hover:scale-105">
           {illustrationType === 'assigned' && (
             <svg width="82" height="82" viewBox="0 0 100 100" fill="none">
               <defs>

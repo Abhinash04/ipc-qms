@@ -1,13 +1,15 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import { MailIcon, RefreshCwIcon, Clock, ShieldAlert, CheckCircle2, ArrowRight } from 'lucide-react';
+import { MailIcon, RefreshCwIcon, ShieldAlert, CheckCircle2, ArrowRight } from 'lucide-react';
 
 import { Breadcrumb } from '@/components/common/Breadcrumb';
 import { PageHeader } from '@/components/common/PageHeader';
 import { EmptyState } from '@/components/common/EmptyState';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
+import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
+import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
 import { useMailboxIngestion } from '@/hooks/useMailboxIngestion';
 import { useRoutePaths } from '@/hooks/useRoutePaths';
 import { useWorkflowStore } from '@/store/useWorkflowStore';
@@ -18,10 +20,10 @@ import { ROLE_SLUG } from '@/constants/permissions';
 
 const AUTO_REFRESH_MS = 15000;
 
-function cleanSubject(subject) {
-  if (!subject) return '(No Subject)';
-  return subject.replace(/[\u00C0-\u024F\uFF00-\uFFFF]+/g, '').trim() || subject;
-}
+// function cleanSubject(subject) {
+//   if (!subject) return '(No Subject)';
+//   return subject.replace(/[\u00C0-\u024F\uFF00-\uFFFF]+/g, '').trim() || subject;
+// }
 
 export function MailboxInboxPage() {
   const paths = useRoutePaths();
@@ -63,7 +65,7 @@ export function MailboxInboxPage() {
       <Breadcrumb
         items={[{ label: 'Dashboard', path: paths.DASHBOARD }, { label: 'IPC Mailbox' }]}
       />
-      
+
       <PageHeader
         greeting="IPC Live Mailbox 📬"
         title="IPC Mailbox Inbox"
@@ -80,7 +82,7 @@ export function MailboxInboxPage() {
                 Auto-refresh (15s)
               </Label>
             </div>
-            
+
             <button
               type="button"
               onClick={registerAll}
@@ -133,61 +135,48 @@ export function MailboxInboxPage() {
             />
           </div>
         ) : (
-          <div>
-            {/* Table Header Row */}
-            <div className="grid grid-cols-[170px_260px_1fr_200px_150px] gap-4 px-6 py-3.5 bg-[#e8eef5] shadow-[inset_2px_2px_4px_#c8cfde,inset_-2px_-2px_4px_#ffffff] text-[11.5px] font-black text-slate-500 tracking-wider uppercase border-b border-white/60 select-none">
-              <span>Message</span>
-              <span>From</span>
-              <span>Subject</span>
-              <span>Received</span>
-              <span className="text-center">Query Case</span>
-            </div>
-
-            {/* Table Message Rows */}
-            <div className="p-4 space-y-3">
-              {messages.map((message) => {
+          <Table>
+            <TableHeader>
+              <TableRow hoverable={false}>
+                <TableHead className="w-[60px] text-center">S.No.</TableHead>
+                <TableHead>From</TableHead>
+                <TableHead>Subject</TableHead>
+                <TableHead>Received</TableHead>
+                <TableHead>Query Case</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {messages.map((message, index) => {
                 const queryId = queryIdFor(message.mailboxMessageId);
                 const known = queryId && queries.some((q) => q.queryId === queryId);
 
                 return (
-                  <div
-                    key={message.mailboxMessageId}
-                    className="grid grid-cols-[170px_260px_1fr_200px_150px] gap-4 items-center px-4 py-3.5 rounded-2xl bg-[#f1f5fa] border border-white/90 shadow-[6px_6px_14px_#d0d7e5,-6px_-6px_14px_#ffffff] hover:shadow-[8px_8px_18px_#c8cfde,-8px_-8px_18px_#ffffff] transition-all duration-200 group"
-                  >
-                    {/* Message ID */}
-                    <div className="flex items-center gap-2 min-w-0">
-                      <span className="font-mono text-[11.5px] font-bold text-slate-700 bg-[#f1f5fa] px-2.5 py-1 rounded-xl shadow-[inset_2px_2px_4px_#d0d7e5,inset_-2px_-2px_4px_#ffffff] border border-white/80 truncate">
-                        {message.mailboxMessageId}
-                      </span>
-                    </div>
-
-                    {/* From Sender */}
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 text-white font-black text-[12px] shadow-2xs">
-                        {message.from ? message.from.charAt(0).toUpperCase() : 'U'}
-                      </div>
-                      <span className="text-[12.5px] font-semibold text-slate-600 truncate">
-                        {message.from}
-                      </span>
-                    </div>
-
-                    {/* Subject */}
-                    <div className="flex items-center gap-2 min-w-0">
-                      <MailIcon className="h-4 w-4 text-blue-500 shrink-0" />
-                      <span className="text-[13.5px] font-bold text-slate-800 truncate group-hover:text-blue-600 transition-colors">
-                        {cleanSubject(message.subject)}
-                      </span>
-                    </div>
-
-                    {/* Received Timestamp */}
-                    <div className="flex items-center gap-1.5 text-[12px] font-medium text-slate-500">
-                      <Clock className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-                      <span>{new Date(message.receivedAt).toLocaleString()}</span>
-                    </div>
-
-                    {/* Query Case Badge */}
-                    <div className="flex justify-center">
-                      {known ? (
+                  <TableRow key={message.mailboxMessageId}>
+                    <TableCell className="text-black text-center">
+                      {index + 1}
+                    </TableCell>
+                    <TableCell className="font-medium text-foreground">
+                      {message.from.split('<')[0].trim()}
+                    </TableCell>
+                    <TableCell className="text-foreground">
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <div className="truncate cursor-default" style={{ maxWidth: '200px' }}>
+                              {message.subject}
+                            </div>
+                          </TooltipTrigger>
+                          <TooltipContent className="max-w-[400px] break-words">
+                            {message.subject}
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {new Date(message.receivedAt).toLocaleString()}
+                    </TableCell>
+                    <TableCell>
+                      {known && paths.QUERY_DETAIL ? (
                         <Link
                           to={getQueryDetailPath(queryId)}
                           className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white px-3.5 py-1.5 text-[11.5px] font-black shadow-md shadow-blue-500/20 transition-all hover:scale-105"
@@ -201,12 +190,12 @@ export function MailboxInboxPage() {
                           Not registered
                         </span>
                       )}
-                    </div>
-                  </div>
+                    </TableCell>
+                  </TableRow>
                 );
               })}
-            </div>
-          </div>
+            </TableBody>
+          </Table>
         )}
       </div>
     </div>

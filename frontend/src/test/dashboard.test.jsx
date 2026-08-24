@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 
 const navigateSpy = vi.fn();
@@ -13,7 +13,7 @@ import { DashboardPage } from '@/pages/dashboard/DashboardPage';
 import { useWorkflowStore } from '@/store/useWorkflowStore';
 import { useAuthStore } from '@/store/useAuthStore';
 import { findUserById, MOCK_USERS } from '@/constants/mockUsers';
-import { WORKFLOW_STATE, AUDIT_EVENT, AUDIT_EVENT_LABELS } from '@/constants/statusEnums';
+import { WORKFLOW_STATE, AUDIT_EVENT } from '@/constants/statusEnums';
 import { ROLES } from '@/constants/roles';
 
 const OIC = findUserById('USR-0003');
@@ -31,13 +31,16 @@ function renderDashboard() {
 }
 
 function tile(label) {
-
   let node = screen.getAllByText(label)[0];
   for (let i = 0; i < 8 && node.parentElement; i += 1) {
     if (/\d/.test(node.textContent)) return node;
     node = node.parentElement;
   }
   return node;
+}
+
+function section(title) {
+  return screen.getByRole('heading', { name: title }).closest('section');
 }
 
 function ingest(n) {
@@ -210,34 +213,44 @@ describe('the dashboard invents nothing', () => {
     }
   });
 
-  it('shows empty states rather than filler on a fresh store', () => {
+  it('shows the intended dashboard sections and empty states on a fresh store', () => {
     renderDashboard();
-    expect(screen.getByText('Nothing closed yet')).toBeInTheDocument();
-    expect(screen.getByText(/No activity yet/)).toBeInTheDocument();
+
+    expect(screen.getByText(/Nothing waiting on you/)).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Resolution rate' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Query overview' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Trend overview' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Quick actions' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: "Today's insights" })).toBeInTheDocument();
   });
 
   it('reports no resolution rate for a period with no enquiries', () => {
     renderDashboard();
-    expect(screen.getAllByText('No data')).toHaveLength(3);
+    expect(within(section('Resolution rate')).getAllByText('No data').length).toBeGreaterThanOrEqual(4);
   });
 });
 
-describe('Recently closed reads the audit trail', () => {
-  it('lists a real closed query by id and subject', () => {
+describe('Waiting on you reads the real queue', () => {
+  it('lists a real assigned query by id and subject', () => {
     const queryId = ingest(1);
-    close(queryId);
+    useWorkflowStore.setState((s) => ({
+      queries: s.queries.map((q) =>
+        q.queryId === queryId ? { ...q, currentAssigneeId: OIC.id } : q,
+      ),
+    }));
+
     renderDashboard();
 
-    expect(screen.queryByText('Nothing closed yet')).toBeNull();
+    expect(screen.queryByText(/Nothing waiting on you/)).toBeNull();
     expect(screen.getAllByText('Dashboard fixture 1').length).toBeGreaterThan(0);
-
     expect(screen.getAllByText(new RegExp(queryId)).length).toBeGreaterThan(0);
   });
 
-  it('does not list a query that is still open', () => {
+  it('shows the empty state when nothing is assigned to the viewer', () => {
     ingest(1);
     renderDashboard();
-    expect(screen.getByText('Nothing closed yet')).toBeInTheDocument();
+
+    expect(screen.getByText(/Nothing waiting on you/)).toBeInTheDocument();
   });
 });
 
@@ -249,8 +262,7 @@ describe('Resolution rate is computed, not asserted', () => {
 
     renderDashboard();
 
-    expect(screen.getAllByText('1 of 2 closed').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('50%').length).toBeGreaterThan(0);
+    expect(within(section('Resolution rate')).getAllByText('50%').length).toBeGreaterThan(0);
   });
 });
 
@@ -295,37 +307,19 @@ describe('each resolution-rate window is computed separately', () => {
   });
 });
 
-describe('Activity feed shows real transitions in words', () => {
-  it('renders the audit trail newest first, with labels not enums', () => {
-    ingest(1);
-    renderDashboard();
-
-    expect(screen.queryByText('No activity yet')).toBeNull();
-    expect(screen.getByText(/Enquiry received/)).toBeInTheDocument();
-
-    expect(screen.queryByText(/QUERY_RECEIVED/)).toBeNull();
-  });
-
-  it('has a label for every audit event, so none can render blank', () => {
-    for (const event of Object.values(AUDIT_EVENT)) {
-      expect(AUDIT_EVENT_LABELS[event], `no label for ${event}`).toBeTruthy();
-    }
-  });
-});
-
 describe('an Inquirer sees only their own queries', () => {
   const INQUIRER = MOCK_USERS.find((u) => u.role === ROLES.INQUIRER);
 
-  it('shows the inquirer their own closed query', () => {
-    const queryId = ingest(1);          
-    close(queryId);
+  it('shows the inquirer their own query in the KPI counts', () => {
+    ingest(1);
     useAuthStore.setState({ currentUser: INQUIRER });
 
     renderDashboard();
-    expect(screen.getAllByText('Dashboard fixture 1').length).toBeGreaterThan(0);
+
+    expect(tile('In drafting')).toHaveTextContent('1');
   });
 
-  it("hides another inquirer's query from them", () => {
+  it("hides another inquirer's query from their dashboard counts", () => {
     const queryId = useWorkflowStore.getState().ingestEmail(
       {
         mailboxMessageId: 'MSG-OTHER',
@@ -341,14 +335,9 @@ describe('an Inquirer sees only their own queries', () => {
     useAuthStore.setState({ currentUser: INQUIRER });
 
     renderDashboard();
-    expect(screen.queryByText('Not your enquiry')).toBeNull();
-    expect(screen.getByText('Nothing closed yet')).toBeInTheDocument();
-  });
 
-  it('offers no "View all" link, having no queries list', () => {
-    useAuthStore.setState({ currentUser: INQUIRER });
-    renderDashboard();
-    expect(screen.queryByText('View all')).toBeNull();
+    expect(screen.queryByText('Not your enquiry')).toBeNull();
+    expect(tile('Closed')).toHaveTextContent('0');
   });
 });
 

@@ -65,15 +65,15 @@ export function WorkflowTimeline({ steps, currentStepId }) {
 
             <div className="pb-3 flex-1 min-w-0">
               <div className="flex flex-wrap items-center gap-2">
-                <span className="text-[15px] font-black text-slate-800">{label}</span>
+                <span className="text-[17px] font-black text-slate-800">{label}</span>
                 <StatusBadge type="step" value={step.status} />
                 {isCurrent && (
-                  <span className="inline-flex items-center gap-1 text-[11px] font-extrabold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-200">
+                  <span className="inline-flex items-center gap-1 text-[12px] font-extrabold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-200">
                     current
                   </span>
                 )}
               </div>
-              <p className="text-[12.5px] font-medium text-slate-400 mt-1">
+              <p className="text-[14.5px] font-medium text-slate-400 mt-1">
                 {assignee?.name || 'Unassigned'}
               </p>
             </div>
