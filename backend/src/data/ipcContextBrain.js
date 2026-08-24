@@ -27,7 +27,7 @@ const DCA_SOURCE = {
   retrievedAt: '2026-08-24',
 };
 
-export const IPC_CONTEXT_ENTRIES = [
+const SEED_ENTRIES = [
   {
     id: 'IPC',
     term: 'Indian Pharmacopoeia Commission',
@@ -433,6 +433,200 @@ export const IPC_CONTEXT_ENTRIES = [
     verified: true,
   },
 ];
+
+const FAQ_SOURCE = {
+  name: 'IPC Frequently Asked Questions — IP and IPRS',
+  url: 'https://iponline.ipc.gov.in/jspui/',
+  retrievedAt: '2026-08-24',
+};
+
+const GD01_SOURCE = {
+  name: 'IPC Guidance Document IPC/GD/01 — Legal Status of Indian Pharmacopoeia',
+  url: 'https://iponline.ipc.gov.in/jspui/',
+  retrievedAt: '2026-08-24',
+};
+
+const CORPUS_ENTRIES = [
+  {
+    id: 'IPC_NOT_A_REGULATOR',
+    term: 'IPC role in drug approval',
+    aliases: ['drug approval', 'marketing authorisation', 'regulatory approval', 'approve a drug'],
+    category: CONTEXT_CATEGORY.REGULATORY,
+    definition:
+      'The IPC sets and publishes official drug standards and has no role in the regulatory review or approval of drugs in India. Under the Drugs and Cosmetics Act 1940, the Central Drugs Standard Control Organisation (CDSCO) and the State Licensing Authorities (SLAs) are the competent authorities for regulatory decisions.',
+    source: { ...FAQ_SOURCE, section: 'Q2. Does the IPC have any role in drug approval process?' },
+    verified: true,
+  },
+  {
+    id: 'IPC_PUBLICATION_TYPES',
+    term: 'IPC publication types',
+    aliases: ['edition', 'addendum', 'corrigenda', 'corrigendum', 'official publication'],
+    category: CONTEXT_CATEGORY.ORGANISATION,
+    definition:
+      'An Edition of the IP and an Addendum both become official from the effective date printed in the book. An Amendment List is official and takes effect immediately unless stated otherwise. Notices and Updates are informative and are usually NOT official text unless explicitly stated. Corrigenda correct an already-issued amendment list, notice or update.',
+    source: {
+      ...FAQ_SOURCE,
+      section: 'Q5. What are different types of publications issued by the IPC?',
+    },
+    verified: true,
+  },
+  {
+    id: 'IP_ONLINE',
+    term: 'IP Online',
+    aliases: ['IP Online', 'iponline', 'digital IP'],
+    category: CONTEXT_CATEGORY.ORGANISATION,
+    definition:
+      'The digital version of the Indian Pharmacopoeia providing access to IP monographs and associated IP Reference Substances with advanced search. Subscriptions are taken at www.iponline.ipc.gov.in.',
+    source: { ...FAQ_SOURCE, section: 'Q4. What is IP Online and how to subscribe it?' },
+    verified: true,
+  },
+  {
+    id: 'IP_LEGAL_BASIS',
+    term: 'Second Schedule, Drugs and Cosmetics Act 1940',
+    aliases: ['second schedule', 'section 8', 'section 16', 'standard quality'],
+    category: CONTEXT_CATEGORY.REGULATORY,
+    definition:
+      'The Indian Pharmacopoeia is the official book of standards for drugs in India under the Second Schedule of the Drugs and Cosmetics Act 1940. Section 8 (standards of quality for imported drugs) and Section 16 both refer to the standard set out in the Second Schedule, which makes IP standards legally enforceable.',
+    source: { ...GD01_SOURCE, section: 'Introduction' },
+    verified: true,
+  },
+  {
+    id: 'FLEXIBLE_MONOGRAPH',
+    term: 'Flexible monograph approach',
+    aliases: ['flexible monograph', 'prolonged-release dissolution', 'multiple dissolution specifications'],
+    category: CONTEXT_CATEGORY.MONOGRAPH,
+    definition:
+      'For prolonged-release formulations the IP may carry multiple dissolution specifications within a single monograph. The product label must then state which dissolution method number applies to that product.',
+    source: {
+      name: 'IPC Update, 4 February 2022 — Dissolution Test in Prolonged-release Formulations',
+      url: 'https://iponline.ipc.gov.in/jspui/',
+      retrievedAt: '2026-08-24',
+      section: 'Adoption of the flexible monograph approach',
+    },
+    verified: true,
+  },
+  {
+    id: 'AMENDMENT_LIST',
+    term: 'Amendment List',
+    aliases: ['amendment list', 'AL-01', 'AL-04', 'AL-05', 'errata'],
+    category: CONTEXT_CATEGORY.MONOGRAPH,
+    definition:
+      'An official errata document issued by the IPC against a published IP edition, structured as page-referenced "Change from / to", "Insert before" and "Delete" instructions. An amendment states only what changed and must be read together with the base monograph.',
+    source: {
+      ...FAQ_SOURCE,
+      section: 'Q5. What are different types of publications issued by the IPC?',
+    },
+    verified: true,
+  },
+  {
+    id: 'IP_2022_DATES',
+    term: 'Indian Pharmacopoeia 2022',
+    aliases: ['IP 2022', '9th edition', 'ninth edition'],
+    category: CONTEXT_CATEGORY.ORGANISATION,
+    definition:
+      'The 9th Edition of the Indian Pharmacopoeia was released on 1 July 2022 and became effective from 1 December 2022. Amendment List 01 to IP 2022 also took effect from 1 December 2022.',
+    source: {
+      name: 'Amendment List 01 to IP 2022, F. No. T. 11015/01/2020-AR&D',
+      url: 'https://iponline.ipc.gov.in/jspui/',
+      retrievedAt: '2026-08-24',
+      section: 'Covering letter, 28 November 2022',
+    },
+    verified: true,
+  },
+  {
+    id: 'EWG',
+    term: 'Expert Working Group',
+    aliases: ['EWG', 'expert working group', 'scientific body'],
+    category: CONTEXT_CATEGORY.ORGANISATION,
+    definition:
+      'Subject-matter committees of the IPC Scientific Body that develop and review IP standards. Groups include General Chapters, Excipients, Impurity Standard Review, IPRS Review, Medical Devices, Microbiology, Vaccines and Immunosera, Veterinary Products and others.',
+    source: {
+      name: 'IPC Expert Working Groups, IP Addendum 2024',
+      url: 'https://iponline.ipc.gov.in/jspui/',
+      retrievedAt: '2026-08-24',
+      section: 'Expert Working Groups',
+    },
+    verified: true,
+  },
+  {
+    id: 'SLA',
+    term: 'State Licensing Authority',
+    aliases: ['SLA', 'state licensing authority', 'state drug controller'],
+    category: CONTEXT_CATEGORY.REGULATORY,
+    definition:
+      'State-level drug regulatory authorities which, together with CDSCO, are competent to take regulatory decisions under the Drugs and Cosmetics Act 1940.',
+    source: { ...FAQ_SOURCE, section: 'Q2. Does the IPC have any role in drug approval process?' },
+    verified: true,
+  },
+  {
+    id: 'RS_VS_IPRS',
+    term: 'Reference Substance (RS) versus IPRS',
+    aliases: ['RS', 'reference substance designation'],
+    category: CONTEXT_CATEGORY.REFERENCE_STANDARDS,
+    definition:
+      'Older IP editions designate reference materials as "RS"; the current designation is "IPRS". Several amendments were issued specifically to replace a plain substance name with the named IPRS, so the two are not interchangeable when citing a monograph requirement.',
+    source: {
+      name: 'Amendment Lists to IP 2022',
+      url: 'https://iponline.ipc.gov.in/jspui/',
+      retrievedAt: '2026-08-24',
+    },
+    verified: true,
+  },
+  {
+    id: 'AAS_FP',
+    term: 'AAS and FP reagent grades',
+    aliases: ['AAS', 'atomic absorption spectrometry', 'FP', 'flame photometry'],
+    category: CONTEXT_CATEGORY.ANALYTICAL,
+    definition:
+      'In IP reagent names, "AAS" denotes a solution of Atomic Absorption Spectrometry grade and "FP" a Flame Photometry grade, as in "magnesium solution AAS" or "sodium solution FP". They are grade suffixes on the reagent, not abbreviations of a method being prescribed.',
+    source: {
+      name: 'Amendment List 04 to IP 2022',
+      url: 'https://iponline.ipc.gov.in/jspui/',
+      retrievedAt: '2026-08-24',
+    },
+    verified: true,
+  },
+  {
+    id: 'CCSEA',
+    term: 'Committee for Control and Supervision of Experiments on Animals',
+    aliases: ['CCSEA', 'CPCSEA'],
+    category: CONTEXT_CATEGORY.REGULATORY,
+    definition:
+      'The Indian committee governing animal experimentation, formerly CPCSEA. Amendment List 04 to IP 2022 replaced references to "CPCSEA guideline" with "CCSEA guidelines".',
+    source: {
+      name: 'Amendment List 04 to IP 2022',
+      url: 'https://iponline.ipc.gov.in/jspui/',
+      retrievedAt: '2026-08-24',
+    },
+    verified: true,
+  },
+  {
+    id: 'PDG',
+    term: 'Pharmacopoeial Discussion Group',
+    aliases: ['PDG', 'pharmacopoeial discussion group'],
+    category: CONTEXT_CATEGORY.ORGANISATION,
+    definition:
+      'An international group harmonising pharmacopoeial standards among the European, Japanese and United States Pharmacopoeias. The IPC joined the PDG in October 2023.',
+    source: {
+      name: 'IPC Update, 18 March 2024 — IPC–USP Memorandum of Understanding',
+      url: 'https://iponline.ipc.gov.in/jspui/',
+      retrievedAt: '2026-08-24',
+    },
+    verified: true,
+  },
+  {
+    id: 'RRT',
+    term: 'Relative retention time',
+    aliases: ['RRT', 'relative retention time', 'RRF', 'relative response factor'],
+    category: CONTEXT_CATEGORY.ANALYTICAL,
+    definition:
+      'The retention time of a peak expressed relative to a reference peak in the same chromatogram, used in IP monographs to identify impurities. The related relative response factor (RRF) corrects for differences in detector response between an impurity and the reference substance.',
+    source: { ...FAQ_SOURCE, section: 'Q16 and Q17 on RRT and correction factors' },
+    verified: true,
+  },
+];
+
+export const IPC_CONTEXT_ENTRIES = [...SEED_ENTRIES, ...CORPUS_ENTRIES];
 
 const normalise = (value) => String(value || '').toLowerCase();
 
