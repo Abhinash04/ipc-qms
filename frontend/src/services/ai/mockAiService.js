@@ -114,10 +114,6 @@ export function recommendAssignee(query, users = MOCK_USERS, openQueries = []) {
     .map((user) => {
       const divisionMatch = wantedDivisions.has(user.divisionId);
       const expertise = expertiseMatch(user, text);
-
-      // Expertise is the strongest signal — it is matched against the actual
-      // words of the enquiry — then division, then availability. The floor
-      // keeps a match percent from ever reading as zero.
       const score =
         Math.min(60, expertise.score * 20) +
         (divisionMatch ? 25 : 0) +

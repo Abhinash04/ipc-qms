@@ -10,9 +10,6 @@ export const MOCK_USERS = [
   },
   {
     id: 'USR-0002',
-    // REAL identity for the multi-account Gmail test phase. The user record is
-    // the source of truth for whose address this is; backend env may override
-    // the value (FRONT_OFFICE_EMAIL) but not the ownership.
     name: 'Bhumika Makker',
     role: ROLES.FRONT_OFFICE,
     email: 'bhoomikamakker@gmail.com',
@@ -20,7 +17,6 @@ export const MOCK_USERS = [
   },
   {
     id: 'USR-0003',
-    // REAL identity — see the note on USR-0002.
     name: 'Jatin Rawat',
     role: ROLES.OFFICER_IN_CHARGE,
     email: 'rawatjatin436@gmail.com',
@@ -35,10 +31,6 @@ export const MOCK_USERS = [
     expertise: ['assay', 'dissolution', 'impurity', 'method validation', 'chromatography'],
   },
   {
-    // Was briefly a real Gmail identity; mock again now, like every other
-    // Assigned Official. Still a different person from USR-0003 "Jatin Rawat",
-    // the Officer-in-Charge, despite the near-identical name — the id and the
-    // address identify them, never the display name.
     id: 'USR-0009',
     name: 'Rawat Jatin',
     role: ROLES.ASSIGNED_OFFICIAL,

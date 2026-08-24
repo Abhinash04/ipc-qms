@@ -20,11 +20,6 @@ import { ROLE_SLUG } from '@/constants/permissions';
 
 const AUTO_REFRESH_MS = 15000;
 
-// function cleanSubject(subject) {
-//   if (!subject) return '(No Subject)';
-//   return subject.replace(/[\u00C0-\u024F\uFF00-\uFFFF]+/g, '').trim() || subject;
-// }
-
 export function MailboxInboxPage() {
   const paths = useRoutePaths();
   const currentUser = useAuthStore((state) => state.currentUser);
@@ -87,7 +82,7 @@ export function MailboxInboxPage() {
               type="button"
               onClick={registerAll}
               disabled={running}
-              className="flex items-center gap-2 rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white px-5 py-2.5 text-[13.5px] font-bold shadow-md shadow-blue-500/20 active:scale-95 transition-all cursor-pointer disabled:opacity-60"
+              className="flex items-center gap-2 rounded-2xl bg-linear-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white px-5 py-2.5 text-[13.5px] font-bold shadow-md shadow-blue-500/20 active:scale-95 transition-all cursor-pointer disabled:opacity-60"
             >
               <RefreshCwIcon className={`h-4 w-4 ${running ? 'animate-spin' : ''}`} />
               <span>{running ? 'Checking Mailbox…' : 'Check IPC Mailbox'}</span>
@@ -124,7 +119,6 @@ export function MailboxInboxPage() {
         </div>
       )}
 
-      {/* Main Mailbox Inbox Table Container (Neumorphism Design) */}
       <div className="bg-[#f1f5fa] rounded-3xl border border-white/80 overflow-hidden shadow-[12px_12px_24px_#d0d7e5,-12px_-12px_24px_#ffffff]">
         {messages.length === 0 ? (
           <div className="p-10 text-center">
@@ -138,7 +132,7 @@ export function MailboxInboxPage() {
           <Table>
             <TableHeader>
               <TableRow hoverable={false}>
-                <TableHead className="w-[60px] text-center">S.No.</TableHead>
+                <TableHead className="w-15 text-center">S.No.</TableHead>
                 <TableHead>From</TableHead>
                 <TableHead>Subject</TableHead>
                 <TableHead>Received</TableHead>
@@ -166,7 +160,7 @@ export function MailboxInboxPage() {
                               {message.subject}
                             </div>
                           </TooltipTrigger>
-                          <TooltipContent className="max-w-[400px] break-words">
+                          <TooltipContent className="max-w-100 wrap-break-word">
                             {message.subject}
                           </TooltipContent>
                         </Tooltip>
@@ -179,7 +173,7 @@ export function MailboxInboxPage() {
                       {known && paths.QUERY_DETAIL ? (
                         <Link
                           to={getQueryDetailPath(queryId)}
-                          className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white px-3.5 py-1.5 text-[11.5px] font-black shadow-md shadow-blue-500/20 transition-all hover:scale-105"
+                          className="inline-flex items-center gap-1.5 rounded-xl bg-linear-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white px-3.5 py-1.5 text-[11.5px] font-black shadow-md shadow-blue-500/20 transition-all hover:scale-105"
                         >
                           <span>{queryId}</span>
                           <ArrowRight className="h-3.5 w-3.5" />

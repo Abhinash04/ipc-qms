@@ -169,7 +169,7 @@ export function QueryTable({ title, purpose, breadcrumbItems, detailPath, filter
                   <Link
                     key={query.queryId}
                     to={getQueryDetailPath(query.queryId)}
-                    className="group relative flex items-center justify-between gap-3 bg-white rounded-2xl border border-slate-200/80 p-4 shadow-2xs hover:shadow-md hover:border-purple-200 transition-all overflow-hidden grid grid-cols-[170px_1fr_150px_220px_180px_150px_32px] gap-3 items-center cursor-pointer"
+                    className="group relative grid grid-cols-[170px_1fr_150px_220px_180px_150px_32px] items-center gap-3 bg-white rounded-2xl border border-slate-200/80 p-4 shadow-2xs hover:shadow-md hover:border-purple-200 transition-all overflow-hidden cursor-pointer"
                   >
                     <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-purple-600 rounded-l-2xl" />
 

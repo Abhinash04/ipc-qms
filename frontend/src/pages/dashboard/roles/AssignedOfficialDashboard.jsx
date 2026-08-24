@@ -82,7 +82,7 @@ export function AssignedOfficialDashboard({ currentUser, queries, workflowSteps,
     <div className="space-y-5">
       <PageHeader
         greeting={`Hello, ${firstName} 👋`}
-        title="Official Dashboard"
+        title="Officer Dashboard"
         purpose={
           <>
             Role-specific overview · <span className="font-medium text-slate-500">{currentUser?.name} ({ROLE_LABELS[currentUser?.role]})</span>

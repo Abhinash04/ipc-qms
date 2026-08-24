@@ -64,14 +64,6 @@ export const AUDIT_EVENT = {
   QUERY_CLOSED: 'QUERY_CLOSED',
 };
 
-/**
- * Human wording for the audit trail, following EMAIL_TYPE_LABELS and
- * ROLE_LABELS. The UI never shows a raw enum, and `QUERY_FORWARDED` split on
- * underscores is not a label — it is an enum with the underscores taken out.
- *
- * Every AUDIT_EVENT must appear here; a missing one would render blank in the
- * activity feed, so the dashboard suite asserts the map is complete.
- */
 export const AUDIT_EVENT_LABELS = {
   [AUDIT_EVENT.QUERY_RECEIVED]: 'Enquiry received',
   [AUDIT_EVENT.ACKNOWLEDGEMENT_SENT]: 'Acknowledgement sent to the inquirer',

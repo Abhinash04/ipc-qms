@@ -540,7 +540,11 @@ describe('final approval dispatches automatically', () => {
     s().assignQuery(queryId, NEHA.id, JATIN);
     s().generateAiDraft(queryId, NEHA);
     s().saveDraftVersion(queryId, 'The approved wording.', NEHA);
+    s().addReviewLevel(queryId, 'USR-0005', NEHA);
+    s().addReviewLevel(queryId, 'USR-0006', NEHA);
     s().submitForReview(queryId, NEHA);
+    s().approveReview(queryId, 'Reviewer I approves', findUserById('USR-0005'));
+    s().approveReview(queryId, 'Reviewer II approves', findUserById('USR-0006'));
     return queryId;
   }
 

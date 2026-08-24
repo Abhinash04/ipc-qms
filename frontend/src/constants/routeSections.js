@@ -1,21 +1,4 @@
-import LayoutDashboard from 'lucide-react/dist/esm/icons/layout-dashboard.mjs';
-import MailPlus from 'lucide-react/dist/esm/icons/mail-plus.mjs';
-import Inbox from 'lucide-react/dist/esm/icons/inbox.mjs';
-import Mail from 'lucide-react/dist/esm/icons/mail.mjs';
-import ListChecks from 'lucide-react/dist/esm/icons/list-checks.mjs';
-import UserCheck from 'lucide-react/dist/esm/icons/user-check.mjs';
-import PenLine from 'lucide-react/dist/esm/icons/pen-line.mjs';
-import ClipboardCheck from 'lucide-react/dist/esm/icons/clipboard-check.mjs';
-import Stamp from 'lucide-react/dist/esm/icons/stamp.mjs';
-import Send from 'lucide-react/dist/esm/icons/send.mjs';
-import Bell from 'lucide-react/dist/esm/icons/bell.mjs';
-import BarChart3 from 'lucide-react/dist/esm/icons/bar-chart-3.mjs';
-import Settings from 'lucide-react/dist/esm/icons/settings.mjs';
-import Users from 'lucide-react/dist/esm/icons/users.mjs';
-import Shield from 'lucide-react/dist/esm/icons/shield.mjs';
-import Building2 from 'lucide-react/dist/esm/icons/building-2.mjs';
-import Workflow from 'lucide-react/dist/esm/icons/workflow.mjs';
-import Tag from 'lucide-react/dist/esm/icons/tag.mjs';
+import {LayoutDashboard, MailPlus, Inbox, Mail, ListChecks, UserCheck, PenLine, ClipboardCheck, Stamp, Send, Bell, BarChart3, Settings, Users, Shield, Building2, Workflow, Tag } from 'lucide-react';
 
 export const SECTION = {
   DASHBOARD: 'DASHBOARD',
