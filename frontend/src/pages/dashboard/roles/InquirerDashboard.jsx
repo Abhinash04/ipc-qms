@@ -8,17 +8,14 @@ import { RoleGate } from '@/components/common/RoleGate';
 import { Plus as PlusIcon } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useRoutePaths } from '@/hooks/useRoutePaths';
+import { isQueryOwnedBy } from '@/utils/queryOwnership';
 
 export function InquirerDashboard({ currentUser, queries }) {
   const navigate = useNavigate();
   const paths = useRoutePaths();
   const firstName = currentUser?.name ? currentUser.name.split(' ')[0] : 'User';
 
-  const myQueries = queries.filter(
-    (q) =>
-      (q.inquirer?.id && q.inquirer.id === currentUser.id) ||
-      (!q.inquirer?.id && q.inquirer?.email?.toLowerCase() === currentUser.email?.toLowerCase())
-  );
+  const myQueries = queries.filter((q) => isQueryOwnedBy(q, currentUser));
 
   const openQueries = myQueries.filter(q => q.workflowState !== WORKFLOW_STATE.CLOSED);
   const closedQueries = myQueries.filter(q => q.workflowState === WORKFLOW_STATE.CLOSED);
