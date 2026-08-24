@@ -1,6 +1,7 @@
 import env from '../../config/env.js';
 import { ASSIGNED_OFFICIALS } from '../../config/officialsMetadata.js';
 import { selectContext, formatContextForPrompt } from '../../data/ipcContextBrain.js';
+import { retrieveContext, formatPassagesForPrompt } from '../../data/ipcKnowledge.js';
 
 
 /**
@@ -340,12 +341,6 @@ IPC AI Recommendations:`;
   }
 }
 
-/**
- * Drafting asks the model for several paragraphs of prose plus a structured
- * envelope, so it is the heaviest of the three prompts. Like the recommendation
- * it renders into a card and blocks no workflow step, so it waits rather than
- * degrading to the template draft.
- */
 const DRAFT_TIMEOUT_FACTOR = 3;
 
 const MAX_BODY_CHARS = 4000;
@@ -428,8 +423,13 @@ export async function generateDraft({
   summaryText = '',
   keyPoints = [],
 }) {
-  const contextEntries = selectContext(`${subject} ${body} ${summaryText}`);
-  const contextUsed = contextEntries.map((entry) => entry.id);
+  const retrievalText = `${subject} ${body} ${summaryText}`;
+  const contextEntries = selectContext(retrievalText);
+  const passages = retrieveContext(retrievalText);
+  const contextUsed = [
+    ...contextEntries.map((entry) => entry.id),
+    ...passages.map((passage) => passage.id),
+  ];
   const fallback = generateFallbackDraft({ subject, body, contextUsed });
 
   if (!env.GEMMA_API_URL) {
@@ -446,20 +446,21 @@ export async function generateDraft({
 Your task is to draft the body of a professional reply email answering the enquiry below. An IPC officer will review and edit your draft before it is sent.
 
 RULES:
-1. Answer ONLY from the ORIGINAL ENQUIRY, the AI QUERY SUMMARY and the IPC CONTEXT given below.
+1. Answer ONLY from the ORIGINAL ENQUIRY, the AI QUERY SUMMARY, the IPC GLOSSARY and the IPC REFERENCE PASSAGES given below.
 2. Do NOT invent drug names, monograph numbers, batch numbers, regulations, standards, prices, dates, references or citations. If a fact is not in the material below, it does not exist for this reply.
 3. Anything the enquiry asks that the material below cannot answer must go into "unanswered" as a short plain statement of what is missing. Never guess it in a paragraph.
 4. Be concise and specific. No filler, no generic explanations of what IPC is, no restating the whole enquiry back.
-5. Use the IPC CONTEXT terminology correctly where it is relevant. An entry marked UNVERIFIED must not be presented as authoritative.
-6. Do NOT write a greeting, a salutation, a sign-off, a signature, a designation or any person's name. Those are added by the system. Write body paragraphs only.
-7. Output strictly valid JSON with this structure:
+5. Use the IPC GLOSSARY terminology correctly where it is relevant. An entry marked UNVERIFIED must not be presented as authoritative.
+6. A passage marked AMENDMENT is a correction to a published monograph, never the complete requirement. If you rely on one, state the amendment list and page and say the base monograph still applies.
+7. Do NOT write a greeting, a salutation, a sign-off, a signature, a designation or any person's name. Those are added by the system. Write body paragraphs only.
+8. Output strictly valid JSON with this structure:
 {
   "subject": "Response regarding <short restatement of the enquiry subject>",
   "paragraphs": ["First body paragraph.", "Second body paragraph."],
   "unanswered": ["Short statement of information the enquiry needs but the material does not provide."],
-  "termsUsed": ["IPC glossary terms you actually relied on"]
+  "termsUsed": ["IPC glossary terms or document references you actually relied on"]
 }
-8. Return ONLY the JSON object. No markdown wrappers, no commentary outside the JSON.
+9. Return ONLY the JSON object. No markdown wrappers, no commentary outside the JSON.
 
 ORIGINAL ENQUIRY
 Subject: "${fenceSafe(subject, 300) || 'Untitled Enquiry'}"
@@ -474,8 +475,11 @@ ${fenceSafe(summaryText, 1000) || 'No summary available.'}
 Key points:
 ${pointsBlock}
 
-IPC CONTEXT
+IPC GLOSSARY
 ${formatContextForPrompt(contextEntries)}
+
+IPC REFERENCE PASSAGES
+${formatPassagesForPrompt(passages)}
 
 IPC JSON Draft:`;
 
