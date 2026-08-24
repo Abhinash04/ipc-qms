@@ -75,7 +75,7 @@ export function OICDashboard({ currentUser, queries, auditEvents }) {
         title="Officer-in-Charge Dashboard"
         purpose={
           <>
-            Role-specific overview · <span className="font-medium text-slate-500">{currentUser?.name} ({ROLE_LABELS[currentUser?.role]})</span>
+            Overview · <span className="font-medium text-slate-500">{currentUser?.name} ({ROLE_LABELS[currentUser?.role]})</span>
           </>
         }
       />

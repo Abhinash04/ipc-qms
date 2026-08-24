@@ -85,7 +85,7 @@ export function AssignedOfficialDashboard({ currentUser, queries, workflowSteps,
         title="Officer Dashboard"
         purpose={
           <>
-            Role-specific overview · <span className="font-medium text-slate-500">{currentUser?.name} ({ROLE_LABELS[currentUser?.role]})</span>
+            Overview · <span className="font-medium text-slate-500">{currentUser?.name} ({ROLE_LABELS[currentUser?.role]})</span>
           </>
         }
       />

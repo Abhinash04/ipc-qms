@@ -72,7 +72,7 @@ export function FrontOfficeDashboard({ currentUser, queries, auditEvents }) {
         title="Front Office Dashboard"
         purpose={
           <>
-            Role-specific overview · <span className="font-medium text-slate-500">{currentUser?.name} ({ROLE_LABELS[currentUser?.role]})</span>
+            Overview · <span className="font-medium text-slate-500">{currentUser?.name} ({ROLE_LABELS[currentUser?.role]})</span>
           </>
         }
       />
