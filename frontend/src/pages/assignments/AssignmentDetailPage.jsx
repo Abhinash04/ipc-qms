@@ -82,7 +82,7 @@ export function AssignmentDetailPage() {
           </CardHeader>
           <CardBody className="space-y-3">
             <div className="flex flex-wrap items-center gap-3">
-              <div className="flex-1 min-w-[240px]">
+              <div className="flex-1 min-w-60">
                 <Label htmlFor="override-assignee" className="text-xs text-muted-foreground mb-1 block">
                   Choose from full directory
                 </Label>

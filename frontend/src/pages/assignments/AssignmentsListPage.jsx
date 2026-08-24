@@ -3,7 +3,6 @@ import { ROLES } from '@/constants/roles';
 import { Breadcrumb } from '@/components/common/Breadcrumb';
 import { useRoutePaths } from '@/hooks/useRoutePaths';
 import { UserCheck } from 'lucide-react';
-import { cn } from '@/utils/cn';
 
 export function AssignmentsListPage() {
   const paths = useRoutePaths();
@@ -26,8 +25,8 @@ export function AssignmentsListPage() {
         </p>
       </div>
 
-      <div className="flex-1 rounded-[24px] border border-white/60 bg-white/40 p-4 shadow-sm backdrop-blur-md">
-        <div className="overflow-hidden rounded-[16px] border border-white/50 bg-white/60 shadow-sm">
+      <div className="flex-1 rounded-3xl border border-white/60 bg-white/40 p-4 shadow-sm backdrop-blur-md">
+        <div className="overflow-hidden rounded-2xl border border-white/50 bg-white/60 shadow-sm">
           <table className="w-full text-left text-[15px]">
             <thead>
               <tr className="border-b border-white/50 bg-white/40 text-[13px] font-semibold text-slate-500 uppercase tracking-wider">

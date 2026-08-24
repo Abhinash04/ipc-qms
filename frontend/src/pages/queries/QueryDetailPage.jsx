@@ -73,7 +73,7 @@ export function QueryDetailPage() {
               useWorkflowStore.getState().applyTransition({
                 queryId: query.queryId,
                 actor: null,
-                actorLabel: 'Gemma AI Summary Assistant',
+                actorLabel: 'AI Summary Assistant',
                 patch: { aiSummary: newSummary },
                 details: newSummary.text,
               });

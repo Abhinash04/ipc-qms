@@ -56,7 +56,7 @@ export function DashboardQueryList({ title, subtitle, icon: Icon = FileText, ite
               to={getQueryDetailPath(query.queryId)}
               className="group relative flex items-center justify-between gap-3 liquid-glass-row rounded-2xl p-3.5 transition-all overflow-hidden cursor-pointer"
             >
-              <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-gradient-to-b from-purple-500 to-indigo-600 rounded-l-2xl shadow-xs" />
+              <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-linear-to-b from-purple-500 to-indigo-600 rounded-l-2xl shadow-xs" />
 
               <div className="flex items-center gap-3 w-40 shrink-0 pl-2">
                 <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#f1f5fa] text-purple-600 shadow-[3px_3px_6px_#d0d7e5,-3px_-3px_6px_#ffffff] border border-white">
@@ -83,14 +83,14 @@ export function DashboardQueryList({ title, subtitle, icon: Icon = FileText, ite
                 </div>
               </div>
 
-              <div className="w-[210px] shrink-0 flex justify-center">
+              <div className="w-52.5 shrink-0 flex justify-center">
                 <span className="inline-flex items-center gap-1.5 rounded-full bg-[#f1f5fa]/90 backdrop-blur-sm px-3.5 py-1.5 text-[11px] font-extrabold text-purple-700 shadow-[inset_2px_2px_4px_#d0d7e5,inset_-2px_-2px_4px_#ffffff] border border-white/80">
                   <Clock className="h-3.5 w-3.5 text-purple-600" />
                   {statusBadgeLabel ? statusBadgeLabel(query) : (query.businessStatus || query.workflowState || 'PENDING FINAL APPROVAL')}
                 </span>
               </div>
 
-              <div className="w-[130px] shrink-0 flex justify-center">
+              <div className="w-32.5 shrink-0 flex justify-center">
                 <span className="inline-flex items-center gap-1.5 rounded-full bg-[#f1f5fa]/90 backdrop-blur-sm px-3.5 py-1.5 text-[11px] font-extrabold text-blue-700 shadow-[inset_2px_2px_4px_#d0d7e5,inset_-2px_-2px_4px_#ffffff] border border-white/80">
                   <ShieldCheck className="h-3.5 w-3.5 text-blue-600" />
                   {query.priority || 'NORMAL'}

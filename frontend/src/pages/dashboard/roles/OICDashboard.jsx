@@ -1,4 +1,4 @@
-import { Inbox, CheckCircle2, UserCheck, Activity, User, FileText } from 'lucide-react';
+import { UserCheck, Activity, User, FileText } from 'lucide-react';
 import { PageHeader } from '@/components/common/PageHeader';
 import { StatTile } from '@/components/common/StatTile';
 import { DashboardQueryList } from '@/components/dashboard/DashboardQueryList';

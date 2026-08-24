@@ -22,3 +22,6 @@ token.json
 
 *.log
 .DS_Store
+
+frontend/package-lock.json
+backend/package-lock.json

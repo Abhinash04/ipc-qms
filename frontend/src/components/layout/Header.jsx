@@ -4,7 +4,6 @@ import { RotateCcwIcon } from 'lucide-react';
 import { roleHome } from '@/constants/routePaths';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useWorkflowStore } from '@/store/useWorkflowStore';
-import { useHealthCheck } from '@/hooks/useHealthCheck';
 import { ROLE_LABELS } from '@/constants/roles';
 import { MOCK_USERS, findUserById } from '@/constants/mockUsers';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select';
@@ -30,25 +29,10 @@ export function Header() {
   const navigate = useNavigate();
   const resetDemo = useWorkflowStore((state) => state.resetDemo);
   const persistenceError = useWorkflowStore((state) => state.persistenceError);
-  const { data, isLoading, isError } = useHealthCheck();
 
   const switchUser = (userId) => {
     login(userId);
     navigate(roleHome(findUserById(userId)?.role));
-  };
-
-  const status = isLoading ? 'checking' : isError ? 'offline' : data?.status === 'healthy' ? 'online' : 'offline';
-
-  const badgeStyles = {
-    online: 'bg-emerald-50 border-emerald-200 text-emerald-700',
-    checking: 'bg-slate-100 border-slate-200 text-slate-600',
-    offline: 'bg-red-50 border-red-200 text-red-700',
-  };
-
-  const dotStyles = {
-    online: 'bg-emerald-500',
-    checking: 'bg-slate-400',
-    offline: 'bg-red-500',
   };
 
   return (
@@ -60,7 +44,7 @@ export function Header() {
 
           {persistenceError && (
             <div className="hidden xl:flex items-center gap-3 pl-4 border-l border-white/50">
-              <span className={`glass-pill inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[11.5px] font-bold ${badgeStyles.offline}`} title={persistenceError}>
+              <span className="glass-pill inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[11.5px] font-bold bg-red-50 border-red-200 text-red-700" title={persistenceError}>
                 Storage unavailable
               </span>
             </div>

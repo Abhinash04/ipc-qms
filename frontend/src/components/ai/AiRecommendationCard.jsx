@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { Sparkles, CheckCircle2, UserCheck, Loader2, RefreshCw, Award, Bot } from 'lucide-react';
+import { Sparkles, CheckCircle2, UserCheck, Loader2, RefreshCw, Award } from 'lucide-react';
 import { fetchGemmaAiRecommendations } from '@/services/api/aiService';
 import { recommendTopOfficials } from '@/services/ai/mockAiService';
 import { MOCK_USERS } from '@/constants/mockUsers';
@@ -74,10 +74,6 @@ export function AiRecommendationCard({ query, onAssign, currentAssigneeId, varia
           <h2 className="font-heading text-[20px] font-black text-slate-900 m-0">
             AI Official Recommendations
           </h2>
-          {/* <span className="inline-flex items-center gap-1 text-[11px] font-black text-purple-700 bg-purple-100/90 px-2.5 py-0.5 rounded-full border border-purple-200 shadow-2xs">
-            <Bot className="h-3 w-3" />
-            Gemma Match Engine
-          </span> */}
         </div>
 
         <button

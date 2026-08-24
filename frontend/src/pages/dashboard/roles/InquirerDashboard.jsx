@@ -3,7 +3,7 @@ import { PageHeader } from '@/components/common/PageHeader';
 import { StatTile } from '@/components/common/StatTile';
 import { DashboardQueryList } from '@/components/dashboard/DashboardQueryList';
 import { WORKFLOW_STATE } from '@/constants/statusEnums';
-import { ROLE_LABELS, ROLES } from '@/constants/roles';
+import { ROLES } from '@/constants/roles';
 import { RoleGate } from '@/components/common/RoleGate';
 import { Plus as PlusIcon } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';

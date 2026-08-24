@@ -66,19 +66,6 @@ function assertCan(state, action, queryId, actor) {
   return query;
 }
 
-/**
- * Reset every review level so a revised draft re-enters the cycle at the first
- * one.
- *
- * Required by the workflow: a revision requested by Reviewer-II, or by the
- * Officer-in-Charge at final approval, must still pass Reviewer-I before
- * reaching Reviewer-II again. Previously only the rejecting step was reset, so
- * a Reviewer-II rejection went straight back to Reviewer-II, and an OIC return
- * skipped both reviewers entirely.
- *
- * `submitForReview` picks the lowest-sequence PENDING review step, so resetting
- * them all is the whole mechanism — no ordering special cases.
- */
 function reopenReviewCycle(steps, queryId) {
   return steps.map((step) =>
     step.queryId === queryId && (step.stepType === 'REVIEW' || step.stepType === 'FINAL_APPROVAL')
@@ -210,10 +197,6 @@ export const useWorkflowStore = create((set, get) => ({
     return message ? message.queryId : null;
   },
 
-  // `fetchSummary` is the test seam, matching the `send` / `forward` / `client`
-  // pattern used elsewhere in this store. Production callers never pass it; the
-  // suite passes a stub, because a real call has no backend under test and its
-  // rejection logs to the console, which the harness treats as a failure.
   ingestEmail: (mailboxMessage, fetchSummary = fetchGemmaAiSummary) => {
     const state = get();
     const sourceMessageId = mailboxMessage.mailboxMessageId || mailboxMessage.providerMessageId;
@@ -337,7 +320,6 @@ export const useWorkflowStore = create((set, get) => ({
       details: summary.text,
     });
 
-    // Asynchronously fetch real Gemma LLM AI summary from backend
     fetchSummary({
       subject: query.subject,
       body: query.description,
@@ -900,16 +882,6 @@ export const useWorkflowStore = create((set, get) => ({
     });
   },
 
-  /**
-   * Final approval is the business event that dispatches the response.
-   *
-   * The approval commits first and is never rolled back. Only then is the
-   * response sent: a failed send leaves the case at READY_FOR_DISPATCH — still
-   * approved, still locked, never CLOSED — so it can be retried from the
-   * Dispatch page without a second Query Case or a duplicate email.
-   *
-   * `send` is injected so tests drive it without a network.
-   */
   grantFinalApproval: async (queryId, actor, send = sendResponse) => {
     assertCan(get(), WORKFLOW_ACTION.FINAL_APPROVE, queryId, actor);
     const state = get();
@@ -939,8 +911,6 @@ export const useWorkflowStore = create((set, get) => ({
       }),
     });
 
-    // Dispatch automatically. Nobody has to open the Dispatch page or press a
-    // button; reaching READY_FOR_DISPATCH is what sends the response.
     return get().dispatchResponse(queryId, null, send);
   },
 
@@ -959,13 +929,6 @@ export const useWorkflowStore = create((set, get) => ({
     });
   },
 
-  /**
-   * OIC sends the response back for revision.
-   *
-   * The revised draft must climb the whole ladder again — Reviewer-I, then
-   * Reviewer-II, then final approval — so every review level is reopened, not
-   * just the approval step.
-   */
   returnForRevisionFromApproval: (queryId, comment, actor) => {
     assertCan(get(), WORKFLOW_ACTION.RETURN_FOR_REVISION, queryId, actor);
     if (!String(comment || '').trim()) {

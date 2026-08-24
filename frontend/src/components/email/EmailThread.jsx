@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { MailIcon } from 'lucide-react';
-import { Card, CardBody, CardHeader } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { EmptyState } from '@/components/common/EmptyState';
 import {

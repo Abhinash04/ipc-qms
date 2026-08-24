@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { LogOut, ChevronLeft, ChevronRight, Menu } from 'lucide-react';
+import { LogOut, Menu } from 'lucide-react';
 
 import { navItemsForRole } from '@/constants/navigation';
 import { ROLE_LABELS } from '@/constants/roles';
@@ -149,7 +149,7 @@ function NavItem({ item, open, notifCount }) {
           FOCUS_RING,
           open ? 'gap-3.5 justify-start px-4 py-3.5' : `${RAIL_SQUARE} justify-center`,
           isActive
-            ? 'bg-[linear-gradient(135deg,rgba(52,120,246,0.95),rgba(68,145,255,0.88))] font-bold text-white border border-white/18 shadow-[0_14px_26px_rgba(12,20,56,0.34)] backdrop-blur-md before:absolute before:inset-[1px] before:rounded-[15px] before:border before:border-white/15 before:content-[""]'
+            ? 'bg-[linear-gradient(135deg,rgba(52,120,246,0.95),rgba(68,145,255,0.88))] font-bold text-white border border-white/18 shadow-[0_14px_26px_rgba(12,20,56,0.34)] backdrop-blur-md before:absolute before:inset-px before:rounded-[15px] before:border before:border-white/15 before:content-[""]'
             : 'font-semibold text-blue-100/92 hover:bg-white/10 hover:text-white',
         )
       }
