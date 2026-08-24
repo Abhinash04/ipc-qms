@@ -6,6 +6,7 @@ import { cleanup } from '@testing-library/react';
 vi.mock('@/services/api/aiService', () => ({
   fetchGemmaAiSummary: async () => null,
   fetchGemmaAiRecommendations: async () => null,
+  fetchGemmaAiDraft: async () => null,
 }));
 
 let consoleError;

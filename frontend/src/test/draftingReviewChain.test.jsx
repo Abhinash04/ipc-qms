@@ -76,7 +76,7 @@ beforeEach(async () => {
   s().verifyQuery(queryId, FRONT_OFFICE);
   await s().forwardToOic(queryId, FRONT_OFFICE, fakeForward);
   s().assignQuery(queryId, OFFICIAL.id, OIC);
-  s().generateAiDraft(queryId, OFFICIAL);
+  await s().generateAiDraft(queryId, OFFICIAL);
 
   useAuthStore.setState({ currentUser: OFFICIAL });
 });

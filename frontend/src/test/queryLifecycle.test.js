@@ -112,7 +112,7 @@ describe('the current stage advances with the workflow', () => {
     s().assignQuery(queryId, OFFICIAL.id, OIC);
     expect(currentOf(queryId).key).toBe(STAGE.DRAFTED);
 
-    s().generateAiDraft(queryId, OFFICIAL);
+    await s().generateAiDraft(queryId, OFFICIAL);
     expect(currentOf(queryId).key).toBe(STAGE.DRAFTED);
   });
 });
@@ -123,7 +123,7 @@ describe('review levels expand from the real steps', () => {
     s().verifyQuery(queryId, FRONT_OFFICE);
     await s().forwardToOic(queryId, FRONT_OFFICE, fakeForward);
     s().assignQuery(queryId, OFFICIAL.id, OIC);
-    s().generateAiDraft(queryId, OFFICIAL);
+    await s().generateAiDraft(queryId, OFFICIAL);
     for (const reviewer of reviewers) {
       s().addReviewLevel(queryId, reviewer.id, OFFICIAL);
     }
@@ -184,7 +184,7 @@ describe('a returned revision sends the rail back to the assigned official', () 
     s().verifyQuery(queryId, FRONT_OFFICE);
     await s().forwardToOic(queryId, FRONT_OFFICE, fakeForward);
     s().assignQuery(queryId, OFFICIAL.id, OIC);
-    s().generateAiDraft(queryId, OFFICIAL);
+    await s().generateAiDraft(queryId, OFFICIAL);
     s().addReviewLevel(queryId, REVIEWER_A.id, OFFICIAL);
     s().addReviewLevel(queryId, REVIEWER_B.id, OFFICIAL);
     s().submitForReview(queryId, OFFICIAL);
@@ -241,7 +241,7 @@ describe('a closed query reads as fully complete', () => {
     s().verifyQuery(queryId, FRONT_OFFICE);
     await s().forwardToOic(queryId, FRONT_OFFICE, fakeForward);
     s().assignQuery(queryId, OFFICIAL.id, OIC);
-    s().generateAiDraft(queryId, OFFICIAL);
+    await s().generateAiDraft(queryId, OFFICIAL);
     s().addReviewLevel(queryId, REVIEWER_A.id, OFFICIAL);
     s().addReviewLevel(queryId, REVIEWER_B.id, OFFICIAL);
     s().submitForReview(queryId, OFFICIAL);

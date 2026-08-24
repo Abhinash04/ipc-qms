@@ -80,7 +80,7 @@ beforeEach(async () => {
   s().verifyQuery(queryId, FRONT_OFFICE);
   await s().forwardToOic(queryId, FRONT_OFFICE, fakeForward);
   s().assignQuery(queryId, OFFICIAL.id, OIC);
-  s().generateAiDraft(queryId, OFFICIAL);
+  await s().generateAiDraft(queryId, OFFICIAL);
   s().addReviewLevel(queryId, REVIEWER_A.id, OFFICIAL);
   s().addReviewLevel(queryId, REVIEWER_B.id, OFFICIAL);
   s().submitForReview(queryId, OFFICIAL);

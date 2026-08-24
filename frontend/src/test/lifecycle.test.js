@@ -77,7 +77,7 @@ async function runTo(stopAt, { reviewers = [REVIEWER_A], message } = {}) {
   s().assignQuery(queryId, OFFICIAL.id, OIC);
   if (stopAt === WORKFLOW_STATE.ASSIGNED) return queryId;
 
-  s().generateAiDraft(queryId, OFFICIAL);
+  await s().generateAiDraft(queryId, OFFICIAL);
   if (stopAt === WORKFLOW_STATE.DRAFTING) return queryId;
 
   for (const reviewer of reviewers) {

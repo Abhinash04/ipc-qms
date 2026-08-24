@@ -336,7 +336,7 @@ describe('9–10. Jatin assigns a mock official and the mocked tail completes', 
     await s().forwardToOic(queryId, BHUMIKA, fakeForward);
     s().assignQuery(queryId, NEHA.id, JATIN);
 
-    s().generateAiDraft(queryId, NEHA);
+    await s().generateAiDraft(queryId, NEHA);
     s().addReviewLevel(queryId, 'USR-0005', NEHA);
     s().addReviewLevel(queryId, 'USR-0006', NEHA);
     s().submitForReview(queryId, NEHA);
@@ -538,7 +538,7 @@ describe('final approval dispatches automatically', () => {
     s().verifyQuery(queryId, BHUMIKA);
     await s().forwardToOic(queryId, BHUMIKA, fakeForward);
     s().assignQuery(queryId, NEHA.id, JATIN);
-    s().generateAiDraft(queryId, NEHA);
+    await s().generateAiDraft(queryId, NEHA);
     s().saveDraftVersion(queryId, 'The approved wording.', NEHA);
     s().addReviewLevel(queryId, 'USR-0005', NEHA);
     s().addReviewLevel(queryId, 'USR-0006', NEHA);
