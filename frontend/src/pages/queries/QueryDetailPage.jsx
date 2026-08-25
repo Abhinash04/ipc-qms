@@ -3,7 +3,7 @@ import { PaperclipIcon, ShieldCheck } from 'lucide-react';
 import { Breadcrumb } from '@/components/common/Breadcrumb';
 import { EmptyState } from '@/components/common/EmptyState';
 import { CaseSummaryBar } from '@/components/workflow/CaseSummaryBar';
-import { WorkflowTimeline } from '@/components/workflow/WorkflowTimeline';
+import { QueryLifecycleTimeline } from '@/components/workflow/QueryLifecycleTimeline';
 import { WorkflowActionsCard } from '@/components/workflow/WorkflowActionsCard';
 import { EmailThread } from '@/components/email/EmailThread';
 import { AiSummaryCard } from '@/components/ai/AiSummaryCard';
@@ -13,6 +13,9 @@ import { useRoutePaths } from '@/hooks/useRoutePaths';
 import { useWorkflowStore } from '@/store/useWorkflowStore';
 import { WORKFLOW_ACTION } from '@/constants/workflowRules';
 import { AiRecommendationCard } from '@/components/ai/AiRecommendationCard';
+import { ROLES } from '@/constants/roles';
+import { isQueryOwnedBy } from '@/utils/queryOwnership';
+import { buildLifecycle } from '@/constants/queryLifecycle';
 
 function InfoRow({ label, value }) {
   return (
@@ -25,12 +28,14 @@ function InfoRow({ label, value }) {
 
 export function QueryDetailPage() {
   const paths = useRoutePaths();
-  const { queryId, query, currentUser, can, steps, versions, latestVersion, audit, messages, currentStep } =
+  const { queryId, query, currentUser, can, steps, versions, latestVersion, reviews, audit, messages } =
     useQueryCase();
   const canAssign = can(WORKFLOW_ACTION.ASSIGN);
   const assignQuery = useWorkflowStore((state) => state.assignQuery);
+  const isInquirer = currentUser?.role === ROLES.INQUIRER;
+  const stages = buildLifecycle({ query, steps, versions, reviews, audit, messages });
 
-  if (!query) {
+  if (!query || (isInquirer && !isQueryOwnedBy(query, currentUser))) {
     return (
       <EmptyState
         title="Query not found"
@@ -42,82 +47,96 @@ export function QueryDetailPage() {
   return (
     <div>
       <Breadcrumb
-        items={[
-          { label: 'Dashboard', path: paths.DASHBOARD },
-          { label: 'Queries', path: paths.QUERIES },
-          { label: query.queryId },
-        ]}
+        items={
+          isInquirer
+            ? [{ label: 'Dashboard', path: paths.DASHBOARD }, { label: query.queryId }]
+            : [
+                { label: 'Dashboard', path: paths.DASHBOARD },
+                { label: 'Queries', path: paths.QUERIES },
+                { label: query.queryId },
+              ]
+        }
       />
 
       <CaseSummaryBar query={query} />
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_340px] mb-6">
+      <div
+        className={
+          isInquirer ? 'mb-6' : 'grid grid-cols-1 gap-6 lg:grid-cols-[1fr_340px] mb-6'
+        }
+      >
         <div className="bg-white rounded-3xl border border-slate-200/80 p-6 shadow-sm flex flex-col">
           <h2 className="font-heading text-[22px] font-black text-slate-900 mb-5 border-b border-slate-100 pb-3">
             Workflow progress
           </h2>
-          <WorkflowTimeline steps={steps} currentStepId={currentStep?.stepId} />
+          <QueryLifecycleTimeline stages={stages} />
         </div>
-        
-        <div className="h-full">
-          <WorkflowActionsCard />
-        </div>
+
+        {!isInquirer && (
+          <div className="h-full">
+            <WorkflowActionsCard />
+          </div>
+        )}
       </div>
 
       <div className="space-y-6">
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-          <AiSummaryCard
-            summary={query.aiSummary}
-            query={query}
-            onSummaryUpdated={(newSummary) => {
-              useWorkflowStore.getState().applyTransition({
-                queryId: query.queryId,
-                actor: null,
-                actorLabel: 'AI Summary Assistant',
-                patch: { aiSummary: newSummary },
-                details: newSummary.text,
-              });
-            }}
-          />
+        {!isInquirer && (
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+            <AiSummaryCard
+              summary={query.aiSummary}
+              query={query}
+              onSummaryUpdated={(newSummary) => {
+                useWorkflowStore.getState().applyTransition({
+                  queryId: query.queryId,
+                  actor: null,
+                  actorLabel: 'AI Summary Assistant',
+                  patch: { aiSummary: newSummary },
+                  details: newSummary.text,
+                });
+              }}
+            />
 
-          <AiRecommendationCard
-            query={query}
-            currentAssigneeId={query.currentAssigneeId}
-            onAssign={canAssign ? (officialId) => assignQuery(query.queryId, officialId, currentUser) : null}
-          />
-        </div>
+            <AiRecommendationCard
+              query={query}
+              currentAssigneeId={query.currentAssigneeId}
+              onAssign={canAssign ? (officialId) => assignQuery(query.queryId, officialId, currentUser) : null}
+            />
+          </div>
+        )}
 
         <EmailThread messages={messages} />
 
         <div className="bg-white rounded-3xl border border-slate-200/80 overflow-hidden shadow-sm p-6">
-          <Tabs defaultValue="draft">
+          <Tabs defaultValue={isInquirer ? 'info' : 'draft'}>
             <div className="border-b border-slate-100 pb-3">
               <TabsList variant="line">
-                <TabsTrigger value="draft">Response Draft</TabsTrigger>
+                {!isInquirer && <TabsTrigger value="draft">Response Draft</TabsTrigger>}
                 <TabsTrigger value="info">Query Info</TabsTrigger>
                 <TabsTrigger value="attachments">Attachments</TabsTrigger>
               </TabsList>
             </div>
 
-            <TabsContent value="draft" className="mt-0 pt-5">
-              {versions.length === 0 ? (
-                <EmptyState
-                  title="No draft yet"
-                  description="The assigned official has not started drafting a response."
-                />
-              ) : (
-                <>
-                  <p className="mb-3 text-xs text-muted-foreground">
-                    Versions: {versions.map((v) => v.version).join(' → ')} — showing{' '}
-                    <span className="font-medium text-foreground">{latestVersion.version}</span> (
-                    {latestVersion.label})
-                  </p>
-                  <pre className="rounded-2xl border border-slate-200/90 bg-slate-50 p-4 font-sans text-sm whitespace-pre-wrap text-slate-800">
-                    {latestVersion.content}
-                  </pre>
-                </>
-              )}
-            </TabsContent>
+            {!isInquirer && (
+              <TabsContent value="draft" className="mt-0 pt-5">
+                {versions.length === 0 ? (
+                  <EmptyState
+                    title="No draft yet"
+                    description="The assigned official has not started drafting a response."
+                  />
+                ) : (
+                  <>
+                    <p className="mb-3 text-xs text-muted-foreground">
+                      Versions: {versions.map((v) => v.version).join(' → ')} — showing{' '}
+                      <span className="font-medium text-foreground">{latestVersion.version}</span> (
+                      {latestVersion.label})
+                    </p>
+                    <pre className="rounded-2xl border border-slate-200/90 bg-slate-50 p-4 font-sans text-sm whitespace-pre-wrap text-slate-800">
+                      {latestVersion.content}
+                    </pre>
+                  </>
+                )}
+              </TabsContent>
+            )}
 
             <TabsContent value="info" className="mt-0 pt-5 space-y-1">
               <InfoRow label="Inquirer" value={query.inquirer.name} />
@@ -150,6 +169,7 @@ export function QueryDetailPage() {
       </div>
 
       {/* Audit History Card */}
+      {!isInquirer && (
       <div className="mt-6 bg-white rounded-3xl border border-slate-200/80 p-6 sm:p-8 shadow-sm overflow-hidden select-none">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-5 mb-5">
           <div className="flex items-center gap-3.5">
@@ -235,7 +255,9 @@ export function QueryDetailPage() {
           </table>
         </div>
       </div>
+      )}
 
+      {!isInquirer && (
       <p className="mt-4 text-xs text-muted-foreground">
         Stage-specific actions also live on their dedicated pages —{' '}
         <Link to={paths.ASSIGNMENTS || '#'} className="text-ring hover:underline">
@@ -259,6 +281,7 @@ export function QueryDetailPage() {
         </Link>
         .
       </p>
+      )}
     </div>
   );
 }

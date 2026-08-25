@@ -2,7 +2,8 @@ import { useState } from 'react';
 import { Breadcrumb } from '@/components/common/Breadcrumb';
 import { EmptyState } from '@/components/common/EmptyState';
 import { CaseSummaryBar } from '@/components/workflow/CaseSummaryBar';
-import { WorkflowTimeline } from '@/components/workflow/WorkflowTimeline';
+import { QueryLifecycleTimeline } from '@/components/workflow/QueryLifecycleTimeline';
+import { buildLifecycle } from '@/constants/queryLifecycle';
 import { Card, CardBody, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -18,7 +19,8 @@ import { ActionError } from '@/components/workflow/ActionError';
 
 export function ApprovalDetailPage() {
   const paths = useRoutePaths();
-  const { queryId, query, steps, reviews, latestVersion, currentStep, currentUser, can } = useQueryCase();
+  const { queryId, query, steps, reviews, versions, latestVersion, audit, messages, currentUser, can } =
+    useQueryCase();
   const { run, error, clearError } = useWorkflowAction();
   const grantFinalApproval = useWorkflowStore((state) => state.grantFinalApproval);
   const rejectFinalApproval = useWorkflowStore((state) => state.rejectFinalApproval);
@@ -51,7 +53,9 @@ export function ApprovalDetailPage() {
               <h2 className="text-sm font-semibold text-foreground">Review history</h2>
             </CardHeader>
             <CardBody className="space-y-4">
-              <WorkflowTimeline steps={steps} currentStepId={currentStep?.stepId} />
+              <QueryLifecycleTimeline
+                stages={buildLifecycle({ query, steps, versions, reviews, audit, messages })}
+              />
               {reviews.length > 0 && (
                 <div className="space-y-2 border-t border-border pt-3">
                   {reviews.map((r) => (

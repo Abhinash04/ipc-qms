@@ -1,11 +1,3 @@
-/**
- * IPC divisions.
- *
- * DIV-001..004 are the original organisational units and are still used by the
- * Front Office, Officer-in-Charge, reviewers and admin roles. DIV-005..009 are
- * the technical divisions that Assigned Officials belong to — they carry the
- * subject-matter meaning the assignment recommendation reasons about.
- */
 export const MOCK_DIVISIONS = [
   { id: 'DIV-001', name: 'Training & Development' },
   { id: 'DIV-002', name: 'Policy & Compliance' },

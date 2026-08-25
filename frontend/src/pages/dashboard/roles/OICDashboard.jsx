@@ -1,81 +1,103 @@
-import { UserCheck, Activity, User, FileText } from 'lucide-react';
-import { PageHeader } from '@/components/common/PageHeader';
-import { StatTile } from '@/components/common/StatTile';
-import { DashboardQueryList } from '@/components/dashboard/DashboardQueryList';
-import { DashboardResolutionRate } from '@/components/dashboard/DashboardResolutionRate';
-import { WORKFLOW_STATE, AUDIT_EVENT } from '@/constants/statusEnums';
-import { ROLE_LABELS } from '@/constants/roles';
+import { useNavigate } from "react-router-dom";
+import { UserCheck, CheckCircle2, Clock, FileText } from "lucide-react";
+import { PageHeader } from "@/components/common/PageHeader";
+import { StatTile } from "@/components/common/StatTile";
+import { DashboardQueryList } from "@/components/dashboard/DashboardQueryList";
+import { DashboardActivity } from "@/components/dashboard/DashboardActivity";
+import { WORKFLOW_STATE, AUDIT_EVENT } from "@/constants/statusEnums";
+import { ROLE_LABELS } from "@/constants/roles";
+import { getTimeBasedGreeting } from "@/utils/greeting";
+import { useRoutePaths } from "@/hooks/useRoutePaths";
 
 function countSince(auditEvents, event, days) {
   const d = new Date();
   d.setDate(d.getDate() - days);
-  return auditEvents.filter((e) => e.event === event && new Date(e.at) >= d).length;
+  return auditEvents.filter((e) => e.event === event && new Date(e.at) >= d)
+    .length;
 }
 
 export function OICDashboard({ currentUser, queries, auditEvents }) {
-  const firstName = currentUser?.name ? currentUser.name.split(' ')[0] : 'User';
+  const navigate = useNavigate();
+  const paths = useRoutePaths();
 
-  const pendingAssignment = queries.filter(q => q.workflowState === WORKFLOW_STATE.PENDING_ASSIGNMENT);
-  const activeCount = queries.filter(q => q.workflowState !== WORKFLOW_STATE.CLOSED).length;
-  const assignedThisWeek = countSince(auditEvents, AUDIT_EVENT.QUERY_ASSIGNED, 7);
-
-  const closedQueryIds = new Set(
-    queries.filter((q) => q.workflowState === WORKFLOW_STATE.CLOSED).map((q) => q.queryId),
+  const pendingAssignment = queries.filter(
+    (q) =>
+      q.workflowState === WORKFLOW_STATE.PENDING_VERIFICATION ||
+      q.workflowState === WORKFLOW_STATE.REGISTERED,
+  );
+  const openQueries = queries.filter(
+    (q) => q.workflowState !== WORKFLOW_STATE.CLOSED,
+  );
+  const closedToday = countSince(auditEvents, AUDIT_EVENT.QUERY_CLOSED, 1);
+  const assignedThisWeek = countSince(
+    auditEvents,
+    AUDIT_EVENT.QUERY_ASSIGNED,
+    7,
   );
 
   const kpis = [
     {
-      label: 'Pending Assignment',
-      caption: 'Requires action',
+      label: "Pending Assignment",
+      caption: "Awaiting officer",
       value: pendingAssignment.length,
       trendText: null,
-      trendType: 'up',
-      subtextMain: `↑ ${pendingAssignment.length} need assigning`,
-      subtextColor: 'text-amber-600',
-      cardBg: 'linear-gradient(180deg, #fffdf2 0%, #ffffff 100%)',
-      cardBorder: '#fde68a',
-      numColor: '#d97706',
-      illustrationType: 'drafting',
-      icon: User,
-    },
-    {
-      label: 'Assigned This Week',
-      caption: 'Throughput',
-      value: assignedThisWeek,
-      trendText: null,
-      trendType: 'up',
-      subtextMain: `${assignedThisWeek} assigned in last 7 days`,
-      subtextColor: 'text-blue-600',
-      cardBg: 'linear-gradient(180deg, #f4f8ff 0%, #ffffff 100%)',
-      cardBorder: '#bfdbfe',
-      numColor: '#2563eb',
-      illustrationType: 'assigned',
+      trendType: "up",
+      subtextMain: `↑ ${pendingAssignment.length} need officer assignment`,
+      subtextColor: "text-amber-600",
+      cardBg: "linear-gradient(180deg, #fffdf2 0%, #ffffff 100%)",
+      cardBorder: "#fde68a",
+      numColor: "#d97706",
+      illustrationType: "assigned",
       icon: UserCheck,
+      onClick: () =>
+        (paths.ASSIGNMENTS || paths.QUERIES) &&
+        navigate(paths.ASSIGNMENTS || paths.QUERIES),
     },
     {
-      label: 'Active Queries',
-      caption: 'In progress overall',
-      value: activeCount,
+      label: "Active System Cases",
+      caption: "In progress overall",
+      value: openQueries.length,
+      trendText: assignedThisWeek
+        ? `+${assignedThisWeek} assigned this week`
+        : null,
+      trendType: "up",
+      subtextMain: `Total active queries`,
+      subtextColor: "text-blue-600",
+      cardBg: "linear-gradient(180deg, #f4f8ff 0%, #ffffff 100%)",
+      cardBorder: "#bfdbfe",
+      numColor: "#2563eb",
+      illustrationType: "open",
+      icon: Clock,
+      onClick: () => paths.QUERIES && navigate(paths.QUERIES),
+    },
+    {
+      label: "Closed Today",
+      caption: "Systemwide",
+      value: closedToday,
       trendText: null,
-      trendType: 'up',
-      subtextMain: `${activeCount} currently active`,
-      subtextColor: 'text-emerald-600',
-      cardBg: 'linear-gradient(180deg, #f0fdf4 0%, #ffffff 100%)',
-      cardBorder: '#bbf7d0',
-      numColor: '#059669',
-      illustrationType: 'closed',
-      icon: Activity,
+      trendType: "up",
+      subtextMain: `${closedToday} cases closed today`,
+      subtextColor: "text-emerald-600",
+      cardBg: "linear-gradient(180deg, #f0fdf4 0%, #ffffff 100%)",
+      cardBorder: "#bbf7d0",
+      numColor: "#059669",
+      illustrationType: "closed",
+      icon: CheckCircle2,
+      onClick: () => paths.INBOX && navigate(paths.INBOX),
     },
   ];
 
   return (
     <div className="space-y-5">
       <PageHeader
-        greeting={`Hello, ${firstName} 👋`}
+        greeting={getTimeBasedGreeting(currentUser?.name)}
         title="Officer-in-Charge Dashboard"
         purpose={
           <>
-            Role-specific overview · <span className="font-medium text-slate-500">{currentUser?.name} ({ROLE_LABELS[currentUser?.role]})</span>
+            Overview ·{" "}
+            <span className="font-medium text-slate-500">
+              {currentUser?.name} ({ROLE_LABELS[currentUser?.role]})
+            </span>
           </>
         }
       />
@@ -95,9 +117,9 @@ export function OICDashboard({ currentUser, queries, auditEvents }) {
           totalCount={queries.length}
           emptyText="No queries pending assignment."
         />
-        
+
         <div className="sticky top-6 self-start">
-          <DashboardResolutionRate visibleAudit={auditEvents} closedQueryIds={closedQueryIds} />
+          <DashboardActivity auditEvents={auditEvents} />
         </div>
       </div>
     </div>

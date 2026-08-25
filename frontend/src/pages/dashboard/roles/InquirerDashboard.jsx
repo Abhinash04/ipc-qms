@@ -1,81 +1,88 @@
-import { Inbox, CheckCircle2, FileText, Activity } from 'lucide-react';
-import { PageHeader } from '@/components/common/PageHeader';
-import { StatTile } from '@/components/common/StatTile';
-import { DashboardQueryList } from '@/components/dashboard/DashboardQueryList';
-import { WORKFLOW_STATE } from '@/constants/statusEnums';
-import { ROLES } from '@/constants/roles';
-import { RoleGate } from '@/components/common/RoleGate';
-import { Plus as PlusIcon } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
-import { useRoutePaths } from '@/hooks/useRoutePaths';
+import { Inbox, CheckCircle2, FileText, Activity } from "lucide-react";
+import { PageHeader } from "@/components/common/PageHeader";
+import { StatTile } from "@/components/common/StatTile";
+import { DashboardQueryList } from "@/components/dashboard/DashboardQueryList";
+import { WORKFLOW_STATE } from "@/constants/statusEnums";
+import { ROLES } from "@/constants/roles";
+import { RoleGate } from "@/components/common/RoleGate";
+import { Plus as PlusIcon } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { useRoutePaths } from "@/hooks/useRoutePaths";
+import { isQueryOwnedBy } from "@/utils/queryOwnership";
+import { getTimeBasedGreeting } from "@/utils/greeting";
 
 export function InquirerDashboard({ currentUser, queries }) {
   const navigate = useNavigate();
   const paths = useRoutePaths();
-  const firstName = currentUser?.name ? currentUser.name.split(' ')[0] : 'User';
 
-  const myQueries = queries.filter(
-    (q) =>
-      (q.inquirer?.id && q.inquirer.id === currentUser.id) ||
-      (!q.inquirer?.id && q.inquirer?.email?.toLowerCase() === currentUser.email?.toLowerCase())
+  const myQueries = queries.filter((q) => isQueryOwnedBy(q, currentUser));
+
+  const openQueries = myQueries.filter(
+    (q) => q.workflowState !== WORKFLOW_STATE.CLOSED,
   );
-
-  const openQueries = myQueries.filter(q => q.workflowState !== WORKFLOW_STATE.CLOSED);
-  const closedQueries = myQueries.filter(q => q.workflowState === WORKFLOW_STATE.CLOSED);
+  const closedQueries = myQueries.filter(
+    (q) => q.workflowState === WORKFLOW_STATE.CLOSED,
+  );
 
   const kpis = [
     {
-      label: 'Open Queries',
-      caption: 'In progress',
+      label: "Open Queries",
+      caption: "In progress",
       value: openQueries.length,
       trendText: null,
-      trendType: 'up',
+      trendType: "up",
       subtextMain: `${openQueries.length} currently open`,
-      subtextColor: 'text-blue-600',
-      cardBg: 'linear-gradient(180deg, #f4f8ff 0%, #ffffff 100%)',
-      cardBorder: '#bfdbfe',
-      numColor: '#2563eb',
-      illustrationType: 'review',
+      subtextColor: "text-blue-600",
+      cardBg: "linear-gradient(180deg, #f4f8ff 0%, #ffffff 100%)",
+      cardBorder: "#bfdbfe",
+      numColor: "#2563eb",
+      illustrationType: "review",
       icon: Inbox,
+      onClick: () => paths.QUERIES && navigate(paths.QUERIES),
     },
     {
-      label: 'Resolved Queries',
-      caption: 'Completed',
+      label: "Resolved Queries",
+      caption: "Completed",
       value: closedQueries.length,
       trendText: null,
-      trendType: 'up',
+      trendType: "up",
       subtextMain: `${closedQueries.length} total closed`,
-      subtextColor: 'text-emerald-600',
-      cardBg: 'linear-gradient(180deg, #f0fdf4 0%, #ffffff 100%)',
-      cardBorder: '#bbf7d0',
-      numColor: '#059669',
-      illustrationType: 'closed',
+      subtextColor: "text-emerald-600",
+      cardBg: "linear-gradient(180deg, #f0fdf4 0%, #ffffff 100%)",
+      cardBorder: "#bbf7d0",
+      numColor: "#059669",
+      illustrationType: "closed",
       icon: CheckCircle2,
+      onClick: () => paths.QUERIES && navigate(paths.QUERIES),
     },
     {
-      label: 'Total Submitted',
-      caption: 'Lifetime',
+      label: "Total Submitted",
+      caption: "Lifetime",
       value: myQueries.length,
       trendText: null,
-      trendType: 'up',
+      trendType: "up",
       subtextMain: `Total cases`,
-      subtextColor: 'text-slate-600',
-      cardBg: 'linear-gradient(180deg, #f8fafc 0%, #ffffff 100%)',
-      cardBorder: '#e2e8f0',
-      numColor: '#475569',
-      illustrationType: 'assigned',
+      subtextColor: "text-slate-600",
+      cardBg: "linear-gradient(180deg, #f8fafc 0%, #ffffff 100%)",
+      cardBorder: "#e2e8f0",
+      numColor: "#475569",
+      illustrationType: "assigned",
       icon: FileText,
-    }
+      onClick: () => paths.QUERIES && navigate(paths.QUERIES),
+    },
   ];
 
   return (
     <div className="space-y-5">
       <PageHeader
-        greeting={`Hello, ${firstName} 👋`}
+        greeting={getTimeBasedGreeting(currentUser?.name)}
         title="My Queries"
         purpose={
           <>
-            Client Portal · <span className="font-medium text-slate-500">{currentUser?.name}</span>
+            Client Portal ·{" "}
+            <span className="font-medium text-slate-500">
+              {currentUser?.name}
+            </span>
           </>
         }
         actions={

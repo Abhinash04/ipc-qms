@@ -67,14 +67,12 @@ export function AssignmentDetailPage() {
         </Card>
       )}
 
-      {/* Top 3 AI Recommendations */}
       <AiRecommendationCard
         query={query}
         currentAssigneeId={query.currentAssigneeId}
         onAssign={canAssign ? handleAssignToOfficial : null}
       />
 
-      {/* Manual Override Selection */}
       {canAssign && (
         <Card>
           <CardHeader>

@@ -34,4 +34,31 @@ async function recommendOfficial(req, res, next) {
   }
 }
 
-export { generateSummary, recommendOfficial };
+async function generateDraft(req, res, next) {
+  try {
+    const { subject, body, inquirerName, summaryText, keyPoints } = req.body || {};
+    if (!subject && !body) {
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({
+        success: false,
+        error: 'Either "subject" or "body" is required to generate an AI draft.',
+      });
+    }
+
+    const draft = await gemmaService.generateDraft({
+      subject,
+      body,
+      inquirerName,
+      summaryText,
+      keyPoints,
+    });
+
+    return res.status(HTTP_STATUS.OK).json({
+      success: true,
+      draft,
+    });
+  } catch (error) {
+    return next(error);
+  }
+}
+
+export { generateSummary, recommendOfficial, generateDraft };
