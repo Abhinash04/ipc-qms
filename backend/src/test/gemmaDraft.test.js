@@ -103,8 +103,8 @@ describe('the draft prompt carries per-question evidence', () => {
   it('emits one QUESTION block per question with its own passages', async () => {
     mockCalls(
       decomposition([
-        'Is characterisation of a degradation product above the identification threshold required?',
-        'Is there guidance on excipient compatibility study design?',
+        'What is the legal status of the Indian Pharmacopoeia?',
+        'Can we apply an alternative analytical procedure instead of the official IP method?',
       ]),
       draftReply([
         { question: 1, sufficiency: 'PARTIAL', paragraphs: ['A.'], sources: [] },
@@ -189,7 +189,7 @@ describe('parsing the draft reply', () => {
 
   it('attributes the supplied passages when the model claims no sources', async () => {
     mockCalls(
-      decomposition(['One question here?']),
+      decomposition(['What is the legal status of the Indian Pharmacopoeia?']),
       draftReply([
         { question: 1, sufficiency: 'PARTIAL', paragraphs: ['Body.'], sources: [] },
       ]),
@@ -228,7 +228,7 @@ describe('parsing the draft reply', () => {
 
   it('accepts a markdown-fenced answer', async () => {
     mockCalls(
-      decomposition(['One question here?']),
+      decomposition(['What is the legal status of the Indian Pharmacopoeia?']),
       answerOf('```json\n{"subject":"S","answers":[{"question":1,"sufficiency":"ANSWERED","paragraphs":["Fenced body."],"sources":[]}]}\n```'),
     );
 
@@ -283,6 +283,198 @@ describe('the draft never throws', () => {
     const draft = await generateDraft(ENQUIRY);
     expect(draft.aiGenerated).toBe(true);
     expect(draft.answers.length).toBeGreaterThan(0);
+  });
+});
+
+describe('the question → answer contract is 1:1', () => {
+  const SUBMISSION = {
+    subject: 'Clarification on submission documentation and compliance requirements',
+    body: `Dear Sir/Madam,
+
+We require clarification on the documentation to be included in our forthcoming submission.
+
+1. Which guideline currently applies to the format of the quality section, and is the previous format still accepted during the transition period?
+
+2. For a change in the manufacturing site, what supporting documentation is expected, and does the change require prior approval or is notification sufficient?
+
+3. Please confirm the compliance evidence required in respect of the revised labelling requirements.
+
+Regards,
+Abhinash Pritiraj
+Regulatory Affairs`,
+    inquirerName: 'Abhinash Pritiraj',
+    summaryText: 'Submission documentation and compliance requirements.',
+    keyPoints: [],
+  };
+
+  it('collapses a model split of five sub-questions back to three', async () => {
+    mockCalls(
+      decomposition([
+        'Which guideline currently applies to the format of the quality section',
+        'is the previous format still accepted during the transition period',
+        'For a change in the manufacturing site, what supporting documentation is expected',
+        'does the change require prior approval or is notification sufficient',
+        'Please confirm the compliance evidence required in respect of the revised labelling requirements.',
+      ]),
+      draftReply([
+        { question: 1, sufficiency: 'NOT_ESTABLISHED', paragraphs: [], sources: [] },
+        { question: 2, sufficiency: 'NOT_ESTABLISHED', paragraphs: [], sources: [] },
+        { question: 3, sufficiency: 'NOT_ESTABLISHED', paragraphs: [], sources: [] },
+      ]),
+    );
+
+    const draft = await generateDraft(SUBMISSION);
+    expect(draft.answers).toHaveLength(3);
+  });
+
+  it('numbers answers consecutively from one', async () => {
+    mockCalls(
+      decomposition(['First question here?', 'Second question here?']),
+      draftReply([
+        { question: 1, sufficiency: 'PARTIAL', paragraphs: ['A.'], sources: [] },
+        { question: 2, sufficiency: 'PARTIAL', paragraphs: ['B.'], sources: [] },
+      ]),
+    );
+
+    const draft = await generateDraft(SUBMISSION);
+    expect(draft.answers.map((a) => a.question)).toEqual([1, 2]);
+  });
+
+  it('normalises a model reply carrying more answers than questions', async () => {
+    mockCalls(
+      decomposition(['What is the legal status of the Indian Pharmacopoeia?']),
+      draftReply([
+        { question: 1, sufficiency: 'PARTIAL', paragraphs: ['Kept.'], sources: [] },
+        { question: 2, sufficiency: 'PARTIAL', paragraphs: ['Extra.'], sources: [] },
+        { question: 3, sufficiency: 'PARTIAL', paragraphs: ['Also extra.'], sources: [] },
+      ]),
+    );
+
+    const draft = await generateDraft(SUBMISSION);
+    expect(draft.answers).toHaveLength(1);
+    expect(draft.answers[0].paragraphs).toEqual(['Kept.']);
+  });
+
+  it('keeps the fallback path 1:1 as well', async () => {
+    global.fetch = vi
+      .fn()
+      .mockResolvedValueOnce(decomposition(['One?', 'Two?', 'Three?']))
+      .mockRejectedValueOnce(new Error('draft down'));
+
+    const draft = await generateDraft(SUBMISSION);
+    expect(draft.fallback).toBe(true);
+    expect(draft.answers).toHaveLength(3);
+    expect(draft.answers.map((a) => a.question)).toEqual([1, 2, 3]);
+  });
+
+  it('never emits two answers with the same questionText', async () => {
+    global.fetch = vi
+      .fn()
+      .mockResolvedValueOnce(
+        decomposition([
+          'Which guideline currently applies to the format of the quality section',
+          'is the previous format still accepted during the transition period',
+        ]),
+      )
+      .mockRejectedValueOnce(new Error('draft down'));
+
+    const draft = await generateDraft(SUBMISSION);
+    const texts = draft.answers.map((a) => a.questionText);
+    expect(new Set(texts).size).toBe(texts.length);
+  });
+});
+
+describe('a question with no qualified evidence', () => {
+  const NO_EVIDENCE = {
+    subject: 'Clarification on submission documentation',
+    body: 'For a change in the manufacturing site, what supporting documentation is expected, and does the change require prior approval or is notification sufficient?',
+    inquirerName: 'Abhinash Pritiraj',
+    summaryText: 'Manufacturing site change documentation.',
+    keyPoints: [],
+  };
+
+  it('tells the model that nothing qualified, and carries no glossary block', async () => {
+    mockCalls(
+      decomposition(['For a change in the manufacturing site, what supporting documentation is expected?']),
+      draftReply([{ question: 1, sufficiency: 'NOT_ESTABLISHED', paragraphs: [], sources: [] }]),
+    );
+
+    await generateDraft(NO_EVIDENCE);
+    const prompt = draftPrompt();
+
+    expect(prompt).toContain('No IPC passage qualified as evidence for this question.');
+    expect(prompt).not.toContain('IPC GLOSSARY FOR QUESTION 1');
+    expect(prompt).not.toContain('IPC REFERENCE PASSAGES FOR QUESTION 1');
+  });
+
+  it('forces NOT_ESTABLISHED even if the model answers anyway', async () => {
+    mockCalls(
+      decomposition(['For a change in the manufacturing site, what supporting documentation is expected?']),
+      draftReply([
+        {
+          question: 1,
+          sufficiency: 'PARTIAL',
+          paragraphs: ['Records must be complete and reliable throughout the product life cycle.'],
+          sources: [],
+        },
+      ]),
+    );
+
+    const draft = await generateDraft(NO_EVIDENCE);
+    expect(draft.answers[0].sufficiency).toBe(SUFFICIENCY.NOT_ESTABLISHED);
+    expect(draft.answers[0].paragraphs).toEqual([]);
+  });
+
+  it('keeps the fallback path one NOT_ESTABLISHED answer per question', async () => {
+    global.fetch = vi
+      .fn()
+      .mockResolvedValueOnce(decomposition(['A question with no corpus support at all?']))
+      .mockRejectedValueOnce(new Error('draft down'));
+
+    const draft = await generateDraft(NO_EVIDENCE);
+    expect(draft.answers).toHaveLength(1);
+    expect(draft.answers[0].sufficiency).toBe(SUFFICIENCY.NOT_ESTABLISHED);
+  });
+});
+
+describe('topic headings', () => {
+  it('keeps the topic the model supplied', async () => {
+    mockCalls(
+      decomposition(['One question here?']),
+      draftReply([
+        {
+          question: 1,
+          topic: 'Quality section format',
+          sufficiency: 'PARTIAL',
+          paragraphs: ['Body.'],
+          sources: [],
+        },
+      ]),
+    );
+
+    const draft = await generateDraft(ENQUIRY);
+    expect(draft.answers[0].topic).toBe('Quality section format');
+  });
+
+  it('derives a topic when the model omits one', async () => {
+    mockCalls(
+      decomposition(['Which guideline applies to the quality section format?']),
+      draftReply([{ question: 1, sufficiency: 'PARTIAL', paragraphs: ['Body.'], sources: [] }]),
+    );
+
+    const draft = await generateDraft(ENQUIRY);
+    expect(draft.answers[0].topic).toBeTruthy();
+    expect(draft.answers[0].topic).not.toContain('?');
+  });
+
+  it('gives every fallback answer a topic', async () => {
+    global.fetch = vi
+      .fn()
+      .mockResolvedValueOnce(decomposition(['Which guideline applies to the quality section?']))
+      .mockRejectedValueOnce(new Error('draft down'));
+
+    const draft = await generateDraft(ENQUIRY);
+    expect(draft.answers[0].topic).toBeTruthy();
   });
 });
 

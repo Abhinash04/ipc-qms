@@ -3,6 +3,7 @@ import { ASSIGNED_OFFICIALS } from '../../config/officialsMetadata.js';
 import { selectContext, formatContextForPrompt } from '../../data/ipcContextBrain.js';
 import { retrieveContext, formatPassagesForPrompt } from '../../data/ipcKnowledge.js';
 import { splitEnquiryQuestions } from '../../data/enquiryQuestions.js';
+import { qualifyPassages } from '../../data/evidenceQualification.js';
 
 
 const RECOMMENDATION_TIMEOUT_FACTOR = 3;
@@ -313,7 +314,7 @@ IPC AI Recommendations:`;
   }
 }
 
-const DRAFT_TIMEOUT_FACTOR = 3;
+const DRAFT_TIMEOUT_FACTOR = 5;
 
 const MAX_BODY_CHARS = 4000;
 
@@ -330,7 +331,53 @@ export const SUFFICIENCY = {
   NOT_ESTABLISHED: 'NOT_ESTABLISHED',
 };
 
-const PASSAGES_PER_QUESTION = 5;
+const PASSAGES_PER_QUESTION = 3;
+const CANDIDATE_LIMIT = 12;
+const CANDIDATE_CHAR_BUDGET = 20000;
+
+const TOPIC_STOP = new Set([
+  'which', 'what', 'when', 'where', 'why', 'how', 'is', 'are', 'was', 'were', 'do', 'does', 'did',
+  'can', 'could', 'shall', 'should', 'will', 'would', 'may', 'might', 'must', 'the', 'a', 'an',
+  'and', 'or', 'of', 'for', 'to', 'in', 'on', 'at', 'by', 'with', 'from', 'we', 'our', 'us', 'i',
+  'you', 'your', 'please', 'confirm', 'clarify', 'kindly', 'currently', 'still', 'be', 'been',
+  'require', 'required', 'requires', 'grateful', 'direction', 'guidance', 'whether', 'that',
+  'this', 'these', 'those', 'it', 'its', 'as', 'if', 'there', 'any',
+]);
+
+const TOPIC_WORDS = 4;
+
+export function deriveTopic(question) {
+  const words = String(question || '')
+    .replace(/[^A-Za-z0-9\s-]/g, ' ')
+    .split(/\s+/)
+    .filter(Boolean);
+
+  const significant = words.filter((word) => !TOPIC_STOP.has(word.toLowerCase()));
+  const chosen = (significant.length ? significant : words).slice(0, TOPIC_WORDS);
+  if (chosen.length === 0) return 'Enquiry';
+
+  return chosen
+    .map((word, index) => (index === 0 ? word.charAt(0).toUpperCase() + word.slice(1) : word))
+    .join(' ');
+}
+
+function assertOneToOne(questions, answers) {
+  if (answers.length !== questions.length) {
+    throw new Error(
+      `draft contract violated: ${questions.length} question(s) produced ${answers.length} answer(s)`,
+    );
+  }
+
+  answers.forEach((answer, index) => {
+    if (answer.question !== index + 1) {
+      throw new Error(
+        `draft contract violated: answer at position ${index} is numbered ${answer.question}`,
+      );
+    }
+  });
+
+  return answers;
+}
 
 async function askGemma(prompt, { timeoutMs, label }) {
   const controller = new AbortController();
@@ -366,20 +413,36 @@ async function askGemma(prompt, { timeoutMs, label }) {
 
 const flatten = (value) => String(value || '').toLowerCase().replace(/\s+/g, ' ').trim();
 
-function restoreContext(questions, deterministic) {
-  if (deterministic.length === 0) return questions;
+export function dedupeQuestions(questions) {
+  const seen = new Set();
+  const out = [];
 
-  return questions.map((question) => {
+  for (const question of questions) {
+    const key = flatten(question);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    out.push(question);
+  }
+
+  return out;
+}
+
+export function restoreContext(questions, deterministic) {
+  if (deterministic.length === 0) return dedupeQuestions(questions);
+
+  const resolved = questions.map((question) => {
     const needle = flatten(question);
-    const richer = deterministic.find(
+    const parent = deterministic.find(
       (candidate) => flatten(candidate).includes(needle) && candidate.length > question.length,
     );
-    return richer || question;
+    return parent || question;
   });
+
+  return dedupeQuestions(resolved);
 }
 
 export async function decomposeEnquiry({ subject = '', body = '' }) {
-  const deterministic = splitEnquiryQuestions(body);
+  const deterministic = dedupeQuestions(splitEnquiryQuestions(body));
 
   if (!env.GEMMA_API_URL) return deterministic;
 
@@ -426,8 +489,14 @@ Questions JSON:`;
 function gatherEvidence(questions, subject = '') {
   return questions.map((question, index) => {
     const anchored = `${subject} ${question}`.trim();
-    const glossary = selectContext(anchored);
-    const passages = retrieveContext(anchored, { limit: PASSAGES_PER_QUESTION });
+    const candidates = retrieveContext(anchored, {
+      limit: CANDIDATE_LIMIT,
+      charBudget: CANDIDATE_CHAR_BUDGET,
+    });
+    const { qualified } = qualifyPassages(question, candidates);
+    const passages = qualified.slice(0, PASSAGES_PER_QUESTION);
+    const glossary = passages.length > 0 ? selectContext(anchored) : [];
+
     return {
       number: index + 1,
       question,
@@ -446,6 +515,7 @@ function generateFallbackDraft({ subject = '', evidence = [], contextUsed = [] }
     answers: evidence.map((item) => ({
       question: item.number,
       questionText: item.question,
+      topic: deriveTopic(item.question),
       sufficiency: SUFFICIENCY.NOT_ESTABLISHED,
       paragraphs: [],
       notEstablished: '',
@@ -480,7 +550,10 @@ function parseDraftJson(jsonStr, { subject, evidence, contextUsed }) {
         ? match.paragraphs.map((p) => String(p).trim()).filter(Boolean)
         : [];
 
-      const sufficiency = normaliseSufficiency(match?.sufficiency, paragraphs);
+      const sufficiency =
+        item.passages.length === 0
+          ? SUFFICIENCY.NOT_ESTABLISHED
+          : normaliseSufficiency(match?.sufficiency, paragraphs);
       const claimed = Array.isArray(match?.sources)
         ? match.sources.map((s) => String(s).trim()).filter(Boolean)
         : [];
@@ -490,9 +563,15 @@ function parseDraftJson(jsonStr, { subject, evidence, contextUsed }) {
       const notEstablished =
         typeof match?.notEstablished === 'string' ? match.notEstablished.trim() : '';
 
+      const topic =
+        typeof match?.topic === 'string' && match.topic.trim()
+          ? match.topic.trim()
+          : deriveTopic(item.question);
+
       return {
         question: item.number,
         questionText: item.question,
+        topic,
         sufficiency,
         paragraphs: sufficiency === SUFFICIENCY.NOT_ESTABLISHED ? [] : paragraphs,
         notEstablished: sufficiency === SUFFICIENCY.ANSWERED ? '' : notEstablished,
@@ -512,7 +591,10 @@ function parseDraftJson(jsonStr, { subject, evidence, contextUsed }) {
         typeof parsed.subject === 'string' && parsed.subject.trim()
           ? parsed.subject.trim()
           : `Response regarding ${subject.trim() || 'your enquiry'}`,
-      answers,
+      answers: assertOneToOne(
+        evidence.map((item) => item.question),
+        answers,
+      ),
       termsUsed: Array.isArray(parsed.termsUsed)
         ? parsed.termsUsed.map((t) => String(t).trim()).filter(Boolean)
         : [],
@@ -550,16 +632,23 @@ export async function generateDraft({
     : '- No key points were extracted.';
 
   const questionBlocks = evidence
-    .map(
-      (item) => `QUESTION ${item.number}
+    .map((item) => {
+      if (item.passages.length === 0) {
+        return `QUESTION ${item.number}
+${fenceSafe(item.question, 800)}
+
+  No IPC passage qualified as evidence for this question.`;
+      }
+
+      return `QUESTION ${item.number}
 ${fenceSafe(item.question, 800)}
 
   IPC GLOSSARY FOR QUESTION ${item.number}
 ${formatContextForPrompt(item.glossary)}
 
   IPC REFERENCE PASSAGES FOR QUESTION ${item.number}
-${formatPassagesForPrompt(item.passages)}`,
-    )
+${formatPassagesForPrompt(item.passages)}`;
+    })
     .join('\n\n────────────────\n\n');
 
   const prompt = `You are an expert AI Assistant drafting an official reply on behalf of the Indian Pharmacopoeia Commission (IPC), Ministry of Health & Family Welfare, Government of India.
@@ -575,17 +664,19 @@ RULES:
    - "NOT_ESTABLISHED" — no supplied passage touches the subject matter at all.
    Never answer a question from general knowledge. Never leave a question silent.
 4. "PARTIAL" is the expected outcome whenever any supplied passage is on the same subject matter, even if it does not answer the precise point asked. A question about a degradation product or an impurity is on the same subject matter as guidance about related substances, impurity limits or reference standards — summarise that guidance, then say what remains unsettled. Reserve "NOT_ESTABLISHED" for questions where every supplied passage is about something else entirely.
+4a. A question marked "No IPC passage qualified as evidence for this question." MUST be "NOT_ESTABLISHED" with an empty "paragraphs" list. Do not answer it from the glossary, from another question's evidence, or from your own knowledge.
 5. When "sufficiency" is "PARTIAL" you MUST write at least one paragraph AND you MUST fill "notEstablished" with one sentence naming the specific part of the question the supplied material does not settle. An empty paragraph list is only valid for "NOT_ESTABLISHED".
 6. Be concise and specific. No filler, no generic explanation of what IPC is, no restating the enquiry back.
 7. Use the IPC GLOSSARY terminology correctly. An entry marked UNVERIFIED must not be presented as authoritative.
 8. A passage marked AMENDMENT is a correction to a published monograph, never the complete requirement. If you rely on one, state the amendment list and page and say the base monograph still applies.
 9. Do NOT write a greeting, a salutation, a sign-off, a signature, a designation or any person's name. Those are added by the system. Write body paragraphs only.
 10. In "sources" list only the bracketed passage identifiers you actually relied on for that question.
+10a. "topic" is a heading of at most six words naming the subject of that question — for example "Quality section format", "Manufacturing site change", "Revised labelling requirements". It is a label, never a sentence and never a question.
 11. Output strictly valid JSON with this structure:
 {
   "subject": "Response regarding <short restatement of the enquiry subject>",
   "answers": [
-    { "question": 1, "sufficiency": "PARTIAL", "paragraphs": ["..."], "notEstablished": "The supplied material does not settle <the specific point>.", "sources": ["GD-10#37"] }
+    { "question": 1, "topic": "Quality section format", "sufficiency": "PARTIAL", "paragraphs": ["..."], "notEstablished": "The supplied material does not settle <the specific point>.", "sources": ["GD-10#37"] }
   ],
   "termsUsed": ["IPC glossary terms or document references you actually relied on"]
 }
@@ -621,6 +712,10 @@ IPC JSON Draft:`;
     console.warn('[Gemma AI] Could not parse the draft reply. Using fallback.');
   }
 
+  assertOneToOne(
+    evidence.map((item) => item.question),
+    fallback.answers,
+  );
   return fallback;
 }
 
@@ -629,5 +724,7 @@ export const gemmaService = {
   recommendOfficial,
   generateDraft,
   decomposeEnquiry,
+  dedupeQuestions,
+  deriveTopic,
 };
 export default gemmaService;

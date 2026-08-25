@@ -2,49 +2,58 @@ import env from '../config/env.js';
 import { generateDraft, decomposeEnquiry } from '../services/ai/gemmaService.js';
 import { retrieveContext } from '../data/ipcKnowledge.js';
 import { selectContext } from '../data/ipcContextBrain.js';
+import { assembleDraftEmail } from '../../../frontend/src/services/ai/draftComposer.js';
+import { qualifyPassages } from '../data/evidenceQualification.js';
 
 const ENQUIRY = {
-  subject: 'Query on degradation products and excipient compatibility in a stability study',
+  subject: 'Clarification on submission documentation and compliance requirements',
   body: [
     'Dear Sir/Madam,',
     '',
-    'During accelerated stability studies of our tablet formulation we have observed a degradation product that is not listed in the monograph.',
+    'We require clarification on the documentation to be included in our forthcoming submission.',
     '',
-    '1. The impurity appears above the identification threshold at 40 degrees Celcius and 75 percent RH but remains below it at long-term conditions. Is characterisation required in this case, and should it be reported in the specification?',
+    '1. Which guideline currently applies to the format of the quality section, and is the previous format still accepted during the transition period?',
     '',
-    '2. We suspect an interaction between the active substance and one of the excipients used in the formulation. Is there published guidance on excipient compatibility study design that we should follow?',
+    '2. For a change in the manufacturing site, what supporting documentation is expected, and does the change require prior approval or is notification sufficient?',
     '',
-    'We would be grateful for direction on whether a change of excipient would require a fresh stability commitment.',
+    '3. Please confirm the compliance evidence required in respect of the revised labelling requirements.',
     '',
     'Regards,',
     'Abhinash Pritiraj',
-    'Formulation Development',
+    'Regulatory Affairs',
   ].join('\n'),
   inquirerName: 'Abhinash Pritiraj',
   summaryText:
-    'The inquirer reports a degradation product above the identification threshold under accelerated conditions, asks whether characterisation and specification reporting are required, asks for guidance on excipient compatibility study design, and asks whether changing an excipient requires a fresh stability commitment.',
+    'The inquirer asks which guideline applies to the quality section format and whether the previous format is still accepted during the transition period, what documentation a manufacturing site change requires and whether prior approval or notification applies, and what compliance evidence the revised labelling requirements demand.',
   keyPoints: [
-    'Degradation product above the identification threshold under accelerated conditions only.',
-    'Suspected active–excipient interaction.',
-    'Whether an excipient change requires a fresh stability commitment.',
+    'Applicable guideline for the quality section format and transition-period acceptance.',
+    'Manufacturing site change: documentation, and approval versus notification.',
+    'Compliance evidence for revised labelling requirements.',
   ],
 };
 
 console.log(`GEMMA_API_URL: ${env.GEMMA_API_URL || '(not configured — will use the fallback)'}`);
-console.log(`timeout: ${env.GEMMA_TIMEOUT_MS}ms, x3 for drafting\n`);
+console.log(`timeout: ${env.GEMMA_TIMEOUT_MS}ms, x5 for drafting\n`);
 
 console.log('--- decomposition ---');
 const questions = await decomposeEnquiry(ENQUIRY);
 questions.forEach((q, i) => console.log(`  Q${i + 1}: ${q}`));
 
-console.log('\n--- evidence retrieved per question ---');
+console.log('\n--- evidence: retrieved → qualified, per question ---');
 questions.forEach((question, index) => {
-  console.log(`\n  QUESTION ${index + 1}`);
-  const glossary = selectContext(question);
-  const passages = retrieveContext(question, { limit: 5 });
-  console.log(`    glossary: ${glossary.map((e) => e.id).join(', ') || '(none)'}`);
-  if (passages.length === 0) console.log('    passages: (none matched)');
-  passages.forEach((p) => console.log(`    passage:  [${p.docId}] ${p.section}`));
+  const anchored = `${ENQUIRY.subject} ${question}`.trim();
+  const candidates = retrieveContext(anchored, { limit: 12, charBudget: 20000 });
+  const { qualified, rejected } = qualifyPassages(question, candidates);
+
+  console.log(`\n  QUESTION ${index + 1} — ${candidates.length} candidates → ${qualified.length} qualified`);
+  if (qualified.length === 0) console.log('    (nothing qualified — this question must be NOT_ESTABLISHED)');
+  qualified.slice(0, 3).forEach((p) => console.log(`    KEEP  [${p.docId}] ${p.section}`));
+  rejected.slice(0, 4).forEach((r) =>
+    console.log(`    drop  [${r.chunk.docId}] ${r.chunk.section.slice(0, 52)} — ${r.reason}`),
+  );
+  if (qualified.length > 0) {
+    console.log(`    glossary: ${selectContext(anchored).map((e) => e.id).join(', ') || '(none)'}`);
+  }
 });
 
 console.log('\n--- calling Gemma ---');
@@ -52,13 +61,23 @@ const started = Date.now();
 const draft = await generateDraft(ENQUIRY);
 console.log(`took ${Date.now() - started}ms; aiGenerated=${draft.aiGenerated} fallback=${draft.fallback}\n`);
 
-console.log(`Subject: ${draft.subject}\n`);
-draft.answers.forEach((answer, index) => {
-  console.log(`${index + 1}. [${answer.sufficiency}] ${answer.questionText}`);
-  answer.paragraphs.forEach((paragraph) => console.log(`\n   ${paragraph}`));
-  if (answer.notEstablished) console.log(`\n   NOT SETTLED: ${answer.notEstablished}`);
-  if (answer.sources.length) console.log(`\n   Sources: ${answer.sources.join('; ')}`);
-  console.log('');
-});
+console.log(`questions: ${questions.length}   answers: ${draft.answers.length}`);
+console.log(
+  `sufficiency: ${draft.answers.map((a) => `${a.question}=${a.sufficiency}`).join(' ')}\n`,
+);
 
+console.log('════════ COMPOSED EMAIL ════════\n');
+console.log(
+  assembleDraftEmail({
+    query: {
+      queryId: 'QRY-2026-00005',
+      subject: ENQUIRY.subject,
+      inquirer: { name: ENQUIRY.inquirerName },
+    },
+    draft,
+  }),
+);
+
+console.log(`\n════════ traceability ════════`);
+draft.answers.forEach((a) => console.log(`  ${a.question}. sources: ${a.sources.join('; ') || '(none)'}`));
 console.log(`contextUsed: ${draft.contextUsed.join(', ')}`);
