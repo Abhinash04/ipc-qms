@@ -17,6 +17,7 @@ export function MyWorkPage() {
   return (
     <QueryTable
       title="My Work"
+      greeting="My Assigned Work 💼"
       purpose={`Queries assigned to or awaiting action from ${currentUser?.name || 'you'}.`}
       breadcrumbItems={[{ label: 'Dashboard', path: paths.DASHBOARD }, { label: 'My Work' }]}
       detailPath={paths.QUERY_DETAIL}

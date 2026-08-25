@@ -13,10 +13,10 @@ import {
   ChevronsUpDown,
   ChevronLeft,
   ChevronRight,
-  Archive,
   Inbox
 } from 'lucide-react';
 import { Breadcrumb } from '@/components/common/Breadcrumb';
+import { PageHeader } from '@/components/common/PageHeader';
 import { useWorkflowStore } from '@/store/useWorkflowStore';
 import { findUserById } from '@/constants/mockUsers';
 import { buildPath } from '@/constants/routePaths';
@@ -24,7 +24,18 @@ import { ROLE_LABELS } from '@/constants/roles';
 import { ROLE_SLUG } from '@/constants/permissions';
 import { useAuthStore } from '@/store/useAuthStore';
 
-export function QueryTable({ title, purpose, breadcrumbItems, detailPath, filter, actions, emptyMessage }) {
+export function QueryTable({ 
+  title, 
+  purpose, 
+  breadcrumbItems, 
+  detailPath, 
+  filter, 
+  actions, 
+  emptyMessage,
+  greeting = "IPC Query Registry 📋",
+  icon = null,
+  iconClassName
+}) {
   const currentUser = useAuthStore((state) => state.currentUser);
   const allQueries = useWorkflowStore((state) => state.queries);
   const queries = filter ? allQueries.filter(filter) : allQueries;
@@ -71,23 +82,14 @@ export function QueryTable({ title, purpose, breadcrumbItems, detailPath, filter
     <div className="space-y-6">
       {breadcrumbItems && <Breadcrumb items={breadcrumbItems} />}
 
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-4">
-          <div className="flex h-13 w-13 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600 border border-emerald-100 shadow-2xs">
-            <Archive className="h-6.5 w-6.5" strokeWidth={2} />
-          </div>
-          <div>
-            <h1 className="font-heading text-[52px] sm:text-[60px] font-black tracking-tight text-transparent bg-clip-text bg-linear-to-r from-slate-900 via-sidebar-tooltip to-blue-900 m-0 leading-none drop-shadow-2xs">
-              {title || 'Queries'}
-            </h1>
-            <p className="m-0 text-[14.5px] font-medium text-slate-400 mt-2">
-              {purpose || 'All registered queries across the organization.'}
-            </p>
-          </div>
-        </div>
-
-        {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
-      </div>
+      <PageHeader
+        greeting={greeting}
+        title={title || 'Queries'}
+        purpose={purpose || 'All registered queries across the organization.'}
+        actions={actions}
+        icon={icon}
+        iconClassName={iconClassName}
+      />
 
       <div className="bg-white rounded-3xl border border-slate-200/70 overflow-hidden shadow-sm flex flex-col justify-between">
         <div className="p-6">

@@ -1,10 +1,13 @@
-import { Inbox, CheckCircle2, Clock, FileText } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Inbox, CheckCircle2, FileText } from 'lucide-react';
 import { PageHeader } from '@/components/common/PageHeader';
 import { StatTile } from '@/components/common/StatTile';
 import { DashboardQueryList } from '@/components/dashboard/DashboardQueryList';
 import { DashboardActivity } from '@/components/dashboard/DashboardActivity';
 import { WORKFLOW_STATE, AUDIT_EVENT } from '@/constants/statusEnums';
 import { ROLE_LABELS } from '@/constants/roles';
+import { getTimeBasedGreeting } from '@/utils/greeting';
+import { useRoutePaths } from '@/hooks/useRoutePaths';
 
 function countSince(auditEvents, event, days) {
   const d = new Date();
@@ -13,7 +16,8 @@ function countSince(auditEvents, event, days) {
 }
 
 export function FrontOfficeDashboard({ currentUser, queries, auditEvents }) {
-  const firstName = currentUser?.name ? currentUser.name.split(' ')[0] : 'User';
+  const navigate = useNavigate();
+  const paths = useRoutePaths();
 
   const pendingDispatch = queries.filter(q => q.workflowState === WORKFLOW_STATE.PENDING_DISPATCH);
   const openQueries = queries.filter(q => q.workflowState !== WORKFLOW_STATE.CLOSED && q.workflowState !== WORKFLOW_STATE.PENDING_VERIFICATION);
@@ -28,47 +32,50 @@ export function FrontOfficeDashboard({ currentUser, queries, auditEvents }) {
       trendText: null,
       trendType: 'up',
       subtextMain: `↑ ${pendingDispatch.length} require dispatch`,
-      subtextColor: 'text-amber-600',
-      cardBg: 'linear-gradient(180deg, #fffdf2 0%, #ffffff 100%)',
-      cardBorder: '#fde68a',
-      numColor: '#d97706',
-      illustrationType: 'drafting',
-      icon: Clock,
+      subtextSecondary: 'Ready for delivery',
+      cardBg: 'linear-gradient(180deg, #faf5ff 0%, #ffffff 100%)',
+      cardBorder: '#e9d5ff',
+      numColor: '#9333ea',
+      illustrationType: 'dispatch',
+      icon: Inbox,
+      onClick: () => paths.DISPATCH && navigate(paths.DISPATCH),
     },
     {
-      label: 'Open Queries',
+      label: 'Active Queries',
       caption: 'In progress',
       value: openQueries.length,
-      trendText: receivedThisWeek ? `+${receivedThisWeek} received this week` : null,
-      trendType: 'up',
-      subtextMain: `Total active cases`,
-      subtextColor: 'text-blue-600',
-      cardBg: 'linear-gradient(180deg, #f4f8ff 0%, #ffffff 100%)',
+      trendText: null,
+      trendType: 'neutral',
+      subtextMain: `↑ ${openQueries.length} total active`,
+      subtextSecondary: 'Cross-functional',
+      cardBg: 'linear-gradient(180deg, #eff6ff 0%, #ffffff 100%)',
       cardBorder: '#bfdbfe',
       numColor: '#2563eb',
-      illustrationType: 'review',
-      icon: Inbox,
+      illustrationType: 'open',
+      icon: FileText,
+      onClick: () => paths.QUERIES && navigate(paths.QUERIES),
     },
     {
       label: 'Closed Today',
-      caption: 'Dispatched & finished',
+      caption: 'Last 24 hours',
       value: closedToday,
       trendText: null,
       trendType: 'up',
-      subtextMain: `${closedToday} sent out today`,
-      subtextColor: 'text-emerald-600',
+      subtextMain: `↑ ${closedToday} resolved today`,
+      subtextSecondary: `${receivedThisWeek} received this week`,
       cardBg: 'linear-gradient(180deg, #f0fdf4 0%, #ffffff 100%)',
       cardBorder: '#bbf7d0',
       numColor: '#059669',
       illustrationType: 'closed',
       icon: CheckCircle2,
+      onClick: () => paths.INBOX && navigate(paths.INBOX),
     },
   ];
 
   return (
     <div className="space-y-5">
       <PageHeader
-        greeting={`Hello, ${firstName} 👋`}
+        greeting={getTimeBasedGreeting(currentUser?.name)}
         title="Front Office Dashboard"
         purpose={
           <>

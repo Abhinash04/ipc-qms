@@ -19,6 +19,7 @@ export function ReviewsListPage() {
   return (
     <QueryTable
       title="Reviews"
+      greeting="Quality & Review 🔍"
       purpose="Queries waiting on your review level right now."
       breadcrumbItems={[{ label: 'Dashboard', path: paths.DASHBOARD }, { label: 'Reviews' }]}
       detailPath={paths.REVIEW_DETAIL}

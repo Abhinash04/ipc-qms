@@ -9,11 +9,11 @@ import { Plus as PlusIcon } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useRoutePaths } from '@/hooks/useRoutePaths';
 import { isQueryOwnedBy } from '@/utils/queryOwnership';
+import { getTimeBasedGreeting } from '@/utils/greeting';
 
 export function InquirerDashboard({ currentUser, queries }) {
   const navigate = useNavigate();
   const paths = useRoutePaths();
-  const firstName = currentUser?.name ? currentUser.name.split(' ')[0] : 'User';
 
   const myQueries = queries.filter((q) => isQueryOwnedBy(q, currentUser));
 
@@ -34,6 +34,7 @@ export function InquirerDashboard({ currentUser, queries }) {
       numColor: '#2563eb',
       illustrationType: 'review',
       icon: Inbox,
+      onClick: () => paths.QUERIES && navigate(paths.QUERIES),
     },
     {
       label: 'Resolved Queries',
@@ -48,6 +49,7 @@ export function InquirerDashboard({ currentUser, queries }) {
       numColor: '#059669',
       illustrationType: 'closed',
       icon: CheckCircle2,
+      onClick: () => paths.QUERIES && navigate(paths.QUERIES),
     },
     {
       label: 'Total Submitted',
@@ -62,13 +64,14 @@ export function InquirerDashboard({ currentUser, queries }) {
       numColor: '#475569',
       illustrationType: 'assigned',
       icon: FileText,
+      onClick: () => paths.QUERIES && navigate(paths.QUERIES),
     }
   ];
 
   return (
     <div className="space-y-5">
       <PageHeader
-        greeting={`Hello, ${firstName} 👋`}
+        greeting={getTimeBasedGreeting(currentUser?.name)}
         title="My Queries"
         purpose={
           <>
