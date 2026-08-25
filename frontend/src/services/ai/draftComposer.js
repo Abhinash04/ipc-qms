@@ -5,15 +5,11 @@ Ministry of Health & Family Welfare
 Government of India`;
 
 export const NOT_ESTABLISHED_SENTENCE =
-  'The available IPC material does not establish an answer to this question. It requires assessment against the applicable monograph and the relevant regulatory requirements.';
+  'The available IPC material does not establish this requirement.';
 
-export const PARTIAL_GAP_SENTENCE =
-  'The available IPC material does not settle the remainder of this question, which requires assessment against the applicable monograph and the relevant regulatory requirements.';
-
-const headline = (text) => {
-  const clean = String(text || '').replace(/\s+/g, ' ').trim();
-  if (clean.length <= 110) return clean;
-  return `${clean.slice(0, 107).trimEnd()}…`;
+const heading = (answer, index) => {
+  const topic = String(answer.topic || '').replace(/\s+/g, ' ').trim();
+  return `${index + 1}. ${topic || `Question ${index + 1}`}`;
 };
 
 function renderAnswers(answers) {
@@ -21,24 +17,18 @@ function renderAnswers(answers) {
     const paragraphs = Array.isArray(answer.paragraphs)
       ? answer.paragraphs.map((p) => String(p).trim()).filter(Boolean)
       : [];
-    const sources = Array.isArray(answer.sources)
-      ? answer.sources.map((s) => String(s).trim()).filter(Boolean)
-      : [];
 
-    const lines = [`${index + 1}. ${headline(answer.questionText) || `Question ${index + 1}`}`];
+    const lines = [heading(answer, index)];
 
     if (answer.sufficiency === 'NOT_ESTABLISHED' || paragraphs.length === 0) {
       lines.push(NOT_ESTABLISHED_SENTENCE);
-    } else {
-      lines.push(...paragraphs);
-
-      if (answer.sufficiency !== 'ANSWERED') {
-        const gap = String(answer.notEstablished || '').trim();
-        lines.push(gap || PARTIAL_GAP_SENTENCE);
-      }
-
-      if (sources.length > 0) lines.push(`Sources: ${sources.join('; ')}`);
+      return lines.join('\n\n');
     }
+
+    lines.push(...paragraphs);
+
+    const gap = String(answer.notEstablished || '').trim();
+    if (answer.sufficiency !== 'ANSWERED' && gap) lines.push(gap);
 
     return lines.join('\n\n');
   });
@@ -58,10 +48,6 @@ export function assembleDraftEmail({ query, draft }) {
   const sections = answers.length > 0 ? renderAnswers(answers) : flat;
   if (sections.length === 0) return '';
 
-  const unanswered = Array.isArray(draft.unanswered)
-    ? draft.unanswered.map((u) => String(u).trim()).filter(Boolean)
-    : [];
-
   const subject =
     typeof draft.subject === 'string' && draft.subject.trim()
       ? draft.subject.trim()
@@ -75,13 +61,6 @@ export function assembleDraftEmail({ query, draft }) {
     `Dear ${recipient},`,
     ...sections,
   ];
-
-  if (unanswered.length > 0) {
-    blocks.push(
-      'The following could not be answered from the information supplied and requires input before this response is sent:',
-      unanswered.map((item, index) => `${index + 1}. ${item}`).join('\n'),
-    );
-  }
 
   blocks.push(
     `Should you require any further clarification, please write back quoting reference ${query.queryId}.`,
