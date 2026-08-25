@@ -2,7 +2,12 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 import { useWorkflowStore } from '@/store/useWorkflowStore';
 import { findUserById } from '@/constants/mockUsers';
-import { assembleDraftEmail, IPC_SIGNATURE } from '@/services/ai/draftComposer';
+import {
+  assembleDraftEmail,
+  IPC_SIGNATURE,
+  NOT_ESTABLISHED_SENTENCE,
+  PARTIAL_GAP_SENTENCE,
+} from '@/services/ai/draftComposer';
 
 vi.mock('@/services/api/mailboxService');
 
@@ -106,6 +111,143 @@ describe('assembleDraftEmail keeps identity out of the model’s hands', () => {
   it('falls back to a neutral salutation when the inquirer has no name', () => {
     const anonymous = { ...query, inquirer: { email: 'a@example.com' } };
     expect(assembleDraftEmail({ query: anonymous, draft: GEMMA_DRAFT })).toContain('Dear Sir/Madam,');
+  });
+});
+
+describe('assembleDraftEmail renders one numbered section per question', () => {
+  const query = {
+    queryId: 'QRY-2026-00004',
+    subject: 'Degradation products and excipient compatibility',
+    inquirer: { name: 'Abhinash Pritiraj', email: 'a@example.com' },
+  };
+
+  const SECTIONED = {
+    subject: 'Response regarding degradation products and excipient compatibility',
+    answers: [
+      {
+        question: 1,
+        questionText:
+          'The impurity appears above the identification threshold. Is characterisation required?',
+        sufficiency: 'PARTIAL',
+        paragraphs: ['Related substances in IP monographs are controlled by chromatographic methods.'],
+        sources: ['GD-10#37', 'FAQ#20'],
+      },
+      {
+        question: 2,
+        questionText: 'Is there published guidance on excipient compatibility study design?',
+        sufficiency: 'NOT_ESTABLISHED',
+        paragraphs: [],
+        sources: [],
+      },
+      {
+        question: 3,
+        questionText: 'Would a change of excipient require a fresh stability commitment?',
+        sufficiency: 'NOT_ESTABLISHED',
+        paragraphs: [],
+        sources: [],
+      },
+    ],
+  };
+
+  it('numbers every question', () => {
+    const email = assembleDraftEmail({ query, draft: SECTIONED });
+    expect(email).toContain('1. The impurity appears above the identification threshold');
+    expect(email).toContain('2. Is there published guidance on excipient compatibility');
+    expect(email).toContain('3. Would a change of excipient require a fresh stability commitment?');
+  });
+
+  it('answers the question the IPC material supports', () => {
+    const email = assembleDraftEmail({ query, draft: SECTIONED });
+    expect(email).toContain('Related substances in IP monographs are controlled');
+  });
+
+  it('states plainly where the IPC material does not establish an answer', () => {
+    const email = assembleDraftEmail({ query, draft: SECTIONED });
+    const occurrences = email.split(NOT_ESTABLISHED_SENTENCE).length - 1;
+    expect(occurrences).toBe(2);
+  });
+
+  it('keeps per-answer source traceability', () => {
+    expect(assembleDraftEmail({ query, draft: SECTIONED })).toContain('Sources: GD-10#37; FAQ#20');
+  });
+
+  it('renders the model’s own statement of what is not settled', () => {
+    const withGap = {
+      answers: [
+        {
+          question: 1,
+          questionText: 'Is characterisation required?',
+          sufficiency: 'PARTIAL',
+          paragraphs: ['Related substances are controlled by chromatographic methods.'],
+          notEstablished: 'The material does not settle the identification threshold question.',
+          sources: ['GD-10#37'],
+        },
+      ],
+    };
+    const email = assembleDraftEmail({ query, draft: withGap });
+    expect(email).toContain('The material does not settle the identification threshold question.');
+  });
+
+  it('supplies a fallback gap sentence when the model omits one on a PARTIAL answer', () => {
+    const noGap = {
+      answers: [
+        {
+          question: 1,
+          questionText: 'Is characterisation required?',
+          sufficiency: 'PARTIAL',
+          paragraphs: ['Related substances are controlled by chromatographic methods.'],
+          sources: [],
+        },
+      ],
+    };
+    expect(assembleDraftEmail({ query, draft: noGap })).toContain(PARTIAL_GAP_SENTENCE);
+  });
+
+  it('does not append a gap sentence to a fully ANSWERED question', () => {
+    const answered = {
+      answers: [
+        {
+          question: 1,
+          questionText: 'Where can I buy the IP?',
+          sufficiency: 'ANSWERED',
+          paragraphs: ['Copies are available directly from the IPC.'],
+          sources: [],
+        },
+      ],
+    };
+    const email = assembleDraftEmail({ query, draft: answered });
+    expect(email).not.toContain(PARTIAL_GAP_SENTENCE);
+    expect(email).not.toContain(NOT_ESTABLISHED_SENTENCE);
+  });
+
+  it('does not collapse the questions into one unanswered list', () => {
+    expect(assembleDraftEmail({ query, draft: SECTIONED })).not.toContain('could not be answered');
+  });
+
+  it('still greets the real inquirer and signs off constantly', () => {
+    const email = assembleDraftEmail({ query, draft: SECTIONED });
+    expect(email).toContain('Dear Abhinash Pritiraj,');
+    expect(email.endsWith(IPC_SIGNATURE)).toBe(true);
+    expect(email).toContain('QRY-2026-00004');
+  });
+
+  it('falls back to the not-established sentence when a section has no paragraphs', () => {
+    const empty = { answers: [{ question: 1, questionText: 'A question?', sufficiency: 'PARTIAL', paragraphs: [] }] };
+    expect(assembleDraftEmail({ query, draft: empty })).toContain(NOT_ESTABLISHED_SENTENCE);
+  });
+
+  it('truncates an over-long question headline', () => {
+    const long = {
+      answers: [
+        {
+          question: 1,
+          questionText: 'x'.repeat(300),
+          sufficiency: 'NOT_ESTABLISHED',
+          paragraphs: [],
+        },
+      ],
+    };
+    expect(assembleDraftEmail({ query, draft: long })).toContain('…');
   });
 });
 
