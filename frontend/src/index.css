@@ -333,3 +333,77 @@ body {
   filter: blur(16px);
   pointer-events: none;
 }
+
+/* ==========================================================================
+   Animated Emojis Keyframes & Utility Classes
+   ========================================================================== */
+@keyframes emoji-wave {
+  0% { transform: rotate(0deg); }
+  15% { transform: rotate(18deg); }
+  30% { transform: rotate(-12deg); }
+  45% { transform: rotate(18deg); }
+  60% { transform: rotate(-8deg); }
+  75% { transform: rotate(12deg); }
+  100% { transform: rotate(0deg); }
+}
+
+@keyframes emoji-mailbox {
+  0%, 100% { transform: translateY(0) scale(1); }
+  50% { transform: translateY(-5px) scale(1.12); }
+}
+
+@keyframes emoji-query {
+  0%, 100% { transform: scale(1) rotate(0deg); }
+  25% { transform: scale(1.12) rotate(-6deg); }
+  75% { transform: scale(1.12) rotate(6deg); }
+}
+
+@keyframes emoji-rocket {
+  0%, 100% { transform: translate(0, 0) rotate(0deg); }
+  50% { transform: translate(4px, -6px) rotate(8deg); }
+}
+
+@keyframes emoji-bell {
+  0%, 100% { transform: rotate(0deg); }
+  20% { transform: rotate(20deg); }
+  40% { transform: rotate(-20deg); }
+  60% { transform: rotate(12deg); }
+  80% { transform: rotate(-12deg); }
+}
+
+@keyframes emoji-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+
+.emoji-animated {
+  display: inline-block;
+  vertical-align: middle;
+}
+
+.emoji-wave {
+  transform-origin: 70% 70%;
+  animation: emoji-wave 2s infinite ease-in-out;
+}
+
+.emoji-mailbox {
+  animation: emoji-mailbox 2s infinite ease-in-out;
+}
+
+.emoji-query {
+  animation: emoji-query 2.5s infinite ease-in-out;
+}
+
+.emoji-rocket {
+  animation: emoji-rocket 1.8s infinite ease-in-out;
+}
+
+.emoji-bell {
+  transform-origin: top center;
+  animation: emoji-bell 2.2s infinite ease-in-out;
+}
+
+.emoji-float {
+  animation: emoji-float 2.4s infinite ease-in-out;
+}
+

@@ -13,6 +13,7 @@ export function DraftingListPage() {
   return (
     <QueryTable
       title="Drafting"
+      greeting="Investigation & Drafting ✍️"
       purpose="Queries currently in investigation & drafting, for Assigned Officials."
       breadcrumbItems={[{ label: 'Dashboard', path: paths.DASHBOARD }, { label: 'Drafting' }]}
       detailPath={paths.DRAFTING_DETAIL}

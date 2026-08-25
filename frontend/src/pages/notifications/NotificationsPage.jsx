@@ -1,6 +1,5 @@
 import { Link } from 'react-router-dom';
 import { 
-  Bell, 
   Hourglass, 
   XCircle, 
   User, 
@@ -9,6 +8,7 @@ import {
   Info 
 } from 'lucide-react';
 import { Breadcrumb } from '@/components/common/Breadcrumb';
+import { PageHeader } from '@/components/common/PageHeader';
 import { useWorkflowStore } from '@/store/useWorkflowStore';
 import { ROLE_LABELS } from '@/constants/roles';
 import { buildPath } from '@/constants/routePaths';
@@ -72,21 +72,11 @@ export function NotificationsPage() {
     <div className="space-y-6">
       <Breadcrumb items={[{ label: 'Dashboard', path: paths.DASHBOARD }, { label: 'Notifications' }]} />
 
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-4">
-          <div className="flex h-13 w-13 items-center justify-center rounded-2xl bg-blue-50 text-blue-600 border border-blue-100/60 shadow-2xs">
-            <Bell className="h-6.5 w-6.5" strokeWidth={2} />
-          </div>
-          <div>
-            <h1 className="font-heading text-[52px] sm:text-[60px] font-black tracking-tight text-transparent bg-clip-text bg-linear-to-r from-slate-900 via-sidebar-tooltip to-blue-900 m-0 leading-none drop-shadow-2xs">
-              Notification Center
-            </h1>
-            <p className="m-0 text-[14.5px] font-medium text-slate-400 mt-2">
-              Workflow events raised for the cases you are involved in
-            </p>
-          </div>
-        </div>
-      </div>
+      <PageHeader
+        greeting="Live Alerts & Updates 🔔"
+        title="Notification Center"
+        purpose="Workflow events raised for the cases you are involved in"
+      />
 
       <div className="bg-white rounded-3xl border border-slate-200/70 p-6 shadow-sm">
         <div className="relative pl-3 space-y-6 my-2">

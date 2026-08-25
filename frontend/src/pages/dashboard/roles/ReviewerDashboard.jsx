@@ -1,3 +1,4 @@
+import { useNavigate } from 'react-router-dom';
 import { ClipboardCheck, CheckCircle2, XCircle, FileText } from 'lucide-react';
 import { PageHeader } from '@/components/common/PageHeader';
 import { StatTile } from '@/components/common/StatTile';
@@ -5,6 +6,8 @@ import { DashboardQueryList } from '@/components/dashboard/DashboardQueryList';
 import { DashboardRecentlyClosed } from '@/components/dashboard/DashboardRecentlyClosed';
 import { WORKFLOW_STATE, AUDIT_EVENT } from '@/constants/statusEnums';
 import { ROLE_LABELS } from '@/constants/roles';
+import { getTimeBasedGreeting } from '@/utils/greeting';
+import { useRoutePaths } from '@/hooks/useRoutePaths';
 
 function countSince(auditEvents, event, days) {
   const d = new Date();
@@ -17,7 +20,8 @@ function newestFirst(events) {
 }
 
 export function ReviewerDashboard({ currentUser, queries, workflowSteps, auditEvents }) {
-  const firstName = currentUser?.name ? currentUser.name.split(' ')[0] : 'User';
+  const navigate = useNavigate();
+  const paths = useRoutePaths();
 
   const awaitingMyReview = queries.filter((q) => {
     if (q.workflowState !== WORKFLOW_STATE.UNDER_REVIEW && q.workflowState !== WORKFLOW_STATE.PENDING_FINAL_APPROVAL) return false;
@@ -54,6 +58,7 @@ export function ReviewerDashboard({ currentUser, queries, workflowSteps, auditEv
       numColor: '#d97706',
       illustrationType: 'review',
       icon: ClipboardCheck,
+      onClick: () => paths.REVIEWS && navigate(paths.REVIEWS),
     },
     {
       label: 'Approved Today',
@@ -68,6 +73,7 @@ export function ReviewerDashboard({ currentUser, queries, workflowSteps, auditEv
       numColor: '#059669',
       illustrationType: 'closed',
       icon: CheckCircle2,
+      onClick: () => (paths.APPROVALS || paths.QUERIES) && navigate(paths.APPROVALS || paths.QUERIES),
     },
     {
       label: 'Returned Today',
@@ -82,13 +88,14 @@ export function ReviewerDashboard({ currentUser, queries, workflowSteps, auditEv
       numColor: '#e11d48',
       illustrationType: 'drafting',
       icon: XCircle,
+      onClick: () => (paths.REVIEWS || paths.QUERIES) && navigate(paths.REVIEWS || paths.QUERIES),
     },
   ];
 
   return (
     <div className="space-y-5">
       <PageHeader
-        greeting={`Hello, ${firstName} 👋`}
+        greeting={getTimeBasedGreeting(currentUser?.name)}
         title="Reviewer Dashboard"
         purpose={
           <>

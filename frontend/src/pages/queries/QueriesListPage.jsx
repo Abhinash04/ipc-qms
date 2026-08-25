@@ -24,6 +24,7 @@ export function QueriesListPage() {
   return (
     <QueryTable
       title={isAssignedOfficial ? "Assigned Queries" : "Queries"}
+      greeting="IPC Query Registry 📋"
       purpose={isAssignedOfficial ? "Queries currently assigned to you." : "All registered queries across the organization."}
       breadcrumbItems={[{ label: 'Dashboard', path: paths.DASHBOARD }, { label: 'Queries' }]}
       detailPath={paths.QUERY_DETAIL}

@@ -1,87 +1,80 @@
-import { Inbox, UserCheck, PenLine, FileText } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Inbox, FileText, Clock } from 'lucide-react';
 import { PageHeader } from '@/components/common/PageHeader';
 import { StatTile } from '@/components/common/StatTile';
 import { DashboardQueryList } from '@/components/dashboard/DashboardQueryList';
 import { DashboardActivity } from '@/components/dashboard/DashboardActivity';
-import { WORKFLOW_STATE, AUDIT_EVENT } from '@/constants/statusEnums';
+import { WORKFLOW_STATE } from '@/constants/statusEnums';
 import { ROLE_LABELS } from '@/constants/roles';
+import { getTimeBasedGreeting } from '@/utils/greeting';
+import { useRoutePaths } from '@/hooks/useRoutePaths';
 
-const DRAFTING_STATES = [
-  WORKFLOW_STATE.ASSIGNED,
-  WORKFLOW_STATE.DRAFTING,
-  WORKFLOW_STATE.RETURNED_FOR_REVISION,
-];
+export function AssignedOfficialDashboard({ currentUser, queries, auditEvents, workflowSteps }) {
+  const navigate = useNavigate();
+  const paths = useRoutePaths();
 
-function countSince(auditEvents, event, days) {
-  const d = new Date();
-  d.setDate(d.getDate() - days);
-  return auditEvents.filter((e) => e.event === event && new Date(e.at) >= d).length;
-}
-
-export function AssignedOfficialDashboard({ currentUser, queries, workflowSteps, auditEvents }) {
-  const firstName = currentUser?.name ? currentUser.name.split(' ')[0] : 'User';
-
-  const mine = queries.filter((q) => q.currentAssigneeId === currentUser?.id);
-  
-  const myQueue = queries.filter((q) => {
+  const myQueries = queries.filter((q) => {
     if (q.currentAssigneeId === currentUser?.id) return true;
     const step = workflowSteps.find((s) => s.stepId === q.currentWorkflowStepId);
     return step?.assignedUserId === currentUser?.id;
   });
 
-  const draftsCount = mine.filter((q) => DRAFTING_STATES.includes(q.workflowState)).length;
-  const returnedCount = mine.filter(q => q.workflowState === WORKFLOW_STATE.RETURNED_FOR_REVISION).length;
-  const assignedThisWeek = countSince(auditEvents, AUDIT_EVENT.QUERY_ASSIGNED, 7);
+  const draftingCount = myQueries.filter((q) => q.workflowState === WORKFLOW_STATE.DRAFTING || q.workflowState === WORKFLOW_STATE.ASSIGNED).length;
+  const underReviewCount = myQueries.filter((q) => q.workflowState === WORKFLOW_STATE.UNDER_REVIEW).length;
+  const returnedCount = myQueries.filter((q) => q.workflowState === WORKFLOW_STATE.RETURNED_FOR_REVISION).length;
 
   const kpis = [
     {
-      label: 'Assigned to you',
-      caption: 'Cases you own',
-      value: mine.length,
-      trendText: assignedThisWeek ? `+${assignedThisWeek} this week` : null,
-      trendType: 'up',
-      subtextMain: `↑ ${mine.length} assigned to you`,
-      subtextColor: 'text-emerald-600',
-      cardBg: 'linear-gradient(180deg, #f4f8ff 0%, #ffffff 100%)',
-      cardBorder: '#bfdbfe',
-      numColor: '#2563eb',
-      illustrationType: 'assigned',
-      icon: UserCheck,
-    },
-    {
-      label: 'In drafting',
-      caption: 'Being written',
-      value: draftsCount,
+      label: 'In Investigation / Drafting',
+      caption: 'Requires your draft',
+      value: draftingCount,
       trendText: null,
       trendType: 'up',
-      subtextMain: `↑ ${draftsCount} in draft state`,
-      subtextColor: 'text-amber-600',
-      cardBg: 'linear-gradient(180deg, #fffdf2 0%, #ffffff 100%)',
-      cardBorder: '#fde68a',
-      numColor: '#d97706',
+      subtextMain: `↑ ${draftingCount} require draft response`,
+      subtextSecondary: 'Action needed',
+      cardBg: 'linear-gradient(180deg, #eff6ff 0%, #ffffff 100%)',
+      cardBorder: '#bfdbfe',
+      numColor: '#2563eb',
       illustrationType: 'drafting',
-      icon: PenLine,
+      icon: Clock,
+      onClick: () => paths.DRAFTING && navigate(paths.DRAFTING),
+    },
+    {
+      label: 'Submitted for Review',
+      caption: 'With Reviewers',
+      value: underReviewCount,
+      trendText: null,
+      trendType: 'neutral',
+      subtextMain: `↑ ${underReviewCount} pending approval`,
+      subtextSecondary: 'Awaiting reviewer feedback',
+      cardBg: 'linear-gradient(180deg, #faf5ff 0%, #ffffff 100%)',
+      cardBorder: '#e9d5ff',
+      numColor: '#9333ea',
+      illustrationType: 'review',
+      icon: FileText,
+      onClick: () => (paths.MY_WORK || paths.QUERIES) && navigate(paths.MY_WORK || paths.QUERIES),
     },
     {
       label: 'Returned for Revision',
-      caption: 'Needs updates',
+      caption: 'Action needed',
       value: returnedCount,
-      trendText: returnedCount > 0 ? 'Action required' : 'All good',
-      trendType: returnedCount > 0 ? 'down' : 'up',
-      subtextMain: `${returnedCount} returned by reviewer`,
-      subtextColor: returnedCount > 0 ? 'text-rose-600' : 'text-slate-400',
-      cardBg: returnedCount > 0 ? 'linear-gradient(180deg, #fff5f6 0%, #ffffff 100%)' : 'linear-gradient(180deg, #f8fafc 0%, #ffffff 100%)',
+      trendText: null,
+      trendType: returnedCount > 0 ? 'down' : 'neutral',
+      subtextMain: returnedCount > 0 ? `! ${returnedCount} returned for changes` : 'No returned drafts',
+      subtextSecondary: 'Revision required',
+      cardBg: returnedCount > 0 ? 'linear-gradient(180deg, #fff1f2 0%, #ffffff 100%)' : 'linear-gradient(180deg, #f8fafc 0%, #ffffff 100%)',
       cardBorder: returnedCount > 0 ? '#fecdd3' : '#e2e8f0',
       numColor: returnedCount > 0 ? '#e11d48' : '#64748b',
       illustrationType: 'review',
       icon: Inbox,
+      onClick: () => paths.DRAFTING && navigate(paths.DRAFTING),
     },
   ];
 
   return (
     <div className="space-y-5">
       <PageHeader
-        greeting={`Hello, ${firstName} 👋`}
+        greeting={getTimeBasedGreeting(currentUser?.name)}
         title="Officer Dashboard"
         purpose={
           <>
@@ -101,7 +94,7 @@ export function AssignedOfficialDashboard({ currentUser, queries, workflowSteps,
           title="Waiting on you"
           subtitle="Queries requiring your action (Drafting, Revision, etc.)"
           icon={FileText}
-          items={myQueue}
+          items={myQueries}
           totalCount={queries.length}
           emptyText="Nothing waiting on you. Queries appear here when they reach a stage you own."
         />

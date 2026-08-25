@@ -7,6 +7,7 @@ export function ApprovalsListPage() {
   return (
     <QueryTable
       title="Approvals"
+      greeting="Final Approval 🛡️"
       purpose="Reviewed drafts awaiting final Officer-in-Charge approval."
       breadcrumbItems={[{ label: 'Dashboard', path: paths.DASHBOARD }, { label: 'Approvals' }]}
       detailPath={paths.APPROVAL_DETAIL}

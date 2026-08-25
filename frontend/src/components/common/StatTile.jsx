@@ -13,7 +13,8 @@ export function StatTile({
   caption,
   subtextColor,
   illustrationType,
-  className
+  className,
+  onClick
 }) {
   const blobColors = {
     assigned: '#3b82f6',
@@ -34,8 +35,9 @@ export function StatTile({
 
   return (
     <div
+      onClick={onClick}
       className={cn(
-        "glass-panel aurora-panel bento-card group relative cursor-pointer select-none overflow-hidden rounded-[28px] p-5 sm:p-6 transition-all duration-300 hover:-translate-y-1",
+        "glass-panel aurora-panel bento-card group relative cursor-pointer select-none overflow-hidden rounded-[28px] p-5 sm:p-6 transition-all duration-300 hover:-translate-y-1 hover:shadow-xl active:scale-[0.99]",
         className
       )}
       style={{ borderColor: cardBorder || 'rgba(255,255,255,0.9)' }}
