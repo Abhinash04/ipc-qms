@@ -1,6 +1,7 @@
 import { createRequire } from 'node:module';
 
 import { IPC_DOCS } from './ipcDocs.manifest.js';
+import { selectContext } from './ipcContextBrain.js';
 
 const require = createRequire(import.meta.url);
 const knowledge = require('./ipcKnowledge.json');
@@ -83,8 +84,17 @@ function buildIndex() {
 const COMMON_TERM_RATIO = 0.25;
 const MIN_SCORE = 2.5;
 
-export function retrieveContext(text, { limit = 4, charBudget = 3000 } = {}) {
-  const queryTerms = [...new Set(tokenise(text))];
+export function expandQuery(text) {
+  const aliases = selectContext(text, { limit: 6 }).flatMap((entry) => [
+    entry.term,
+    ...(entry.aliases || []),
+  ]);
+  return aliases.length ? `${text} ${aliases.join(' ')}` : String(text || '');
+}
+
+export function retrieveContext(text, { limit = 4, charBudget = 3000, expand = true } = {}) {
+  const query = expand ? expandQuery(text) : String(text || '');
+  const queryTerms = [...new Set(tokenise(query))];
   if (queryTerms.length === 0) return [];
 
   const { entries, documentFrequency, total } = buildIndex();
@@ -97,15 +107,18 @@ export function retrieveContext(text, { limit = 4, charBudget = 3000 } = {}) {
 
   for (const entry of entries) {
     let score = 0;
+    let matched = 0;
 
     for (const term of discriminating) {
       if (!entry.terms.has(term)) continue;
+      matched += 1;
       const frequency = documentFrequency.get(term) || 1;
       const weight = Math.log(1 + total / frequency);
       score += weight;
       if (entry.titleHaystack.includes(term)) score += weight * 0.75;
     }
 
+    score *= Math.sqrt(matched / discriminating.length);
     if (score < MIN_SCORE) continue;
     score *= 1 + (PRIORITY_BY_DOC[entry.chunk.docId] || 1) / 10;
     scored.push({ chunk: entry.chunk, score });
