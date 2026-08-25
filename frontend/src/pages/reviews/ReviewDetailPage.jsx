@@ -3,7 +3,8 @@ import { PlusIcon, Trash2Icon } from 'lucide-react';
 import { Breadcrumb } from '@/components/common/Breadcrumb';
 import { EmptyState } from '@/components/common/EmptyState';
 import { CaseSummaryBar } from '@/components/workflow/CaseSummaryBar';
-import { WorkflowTimeline } from '@/components/workflow/WorkflowTimeline';
+import { QueryLifecycleTimeline } from '@/components/workflow/QueryLifecycleTimeline';
+import { buildLifecycle } from '@/constants/queryLifecycle';
 import { Card, CardBody, CardHeader } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
@@ -23,7 +24,8 @@ const ELIGIBLE_REVIEWERS = MOCK_USERS.filter((u) => u.role === ROLES.REVIEWER);
 
 export function ReviewDetailPage() {
   const paths = useRoutePaths();
-  const { queryId, query, steps, reviews, latestVersion, currentStep, currentUser, can } = useQueryCase();
+  const { queryId, query, steps, reviews, versions, latestVersion, audit, messages, currentStep, currentUser, can } =
+    useQueryCase();
   const { run, error, clearError } = useWorkflowAction();
   const approveReview = useWorkflowStore((state) => state.approveReview);
   const requestRevision = useWorkflowStore((state) => state.requestRevision);
@@ -38,7 +40,8 @@ export function ReviewDetailPage() {
 
   const reviewSteps = steps.filter((s) => s.stepType === 'REVIEW');
   const isCurrentReviewer = currentStep?.assignedUserId === currentUser?.id;
-  const canDecide = can(WORKFLOW_ACTION.APPROVE_REVIEW) && currentStep?.stepType === 'REVIEW';
+  const canDecide =
+    can(WORKFLOW_ACTION.APPROVE_REVIEW) && currentStep?.stepType === 'REVIEW' && isCurrentReviewer;
 
   const handleDelete = (stepId) => {
     const result = deleteReviewLevel(queryId, stepId, currentUser);
@@ -57,23 +60,17 @@ export function ReviewDetailPage() {
 
       <CaseSummaryBar query={query} />
 
-
-
       <ActionError message={error} onDismiss={clearError} />
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="space-y-6 lg:col-span-2">
           <Card>
             <CardHeader>
               <h2 className="text-sm font-semibold text-foreground">Workflow progress</h2>
-              {currentStep?.stepType === 'REVIEW' && (
-                <p className="mt-0.5 text-xs text-muted-foreground">
-                  Currently at review level {reviewSteps.findIndex((s) => s.stepId === currentStep.stepId) + 1} of{' '}
-                  {reviewSteps.length} — {findUserById(currentStep.assignedUserId)?.name}
-                </p>
-              )}
             </CardHeader>
             <CardBody>
-              <WorkflowTimeline steps={steps} currentStepId={currentStep?.stepId} />
+              <QueryLifecycleTimeline
+                stages={buildLifecycle({ query, steps, versions, reviews, audit, messages })}
+              />
             </CardBody>
           </Card>
 
@@ -135,12 +132,6 @@ export function ReviewDetailPage() {
             <CardBody className="space-y-3">
               {canDecide ? (
                 <>
-                  {!isCurrentReviewer && (
-                    <p className="rounded-md border border-status-amber-line bg-status-amber-bg px-3 py-2 text-xs text-status-amber-fg">
-                      This level is assigned to {findUserById(currentStep.assignedUserId)?.name}. You're
-                      acting as a different reviewer.
-                    </p>
-                  )}
                   <div className="space-y-1.5">
                     <Label htmlFor="review-comment">Comments</Label>
                     <Textarea
@@ -176,6 +167,11 @@ export function ReviewDetailPage() {
                     works from. Returning restarts the review cycle at the first reviewer.
                   </p>
                 </>
+              ) : currentStep?.stepType === 'REVIEW' && !isCurrentReviewer ? (
+                <p className="rounded-md border border-status-amber-line bg-status-amber-bg px-3 py-2 text-sm text-status-amber-fg">
+                  This level is assigned to {findUserById(currentStep.assignedUserId)?.name}. Only they
+                  can approve it or return it for revision.
+                </p>
               ) : (
                 <p className="rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
                   Review decisions are available to reviewers while the query is UNDER_REVIEW.

@@ -40,11 +40,6 @@ function renderApp(path = '/login') {
   );
 }
 
-/**
- * The mock-credentials list sits behind a disclosure in the redesigned login
- * page. Every user is still listed with their role and a Use Credentials
- * button — it just has to be opened first.
- */
 function openMockCredentials() {
   fireEvent.click(screen.getByRole('button', { name: /Mock Credentials/i }));
 }
@@ -234,7 +229,6 @@ describe('Rawat Jatin — a mock Assigned Official', () => {
     const labels = navItemsForRole(RAWAT.role).map((item) => item.label);
     expect(labels).toEqual(['Dashboard', 'Queries', 'My Work', 'Drafting', 'Notifications']);
 
-    // Every offered link is one his role may actually open.
     for (const item of navItemsForRole(RAWAT.role)) {
       expect(isRouteAllowedForRole(RAWAT.role, item.path)).toBe(true);
     }
@@ -266,7 +260,6 @@ describe('Rawat Jatin — a mock Assigned Official', () => {
     expect(jatin.email).not.toBe(RAWAT.email);
     expect(jatin.role).not.toBe(RAWAT.role);
 
-    // Logging in as one must never resolve to the other.
     useAuthStore.getState().login('USR-0009');
     expect(useAuthStore.getState().currentUser.email).toBe(RAWAT.email);
 
@@ -287,3 +280,4 @@ describe('Rawat Jatin — a mock Assigned Official', () => {
     expect(await screen.findByRole('heading', { name: 'Dashboard' })).toBeInTheDocument();
   });
 });
+

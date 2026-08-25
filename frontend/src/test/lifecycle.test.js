@@ -10,7 +10,7 @@ import {
   RESPONSE_SOURCE,
   RESPONSE_STATUS,
 } from '@/constants/statusEnums';
-import { WORKFLOW_ACTION } from '@/constants/workflowRules';
+import { WORKFLOW_ACTION, canPerform } from '@/constants/workflowRules';
 import { EMAIL_DIRECTION, EMAIL_TYPE } from '@/constants/emailModel';
 
 vi.mock('@/services/api/mailboxService');
@@ -77,7 +77,7 @@ async function runTo(stopAt, { reviewers = [REVIEWER_A], message } = {}) {
   s().assignQuery(queryId, OFFICIAL.id, OIC);
   if (stopAt === WORKFLOW_STATE.ASSIGNED) return queryId;
 
-  s().generateAiDraft(queryId, OFFICIAL);
+  await s().generateAiDraft(queryId, OFFICIAL);
   if (stopAt === WORKFLOW_STATE.DRAFTING) return queryId;
 
   for (const reviewer of reviewers) {
@@ -91,9 +91,6 @@ async function runTo(stopAt, { reviewers = [REVIEWER_A], message } = {}) {
   }
   if (stopAt === WORKFLOW_STATE.PENDING_FINAL_APPROVAL) return queryId;
 
-  // Final approval now dispatches automatically. To observe the intermediate
-  // READY_FOR_DISPATCH state — approved but not yet sent — approve with a
-  // sender that fails, which is exactly what a Gmail outage looks like.
   if (stopAt === WORKFLOW_STATE.READY_FOR_DISPATCH) {
     await s()
       .grantFinalApproval(queryId, OIC, () => Promise.reject(new Error('Gmail unavailable')))
@@ -154,7 +151,6 @@ describe('the complete lifecycle, end to end', () => {
     const query = s().getQuery(queryId);
     const messages = s().emailMessages.filter((m) => m.queryId === queryId);
 
-    // Enquiry in, forward to the OIC, final response out — one conversation.
     expect(messages.map((m) => m.emailType)).toEqual([
       EMAIL_TYPE.INCOMING_QUERY,
       EMAIL_TYPE.FORWARD,
@@ -235,12 +231,35 @@ describe('dynamic review levels — nothing is hard-coded to two', () => {
     expect(stateOf(queryId)).toBe(WORKFLOW_STATE.CLOSED);
   });
 
-  it('goes straight to final approval when no review level was added', async () => {
+  it('refuses a submit with no review level, so review can never be bypassed', async () => {
     const queryId = await runTo(WORKFLOW_STATE.DRAFTING);
-    s().submitForReview(queryId, OFFICIAL);
+    const auditBefore = s().getAudit(queryId).length;
 
-    expect(stateOf(queryId)).toBe(WORKFLOW_STATE.PENDING_FINAL_APPROVAL);
-    expect(s().getSteps(queryId).filter((step) => step.stepType === 'REVIEW')).toHaveLength(0);
+    expect(() => s().submitForReview(queryId, OFFICIAL)).toThrow(/at least one review level/);
+
+    expect(stateOf(queryId)).toBe(WORKFLOW_STATE.DRAFTING);
+    expect(s().getSteps(queryId)).toHaveLength(0);
+    expect(s().getAudit(queryId)).toHaveLength(auditBefore);
+  });
+
+  it('keeps final approval out of the OIC’s reach until the last level approves', async () => {
+    const queryId = await runTo(WORKFLOW_STATE.UNDER_REVIEW, {
+      reviewers: [REVIEWER_A, REVIEWER_B],
+    });
+
+    expect(canPerform(ROLES.OFFICER_IN_CHARGE, WORKFLOW_ACTION.FINAL_APPROVE, stateOf(queryId))).toBe(false);
+    await expect(s().grantFinalApproval(queryId, OIC, fakeSend)).rejects.toThrow(
+      /may not perform FINAL_APPROVE/,
+    );
+
+    s().approveReview(queryId, 'Level 1 fine', REVIEWER_A);
+    expect(canPerform(ROLES.OFFICER_IN_CHARGE, WORKFLOW_ACTION.FINAL_APPROVE, stateOf(queryId))).toBe(false);
+    await expect(s().grantFinalApproval(queryId, OIC, fakeSend)).rejects.toThrow(
+      /may not perform FINAL_APPROVE/,
+    );
+
+    s().approveReview(queryId, 'Level 2 fine', REVIEWER_B);
+    expect(canPerform(ROLES.OFFICER_IN_CHARGE, WORKFLOW_ACTION.FINAL_APPROVE, stateOf(queryId))).toBe(true);
   });
 
   it('holds at the first level until it is approved', async () => {
@@ -298,8 +317,6 @@ describe('revision cycles', () => {
     s().saveDraftVersion(queryId, 'Softened text.', OFFICIAL, 'Revision after review');
     s().submitForReview(queryId, OFFICIAL);
 
-    // The revised draft must climb the whole ladder again: Reviewer-I first,
-    // not straight back to the OIC.
     expect(stateOf(queryId)).toBe(WORKFLOW_STATE.UNDER_REVIEW);
 
     s().approveReview(queryId, 'Level 1 fine', REVIEWER_A);
@@ -318,7 +335,9 @@ describe('response versioning and locking', () => {
     const queryId = await runTo(WORKFLOW_STATE.DRAFTING);
     s().saveDraftVersion(queryId, 'Officer edit A', OFFICIAL);
     s().saveDraftVersion(queryId, 'Officer edit B', OFFICIAL);
+    s().addReviewLevel(queryId, REVIEWER_A.id, OFFICIAL);
     s().submitForReview(queryId, OFFICIAL);
+    s().approveReview(queryId, 'ok', REVIEWER_A);
     await s().grantFinalApproval(queryId, OIC, fakeSend);
 
     const versions = s().getVersions(queryId);
@@ -346,8 +365,10 @@ describe('response versioning and locking', () => {
   it('dispatches exactly the approved text', async () => {
     const queryId = await runTo(WORKFLOW_STATE.DRAFTING);
     s().saveDraftVersion(queryId, 'The final agreed wording.', OFFICIAL);
+    s().addReviewLevel(queryId, REVIEWER_A.id, OFFICIAL);
     s().submitForReview(queryId, OFFICIAL);
-    // No manual dispatch: approval sends the approved text on its own.
+    s().approveReview(queryId, 'ok', REVIEWER_A);
+
     await s().grantFinalApproval(queryId, OIC, fakeSend);
 
     const sent = s().emailMessages.find((m) => m.emailType === EMAIL_TYPE.OUTGOING_RESPONSE);
@@ -566,7 +587,7 @@ describe('duplicate ingestion protection still holds', () => {
 });
 
 describe('every revision restarts at Reviewer-I', () => {
-  /** Reach UNDER_REVIEW with two reviewers configured. */
+
   async function twoLevelReview() {
     return runTo(WORKFLOW_STATE.UNDER_REVIEW, { reviewers: [REVIEWER_A, REVIEWER_B] });
   }
@@ -582,15 +603,12 @@ describe('every revision restarts at Reviewer-I', () => {
     s().approveReview(queryId, 'Level 1 fine', REVIEWER_A);
     expect(pendingReviewer(queryId)).toBe(REVIEWER_B.id);
 
-    // Reviewer-II rejects. Previously the revision went straight back to
-    // Reviewer-II, skipping Reviewer-I entirely.
     s().requestRevision(queryId, 'Cite the edition.', REVIEWER_B);
     s().saveDraftVersion(queryId, 'Revised text.', OFFICIAL, 'Revision after review');
     s().submitForReview(queryId, OFFICIAL);
 
     expect(pendingReviewer(queryId)).toBe(REVIEWER_A.id);
 
-    // And the full ladder still has to be climbed.
     s().approveReview(queryId, 'ok', REVIEWER_A);
     expect(pendingReviewer(queryId)).toBe(REVIEWER_B.id);
     s().approveReview(queryId, 'ok', REVIEWER_B);
@@ -622,10 +640,25 @@ describe('every revision restarts at Reviewer-I', () => {
     expect(pendingReviewer(queryId)).toBe(REVIEWER_B.id);
   });
 
+  it('a rejected final approval also re-enters at Reviewer-I', async () => {
+    const queryId = await runTo(WORKFLOW_STATE.PENDING_FINAL_APPROVAL, {
+      reviewers: [REVIEWER_A, REVIEWER_B],
+    });
+
+    s().rejectFinalApproval(queryId, 'Not defensible as written.', OIC);
+    s().saveDraftVersion(queryId, 'Rewritten.', OFFICIAL, 'Revision after review');
+    s().submitForReview(queryId, OFFICIAL);
+
+    expect(stateOf(queryId)).toBe(WORKFLOW_STATE.UNDER_REVIEW);
+    expect(pendingReviewer(queryId)).toBe(REVIEWER_A.id);
+
+    s().approveReview(queryId, 'ok', REVIEWER_A);
+    expect(pendingReviewer(queryId)).toBe(REVIEWER_B.id);
+  });
+
   it('survives several loops, retaining every version', async () => {
     const queryId = await twoLevelReview();
 
-    // Reviewer-I rejects, Reviewer-II rejects, OIC returns — three full laps.
     s().requestRevision(queryId, 'Round 1', REVIEWER_A);
     s().saveDraftVersion(queryId, 'v2 text', OFFICIAL, 'Revision after review');
     s().submitForReview(queryId, OFFICIAL);
@@ -647,6 +680,176 @@ describe('every revision restarts at Reviewer-I', () => {
 
     expect(s().getVersions(queryId).map((v) => v.version)).toEqual(['v1', 'v2', 'v3', 'v4']);
     expect(s().queries).toHaveLength(1);
+  });
+});
+
+describe('reviewers may only act on their own level', () => {
+  const twoLevel = () =>
+    runTo(WORKFLOW_STATE.UNDER_REVIEW, { reviewers: [REVIEWER_A, REVIEWER_B] });
+  const pendingReviewer = (queryId) => s().getCurrentStep(queryId)?.assignedUserId;
+
+  it('refuses Reviewer-II approving Reviewer-I’s pending level', async () => {
+    const queryId = await twoLevel();
+
+    expect(() => s().approveReview(queryId, 'ok', REVIEWER_B)).toThrow(
+      /assigned to Amit Mehta, not Kavita Rao/,
+    );
+
+    expect(stateOf(queryId)).toBe(WORKFLOW_STATE.UNDER_REVIEW);
+    expect(pendingReviewer(queryId)).toBe(REVIEWER_A.id);
+    expect(s().getReviews(queryId)).toHaveLength(0);
+  });
+
+  it('refuses Reviewer-II requesting changes on Reviewer-I’s pending level', async () => {
+    const queryId = await twoLevel();
+
+    expect(() => s().requestRevision(queryId, 'Not good enough.', REVIEWER_B)).toThrow(
+      /assigned to Amit Mehta/,
+    );
+
+    expect(stateOf(queryId)).toBe(WORKFLOW_STATE.UNDER_REVIEW);
+    expect(pendingReviewer(queryId)).toBe(REVIEWER_A.id);
+    expect(s().getReviews(queryId)).toHaveLength(0);
+  });
+
+  it('refuses Reviewer-I acting once the level has moved to Reviewer-II', async () => {
+    const queryId = await twoLevel();
+    s().approveReview(queryId, 'Level 1 fine', REVIEWER_A);
+    expect(pendingReviewer(queryId)).toBe(REVIEWER_B.id);
+
+    expect(() => s().approveReview(queryId, 'ok', REVIEWER_A)).toThrow(
+      /assigned to Kavita Rao, not Amit Mehta/,
+    );
+    expect(() => s().requestRevision(queryId, 'Actually no.', REVIEWER_A)).toThrow(
+      /assigned to Kavita Rao/,
+    );
+
+    expect(stateOf(queryId)).toBe(WORKFLOW_STATE.UNDER_REVIEW);
+    expect(s().getReviews(queryId)).toHaveLength(1);
+  });
+
+  it('shows each level to exactly one reviewer as it advances', async () => {
+    const queryId = await twoLevel();
+
+    expect(pendingReviewer(queryId)).toBe(REVIEWER_A.id);
+    expect(pendingReviewer(queryId)).not.toBe(REVIEWER_B.id);
+
+    s().approveReview(queryId, 'Level 1 fine', REVIEWER_A);
+
+    expect(pendingReviewer(queryId)).toBe(REVIEWER_B.id);
+    expect(pendingReviewer(queryId)).not.toBe(REVIEWER_A.id);
+  });
+
+  it('still runs Reviewer-I → Reviewer-II → OIC normally', async () => {
+    const queryId = await twoLevel();
+
+    s().approveReview(queryId, 'Level 1 fine', REVIEWER_A);
+    expect(stateOf(queryId)).toBe(WORKFLOW_STATE.UNDER_REVIEW);
+
+    s().approveReview(queryId, 'Level 2 fine', REVIEWER_B);
+    expect(stateOf(queryId)).toBe(WORKFLOW_STATE.PENDING_FINAL_APPROVAL);
+
+    await s().grantFinalApproval(queryId, OIC, fakeSend);
+    expect(stateOf(queryId)).toBe(WORKFLOW_STATE.CLOSED);
+    expect(s().getReviews(queryId).map((r) => r.reviewerId)).toEqual([REVIEWER_A.id, REVIEWER_B.id]);
+  });
+
+  it('a returned revision hands the level back to Reviewer-I alone', async () => {
+    const queryId = await twoLevel();
+    s().approveReview(queryId, 'Level 1 fine', REVIEWER_A);
+    s().requestRevision(queryId, 'Cite the edition.', REVIEWER_B);
+    s().saveDraftVersion(queryId, 'v2 text', OFFICIAL, 'Revision after review');
+    s().submitForReview(queryId, OFFICIAL);
+
+    expect(pendingReviewer(queryId)).toBe(REVIEWER_A.id);
+    expect(() => s().approveReview(queryId, 'ok', REVIEWER_B)).toThrow(/assigned to Amit Mehta/);
+  });
+});
+
+describe('the final approver is resolved by role, not pinned to an id', () => {
+  it('assigns the FINAL_APPROVAL step to the Officer-in-Charge', async () => {
+    const queryId = await runTo(WORKFLOW_STATE.UNDER_REVIEW);
+    const finalStep = s()
+      .getSteps(queryId)
+      .find((step) => step.stepType === 'FINAL_APPROVAL');
+
+    expect(finalStep).toBeDefined();
+    expect(findUserById(finalStep.assignedUserId)?.role).toBe(ROLES.OFFICER_IN_CHARGE);
+  });
+
+  it('creates the draft and final-approval steps exactly once, alongside the review levels', async () => {
+    const queryId = await runTo(WORKFLOW_STATE.UNDER_REVIEW, {
+      reviewers: [REVIEWER_A, REVIEWER_B],
+    });
+
+    const typesAfterFirstSubmit = s()
+      .getSteps(queryId)
+      .map((step) => step.stepType);
+    expect(typesAfterFirstSubmit).toEqual(['DRAFT', 'REVIEW', 'REVIEW', 'FINAL_APPROVAL']);
+
+    s().requestRevision(queryId, 'Round 1', REVIEWER_A);
+    s().saveDraftVersion(queryId, 'v2 text', OFFICIAL, 'Revision after review');
+    s().submitForReview(queryId, OFFICIAL);
+
+    expect(s().getSteps(queryId).map((step) => step.stepType)).toEqual(typesAfterFirstSubmit);
+  });
+
+  it('parks the case on the final-approval step once every level has approved', async () => {
+    const queryId = await runTo(WORKFLOW_STATE.PENDING_FINAL_APPROVAL, {
+      reviewers: [REVIEWER_A, REVIEWER_B],
+    });
+
+    const current = s().getCurrentStep(queryId);
+    expect(current?.stepType).toBe('FINAL_APPROVAL');
+    expect(current?.status).toBe('IN_PROGRESS');
+    expect(findUserById(current.assignedUserId)?.role).toBe(ROLES.OFFICER_IN_CHARGE);
+  });
+});
+
+describe('the specified two-level path, end to end', () => {
+  const pendingReviewer = (queryId) => s().getCurrentStep(queryId)?.assignedUserId;
+
+  it('walks the whole chain and dispatches the last approved version', async () => {
+    const queryId = await runTo(WORKFLOW_STATE.UNDER_REVIEW, {
+      reviewers: [REVIEWER_A, REVIEWER_B],
+    });
+
+    expect(pendingReviewer(queryId)).toBe(REVIEWER_A.id);
+
+    s().requestRevision(queryId, 'Cite the monograph edition.', REVIEWER_A);
+    expect(stateOf(queryId)).toBe(WORKFLOW_STATE.RETURNED_FOR_REVISION);
+    s().saveDraftVersion(queryId, 'v2 text', OFFICIAL, 'Revision after review');
+    s().submitForReview(queryId, OFFICIAL);
+
+    s().approveReview(queryId, 'Reviewer I approves', REVIEWER_A);
+    expect(pendingReviewer(queryId)).toBe(REVIEWER_B.id);
+
+    s().requestRevision(queryId, 'Add the analytical method.', REVIEWER_B);
+    s().saveDraftVersion(queryId, 'v3 text', OFFICIAL, 'Revision after review');
+    s().submitForReview(queryId, OFFICIAL);
+
+    expect(pendingReviewer(queryId)).toBe(REVIEWER_A.id);
+    s().approveReview(queryId, 'Reviewer I approves again', REVIEWER_A);
+    expect(stateOf(queryId)).toBe(WORKFLOW_STATE.UNDER_REVIEW);
+
+    s().approveReview(queryId, 'Reviewer II approves', REVIEWER_B);
+    expect(stateOf(queryId)).toBe(WORKFLOW_STATE.PENDING_FINAL_APPROVAL);
+
+    await s().grantFinalApproval(queryId, OIC, fakeSend);
+    expect(stateOf(queryId)).toBe(WORKFLOW_STATE.CLOSED);
+
+    expect(s().getVersions(queryId).map((v) => v.version)).toEqual(['v1', 'v2', 'v3']);
+    expect(s().getReviews(queryId).map((r) => r.decision)).toEqual([
+      'CHANGES_REQUESTED',
+      'APPROVED',
+      'CHANGES_REQUESTED',
+      'APPROVED',
+      'APPROVED',
+    ]);
+
+    const sent = s().emailMessages.find((m) => m.emailType === EMAIL_TYPE.OUTGOING_RESPONSE);
+    expect(sent.body).toBe('v3 text');
+    expect(sent.to).toContain(INQUIRER.email);
   });
 });
 
@@ -690,7 +893,6 @@ describe('review comments', () => {
     expect(() => s().requestRevision(queryId, '   ', REVIEWER_A)).toThrow(/requires a comment/);
     expect(() => s().requestRevision(queryId, undefined, REVIEWER_A)).toThrow(/requires a comment/);
 
-    // Nothing was recorded and the case did not move.
     expect(s().getReviews(queryId)).toHaveLength(0);
     expect(stateOf(queryId)).toBe(WORKFLOW_STATE.UNDER_REVIEW);
   });
@@ -707,3 +909,4 @@ describe('review comments', () => {
     expect(() => s().approveReview(queryId, '', REVIEWER_A)).not.toThrow();
   });
 });
+

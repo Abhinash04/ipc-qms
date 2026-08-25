@@ -148,3 +148,4 @@ describe('auth route', () => {
     expect(() => renderAt('/login')).not.toThrow();
   });
 });
+

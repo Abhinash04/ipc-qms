@@ -1,37 +1,22 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { SparklesIcon, CheckCircle2Icon, UserCheckIcon, Loader2Icon, RefreshCwIcon, AwardIcon } from 'lucide-react';
-import { Card, CardBody, CardHeader } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
+import { Sparkles, CheckCircle2, UserCheck, Loader2, RefreshCw, Award } from 'lucide-react';
 import { fetchGemmaAiRecommendations } from '@/services/api/aiService';
 import { recommendTopOfficials } from '@/services/ai/mockAiService';
 import { MOCK_USERS } from '@/constants/mockUsers';
 
-export function AiRecommendationCard({ query, onAssign, currentAssigneeId }) {
-  // The local rule-based scorer needs no network, so the Officer-in-Charge gets
-  // a usable top-3 on first paint instead of a spinner. Gemma refines it when
-  // and if it answers; if it never does, what is on screen is already correct.
+export function AiRecommendationCard({ query, onAssign, currentAssigneeId, variant = 'card' }) {
   const localRecommendations = useMemo(
     () => (query ? recommendTopOfficials(query, MOCK_USERS) : []),
     [query],
   );
-  // Stamped with the query it belongs to, so a reply for a previous case is
-  // ignored by derivation rather than cleared by an effect.
+
   const [gemma, setGemma] = useState({ queryId: null, recs: null });
   const [loading, setLoading] = useState(false);
+  const [showAll, setShowAll] = useState(false);
 
   const recommendations =
     (gemma.queryId === query?.queryId ? gemma.recs : null) ?? localRecommendations;
 
-  /**
-   * `isCurrent` lets a caller abandon a reply that is no longer wanted: the
-   * request outlives the render that started it, so applying it unconditionally
-   * would write to an unmounted component, and a slow reply for the previous
-   * query could land on top of the current one.
-   *
-   * State is only touched when Gemma actually returns something. A null or empty
-   * reply leaves the local recommendations in place — nothing to re-render.
-   */
   const loadRecommendations = useCallback(
     async (isCurrent = () => true) => {
       if (!query) return;
@@ -55,8 +40,6 @@ export function AiRecommendationCard({ query, onAssign, currentAssigneeId }) {
 
   useEffect(() => {
     let cancelled = false;
-    // Wrapped so the state update is plainly after the await, not synchronous
-    // in the effect body — nothing here re-renders before Gemma answers.
     void (async () => {
       await loadRecommendations(() => !cancelled);
     })();
@@ -65,7 +48,6 @@ export function AiRecommendationCard({ query, onAssign, currentAssigneeId }) {
     };
   }, [loadRecommendations]);
 
-  /** Explicit re-analyse: user-initiated, so a spinner is warranted here. */
   const reanalyse = async () => {
     setLoading(true);
     try {
@@ -77,116 +59,122 @@ export function AiRecommendationCard({ query, onAssign, currentAssigneeId }) {
 
   if (!query) return null;
 
+  const outerClass = variant === 'embedded'
+    ? "select-none h-full"
+    : "bg-linear-to-br from-indigo-50/80 via-purple-50/30 to-white rounded-3xl border border-indigo-200/80 p-6 shadow-sm select-none h-full";
+
   return (
-    <Card className="border-status-indigo-line bg-background shadow-sm">
-      <CardHeader className="flex items-center justify-between gap-2 border-b border-border bg-muted/20 py-3">
-        <div className="flex items-center gap-2">
-          <SparklesIcon className="h-4 w-4 text-status-indigo-fg" aria-hidden="true" />
-          <h2 className="text-sm font-semibold text-foreground">AI Official Recommendations (Top 3)</h2>
-          <Badge variant="status-indigo" className="text-[11px]">
-            🤖 Gemma Match Engine
-          </Badge>
+    <div className={outerClass}>
+      {/* Header Row */}
+      <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-indigo-100">
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-xl bg-purple-600 text-white flex items-center justify-center shadow-2xs">
+            <Sparkles className="h-4 w-4" strokeWidth={2.2} />
+          </div>
+          <h2 className="font-heading text-[20px] font-black text-slate-900 m-0">
+            AI Official Recommendations
+          </h2>
         </div>
 
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
+        <button
+          type="button"
+          className="inline-flex items-center gap-1.5 text-[12px] font-bold text-slate-500 hover:text-purple-700 bg-white hover:bg-purple-50 px-3 py-1.5 rounded-xl border border-slate-200/80 transition-all cursor-pointer disabled:opacity-50"
           onClick={reanalyse}
           disabled={loading}
         >
-          <RefreshCwIcon className={`h-3 w-3 mr-1 ${loading ? 'animate-spin' : ''}`} />
-          {loading ? 'Analyzing...' : 'Re-analyze'}
-        </Button>
-      </CardHeader>
+          <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
+          <span>{loading ? 'Analyzing...' : 'Re-analyze'}</span>
+        </button>
+      </div>
 
-      <CardBody className="p-4 space-y-3">
+      <div className="pt-4 space-y-3.5">
         {loading ? (
-          <div className="flex flex-col items-center justify-center py-6 space-y-2">
-            <Loader2Icon className="h-6 w-6 animate-spin text-status-indigo-fg" />
-            <p className="text-sm font-medium text-status-indigo-fg">
+          <div className="flex flex-col items-center justify-center py-8 space-y-2">
+            <Loader2 className="h-7 w-7 animate-spin text-purple-600" />
+            <p className="text-[14px] font-bold text-slate-800">
               Analyzing query & matching with official expertise metadata...
             </p>
-            <p className="text-xs text-muted-foreground">Evaluating domain fit, division, and workload</p>
+            <p className="text-[12px] font-medium text-slate-400">Evaluating domain fit, division, and workload</p>
           </div>
         ) : (
-          <div className="space-y-3">
-            {recommendations.map((rec) => {
+          <div className="space-y-3.5">
+            {(showAll ? recommendations : recommendations.slice(0, 2)).map((rec) => {
               const isAssigned = currentAssigneeId === rec.userId;
               const isRank1 = rec.rank === 1;
 
               return (
                 <div
                   key={rec.userId}
-                  className={`rounded-lg border p-3.5 transition-all ${
+                  className={`rounded-2xl border p-4 transition-all shadow-2xs ${
                     isAssigned
-                      ? 'border-emerald-500 bg-emerald-50/40 dark:bg-emerald-950/20'
+                      ? 'border-emerald-300 bg-emerald-50/60'
                       : isRank1
-                      ? 'border-indigo-300 bg-indigo-50/30 dark:bg-indigo-950/10'
-                      : 'border-border bg-card'
+                      ? 'border-indigo-200 bg-indigo-50/50'
+                      : 'border-slate-200/80 bg-white'
                   }`}
                 >
                   <div className="flex flex-wrap items-start justify-between gap-2">
-                    <div className="flex items-center gap-2">
-                      {isRank1 && <AwardIcon className="h-4 w-4 text-amber-500" />}
-                      <span className="text-xs font-semibold text-muted-foreground">
+                    <div className="flex flex-wrap items-center gap-2">
+                      {isRank1 && <Award className="h-4 w-4 text-amber-500" />}
+                      <span className="text-[14px] font-black text-slate-400 uppercase tracking-wider">
                         #{rec.rank} Match
                       </span>
-                      <h3 className="font-semibold text-foreground text-sm">{rec.name}</h3>
-                      <Badge
-                        variant={isRank1 ? 'status-indigo' : 'outline'}
-                        className="text-xs font-bold"
-                      >
+                      <h3 className="font-heading text-[18px] font-black text-slate-900 m-0">{rec.name}</h3>
+                      <span className="text-[13px] font-black text-purple-700 bg-purple-100/90 px-2.5 py-0.5 rounded-full border border-purple-200">
                         {rec.matchPercent}% Match
-                      </Badge>
+                      </span>
                     </div>
 
                     {onAssign && (
-                      <Button
-                        size="sm"
-                        variant={isAssigned ? 'outline' : isRank1 ? 'default' : 'outline'}
-                        className="h-8 text-xs font-medium"
+                      <button
+                        type="button"
                         onClick={() => onAssign(rec.userId)}
                         disabled={isAssigned}
+                        className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[12px] font-bold transition-all cursor-pointer disabled:opacity-70 disabled:cursor-not-allowed ${
+                          isAssigned
+                            ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                            : isRank1
+                            ? 'bg-purple-600 hover:bg-purple-700 text-white shadow-xs'
+                            : 'bg-white hover:bg-slate-100 text-slate-700 border border-slate-200'
+                        }`}
                       >
                         {isAssigned ? (
                           <>
-                            <CheckCircle2Icon className="h-3.5 w-3.5 mr-1 text-emerald-600" />
-                            Currently Assigned
+                            <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+                            <span>Currently Assigned</span>
                           </>
                         ) : (
                           <>
-                            <UserCheckIcon className="h-3.5 w-3.5 mr-1" />
-                            Assign to {rec.name.split(' ')[0]}
+                            <UserCheck className="h-3.5 w-3.5" />
+                            <span>Assign to {rec.name.split(' ')[0]}</span>
                           </>
                         )}
-                      </Button>
+                      </button>
                     )}
                   </div>
 
-                  <div className="mt-1 text-xs text-muted-foreground flex items-center gap-2">
-                    <span className="font-medium text-foreground">{rec.divisionName}</span>
+                  <div className="mt-1 text-[14px] font-semibold text-slate-400 flex items-center gap-2">
+                    <span className="font-extrabold text-slate-700">{rec.divisionName}</span>
                     <span>•</span>
                     <span>{rec.email}</span>
                   </div>
 
-                  <p className="mt-2 text-xs text-foreground/90 leading-relaxed font-normal bg-background/80 p-2 rounded border border-border/50">
-                    {rec.reason}
-                  </p>
-
                   {rec.expertise?.length > 0 && (
-                    <div className="mt-2 flex flex-wrap items-center gap-1">
-                      <span className="text-[11px] font-medium text-muted-foreground">Expertise:</span>
+                    <div className="mt-3 flex flex-wrap items-center gap-1.5">
+                      <span className="text-[14px] font-bold text-slate-400">Expertise:</span>
                       {rec.expertise.map((exp) => {
                         const isMatched = rec.matchedKeywords?.includes(exp.toLowerCase());
                         return (
-                          <Badge
+                          <span
                             key={exp}
-                            variant={isMatched ? 'status-indigo' : 'outline'}
-                            className={`text-[10px] py-0 px-1.5 ${isMatched ? 'font-semibold' : 'text-muted-foreground'}`}
+                            className={`text-[13px] font-bold px-2 py-0.5 rounded-lg border ${
+                              isMatched
+                                ? 'bg-purple-100 text-purple-800 border-purple-200'
+                                : 'bg-slate-100 text-slate-500 border-slate-200'
+                            }`}
                           >
                             {exp}
-                          </Badge>
+                          </span>
                         );
                       })}
                     </div>
@@ -194,9 +182,19 @@ export function AiRecommendationCard({ query, onAssign, currentAssigneeId }) {
                 </div>
               );
             })}
+
+            {recommendations.length > 2 && (
+              <button
+                type="button"
+                onClick={() => setShowAll(!showAll)}
+                className="w-full mt-2 py-2 text-[12.5px] font-bold text-slate-500 bg-slate-50 hover:bg-slate-100 hover:text-slate-700 border border-slate-200/60 rounded-xl transition-colors cursor-pointer"
+              >
+                {showAll ? 'Show less' : `Show ${recommendations.length - 2} more matches`}
+              </button>
+            )}
           </div>
         )}
-      </CardBody>
-    </Card>
+      </div>
+    </div>
   );
 }

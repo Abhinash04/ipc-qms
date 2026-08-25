@@ -1,6 +1,7 @@
 import { MOCK_USERS } from '@/constants/mockUsers';
 import { findDivisionById } from '@/constants/mockDivisions';
 import { ROLES } from '@/constants/roles';
+import { IPC_SIGNATURE } from '@/services/ai/draftComposer';
 
 const TOPIC_DIVISIONS = {
   'monograph': 'DIV-003',
@@ -94,37 +95,11 @@ export function summarise(query) {
     topics,
   };
 }
-/**
- * Score how well an official's declared expertise fits the enquiry.
- *
- * Expertise keywords are matched against the enquiry text directly rather than
- * through the topic map, so an official can be a match on wording the topic map
- * has never heard of. Returns the matched keywords so the reason can name them.
- */
 function expertiseMatch(user, text) {
   const matched = (user.expertise || []).filter((skill) => text.includes(skill.toLowerCase()));
   return { matched, score: matched.length };
 }
 
-/**
- * Recommend an Assigned Official. **Advisory only** — nothing here assigns
- * anybody; `assignQuery` still requires the Officer-in-Charge's explicit choice.
- *
- * ── The swap point for a real model ──────────────────────────────────────────
- * This function is the entire assignment-intelligence contract:
- *
- *     recommendAssignee(query, users, openQueries)
- *       → { userId, matchPercent, reason, factors } | null
- *
- * A Gemma-backed implementation replaces this body and nothing else. The store
- * (`recommendAssigneeFor`), the Assignment page and the workflow all consume
- * that shape and never inspect how it was produced, so swapping the reasoning
- * for a model does not touch the workflow. If the model call becomes async, the
- * only change is awaiting it in `recommendAssigneeFor`.
- *
- * Signals weighed, in the order the user specified: subject and body content,
- * domain/expertise fit, the official's division, and current workload.
- */
 export function recommendAssignee(query, users = MOCK_USERS, openQueries = []) {
   const eligible = users.filter((user) => user.role === ROLES.ASSIGNED_OFFICIAL);
   if (eligible.length === 0) return null;
@@ -140,10 +115,6 @@ export function recommendAssignee(query, users = MOCK_USERS, openQueries = []) {
     .map((user) => {
       const divisionMatch = wantedDivisions.has(user.divisionId);
       const expertise = expertiseMatch(user, text);
-
-      // Expertise is the strongest signal — it is matched against the actual
-      // words of the enquiry — then division, then availability. The floor
-      // keeps a match percent from ever reading as zero.
       const score =
         Math.min(60, expertise.score * 20) +
         (divisionMatch ? 25 : 0) +
@@ -239,11 +210,7 @@ export function recommendTopOfficials(query, users = MOCK_USERS, openQueries = [
   }));
 }
 
-const SIGNATURE = `Regards,
-AR&D Division
-Indian Pharmacopoeia Commission (IPC)
-Ministry of Health & Family Welfare
-Government of India`;
+const SIGNATURE = IPC_SIGNATURE;
 
 export function draftResponse(query) {
   if (!query) return '';

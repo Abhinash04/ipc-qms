@@ -10,15 +10,6 @@ import { ROLES } from '@/constants/roles';
 import { WORKFLOW_STATE, AUDIT_EVENT } from '@/constants/statusEnums';
 import { EMAIL_DIRECTION, EMAIL_TYPE } from '@/constants/emailModel';
 
-/**
- * The three real stakeholders — Abhinash (inquirer), Bhumika (Front Office) and
- * Jatin (Officer-in-Charge) — driving one Query Case, with the rest of the
- * workflow still on mock users.
- *
- * Everything here runs against fakes: no Gmail client is constructed, no token
- * is required, nothing leaves the machine.
- */
-
 vi.mock('@/services/api/mailboxService');
 
 const s = () => useWorkflowStore.getState();
@@ -29,7 +20,6 @@ const JATIN = findUserById('USR-0003');
 const NEHA = findUserById('USR-0004');
 const RAWAT = findUserById('USR-0009');
 
-/** What Bhumika's polled Gmail inbox hands back for Abhinash's enquiry. */
 function gmailEnquiry(overrides = {}) {
   return {
     mailboxMessageId: '18f2a1b2c3d4e5f6',
@@ -66,7 +56,6 @@ const fakeResponse = (payload) =>
     sentAt: '2026-08-18T12:00:00.000Z',
   });
 
-/** The acknowledgement the backend reports sending, as Bhumika. */
 const ACK = {
   from: `${BHUMIKA.name} <${BHUMIKA.email}>`,
   to: [ABHINASH.email],
@@ -117,18 +106,17 @@ describe('the real identities', () => {
   });
 
   it('keeps Rawat Jatin and Jatin Rawat as different people', () => {
-    // Near-identical display names, genuinely different accounts and roles.
+
     expect(RAWAT.id).not.toBe(JATIN.id);
     expect(RAWAT.email).not.toBe(JATIN.email);
     expect(RAWAT.role).not.toBe(JATIN.role);
 
-    // Nobody shares an address, which is what identity resolution keys on.
     const addresses = MOCK_USERS.map((u) => u.email.toLowerCase());
     expect(new Set(addresses).size).toBe(addresses.length);
   });
 
   it('leaves every user without a real identity on a mock address', () => {
-    // Exactly three real participants now; everyone else is mock.
+
     const realAddresses = new Set([ABHINASH.email, BHUMIKA.email, JATIN.email]);
     const stillMock = MOCK_USERS.filter((u) => !realAddresses.has(u.email));
 
@@ -141,7 +129,7 @@ describe('the real identities', () => {
   it('offers the AI several officials to choose between', () => {
     const officials = MOCK_USERS.filter((u) => u.role === ROLES.ASSIGNED_OFFICIAL);
     expect(officials.length).toBeGreaterThanOrEqual(5);
-    // Spread across divisions, so the recommendation is a real choice.
+
     expect(new Set(officials.map((u) => u.divisionId)).size).toBeGreaterThanOrEqual(4);
   });
 });
@@ -259,8 +247,6 @@ describe('5–6. Bhumika forwards to Jatin, same case throughout', () => {
   it('7. a reply on the same Gmail thread attaches instead of creating QRY-2026-00002', () => {
     const { queryId, threadId } = s().ingestEmail(gmailEnquiry());
 
-    // Abhinash replies; Gmail delivers it to Bhumika on the SAME thread with a
-    // NEW message id, so message-level dedupe alone would not catch it.
     const reply = s().ingestEmail(
       gmailEnquiry({
         mailboxMessageId: '18f2a1b2c3d4e5f7',
@@ -335,7 +321,6 @@ describe('9–10. Jatin assigns a mock official and the mocked tail completes', 
     expect(recommendation.userId).toBeTruthy();
     expect(findUserById(recommendation.userId).role).toBe(ROLES.ASSIGNED_OFFICIAL);
 
-    // Nothing is assigned until Jatin acts.
     expect(s().getQuery(queryId).currentAssigneeId).toBeNull();
     expect(s().getQuery(queryId).workflowState).toBe(WORKFLOW_STATE.PENDING_ASSIGNMENT);
 
@@ -351,26 +336,22 @@ describe('9–10. Jatin assigns a mock official and the mocked tail completes', 
     await s().forwardToOic(queryId, BHUMIKA, fakeForward);
     s().assignQuery(queryId, NEHA.id, JATIN);
 
-    s().generateAiDraft(queryId, NEHA);
+    await s().generateAiDraft(queryId, NEHA);
     s().addReviewLevel(queryId, 'USR-0005', NEHA);
     s().addReviewLevel(queryId, 'USR-0006', NEHA);
     s().submitForReview(queryId, NEHA);
     s().approveReview(queryId, 'Reviewer I approves', findUserById('USR-0005'));
     s().approveReview(queryId, 'Reviewer II approves', findUserById('USR-0006'));
 
-    // Jatin's approval dispatches automatically — Bhumika presses nothing.
     await s().grantFinalApproval(queryId, JATIN, fakeResponse);
 
-    // Exactly one case, start to finish.
     expect(s().queries.map((q) => q.queryId)).toEqual([queryId]);
     expect(s().getQuery(queryId).workflowState).toBe(WORKFLOW_STATE.CLOSED);
 
-    // Every real stakeholder is still named in the history.
     const actors = s().getAudit(queryId).map((a) => a.actor);
     expect(actors).toContain(BHUMIKA.name);
     expect(actors).toContain(JATIN.name);
 
-    // One conversation: enquiry in, acknowledgement, forward, response out.
     const thread = s().emailMessages.filter((m) => m.queryId === queryId);
     expect(thread.map((m) => m.emailType)).toEqual([
       EMAIL_TYPE.INCOMING_QUERY,
@@ -380,7 +361,6 @@ describe('9–10. Jatin assigns a mock official and the mocked tail completes', 
     ]);
     expect(new Set(thread.map((m) => m.threadId)).size).toBe(1);
 
-    // The final response goes back to Abhinash, from Bhumika.
     const response = thread.at(-1);
     expect(response.to).toEqual([ABHINASH.email]);
     expect(response.from).toContain(BHUMIKA.email);
@@ -399,10 +379,7 @@ describe('9–10. Jatin assigns a mock official and the mocked tail completes', 
 });
 
 describe('automatic intake — one email drives the whole Front Office stage', () => {
-  /**
-   * Registering the enquiry must acknowledge, verify and forward on its own.
-   * The service layer is mocked: no Gmail client, no network.
-   */
+
   function mockGmail({ forwardFails = false } = {}) {
     vi.mocked(mailboxService.fetchMailboxMessages).mockResolvedValue({
       messages: [gmailEnquiry()],
@@ -457,7 +434,6 @@ describe('automatic intake — one email drives the whole Front Office stage', (
       AUDIT_EVENT.QUERY_FORWARDED,
     ]);
 
-    // The verification checkpoint survives as a record even though nobody clicked.
     const verified = audit.find((a) => a.event === AUDIT_EVENT.QUERY_REGISTERED);
     const forwarded = audit.find((a) => a.event === AUDIT_EVENT.QUERY_FORWARDED);
     expect(verified.actor).toBe(BHUMIKA.name);
@@ -479,7 +455,6 @@ describe('automatic intake — one email drives the whole Front Office stage', (
     ]);
     expect(new Set(thread.map((m) => m.threadId))).toEqual(new Set([query.threadId]));
 
-    // Abhinash → Bhumika, Bhumika → Abhinash, Bhumika → Jatin.
     expect(thread[0].to).toEqual([BHUMIKA.email]);
     expect(thread[1].to).toEqual([ABHINASH.email]);
     expect(thread[2].to).toEqual([JATIN.email]);
@@ -494,7 +469,6 @@ describe('automatic intake — one email drives the whole Front Office stage', (
     expect(outcome.acknowledged).toEqual(['QRY-2026-00001']);
     expect(outcome.forwarded).toEqual([]);
 
-    // Registration and the acknowledgement stand; only the forward is missing.
     const query = s().getQuery('QRY-2026-00001');
     expect(query.workflowState).toBe(WORKFLOW_STATE.FRONT_OFFICE_VERIFICATION);
     expect(s().emailMessages.filter((m) => m.emailType === EMAIL_TYPE.ACKNOWLEDGEMENT)).toHaveLength(1);
@@ -517,8 +491,6 @@ describe('the inquirer device does not matter', () => {
   it('treats desktop and mobile as the same inquirer on the same thread', () => {
     const { queryId } = s().ingestEmail(gmailEnquiry());
 
-    // Same person, same Gmail thread, different message id — as a follow-up
-    // sent from a phone would arrive.
     const fromPhone = s().ingestEmail(
       gmailEnquiry({
         mailboxMessageId: 'mobile-msg-1',
@@ -542,15 +514,13 @@ describe('the inquirer device does not matter', () => {
       }),
     );
 
-    // Different conversation, so a different case — the device is irrelevant,
-    // the thread is what decides.
     expect(second.created).toBe(true);
     expect(second.queryId).not.toBe(first.queryId);
     expect(s().queries.map((q) => q.queryId)).toEqual(['QRY-2026-00001', 'QRY-2026-00002']);
   });
 
   it('resolves the inquirer from the email address, not from any session', () => {
-    // Nobody is signed in; identity still comes from the From header.
+
     useAuthStore.setState({ currentUser: null });
     const { queryId } = s().ingestEmail(gmailEnquiry());
 
@@ -561,16 +531,20 @@ describe('the inquirer device does not matter', () => {
 });
 
 describe('final approval dispatches automatically', () => {
-  /** Drive a case to the point where the OIC can approve. */
+
   async function readyForApproval() {
     const { queryId } = s().ingestEmail(gmailEnquiry());
     acknowledge(queryId);
     s().verifyQuery(queryId, BHUMIKA);
     await s().forwardToOic(queryId, BHUMIKA, fakeForward);
     s().assignQuery(queryId, NEHA.id, JATIN);
-    s().generateAiDraft(queryId, NEHA);
+    await s().generateAiDraft(queryId, NEHA);
     s().saveDraftVersion(queryId, 'The approved wording.', NEHA);
+    s().addReviewLevel(queryId, 'USR-0005', NEHA);
+    s().addReviewLevel(queryId, 'USR-0006', NEHA);
     s().submitForReview(queryId, NEHA);
+    s().approveReview(queryId, 'Reviewer I approves', findUserById('USR-0005'));
+    s().approveReview(queryId, 'Reviewer II approves', findUserById('USR-0006'));
     return queryId;
   }
 
@@ -579,7 +553,6 @@ describe('final approval dispatches automatically', () => {
   it('1–2. approval alone takes the case from READY_FOR_DISPATCH to CLOSED', async () => {
     const queryId = await readyForApproval();
 
-    // Nobody opens the Dispatch page; nobody presses a button.
     await s().grantFinalApproval(queryId, JATIN, fakeResponse);
 
     expect(s().getQuery(queryId).workflowState).toBe(WORKFLOW_STATE.CLOSED);
@@ -611,7 +584,6 @@ describe('final approval dispatches automatically', () => {
     expect(query.workflowState).toBe(WORKFLOW_STATE.READY_FOR_DISPATCH);
     expect(query.workflowState).not.toBe(WORKFLOW_STATE.CLOSED);
 
-    // The approval itself stands, and the response stays locked.
     const approved = s().getVersions(queryId).find((v) => v.status === 'FINAL_APPROVED');
     expect(approved).toBeTruthy();
     expect(s().emailMessages.filter((m) => m.emailType === EMAIL_TYPE.OUTGOING_RESPONSE)).toHaveLength(0);
@@ -621,7 +593,6 @@ describe('final approval dispatches automatically', () => {
     const queryId = await readyForApproval();
     await s().grantFinalApproval(queryId, JATIN, failing).catch(() => {});
 
-    // Front Office retries from the Dispatch page.
     const outcome = await s().dispatchResponse(queryId, BHUMIKA, fakeResponse);
 
     expect(outcome.dispatched).toBe(true);
@@ -686,7 +657,6 @@ describe('final approval dispatches automatically', () => {
   it('never dispatches before final approval', async () => {
     const queryId = await readyForApproval();
 
-    // Still UNDER_REVIEW: the system path is gated on the workflow state.
     await expect(s().dispatchResponse(queryId, null, fakeResponse)).rejects.toThrow(
       /not READY_FOR_DISPATCH/,
     );
@@ -757,10 +727,8 @@ describe('assignment recommendation weighs expertise', () => {
 
     const recommended = s().recommendAssigneeFor(queryId).userId;
 
-    // Nobody is assigned until the OIC acts...
     expect(s().getQuery(queryId).currentAssigneeId).toBeNull();
 
-    // ...and the OIC may pick someone else entirely.
     const other = MOCK_USERS.find(
       (u) => u.role === ROLES.ASSIGNED_OFFICIAL && u.id !== recommended,
     );
@@ -770,3 +738,4 @@ describe('assignment recommendation weighs expertise', () => {
     expect(s().getQuery(queryId).assignmentDecision.acceptedAiRecommendation).toBe(false);
   });
 });
+

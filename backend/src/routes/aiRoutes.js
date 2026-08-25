@@ -5,5 +5,6 @@ const router = express.Router();
 
 router.post('/summary', aiController.generateSummary);
 router.post('/recommend', aiController.recommendOfficial);
+router.post('/draft', aiController.generateDraft);
 
 export default router;

@@ -81,3 +81,4 @@ describe('Dexie v1 → v2 upgrade', () => {
     expect(await open.emailMessages.where('direction').equals('OUTBOUND').count()).toBe(1);
   });
 });
+

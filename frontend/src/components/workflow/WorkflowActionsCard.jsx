@@ -1,8 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { LockIcon } from 'lucide-react';
-import { Card, CardBody, CardHeader } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
+import { Lock, ArrowRight, Zap } from 'lucide-react';
 import { useQueryCase } from '@/hooks/useQueryCase';
 import { useWorkflowStore } from '@/store/useWorkflowStore';
 import { WORKFLOW_ACTION, CLARIFICATION_REQUIRED_ACTIONS } from '@/constants/workflowRules';
@@ -61,39 +59,56 @@ export function WorkflowActionsCard() {
   const isClosed = query.workflowState === WORKFLOW_STATE.CLOSED;
 
   return (
-    <Card>
-      <CardHeader>
-        <h2 className="text-sm font-semibold text-foreground">Available actions</h2>
-        <p className="mt-0.5 text-xs text-muted-foreground">
-          For {currentUser?.name} — actions change with the query's stage.
+    <div className="bg-white rounded-3xl border border-slate-200/80 p-6 shadow-sm select-none flex flex-col h-full space-y-5">
+      <div>
+        <h2 className="font-heading text-[22px] font-black text-slate-900 m-0">
+          Available actions
+        </h2>
+        <p className="text-[14.5px] font-medium text-slate-400 m-0 mt-1">
+          For <span className="font-bold text-slate-700">{currentUser?.name}</span> — actions change with the query&apos;s stage.
         </p>
-      </CardHeader>
-      <CardBody className="space-y-2">
+      </div>
+
+      <div className="space-y-3">
         <ActionError message={error} onDismiss={clearError} />
 
         {isClosed && (
-          <p className="rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
+          <p className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-[15px] font-medium text-slate-500 leading-relaxed m-0">
             This query is closed. Its full audit history remains available below.
           </p>
         )}
 
         {can(WORKFLOW_ACTION.VERIFY) && (
-          <Button className="w-full" onClick={() => run(() => verifyQuery(queryId, currentUser))}>
-            Verify query details
-          </Button>
+          <button
+            type="button"
+            onClick={() => run(() => verifyQuery(queryId, currentUser))}
+            className="w-full py-3.5 px-4 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-[16px] shadow-md shadow-blue-500/20 transition-all cursor-pointer flex items-center justify-center gap-2"
+          >
+            <Zap className="h-4 w-4" />
+            <span>Verify query details</span>
+          </button>
         )}
 
         {can(WORKFLOW_ACTION.FORWARD) && (
-          <Button className="w-full" onClick={() => run(() => forwardToOic(queryId, currentUser))}>
-            Forward to Officer-in-Charge
-          </Button>
+          <button
+            type="button"
+            onClick={() => run(() => forwardToOic(queryId, currentUser))}
+            className="w-full py-3.5 px-4 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-[16px] shadow-md shadow-indigo-500/20 transition-all cursor-pointer flex items-center justify-center gap-2"
+          >
+            <ArrowRight className="h-4 w-4" />
+            <span>Forward to Officer-in-Charge</span>
+          </button>
         )}
 
         {links.map((link) => (
           <Link key={link.path} to={buildPath(link.path, { queryId })} className="block">
-            <Button variant="secondary" className="w-full">
-              {link.label}
-            </Button>
+            <button
+              type="button"
+              className="w-full py-3.5 px-4 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-extrabold text-[16px] transition-all cursor-pointer flex items-center justify-center gap-2"
+            >
+              <span>{link.label}</span>
+              <ArrowRight className="h-4 w-4 text-slate-400" />
+            </button>
           </Link>
         ))}
 
@@ -101,38 +116,37 @@ export function WorkflowActionsCard() {
           !can(WORKFLOW_ACTION.VERIFY) &&
           !can(WORKFLOW_ACTION.FORWARD) &&
           links.length === 0 && (
-            <p className="rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
-              No actions available to you at this stage. Switch user in the header to act as the
-              role this query is waiting on.
-            </p>
+            <div className="rounded-2xl border border-slate-200/90 bg-slate-50/80 p-4 text-[15px] font-medium text-slate-500 leading-relaxed">
+              No actions available to you at this stage. Switch user in the header to act as the role this query is waiting on.
+            </div>
           )}
 
-        <div className="space-y-2 border-t border-border pt-3">
+        {/* Transfer / Pullback Section */}
+        <div className="space-y-2 pt-3 border-t border-slate-100">
           {[WORKFLOW_ACTION.TRANSFER, WORKFLOW_ACTION.PULLBACK].map((action) => (
             <div key={action}>
-              <Button
-                variant="ghost"
-                className="w-full justify-start"
+              <button
+                type="button"
                 onClick={() => setShowClarification(showClarification === action ? null : action)}
+                className="w-full flex items-center gap-2.5 px-4 py-3 rounded-2xl bg-slate-50 hover:bg-slate-100 text-slate-700 font-bold text-[15px] border border-slate-200/60 transition-all cursor-pointer"
               >
-                <LockIcon className="h-4 w-4" aria-hidden="true" />
-                {CLARIFICATION_REQUIRED_ACTIONS[action].label}
-              </Button>
+                <Lock className="h-4 w-4 text-slate-400 shrink-0" />
+                <span>{CLARIFICATION_REQUIRED_ACTIONS[action].label}</span>
+              </button>
               {showClarification === action && (
-                <div className="mt-1 rounded-md border border-status-amber-line bg-status-amber-bg px-3 py-2 text-xs text-status-amber-fg">
-                  <p className="font-medium">Client clarification required before this can be enabled:</p>
-                  <ul className="mt-1 list-disc space-y-0.5 pl-4">
+                <div className="mt-2 rounded-2xl border border-amber-200 bg-amber-50/90 p-3.5 text-[14px] font-medium text-amber-900 space-y-1.5">
+                  <p className="font-bold text-[14.5px] text-amber-950">Client clarification required before this can be enabled:</p>
+                  <ul className="list-disc space-y-1 pl-4 text-amber-900/90">
                     {CLARIFICATION_REQUIRED_ACTIONS[action].openQuestions.map((q) => (
                       <li key={q}>{q}</li>
                     ))}
                   </ul>
-                  <p className="mt-1">See docs/srs/14-open-questions-and-client-clarifications.md</p>
                 </div>
               )}
             </div>
           ))}
         </div>
-      </CardBody>
-    </Card>
+      </div>
+    </div>
   );
 }

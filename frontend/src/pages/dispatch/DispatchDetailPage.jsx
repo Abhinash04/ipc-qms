@@ -16,10 +16,6 @@ import { ActionError } from '@/components/workflow/ActionError';
 export function DispatchDetailPage() {
   const paths = useRoutePaths();
   const { queryId, query, latestVersion, messages, currentUser, can } = useQueryCase();
-
-  // Dispatch is automatic: granting final approval sends the response. This
-  // page reports what happened; the button below is a RETRY, offered only when
-  // the automatic send did not succeed.
   const dispatched = messages.find((m) => m.emailType === EMAIL_TYPE.OUTGOING_RESPONSE);
   const { run, error, clearError } = useWorkflowAction();
   const dispatchResponse = useWorkflowStore((state) => state.dispatchResponse);
@@ -40,8 +36,6 @@ export function DispatchDetailPage() {
       />
 
       <CaseSummaryBar query={query} />
-
-
 
       <ActionError message={error} onDismiss={clearError} />
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
@@ -88,8 +82,7 @@ export function DispatchDetailPage() {
                 </ul>
               )}
               <p className="mt-3 text-xs text-muted-foreground">
-                Whether attachments are carried through automatically is a proposed design, not yet
-                confirmed with the client.
+                Whether attachments are carried through automatically is a proposed design, not yet confirmed with the client.
               </p>
             </CardBody>
           </Card>
@@ -120,8 +113,7 @@ export function DispatchDetailPage() {
               ) : canDispatch ? (
                 <>
                   <p className="rounded-md border border-status-amber-line bg-status-amber-bg px-3 py-2 text-sm text-status-amber-fg">
-                    The automatic dispatch did not complete. The response is approved and locked —
-                    retrying sends it without creating a second response.
+                    The automatic dispatch did not complete. The response is approved and locked — retrying sends it without creating a second response.
                   </p>
                   <Button className="w-full" onClick={() => run(() => dispatchResponse(queryId, currentUser))}>
                     <SendIcon className="h-4 w-4" aria-hidden="true" />
@@ -130,8 +122,7 @@ export function DispatchDetailPage() {
                 </>
               ) : (
                 <p className="rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
-                  The response is sent automatically when the Officer-in-Charge grants final
-                  approval. Nothing to do here.
+                  The response is sent automatically when the Officer-in-Charge grants final approval. Nothing to do here.
                 </p>
               )}
             </CardBody>

@@ -163,6 +163,14 @@ describe('path resolution', () => {
     );
     expect(sectionPath(ROLES.SUPER_ADMIN, SECTION.USERS)).toBe('/super-admin/users');
     expect(sectionPath(ROLES.INQUIRER, SECTION.COMPOSE)).toBe('/inquirer/compose');
+    expect(sectionPath(ROLES.INQUIRER, SECTION.QUERY_DETAIL)).toBe('/inquirer/queries/:queryId');
+  });
+
+  it('lets the inquirer open a query detail URL under their own slug only', () => {
+    expect(isRouteAllowedForRole(ROLES.INQUIRER, '/inquirer/queries/QRY-2026-00001')).toBe(true);
+    expect(isRouteAllowedForRole(ROLES.INQUIRER, '/front-officer/queries/QRY-2026-00001')).toBe(
+      false,
+    );
   });
 
   it('exposes only granted sections, so an ungranted link cannot be built', () => {
@@ -193,3 +201,4 @@ describe('workflow actions respect the role namespace', () => {
     expect(paths[SECTION.DISPATCH_DETAIL]).toBe('/front-officer/dispatch/:queryId');
   });
 });
+
