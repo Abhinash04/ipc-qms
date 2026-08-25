@@ -1,16 +1,22 @@
-import { Activity, XCircle, Pencil, CheckCircle2, Sparkles } from 'lucide-react';
-import { AUDIT_EVENT, AUDIT_EVENT_LABELS } from '@/constants/statusEnums';
+import {
+  Activity,
+  XCircle,
+  Pencil,
+  CheckCircle2,
+  Sparkles,
+} from "lucide-react";
+import { AUDIT_EVENT, AUDIT_EVENT_LABELS } from "@/constants/statusEnums";
 
 function relativeTime(iso) {
-  if (!iso) return 'Recently';
+  if (!iso) return "Recently";
   const then = new Date(iso);
   const minutes = Math.floor((Date.now() - then.getTime()) / 60000);
-  if (minutes < 1) return 'Just now';
+  if (minutes < 1) return "Just now";
   if (minutes < 60) return `${minutes}m ago`;
   const hours = Math.floor(minutes / 60);
   if (hours < 24) return `${hours}h ago`;
-  if (hours < 48) return 'Yesterday';
-  return then.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
+  if (hours < 48) return "Yesterday";
+  return then.toLocaleDateString("en-GB", { day: "2-digit", month: "short" });
 }
 
 function newestFirst(events) {
@@ -27,18 +33,18 @@ export function DashboardActivity({ auditEvents = [] }) {
       case AUDIT_EVENT.REVISION_REQUESTED:
         return {
           icon: XCircle,
-          bg: 'bg-rose-50 text-rose-600 border-rose-200/80',
+          bg: "bg-rose-50 text-rose-600 border-rose-200/80",
         };
       case AUDIT_EVENT.QUERY_CLOSED:
       case AUDIT_EVENT.FINAL_APPROVAL_GRANTED:
         return {
           icon: CheckCircle2,
-          bg: 'bg-emerald-50 text-emerald-600 border-emerald-200/80',
+          bg: "bg-emerald-50 text-emerald-600 border-emerald-200/80",
         };
       default:
         return {
           icon: Pencil,
-          bg: 'bg-blue-50 text-blue-600 border-blue-200/80',
+          bg: "bg-blue-50 text-blue-600 border-blue-200/80",
         };
     }
   };
@@ -75,9 +81,12 @@ export function DashboardActivity({ auditEvents = [] }) {
               <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-50 text-blue-600 border border-blue-100/60 shadow-2xs mb-3">
                 <Sparkles className="h-7 w-7" strokeWidth={1.8} />
               </div>
-              <h4 className="font-heading text-[16px] font-extrabold text-slate-800 m-0">No Activity Yet</h4>
+              <h4 className="font-heading text-[16px] font-extrabold text-slate-800 m-0">
+                No Activity Yet
+              </h4>
               <p className="text-[13px] font-medium text-slate-400 m-0 mt-1 max-w-xs">
-                Workflow transitions and case updates will appear here automatically as they occur.
+                Workflow transitions and case updates will appear here
+                automatically as they occur.
               </p>
             </div>
           ) : (
@@ -87,12 +96,17 @@ export function DashboardActivity({ auditEvents = [] }) {
               const label = AUDIT_EVENT_LABELS[event.event] || event.event;
 
               return (
-                <div key={event.auditId || i} className="relative flex items-start gap-3.5 group">
+                <div
+                  key={event.auditId || i}
+                  className="relative flex items-start gap-3.5 group"
+                >
                   {i < activity.length - 1 && (
                     <div className="absolute left-4.75 top-9 bottom-0 w-0.5 bg-slate-100 z-0" />
                   )}
 
-                  <div className={`relative z-10 flex h-9.5 w-9.5 shrink-0 items-center justify-center rounded-full border shadow-2xs ${badge.bg}`}>
+                  <div
+                    className={`relative z-10 flex h-9.5 w-9.5 shrink-0 items-center justify-center rounded-full border shadow-2xs ${badge.bg}`}
+                  >
                     <EventIcon className="h-4.5 w-4.5" strokeWidth={2} />
                   </div>
 
@@ -113,7 +127,9 @@ export function DashboardActivity({ auditEvents = [] }) {
                     {event.actor && (
                       <p className="text-[11.5px] font-medium text-slate-400 m-0 mt-1 flex items-center gap-1">
                         <span>by</span>
-                        <strong className="text-slate-600 font-bold">{event.actor}</strong>
+                        <strong className="text-slate-600 font-bold">
+                          {event.actor}
+                        </strong>
                       </p>
                     )}
                   </div>
@@ -126,4 +142,3 @@ export function DashboardActivity({ auditEvents = [] }) {
     </div>
   );
 }
-

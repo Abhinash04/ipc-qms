@@ -1,12 +1,12 @@
-import { useAuthStore } from '@/store/useAuthStore';
-import { useWorkflowStore } from '@/store/useWorkflowStore';
-import { ROLES } from '@/constants/roles';
+import { useAuthStore } from "@/store/useAuthStore";
+import { useWorkflowStore } from "@/store/useWorkflowStore";
+import { ROLES } from "@/constants/roles";
 
-import { FrontOfficeDashboard } from './roles/FrontOfficeDashboard';
-import { OICDashboard } from './roles/OICDashboard';
-import { AssignedOfficialDashboard } from './roles/AssignedOfficialDashboard';
-import { ReviewerDashboard } from './roles/ReviewerDashboard';
-import { InquirerDashboard } from './roles/InquirerDashboard';
+import { FrontOfficeDashboard } from "./roles/FrontOfficeDashboard";
+import { OICDashboard } from "./roles/OICDashboard";
+import { AssignedOfficialDashboard } from "./roles/AssignedOfficialDashboard";
+import { ReviewerDashboard } from "./roles/ReviewerDashboard";
+import { InquirerDashboard } from "./roles/InquirerDashboard";
 
 export function DashboardPage() {
   const currentUser = useAuthStore((state) => state.currentUser);
@@ -18,18 +18,48 @@ export function DashboardPage() {
 
   switch (currentUser.role) {
     case ROLES.FRONT_OFFICE:
-      return <FrontOfficeDashboard currentUser={currentUser} queries={queries} auditEvents={auditEvents} />;
+      return (
+        <FrontOfficeDashboard
+          currentUser={currentUser}
+          queries={queries}
+          auditEvents={auditEvents}
+        />
+      );
     case ROLES.OFFICER_IN_CHARGE:
-      return <OICDashboard currentUser={currentUser} queries={queries} auditEvents={auditEvents} />;
+      return (
+        <OICDashboard
+          currentUser={currentUser}
+          queries={queries}
+          auditEvents={auditEvents}
+        />
+      );
     case ROLES.ASSIGNED_OFFICIAL:
-      return <AssignedOfficialDashboard currentUser={currentUser} queries={queries} workflowSteps={workflowSteps} auditEvents={auditEvents} />;
+      return (
+        <AssignedOfficialDashboard
+          currentUser={currentUser}
+          queries={queries}
+          workflowSteps={workflowSteps}
+          auditEvents={auditEvents}
+        />
+      );
     case ROLES.REVIEWER:
-      return <ReviewerDashboard currentUser={currentUser} queries={queries} workflowSteps={workflowSteps} auditEvents={auditEvents} />;
+      return (
+        <ReviewerDashboard
+          currentUser={currentUser}
+          queries={queries}
+          workflowSteps={workflowSteps}
+          auditEvents={auditEvents}
+        />
+      );
     case ROLES.INQUIRER:
       return <InquirerDashboard currentUser={currentUser} queries={queries} />;
     default:
-      // Fallback to OIC Dashboard for Admins / Super Admins / Unknowns
-      return <OICDashboard currentUser={currentUser} queries={queries} auditEvents={auditEvents} />;
+      return (
+        <OICDashboard
+          currentUser={currentUser}
+          queries={queries}
+          auditEvents={auditEvents}
+        />
+      );
   }
 }
-

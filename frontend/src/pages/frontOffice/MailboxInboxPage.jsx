@@ -1,20 +1,31 @@
-import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { Link } from 'react-router-dom';
-import { MailIcon, RefreshCwIcon, ShieldAlert, CheckCircle2, ArrowRight } from 'lucide-react';
+import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { Link } from "react-router-dom";
+import {
+  MailIcon,
+  RefreshCwIcon,
+  ShieldAlert,
+  CheckCircle2,
+  ArrowRight,
+} from "lucide-react";
 
-import { Breadcrumb } from '@/components/common/Breadcrumb';
-import { PageHeader } from '@/components/common/PageHeader';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Label } from '@/components/ui/label';
-import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
-import { useMailboxIngestion } from '@/hooks/useMailboxIngestion';
-import { useRoutePaths } from '@/hooks/useRoutePaths';
-import { useWorkflowStore } from '@/store/useWorkflowStore';
-import { fetchMailboxMessages } from '@/services/api/mailboxService';
-import { buildPath } from '@/constants/routePaths';
-import { useAuthStore } from '@/store/useAuthStore';
-import { ROLE_SLUG } from '@/constants/permissions';
+import { Breadcrumb } from "@/components/common/Breadcrumb";
+import { PageHeader } from "@/components/common/PageHeader";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
+import {
+  Tooltip,
+  TooltipProvider,
+  TooltipTrigger,
+  TooltipContent,
+} from "@/components/ui/tooltip";
+import { useMailboxIngestion } from "@/hooks/useMailboxIngestion";
+import { useRoutePaths } from "@/hooks/useRoutePaths";
+import { useWorkflowStore } from "@/store/useWorkflowStore";
+import { fetchMailboxMessages } from "@/services/api/mailboxService";
+import { buildPath } from "@/constants/routePaths";
+import { useAuthStore } from "@/store/useAuthStore";
+import { ROLE_SLUG } from "@/constants/permissions";
 
 const AUTO_REFRESH_MS = 15000;
 
@@ -28,7 +39,7 @@ export function MailboxInboxPage() {
   const [autoRefresh, setAutoRefresh] = useState(false);
 
   const inbox = useQuery({
-    queryKey: ['mailbox', 'all'],
+    queryKey: ["mailbox", "all"],
     queryFn: () => fetchMailboxMessages({ unreadOnly: false }),
     retry: false,
     refetchInterval: autoRefresh ? AUTO_REFRESH_MS : false,
@@ -43,20 +54,24 @@ export function MailboxInboxPage() {
   };
 
   const queryIdFor = (mailboxMessageId) =>
-    emailMessages.find((m) => m.sourceMessageId === mailboxMessageId)?.queryId || null;
+    emailMessages.find((m) => m.sourceMessageId === mailboxMessageId)
+      ?.queryId || null;
 
   const getQueryDetailPath = (queryId) => {
     if (paths.QUERY_DETAIL) {
       return buildPath(paths.QUERY_DETAIL, { queryId });
     }
-    const slug = ROLE_SLUG[currentUser?.role] || 'front-officer';
+    const slug = ROLE_SLUG[currentUser?.role] || "front-officer";
     return `/${slug}/queries/${queryId}`;
   };
 
   return (
     <div className="space-y-6">
       <Breadcrumb
-        items={[{ label: 'Dashboard', path: paths.DASHBOARD }, { label: 'IPC Mailbox' }]}
+        items={[
+          { label: "Dashboard", path: paths.DASHBOARD },
+          { label: "IPC Mailbox" },
+        ]}
       />
 
       <PageHeader
@@ -71,7 +86,10 @@ export function MailboxInboxPage() {
                 checked={autoRefresh}
                 onCheckedChange={(checked) => setAutoRefresh(checked === true)}
               />
-              <Label htmlFor="auto-refresh" className="text-[12.5px] font-semibold text-slate-600 cursor-pointer">
+              <Label
+                htmlFor="auto-refresh"
+                className="text-[12.5px] font-semibold text-slate-600 cursor-pointer"
+              >
                 Auto-refresh (15s)
               </Label>
             </div>
@@ -82,8 +100,10 @@ export function MailboxInboxPage() {
               disabled={running}
               className="flex items-center gap-2 rounded-2xl bg-linear-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white px-5 py-2.5 text-[13.5px] font-bold shadow-md shadow-blue-500/20 active:scale-95 transition-all cursor-pointer disabled:opacity-60"
             >
-              <RefreshCwIcon className={`h-4 w-4 ${running ? 'animate-spin' : ''}`} />
-              <span>{running ? 'Checking Mailbox…' : 'Check IPC Mailbox'}</span>
+              <RefreshCwIcon
+                className={`h-4 w-4 ${running ? "animate-spin" : ""}`}
+              />
+              <span>{running ? "Checking Mailbox…" : "Check IPC Mailbox"}</span>
             </button>
           </div>
         }
@@ -96,9 +116,12 @@ export function MailboxInboxPage() {
         >
           <ShieldAlert className="h-6 w-6 text-rose-600 shrink-0 mt-0.5" />
           <div>
-            <p className="font-bold text-[14px] text-rose-900">Mailbox server offline / unreachable</p>
+            <p className="font-bold text-[14px] text-rose-900">
+              Mailbox server offline / unreachable
+            </p>
             <p className="mt-1 text-[12.5px] font-medium text-rose-700 leading-relaxed">
-              Could not connect to the backend mailbox service. Please verify backend is running (`npm start` in `/backend`).
+              Could not connect to the backend mailbox service. Please verify
+              backend is running (`npm start` in `/backend`).
             </p>
           </div>
         </div>
@@ -109,10 +132,12 @@ export function MailboxInboxPage() {
           <CheckCircle2 className="h-4.5 w-4.5 text-emerald-600 shrink-0" />
           <span>
             {lastResult.created.length > 0
-              ? `${lastResult.created.length} case${lastResult.created.length > 1 ? 's' : ''} registered`
-              : 'No new mail to register'}
-            {lastResult.skipped.length > 0 && ` · ${lastResult.skipped.length} already registered`}
-            {lastResult.acknowledged?.length > 0 && ` · ${lastResult.acknowledged.length} acknowledged`}
+              ? `${lastResult.created.length} case${lastResult.created.length > 1 ? "s" : ""} registered`
+              : "No new mail to register"}
+            {lastResult.skipped.length > 0 &&
+              ` · ${lastResult.skipped.length} already registered`}
+            {lastResult.acknowledged?.length > 0 &&
+              ` · ${lastResult.acknowledged.length} acknowledged`}
           </span>
         </div>
       )}
@@ -137,7 +162,7 @@ export function MailboxInboxPage() {
           <div className="flex items-center gap-2 self-start sm:self-center shrink-0">
             <span className="inline-flex items-center gap-2 rounded-full bg-blue-50 px-4 py-1.5 text-[12.5px] font-extrabold text-blue-700 border border-blue-200/60 shadow-2xs">
               <span className="h-2 w-2 rounded-full bg-blue-600 animate-pulse" />
-              {messages.length} Message{messages.length === 1 ? '' : 's'} Total
+              {messages.length} Message{messages.length === 1 ? "" : "s"} Total
             </span>
           </div>
         </div>
@@ -147,9 +172,12 @@ export function MailboxInboxPage() {
             <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-50 text-blue-600 border border-blue-100/60 shadow-2xs mb-3">
               <MailIcon className="h-7 w-7" strokeWidth={1.8} />
             </div>
-            <h4 className="font-heading text-[16px] font-extrabold text-slate-800 m-0">No Mail in the IPC Mailbox</h4>
+            <h4 className="font-heading text-[16px] font-extrabold text-slate-800 m-0">
+              No Mail in the IPC Mailbox
+            </h4>
             <p className="text-[13px] font-medium text-slate-400 m-0 mt-1 max-w-sm">
-              Incoming enquiries sent to the official mailbox will automatically appear here.
+              Incoming enquiries sent to the official mailbox will automatically
+              appear here.
             </p>
           </div>
         ) : (
@@ -167,20 +195,38 @@ export function MailboxInboxPage() {
             <div className="space-y-3">
               {messages.map((message, index) => {
                 const queryId = queryIdFor(message.mailboxMessageId);
-                const known = queryId && queries.some((q) => q.queryId === queryId);
-                const senderName = message.from ? message.from.split('<')[0].trim() : 'Unknown Sender';
-                const senderEmail = message.from && message.from.includes('<') ? message.from.split('<')[1].replace('>', '').trim() : '';
+                const known =
+                  queryId && queries.some((q) => q.queryId === queryId);
+                const senderName = message.from
+                  ? message.from.split("<")[0].trim()
+                  : "Unknown Sender";
+                const senderEmail =
+                  message.from && message.from.includes("<")
+                    ? message.from.split("<")[1].replace(">", "").trim()
+                    : "";
 
-                const receivedDate = message.receivedAt ? new Date(message.receivedAt) : new Date();
-                const dateFormatted = receivedDate.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
-                const timeFormatted = receivedDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
+                const receivedDate = message.receivedAt
+                  ? new Date(message.receivedAt)
+                  : new Date();
+                const dateFormatted = receivedDate.toLocaleDateString("en-GB", {
+                  day: "2-digit",
+                  month: "short",
+                  year: "numeric",
+                });
+                const timeFormatted = receivedDate.toLocaleTimeString("en-US", {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                  second: "2-digit",
+                  hour12: true,
+                });
 
-                const senderInitials = senderName
-                  .split(' ')
-                  .map((n) => n[0])
-                  .join('')
-                  .slice(0, 2)
-                  .toUpperCase() || 'M';
+                const senderInitials =
+                  senderName
+                    .split(" ")
+                    .map((n) => n[0])
+                    .join("")
+                    .slice(0, 2)
+                    .toUpperCase() || "M";
 
                 return (
                   <div
@@ -188,7 +234,9 @@ export function MailboxInboxPage() {
                     className="group relative grid grid-cols-[60px_220px_1fr_200px_160px] items-center gap-4 bg-white rounded-2xl border border-slate-200/70 p-4 shadow-2xs hover:shadow-md hover:border-purple-300 transition-all duration-200"
                   >
                     {/* Left Accent Bar */}
-                    <div className={`absolute left-0 top-0 bottom-0 w-1.5 rounded-l-2xl ${known ? 'bg-emerald-500' : 'bg-amber-500'}`} />
+                    <div
+                      className={`absolute left-0 top-0 bottom-0 w-1.5 rounded-l-2xl ${known ? "bg-emerald-500" : "bg-amber-500"}`}
+                    />
 
                     {/* S.No */}
                     <div className="flex justify-center pl-2">
@@ -220,7 +268,7 @@ export function MailboxInboxPage() {
                         <Tooltip>
                           <TooltipTrigger asChild>
                             <div className="text-[14px] font-extrabold text-slate-900 truncate group-hover:text-purple-700 transition-colors cursor-pointer">
-                              {message.subject || '(No Subject)'}
+                              {message.subject || "(No Subject)"}
                             </div>
                           </TooltipTrigger>
                           <TooltipContent className="max-w-100 wrap-break-word">
@@ -271,4 +319,3 @@ export function MailboxInboxPage() {
     </div>
   );
 }
-

@@ -1,55 +1,57 @@
-import { useState } from 'react';
-import { Link } from 'react-router-dom';
-import { 
-  Search, 
-  Filter, 
-  ChevronDown, 
-  FileText, 
-  Mail, 
-  Clock, 
-  Calendar, 
-  Copy, 
-  MoreVertical, 
+import { useState } from "react";
+import { Link } from "react-router-dom";
+import {
+  Search,
+  Filter,
+  ChevronDown,
+  FileText,
+  Mail,
+  Clock,
+  Calendar,
+  Copy,
+  MoreVertical,
   ChevronsUpDown,
   ChevronLeft,
   ChevronRight,
-  Inbox
-} from 'lucide-react';
-import { Breadcrumb } from '@/components/common/Breadcrumb';
-import { PageHeader } from '@/components/common/PageHeader';
-import { useWorkflowStore } from '@/store/useWorkflowStore';
-import { findUserById } from '@/constants/mockUsers';
-import { buildPath } from '@/constants/routePaths';
-import { ROLE_LABELS } from '@/constants/roles';
-import { ROLE_SLUG } from '@/constants/permissions';
-import { useAuthStore } from '@/store/useAuthStore';
+  Inbox,
+} from "lucide-react";
+import { Breadcrumb } from "@/components/common/Breadcrumb";
+import { PageHeader } from "@/components/common/PageHeader";
+import { useWorkflowStore } from "@/store/useWorkflowStore";
+import { findUserById } from "@/constants/mockUsers";
+import { buildPath } from "@/constants/routePaths";
+import { ROLE_LABELS } from "@/constants/roles";
+import { ROLE_SLUG } from "@/constants/permissions";
+import { useAuthStore } from "@/store/useAuthStore";
 
-export function QueryTable({ 
-  title, 
-  purpose, 
-  breadcrumbItems, 
-  detailPath, 
-  filter, 
-  actions, 
+export function QueryTable({
+  title,
+  purpose,
+  breadcrumbItems,
+  detailPath,
+  filter,
+  actions,
   emptyMessage,
   greeting = "IPC Query Registry 📋",
   icon = null,
-  iconClassName
+  iconClassName,
 }) {
   const currentUser = useAuthStore((state) => state.currentUser);
   const allQueries = useWorkflowStore((state) => state.queries);
   const queries = filter ? allQueries.filter(filter) : allQueries;
-  
-  const [searchQuery, setSearchQuery] = useState('');
-  const [priorityFilter, setPriorityFilter] = useState('ALL');
+
+  const [searchQuery, setSearchQuery] = useState("");
+  const [priorityFilter, setPriorityFilter] = useState("ALL");
 
   const filteredQueries = queries.filter((q) => {
     const matchSearch =
       !searchQuery ||
       q.queryId?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       q.subject?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (q.inquirer?.name && q.inquirer.name.toLowerCase().includes(searchQuery.toLowerCase()));
-    const matchPriority = priorityFilter === 'ALL' || q.priority === priorityFilter;
+      (q.inquirer?.name &&
+        q.inquirer.name.toLowerCase().includes(searchQuery.toLowerCase()));
+    const matchPriority =
+      priorityFilter === "ALL" || q.priority === priorityFilter;
     return matchSearch && matchPriority;
   });
 
@@ -57,24 +59,24 @@ export function QueryTable({
     if (detailPath) {
       return buildPath(detailPath, { queryId });
     }
-    const slug = ROLE_SLUG[currentUser?.role] || 'officer-in-charge';
+    const slug = ROLE_SLUG[currentUser?.role] || "officer-in-charge";
     return `/${slug}/queries/${queryId}`;
   };
 
   const formatStatus = (statusStr) => {
-    if (!statusStr) return 'PENDING APPROVAL';
-    return statusStr.replace(/_/g, ' ').toUpperCase();
+    if (!statusStr) return "PENDING APPROVAL";
+    return statusStr.replace(/_/g, " ").toUpperCase();
   };
 
   const getPriorityStyle = (priority) => {
     switch (priority?.toUpperCase()) {
-      case 'URGENT':
-      case 'HIGH':
-        return 'bg-rose-100/80 text-rose-700 border-rose-200/80';
-      case 'LOW':
-        return 'bg-slate-100/80 text-slate-600 border-slate-200/80';
+      case "URGENT":
+      case "HIGH":
+        return "bg-rose-100/80 text-rose-700 border-rose-200/80";
+      case "LOW":
+        return "bg-slate-100/80 text-slate-600 border-slate-200/80";
       default:
-        return 'bg-blue-100/70 text-blue-700 border-blue-200/80';
+        return "bg-blue-100/70 text-blue-700 border-blue-200/80";
     }
   };
 
@@ -84,8 +86,8 @@ export function QueryTable({
 
       <PageHeader
         greeting={greeting}
-        title={title || 'Queries'}
-        purpose={purpose || 'All registered queries across the organization.'}
+        title={title || "Queries"}
+        purpose={purpose || "All registered queries across the organization."}
         actions={actions}
         icon={icon}
         iconClassName={iconClassName}
@@ -153,19 +155,36 @@ export function QueryTable({
           <div className="space-y-3.5 mt-3.5">
             {filteredQueries.length > 0 ? (
               filteredQueries.map((query) => {
-                const assignee = query.currentAssigneeId ? findUserById(query.currentAssigneeId) : null;
-                const assigneeName = assignee?.name || query.inquirer?.name || 'Unassigned';
-                const assigneeRole = assignee?.role ? ROLE_LABELS[assignee.role] : (query.inquirer ? 'Inquirer' : 'Assigned Official');
-                const initials = assigneeName
-                  .split(' ')
-                  .map((n) => n[0])
-                  .join('')
-                  .slice(0, 2)
-                  .toUpperCase() || 'Q';
+                const assignee = query.currentAssigneeId
+                  ? findUserById(query.currentAssigneeId)
+                  : null;
+                const assigneeName =
+                  assignee?.name || query.inquirer?.name || "Unassigned";
+                const assigneeRole = assignee?.role
+                  ? ROLE_LABELS[assignee.role]
+                  : query.inquirer
+                    ? "Inquirer"
+                    : "Assigned Official";
+                const initials =
+                  assigneeName
+                    .split(" ")
+                    .map((n) => n[0])
+                    .join("")
+                    .slice(0, 2)
+                    .toUpperCase() || "Q";
 
-                const createdDate = query.createdAt ? new Date(query.createdAt) : new Date('2026-08-19T09:30:00');
-                const dateFormatted = createdDate.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
-                const timeFormatted = createdDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+                const createdDate = query.createdAt
+                  ? new Date(query.createdAt)
+                  : new Date("2026-08-19T09:30:00");
+                const dateFormatted = createdDate.toLocaleDateString("en-GB", {
+                  day: "2-digit",
+                  month: "short",
+                  year: "numeric",
+                });
+                const timeFormatted = createdDate.toLocaleTimeString("en-US", {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                });
 
                 return (
                   <Link
@@ -191,7 +210,7 @@ export function QueryTable({
 
                     <div className="min-w-0 px-2">
                       <div className="text-[14px] font-bold text-slate-900 truncate group-hover:text-purple-700">
-                        {query.subject || '(No Subject)'}
+                        {query.subject || "(No Subject)"}
                       </div>
                       <div className="flex items-center gap-1.5 text-[11.5px] font-medium text-slate-400 mt-0.5">
                         <Mail className="h-3.5 w-3.5 text-purple-500" />
@@ -200,16 +219,20 @@ export function QueryTable({
                     </div>
 
                     <div className="flex justify-center">
-                      <span className={`inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-[11.5px] font-extrabold border shadow-2xs ${getPriorityStyle(query.priority)}`}>
+                      <span
+                        className={`inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-[11.5px] font-extrabold border shadow-2xs ${getPriorityStyle(query.priority)}`}
+                      >
                         <span className="h-2 w-2 rounded-full bg-current" />
-                        {query.priority || 'NORMAL'}
+                        {query.priority || "NORMAL"}
                       </span>
                     </div>
 
                     <div className="flex justify-center">
                       <span className="inline-flex items-center gap-2 rounded-full bg-purple-100/70 px-4 py-1.5 text-[11.5px] font-extrabold text-purple-700 border border-purple-200/80 shadow-2xs">
                         <Clock className="h-3.5 w-3.5 text-purple-600" />
-                        {formatStatus(query.businessStatus || query.workflowState)}
+                        {formatStatus(
+                          query.businessStatus || query.workflowState,
+                        )}
                       </span>
                     </div>
 
@@ -248,9 +271,12 @@ export function QueryTable({
             ) : (
               <div className="p-12 text-center rounded-2xl border border-dashed border-slate-200 bg-slate-50/50">
                 <Inbox className="mx-auto h-10 w-10 text-slate-300 mb-2" />
-                <p className="font-bold text-[14px] text-slate-700">No matching queries found</p>
+                <p className="font-bold text-[14px] text-slate-700">
+                  No matching queries found
+                </p>
                 <p className="text-[12.5px] text-slate-400 mt-1">
-                  {emptyMessage || 'Try adjusting your search or priority filter.'}
+                  {emptyMessage ||
+                    "Try adjusting your search or priority filter."}
                 </p>
               </div>
             )}
@@ -259,7 +285,8 @@ export function QueryTable({
 
         <div className="px-6 py-4 border-t border-slate-100/80 flex items-center justify-between bg-white">
           <span className="text-[13px] font-medium text-slate-500">
-            Showing {filteredQueries.length} of {queries.length} result{queries.length === 1 ? '' : 's'}
+            Showing {filteredQueries.length} of {queries.length} result
+            {queries.length === 1 ? "" : "s"}
           </span>
 
           <div className="flex items-center gap-2">

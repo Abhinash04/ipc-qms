@@ -1,5 +1,5 @@
 export function getTimeBasedGreeting(name) {
-  const firstName = name ? name.split(' ')[0] : 'User';
+  const firstName = name ? name.split(" ")[0] : "User";
   const hour = new Date().getHours();
 
   if (hour >= 4 && hour < 12) {

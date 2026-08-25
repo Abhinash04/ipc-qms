@@ -1,76 +1,96 @@
-import { Link } from 'react-router-dom';
-import { 
-  Hourglass, 
-  XCircle, 
-  User, 
-  ShieldCheck, 
-  Calendar, 
-  Info 
-} from 'lucide-react';
-import { Breadcrumb } from '@/components/common/Breadcrumb';
-import { PageHeader } from '@/components/common/PageHeader';
-import { useWorkflowStore } from '@/store/useWorkflowStore';
-import { ROLE_LABELS } from '@/constants/roles';
-import { buildPath } from '@/constants/routePaths';
-import { useRoutePaths } from '@/hooks/useRoutePaths';
+import { Link } from "react-router-dom";
+import {
+  Hourglass,
+  XCircle,
+  User,
+  ShieldCheck,
+  Calendar,
+  Info,
+} from "lucide-react";
+import { Breadcrumb } from "@/components/common/Breadcrumb";
+import { PageHeader } from "@/components/common/PageHeader";
+import { useWorkflowStore } from "@/store/useWorkflowStore";
+import { ROLE_LABELS } from "@/constants/roles";
+import { buildPath } from "@/constants/routePaths";
+import { useRoutePaths } from "@/hooks/useRoutePaths";
 
 export function NotificationsPage() {
   const paths = useRoutePaths();
   const notifications = useWorkflowStore((state) => state.notifications);
 
-  const storeOrdered = [...notifications].sort((a, b) => new Date(b.at) - new Date(a.at));
+  const storeOrdered = [...notifications].sort(
+    (a, b) => new Date(b.at) - new Date(a.at),
+  );
   const displayList = storeOrdered;
 
   const getNodeConfig = (item) => {
-    const msg = (item.message || '').toLowerCase();
-    const role = item.recipientRole || '';
+    const msg = (item.message || "").toLowerCase();
+    const role = item.recipientRole || "";
 
-    if (item.type === 'rejected' || msg.includes('rejected')) {
+    if (item.type === "rejected" || msg.includes("rejected")) {
       return {
         icon: XCircle,
-        boxBg: 'bg-rose-50 text-rose-500 border-rose-200/60',
-        dotBg: 'bg-rose-500',
-        badgeBg: 'bg-rose-100/80 text-rose-800 border-rose-200/80',
+        boxBg: "bg-rose-50 text-rose-500 border-rose-200/60",
+        dotBg: "bg-rose-500",
+        badgeBg: "bg-rose-100/80 text-rose-800 border-rose-200/80",
       };
     }
-    if (item.type === 'user' || msg.includes('assigned to')) {
+    if (item.type === "user" || msg.includes("assigned to")) {
       return {
         icon: User,
-        boxBg: 'bg-blue-50 text-blue-600 border-blue-200/60',
-        dotBg: 'bg-blue-600',
-        badgeBg: 'bg-blue-100/80 text-blue-700 border-blue-200/80',
+        boxBg: "bg-blue-50 text-blue-600 border-blue-200/60",
+        dotBg: "bg-blue-600",
+        badgeBg: "bg-blue-100/80 text-blue-700 border-blue-200/80",
       };
     }
-    if (item.type === 'verified' || msg.includes('front office') || role === 'FRONT_OFFICE') {
+    if (
+      item.type === "verified" ||
+      msg.includes("front office") ||
+      role === "FRONT_OFFICE"
+    ) {
       return {
         icon: ShieldCheck,
-        boxBg: 'bg-emerald-50 text-emerald-600 border-emerald-200/60',
-        dotBg: 'bg-emerald-600',
-        badgeBg: 'bg-emerald-100/80 text-emerald-800 border-emerald-200/80',
+        boxBg: "bg-emerald-50 text-emerald-600 border-emerald-200/60",
+        dotBg: "bg-emerald-600",
+        badgeBg: "bg-emerald-100/80 text-emerald-800 border-emerald-200/80",
       };
     }
     return {
       icon: Hourglass,
-      boxBg: 'bg-amber-50 text-amber-500 border-amber-200/60',
-      dotBg: 'bg-amber-500',
-      badgeBg: 'bg-amber-100/80 text-amber-800 border-amber-200/80',
+      boxBg: "bg-amber-50 text-amber-500 border-amber-200/60",
+      dotBg: "bg-amber-500",
+      badgeBg: "bg-amber-100/80 text-amber-800 border-amber-200/80",
     };
   };
 
   const formatTimestamp = (isoString) => {
     try {
       const d = new Date(isoString);
-      const dateStr = d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
-      const timeStr = d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
+      const dateStr = d.toLocaleDateString("en-GB", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+      });
+      const timeStr = d.toLocaleTimeString("en-US", {
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hour12: true,
+      });
       return `${dateStr}, ${timeStr}`;
     } catch {
-      return '19 Aug 2026, 03:10:19 PM';
+      return "19 Aug 2026, 03:10:19 PM";
     }
   };
 
   return (
     <div className="space-y-6">
-      <Breadcrumb items={[{ label: 'Dashboard', path: paths.DASHBOARD }, { label: 'Notifications' }]} />
+      <Breadcrumb
+        items={[
+          { label: "Dashboard", path: paths.DASHBOARD },
+          { label: "Notifications" },
+        ]}
+      />
 
       <PageHeader
         greeting="Live Alerts & Updates 🔔"
@@ -83,18 +103,26 @@ export function NotificationsPage() {
           {displayList.map((item, index) => {
             const config = getNodeConfig(item);
             const Icon = config.icon;
-            const roleLabel = ROLE_LABELS[item.recipientRole] || item.recipientRole;
+            const roleLabel =
+              ROLE_LABELS[item.recipientRole] || item.recipientRole;
 
             return (
-              <div key={item.notificationId || index} className="relative flex items-center gap-4 group">
+              <div
+                key={item.notificationId || index}
+                className="relative flex items-center gap-4 group"
+              >
                 {index < displayList.length - 1 && (
                   <div className="absolute left-5.25 top-12 -bottom-6 w-0.5 border-l-2 border-dashed border-slate-200 z-0" />
                 )}
-                <div className={`relative z-10 flex h-11 w-11 shrink-0 items-center justify-center rounded-full border shadow-2xs ${config.boxBg}`}>
+                <div
+                  className={`relative z-10 flex h-11 w-11 shrink-0 items-center justify-center rounded-full border shadow-2xs ${config.boxBg}`}
+                >
                   <Icon className="h-5 w-5" strokeWidth={2} />
                 </div>
 
-                <div className={`relative z-10 h-2.5 w-2.5 shrink-0 rounded-full ${config.dotBg} ring-4 ring-white`} />
+                <div
+                  className={`relative z-10 h-2.5 w-2.5 shrink-0 rounded-full ${config.dotBg} ring-4 ring-white`}
+                />
 
                 <div className="flex-1 bg-white rounded-2xl border border-slate-200/80 p-4 shadow-2xs hover:shadow-md hover:border-purple-200 transition-all flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                   <div>
@@ -102,13 +130,17 @@ export function NotificationsPage() {
                       {item.message}
                     </p>
                     <div className="flex items-center gap-2 mt-1.5">
-                      <span className={`inline-flex items-center rounded-full px-3 py-0.5 text-[11px] font-extrabold border ${config.badgeBg}`}>
+                      <span
+                        className={`inline-flex items-center rounded-full px-3 py-0.5 text-[11px] font-extrabold border ${config.badgeBg}`}
+                      >
                         {roleLabel}
                       </span>
                       <span className="text-slate-300 font-bold">•</span>
                       {item.queryId && (
                         <Link
-                          to={buildPath(paths.QUERY_DETAIL, { queryId: item.queryId })}
+                          to={buildPath(paths.QUERY_DETAIL, {
+                            queryId: item.queryId,
+                          })}
                           className="font-extrabold text-blue-600 hover:underline text-[12.5px]"
                         >
                           {item.queryId}
@@ -136,7 +168,8 @@ export function NotificationsPage() {
               Notifications are generated in-app as workflow transitions occur.
             </p>
             <p className="text-[12px] font-medium text-slate-400 m-0 mt-0.5">
-              Real delivery infrastructure is not implemented — see docs/srs/10-notifications.md.
+              Real delivery infrastructure is not implemented — see
+              docs/srs/10-notifications.md.
             </p>
           </div>
         </div>

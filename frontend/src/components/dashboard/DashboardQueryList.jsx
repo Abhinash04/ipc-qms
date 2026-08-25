@@ -1,46 +1,46 @@
-import { Link } from 'react-router-dom';
-import { 
-  Inbox, 
-  FileText, 
-  Mail, 
-  Clock, 
-  ShieldCheck, 
+import { Link } from "react-router-dom";
+import {
+  Inbox,
+  FileText,
+  Mail,
+  Clock,
+  ShieldCheck,
   Info,
-  Sparkles
-} from 'lucide-react';
-import { useRoutePaths } from '@/hooks/useRoutePaths';
-import { ROLE_SLUG } from '@/constants/permissions';
-import { useAuthStore } from '@/store/useAuthStore';
+  Sparkles,
+} from "lucide-react";
+import { useRoutePaths } from "@/hooks/useRoutePaths";
+import { ROLE_SLUG } from "@/constants/permissions";
+import { useAuthStore } from "@/store/useAuthStore";
 
-export function DashboardQueryList({ 
-  title, 
-  subtitle, 
-  icon: Icon = FileText, 
-  items = [], 
-  emptyText = "No items right now.", 
-  totalCount = 0, 
-  statusBadgeLabel 
+export function DashboardQueryList({
+  title,
+  subtitle,
+  icon: Icon = FileText,
+  items = [],
+  emptyText = "No items right now.",
+  totalCount = 0,
+  statusBadgeLabel,
 }) {
   const paths = useRoutePaths();
   const currentUser = useAuthStore((state) => state.currentUser);
 
   const getQueryDetailPath = (queryId) => {
     if (paths.QUERY_DETAIL) {
-      return paths.QUERY_DETAIL.replace(':queryId', queryId);
+      return paths.QUERY_DETAIL.replace(":queryId", queryId);
     }
-    const slug = ROLE_SLUG[currentUser?.role] || 'front-officer';
+    const slug = ROLE_SLUG[currentUser?.role] || "front-officer";
     return `/${slug}/queries/${queryId}`;
   };
 
   const getPriorityStyle = (priority) => {
     switch (priority?.toUpperCase()) {
-      case 'URGENT':
-      case 'HIGH':
-        return 'bg-rose-100/90 text-rose-700 border-rose-200';
-      case 'LOW':
-        return 'bg-slate-100 text-slate-600 border-slate-200';
+      case "URGENT":
+      case "HIGH":
+        return "bg-rose-100/90 text-rose-700 border-rose-200";
+      case "LOW":
+        return "bg-slate-100 text-slate-600 border-slate-200";
       default:
-        return 'bg-blue-100/80 text-blue-700 border-blue-200';
+        return "bg-blue-100/80 text-blue-700 border-blue-200";
     }
   };
 
@@ -68,7 +68,7 @@ export function DashboardQueryList({
           <div className="flex items-center gap-2 self-start sm:self-center shrink-0">
             <span className="inline-flex items-center gap-2 rounded-full bg-purple-50 px-4 py-1.5 text-[12.5px] font-extrabold text-purple-700 border border-purple-200/60 shadow-2xs">
               <Inbox className="h-4 w-4 text-purple-600" />
-              {items.length} {items.length === 1 ? 'listed' : 'listed'}
+              {items.length} {items.length === 1 ? "listed" : "listed"}
             </span>
           </div>
         </div>
@@ -90,23 +90,38 @@ export function DashboardQueryList({
               <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-purple-50 text-purple-600 border border-purple-100/60 shadow-2xs mb-3">
                 <Sparkles className="h-7 w-7" strokeWidth={1.8} />
               </div>
-              <h4 className="font-heading text-[16px] font-extrabold text-slate-800 m-0">All Caught Up!</h4>
+              <h4 className="font-heading text-[16px] font-extrabold text-slate-800 m-0">
+                All Caught Up!
+              </h4>
               <p className="text-[13px] font-medium text-slate-400 m-0 mt-1 max-w-sm">
                 {emptyText}
               </p>
             </div>
           ) : (
             items.map((query) => {
-              const formattedDate = query.createdAt 
-                ? new Date(query.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
-                : '19 Aug 2026';
+              const formattedDate = query.createdAt
+                ? new Date(query.createdAt).toLocaleDateString("en-GB", {
+                    day: "2-digit",
+                    month: "short",
+                    year: "numeric",
+                  })
+                : "19 Aug 2026";
               const formattedTime = query.createdAt
-                ? new Date(query.createdAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
-                : '09:30 AM';
+                ? new Date(query.createdAt).toLocaleTimeString("en-US", {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })
+                : "09:30 AM";
 
-              const statusText = statusBadgeLabel 
-                ? statusBadgeLabel(query) 
-                : (query.businessStatus || query.workflowState || 'PENDING APPROVAL').replace(/_/g, ' ').toUpperCase();
+              const statusText = statusBadgeLabel
+                ? statusBadgeLabel(query)
+                : (
+                    query.businessStatus ||
+                    query.workflowState ||
+                    "PENDING APPROVAL"
+                  )
+                    .replace(/_/g, " ")
+                    .toUpperCase();
 
               return (
                 <Link
@@ -129,7 +144,7 @@ export function DashboardQueryList({
                   {/* Subject & Subtext */}
                   <div className="min-w-0 px-1">
                     <div className="text-[13.5px] font-extrabold text-slate-900 truncate group-hover:text-purple-700 transition-colors">
-                      {query.subject || '(No Subject)'}
+                      {query.subject || "(No Subject)"}
                     </div>
                     <div className="flex items-center gap-2 text-[11.5px] font-medium text-slate-400 mt-0.5">
                       <span className="inline-flex items-center gap-1">
@@ -151,9 +166,11 @@ export function DashboardQueryList({
 
                   {/* Priority Badge */}
                   <div className="flex justify-center">
-                    <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[11px] font-extrabold border shadow-2xs ${getPriorityStyle(query.priority)}`}>
+                    <span
+                      className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[11px] font-extrabold border shadow-2xs ${getPriorityStyle(query.priority)}`}
+                    >
                       <ShieldCheck className="h-3.5 w-3.5 shrink-0" />
-                      {query.priority || 'NORMAL'}
+                      {query.priority || "NORMAL"}
                     </span>
                   </div>
                 </Link>
@@ -168,11 +185,15 @@ export function DashboardQueryList({
         <div className="flex items-center gap-2">
           <Info className="h-4 w-4 text-purple-600 shrink-0" />
           <span>
-            Showing <strong className="text-slate-800">{items.length}</strong> of <strong className="text-slate-800">{totalCount || items.length}</strong> total item{totalCount === 1 ? '' : 's'}
+            Showing <strong className="text-slate-800">{items.length}</strong>{" "}
+            of{" "}
+            <strong className="text-slate-800">
+              {totalCount || items.length}
+            </strong>{" "}
+            total item{totalCount === 1 ? "" : "s"}
           </span>
         </div>
       </div>
     </div>
   );
 }
-

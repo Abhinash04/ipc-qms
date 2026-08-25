@@ -1,6 +1,6 @@
-import { QueryTable } from '@/components/workflow/QueryTable';
-import { useRoutePaths } from '@/hooks/useRoutePaths';
-import { WORKFLOW_STATE } from '@/constants/statusEnums';
+import { QueryTable } from "@/components/workflow/QueryTable";
+import { useRoutePaths } from "@/hooks/useRoutePaths";
+import { WORKFLOW_STATE } from "@/constants/statusEnums";
 
 const IN_DRAFTING = [
   WORKFLOW_STATE.ASSIGNED,
@@ -15,7 +15,10 @@ export function DraftingListPage() {
       title="Drafting"
       greeting="Investigation & Drafting ✍️"
       purpose="Queries currently in investigation & drafting, for Assigned Officials."
-      breadcrumbItems={[{ label: 'Dashboard', path: paths.DASHBOARD }, { label: 'Drafting' }]}
+      breadcrumbItems={[
+        { label: "Dashboard", path: paths.DASHBOARD },
+        { label: "Drafting" },
+      ]}
       detailPath={paths.DRAFTING_DETAIL}
       filter={(q) => IN_DRAFTING.includes(q.workflowState)}
       emptyMessage="Nothing to draft. A query appears here once the Officer-in-Charge assigns it."
