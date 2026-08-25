@@ -2,19 +2,9 @@ import env from '../../config/env.js';
 import { ASSIGNED_OFFICIALS } from '../../config/officialsMetadata.js';
 import { selectContext, formatContextForPrompt } from '../../data/ipcContextBrain.js';
 import { retrieveContext, formatPassagesForPrompt } from '../../data/ipcKnowledge.js';
+import { splitEnquiryQuestions } from '../../data/enquiryQuestions.js';
 
 
-/**
- * The recommendation prompt carries the whole official roster, so it is far
- * heavier than the summary prompt. Measured against the live endpoint:
- * summaries answer in ~5s, recommendations in 6–12s — straddling a 12s ceiling,
- * which made the model reachable only intermittently.
- *
- * The summary keeps GEMMA_TIMEOUT_MS because it is awaited inside the automatic
- * intake chain, where the wait delays a real forward. The recommendation
- * renders in a card and blocks no workflow step, so it can afford to wait
- * longer rather than silently degrade to the rule-based scorer.
- */
 const RECOMMENDATION_TIMEOUT_FACTOR = 3;
 
 function generateFallbackSummary({ subject = '', body = '', inquirerName = 'The Inquirer' }) {
@@ -44,9 +34,6 @@ function generateFallbackSummary({ subject = '', body = '', inquirerName = 'The 
   };
 }
 
-/**
- * Clean markdown or raw quotes from Gemma API response
- */
 function cleanApiResponse(rawAnswer) {
   if (!rawAnswer) return '';
   let str = String(rawAnswer).trim();
@@ -57,9 +44,6 @@ function cleanApiResponse(rawAnswer) {
   return str;
 }
 
-/**
- * Parse JSON safely from string
- */
 function parseSummaryJson(jsonStr, fallbackData) {
   try {
     const parsed = JSON.parse(jsonStr);
@@ -86,9 +70,6 @@ function parseSummaryJson(jsonStr, fallbackData) {
   return null;
 }
 
-/**
- * Call Gemma API to generate an AI summary for an enquiry query email
- */
 export async function generateSummary({ subject = '', body = '', inquirerName = '' }) {
   const fallback = generateFallbackSummary({ subject, body, inquirerName });
 
@@ -163,9 +144,6 @@ IPC JSON Summary:`;
   }
 }
 
-/**
- * Fallback recommendation engine based on metadata keyword matching
- */
 function generateFallbackRecommendations({ subject = '', body = '', summaryText = '' }) {
   const fullText = `${subject} ${body} ${summaryText}`.toLowerCase();
 
@@ -175,12 +153,10 @@ function generateFallbackRecommendations({ subject = '', body = '', summaryText 
 
     let matchPercent;
     if (matchedKeywords.length > 0) {
-      // Strong keyword match: 70% base + 12% per additional keyword + division match
       matchPercent = Math.min(98, 70 + (matchedKeywords.length - 1) * 12 + (divisionMatch ? 10 : 0));
     } else if (divisionMatch) {
       matchPercent = 65;
     } else {
-      // Dynamic differentiation when no direct technical keyword matches (e.g., 55%, 42%, 30%)
       matchPercent = Math.max(25, 55 - idx * 12);
     }
 
@@ -216,9 +192,6 @@ function generateFallbackRecommendations({ subject = '', body = '', summaryText 
     }));
 }
 
-/**
- * Recommend Top 3 IPC Officials using Gemma AI LLM domain analysis
- */
 export async function recommendOfficial({ subject = '', body = '', summaryText = '' }) {
   const fallbackRecs = generateFallbackRecommendations({ subject, body, summaryText });
 
@@ -321,7 +294,6 @@ IPC AI Recommendations:`;
           return formatted;
         }
       } catch {
-        // Model replied with something that is not the expected JSON.
         console.warn('[Gemma AI] Could not parse the recommendation reply. Using fallback.');
       }
     }
@@ -352,33 +324,133 @@ function fenceSafe(value, limit = MAX_BODY_CHARS) {
     .slice(0, limit);
 }
 
-function generateFallbackDraft({ subject = '', body = '', contextUsed = [] }) {
+export const SUFFICIENCY = {
+  ANSWERED: 'ANSWERED',
+  PARTIAL: 'PARTIAL',
+  NOT_ESTABLISHED: 'NOT_ESTABLISHED',
+};
+
+const PASSAGES_PER_QUESTION = 5;
+
+async function askGemma(prompt, { timeoutMs, label }) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetch(env.GEMMA_API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt }),
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      console.warn(`[Gemma AI] ${label} returned status ${response.status}. Using fallback.`);
+      return null;
+    }
+
+    const data = await response.json();
+    return data?.answer || data?.response || data?.text || null;
+  } catch (error) {
+    clearTimeout(timeoutId);
+    if (error.name === 'AbortError') {
+      console.warn(`[Gemma AI] ${label} timed out after ${timeoutMs}ms. Using fallback.`);
+    } else {
+      console.warn(`[Gemma AI] ${label} failed: ${error.message}. Using fallback.`);
+    }
+    return null;
+  }
+}
+
+const flatten = (value) => String(value || '').toLowerCase().replace(/\s+/g, ' ').trim();
+
+function restoreContext(questions, deterministic) {
+  if (deterministic.length === 0) return questions;
+
+  return questions.map((question) => {
+    const needle = flatten(question);
+    const richer = deterministic.find(
+      (candidate) => flatten(candidate).includes(needle) && candidate.length > question.length,
+    );
+    return richer || question;
+  });
+}
+
+export async function decomposeEnquiry({ subject = '', body = '' }) {
+  const deterministic = splitEnquiryQuestions(body);
+
+  if (!env.GEMMA_API_URL) return deterministic;
+
+  const prompt = `You are analysing an enquiry sent to the Indian Pharmacopoeia Commission (IPC).
+
+Split it into the distinct questions the sender is asking, so each can be researched separately.
+
+RULES:
+1. One entry per distinct thing the sender wants to know.
+2. Preserve the sender's own wording. Do not rephrase into your own words, do not summarise, do not merge two questions into one.
+3. A request phrased as a statement is still a question — for example "We would be grateful for direction on whether X" is a question about X.
+4. Ignore greetings, sign-offs, names and job titles.
+5. Do NOT answer anything. Do NOT add questions the sender did not ask.
+6. Output strictly valid JSON: {"questions": ["first question", "second question"]}
+7. Return ONLY the JSON object, with no markdown wrapper and no commentary.
+
+Enquiry subject: "${fenceSafe(subject, 300) || 'Untitled Enquiry'}"
+Enquiry body:
+"""
+${fenceSafe(body) || 'No body content provided.'}
+"""
+
+Questions JSON:`;
+
+  const raw = await askGemma(prompt, {
+    timeoutMs: env.GEMMA_TIMEOUT_MS,
+    label: 'Enquiry decomposition',
+  });
+  if (!raw) return deterministic;
+
+  try {
+    const parsed = JSON.parse(cleanApiResponse(raw));
+    const questions = Array.isArray(parsed?.questions)
+      ? parsed.questions.map((q) => String(q).trim()).filter((q) => q.length > 10)
+      : [];
+    if (questions.length > 0) return restoreContext(questions, deterministic);
+  } catch {
+    console.warn('[Gemma AI] Could not parse the decomposition reply. Using the deterministic split.');
+  }
+
+  return deterministic;
+}
+
+function gatherEvidence(questions, subject = '') {
+  return questions.map((question, index) => {
+    const anchored = `${subject} ${question}`.trim();
+    const glossary = selectContext(anchored);
+    const passages = retrieveContext(anchored, { limit: PASSAGES_PER_QUESTION });
+    return {
+      number: index + 1,
+      question,
+      glossary,
+      passages,
+      sources: [...glossary.map((e) => e.id), ...passages.map((p) => p.id)],
+    };
+  });
+}
+
+function generateFallbackDraft({ subject = '', evidence = [], contextUsed = [] }) {
   const cleanSubject = subject.trim() || 'your enquiry';
-
-  const bullets = body
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter((line) => /^(\d+[.)]|[-*•])\s+/.test(line))
-    .map((line) => line.replace(/^(\d+[.)]|[-*•])\s+/, ''));
-
-  const sentences = body
-    .split(/(?<=[.?!।])\s+/)
-    .map((s) => s.trim())
-    .filter((s) => s.length > 25 && !/^(dear|regards|thank|hi|hello)/i.test(s));
-
-  const points = bullets.length ? bullets : sentences.slice(0, 3);
-
-  const paragraphs = [
-    `Thank you for your enquiry regarding "${cleanSubject}".`,
-    'Your enquiry has been received and reviewed by the concerned division. A detailed response to the points you raised follows below.',
-  ];
 
   return {
     subject: `Response regarding ${cleanSubject}`,
-    paragraphs,
-    unanswered: points.length
-      ? points.map((point) => `${point} — a substantive response is still required from the assigned official.`)
-      : ['The enquiry raises no itemised points; the assigned official must summarise the position.'],
+    answers: evidence.map((item) => ({
+      question: item.number,
+      questionText: item.question,
+      sufficiency: SUFFICIENCY.NOT_ESTABLISHED,
+      paragraphs: [],
+      notEstablished: '',
+      sources: [],
+    })),
     termsUsed: [],
     contextUsed,
     aiGenerated: false,
@@ -386,24 +458,61 @@ function generateFallbackDraft({ subject = '', body = '', contextUsed = [] }) {
   };
 }
 
-function parseDraftJson(jsonStr, { subject, contextUsed }) {
+function normaliseSufficiency(value, paragraphs) {
+  const upper = String(value || '').toUpperCase();
+  if (SUFFICIENCY[upper]) return upper;
+  return paragraphs.length > 0 ? SUFFICIENCY.PARTIAL : SUFFICIENCY.NOT_ESTABLISHED;
+}
+
+function parseDraftJson(jsonStr, { subject, evidence, contextUsed }) {
   try {
     const parsed = JSON.parse(jsonStr);
-    const paragraphs = Array.isArray(parsed?.paragraphs)
-      ? parsed.paragraphs.map((p) => String(p).trim()).filter(Boolean)
-      : [];
+    const rawAnswers = Array.isArray(parsed?.answers) ? parsed.answers : [];
+    if (rawAnswers.length === 0) return null;
 
-    if (paragraphs.length === 0) return null;
+    const answers = evidence.map((item) => {
+      const match =
+        rawAnswers.find((a) => Number(a?.question) === item.number) ||
+        rawAnswers[item.number - 1] ||
+        null;
+
+      const paragraphs = Array.isArray(match?.paragraphs)
+        ? match.paragraphs.map((p) => String(p).trim()).filter(Boolean)
+        : [];
+
+      const sufficiency = normaliseSufficiency(match?.sufficiency, paragraphs);
+      const claimed = Array.isArray(match?.sources)
+        ? match.sources.map((s) => String(s).trim()).filter(Boolean)
+        : [];
+      const verified = claimed.filter((id) => item.sources.includes(id));
+      const passageIds = item.passages.map((p) => p.id);
+
+      const notEstablished =
+        typeof match?.notEstablished === 'string' ? match.notEstablished.trim() : '';
+
+      return {
+        question: item.number,
+        questionText: item.question,
+        sufficiency,
+        paragraphs: sufficiency === SUFFICIENCY.NOT_ESTABLISHED ? [] : paragraphs,
+        notEstablished: sufficiency === SUFFICIENCY.ANSWERED ? '' : notEstablished,
+        sources:
+          sufficiency === SUFFICIENCY.NOT_ESTABLISHED
+            ? []
+            : (verified.length > 0 ? verified : passageIds),
+      };
+    });
+
+    if (answers.every((a) => a.paragraphs.length === 0 && a.sufficiency !== SUFFICIENCY.NOT_ESTABLISHED)) {
+      return null;
+    }
 
     return {
       subject:
         typeof parsed.subject === 'string' && parsed.subject.trim()
           ? parsed.subject.trim()
           : `Response regarding ${subject.trim() || 'your enquiry'}`,
-      paragraphs,
-      unanswered: Array.isArray(parsed.unanswered)
-        ? parsed.unanswered.map((u) => String(u).trim()).filter(Boolean)
-        : [],
+      answers,
       termsUsed: Array.isArray(parsed.termsUsed)
         ? parsed.termsUsed.map((t) => String(t).trim()).filter(Boolean)
         : [],
@@ -423,14 +532,13 @@ export async function generateDraft({
   summaryText = '',
   keyPoints = [],
 }) {
-  const retrievalText = `${subject} ${body} ${summaryText}`;
-  const contextEntries = selectContext(retrievalText);
-  const passages = retrieveContext(retrievalText);
-  const contextUsed = [
-    ...contextEntries.map((entry) => entry.id),
-    ...passages.map((passage) => passage.id),
-  ];
-  const fallback = generateFallbackDraft({ subject, body, contextUsed });
+  const questions = await decomposeEnquiry({ subject, body });
+  const evidence = gatherEvidence(
+    questions.length > 0 ? questions : [`${subject} ${body}`.trim() || 'the enquiry'],
+    subject,
+  );
+  const contextUsed = [...new Set(evidence.flatMap((item) => item.sources))];
+  const fallback = generateFallbackDraft({ subject, evidence, contextUsed });
 
   if (!env.GEMMA_API_URL) {
     console.warn('[Gemma AI] GEMMA_API_URL is not configured. Returning fallback draft.');
@@ -441,26 +549,47 @@ export async function generateDraft({
     ? keyPoints.map((point) => `- ${String(point).trim()}`).join('\n')
     : '- No key points were extracted.';
 
+  const questionBlocks = evidence
+    .map(
+      (item) => `QUESTION ${item.number}
+${fenceSafe(item.question, 800)}
+
+  IPC GLOSSARY FOR QUESTION ${item.number}
+${formatContextForPrompt(item.glossary)}
+
+  IPC REFERENCE PASSAGES FOR QUESTION ${item.number}
+${formatPassagesForPrompt(item.passages)}`,
+    )
+    .join('\n\n────────────────\n\n');
+
   const prompt = `You are an expert AI Assistant drafting an official reply on behalf of the Indian Pharmacopoeia Commission (IPC), Ministry of Health & Family Welfare, Government of India.
 
-Your task is to draft the body of a professional reply email answering the enquiry below. An IPC officer will review and edit your draft before it is sent.
+Your task is to draft the body of a professional reply email. The enquiry has been split into ${evidence.length} question(s), and each question has been given its OWN evidence. Answer each question separately, using only the evidence supplied for that question.
 
 RULES:
-1. Answer ONLY from the ORIGINAL ENQUIRY, the AI QUERY SUMMARY, the IPC GLOSSARY and the IPC REFERENCE PASSAGES given below.
-2. Do NOT invent drug names, monograph numbers, batch numbers, regulations, standards, prices, dates, references or citations. If a fact is not in the material below, it does not exist for this reply.
-3. Anything the enquiry asks that the material below cannot answer must go into "unanswered" as a short plain statement of what is missing. Never guess it in a paragraph.
-4. Be concise and specific. No filler, no generic explanations of what IPC is, no restating the whole enquiry back.
-5. Use the IPC GLOSSARY terminology correctly where it is relevant. An entry marked UNVERIFIED must not be presented as authoritative.
-6. A passage marked AMENDMENT is a correction to a published monograph, never the complete requirement. If you rely on one, state the amendment list and page and say the base monograph still applies.
-7. Do NOT write a greeting, a salutation, a sign-off, a signature, a designation or any person's name. Those are added by the system. Write body paragraphs only.
-8. Output strictly valid JSON with this structure:
+1. Answer each question ONLY from the evidence given under that question, plus the ORIGINAL ENQUIRY and the AI QUERY SUMMARY.
+2. Do NOT invent drug names, monograph numbers, thresholds, batch numbers, regulations, standards, dates, references or citations. If a fact is not in the material below, it does not exist for this reply.
+3. For every question set "sufficiency":
+   - "ANSWERED" — the evidence fully settles the question.
+   - "PARTIAL" — the evidence says something on the same subject matter but does not settle every part. Summarise what the IPC material DOES establish, then state plainly which part of the question it does not settle.
+   - "NOT_ESTABLISHED" — no supplied passage touches the subject matter at all.
+   Never answer a question from general knowledge. Never leave a question silent.
+4. "PARTIAL" is the expected outcome whenever any supplied passage is on the same subject matter, even if it does not answer the precise point asked. A question about a degradation product or an impurity is on the same subject matter as guidance about related substances, impurity limits or reference standards — summarise that guidance, then say what remains unsettled. Reserve "NOT_ESTABLISHED" for questions where every supplied passage is about something else entirely.
+5. When "sufficiency" is "PARTIAL" you MUST write at least one paragraph AND you MUST fill "notEstablished" with one sentence naming the specific part of the question the supplied material does not settle. An empty paragraph list is only valid for "NOT_ESTABLISHED".
+6. Be concise and specific. No filler, no generic explanation of what IPC is, no restating the enquiry back.
+7. Use the IPC GLOSSARY terminology correctly. An entry marked UNVERIFIED must not be presented as authoritative.
+8. A passage marked AMENDMENT is a correction to a published monograph, never the complete requirement. If you rely on one, state the amendment list and page and say the base monograph still applies.
+9. Do NOT write a greeting, a salutation, a sign-off, a signature, a designation or any person's name. Those are added by the system. Write body paragraphs only.
+10. In "sources" list only the bracketed passage identifiers you actually relied on for that question.
+11. Output strictly valid JSON with this structure:
 {
   "subject": "Response regarding <short restatement of the enquiry subject>",
-  "paragraphs": ["First body paragraph.", "Second body paragraph."],
-  "unanswered": ["Short statement of information the enquiry needs but the material does not provide."],
+  "answers": [
+    { "question": 1, "sufficiency": "PARTIAL", "paragraphs": ["..."], "notEstablished": "The supplied material does not settle <the specific point>.", "sources": ["GD-10#37"] }
+  ],
   "termsUsed": ["IPC glossary terms or document references you actually relied on"]
 }
-9. Return ONLY the JSON object. No markdown wrappers, no commentary outside the JSON.
+12. Return ONLY the JSON object. No markdown wrappers, no commentary outside the JSON.
 
 ORIGINAL ENQUIRY
 Subject: "${fenceSafe(subject, 300) || 'Untitled Enquiry'}"
@@ -475,55 +604,30 @@ ${fenceSafe(summaryText, 1000) || 'No summary available.'}
 Key points:
 ${pointsBlock}
 
-IPC GLOSSARY
-${formatContextForPrompt(contextEntries)}
+════════ EVIDENCE, PER QUESTION ════════
 
-IPC REFERENCE PASSAGES
-${formatPassagesForPrompt(passages)}
+${questionBlocks}
 
 IPC JSON Draft:`;
 
-  const timeoutMs = env.GEMMA_TIMEOUT_MS * DRAFT_TIMEOUT_FACTOR;
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  const rawAnswer = await askGemma(prompt, {
+    timeoutMs: env.GEMMA_TIMEOUT_MS * DRAFT_TIMEOUT_FACTOR,
+    label: 'Draft',
+  });
 
-  try {
-    const response = await fetch(env.GEMMA_API_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ prompt }),
-      signal: controller.signal,
-    });
-
-    clearTimeout(timeoutId);
-
-    if (!response.ok) {
-      console.warn(`[Gemma AI] Draft API returned status ${response.status}. Using fallback.`);
-      return fallback;
-    }
-
-    const data = await response.json();
-    const rawAnswer = data?.answer || data?.response || data?.text || null;
-
-    if (rawAnswer) {
-      const parsed = parseDraftJson(cleanApiResponse(rawAnswer), { subject, contextUsed });
-      if (parsed) {
-        return parsed;
-      }
-    }
-
+  if (rawAnswer) {
+    const parsed = parseDraftJson(cleanApiResponse(rawAnswer), { subject, evidence, contextUsed });
+    if (parsed) return parsed;
     console.warn('[Gemma AI] Could not parse the draft reply. Using fallback.');
-    return fallback;
-  } catch (error) {
-    clearTimeout(timeoutId);
-    if (error.name === 'AbortError') {
-      console.warn(`[Gemma AI] Draft timed out after ${timeoutMs}ms. Using fallback.`);
-    } else {
-      console.warn(`[Gemma AI] Draft call failed: ${error.message}. Using fallback.`);
-    }
-    return fallback;
   }
+
+  return fallback;
 }
 
-export const gemmaService = { generateSummary, recommendOfficial, generateDraft };
+export const gemmaService = {
+  generateSummary,
+  recommendOfficial,
+  generateDraft,
+  decomposeEnquiry,
+};
 export default gemmaService;
