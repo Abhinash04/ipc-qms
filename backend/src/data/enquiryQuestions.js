@@ -49,15 +49,25 @@ export function splitEnquiryQuestions(body) {
 
   const numbered = [];
   const unnumbered = [];
+  let lastNumberedIndex = -1;
 
-  for (const paragraph of paragraphs) {
+  paragraphs.forEach((paragraph, index) => {
     const marker = /^(\d+)[.)]\s+(.*)$/.exec(paragraph);
-    if (marker) numbered.push(marker[2].trim());
-    else unnumbered.push(paragraph);
-  }
+    if (marker) {
+      numbered.push(marker[2].trim());
+      lastNumberedIndex = index;
+    } else {
+      unnumbered.push({ text: paragraph, index });
+    }
+  });
 
-  const extra = unnumbered
-    .flatMap((paragraph) => paragraph.split(/(?<=[.?!])\s+/))
+  const trailing =
+    numbered.length > 0
+      ? unnumbered.filter((entry) => entry.index > lastNumberedIndex)
+      : unnumbered;
+
+  const extra = trailing
+    .flatMap((entry) => entry.text.split(/(?<=[.?!])\s+/))
     .map((sentence) => sentence.trim())
     .filter((sentence) => sentence.length > 25 && isRequest(sentence));
 

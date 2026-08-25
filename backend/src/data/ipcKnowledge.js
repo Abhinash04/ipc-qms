@@ -51,7 +51,7 @@ function stem(token) {
   return out;
 }
 
-const tokenise = (text) =>
+export const contentTokens = (text) =>
   String(text || '')
     .toLowerCase()
     .split(/[^a-z0-9.]+/)
@@ -68,7 +68,7 @@ function buildIndex() {
   const entries = IPC_KNOWLEDGE_CHUNKS.map((chunk) => {
     const haystack = `${chunk.section} ${chunk.text}`.toLowerCase();
     const titleHaystack = `${chunk.docTitle} ${chunk.section}`.toLowerCase();
-    const terms = new Set(tokenise(haystack));
+    const terms = new Set(contentTokens(haystack));
 
     for (const term of terms) {
       documentFrequency.set(term, (documentFrequency.get(term) || 0) + 1);
@@ -83,6 +83,13 @@ function buildIndex() {
 
 const COMMON_TERM_RATIO = 0.25;
 const MIN_SCORE = 2.5;
+const RARE_TERM_RATIO = 0.015;
+
+export function isRareTerm(term) {
+  const { documentFrequency, total } = buildIndex();
+  const frequency = documentFrequency.get(term) || 0;
+  return frequency > 0 && frequency <= total * RARE_TERM_RATIO;
+}
 
 export function expandQuery(text) {
   const aliases = selectContext(text, { limit: 6 }).flatMap((entry) => [
@@ -94,7 +101,7 @@ export function expandQuery(text) {
 
 export function retrieveContext(text, { limit = 4, charBudget = 3000, expand = true } = {}) {
   const query = expand ? expandQuery(text) : String(text || '');
-  const queryTerms = [...new Set(tokenise(query))];
+  const queryTerms = [...new Set(contentTokens(query))];
   if (queryTerms.length === 0) return [];
 
   const { entries, documentFrequency, total } = buildIndex();
