@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
+import { Link } from 'react-router-dom';
 import { SendIcon } from 'lucide-react';
 import { Breadcrumb } from '@/components/common/Breadcrumb';
 import { PageHeader } from '@/components/common/PageHeader';
@@ -9,17 +10,41 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { useRoutePaths } from '@/hooks/useRoutePaths';
+import { buildPath } from '@/constants/routePaths';
+import { useAuthStore } from '@/store/useAuthStore';
+import { useWorkflowStore } from '@/store/useWorkflowStore';
 import { fetchEmailConfig, sendEnquiry } from '@/services/api/mailboxService';
 
 export function ComposeEnquiryPage() {
   const paths = useRoutePaths();
+  const currentUser = useAuthStore((state) => state.currentUser);
+  const raiseEnquiry = useWorkflowStore((state) => state.raiseEnquiry);
   const [subject, setSubject] = useState('');
   const [body, setBody] = useState('');
+  const [raisedQueryId, setRaisedQueryId] = useState(null);
 
   const config = useQuery({ queryKey: ['emailConfig'], queryFn: fetchEmailConfig, retry: false });
   const send = useMutation({
-    mutationFn: () => sendEnquiry({ subject: subject.trim(), body }),
-    onSuccess: () => {
+    mutationFn: async () => {
+      const sent = await sendEnquiry({ subject: subject.trim(), body });
+      // The case is opened here rather than waiting for Front Office to ingest
+      // the mail copy, so the inquirer sees it on their dashboard immediately.
+      const raised = raiseEnquiry({
+        subject: subject.trim(),
+        body,
+        inquirer: {
+          id: currentUser?.id || null,
+          name: currentUser?.name || '',
+          email: currentUser?.email || '',
+        },
+        to: config.data?.ipcQueryEmail || null,
+        providerMessageId: sent?.providerMessageId || null,
+        providerThreadId: sent?.providerThreadId || null,
+      });
+      return { ...sent, queryId: raised.queryId };
+    },
+    onSuccess: (result) => {
+      setRaisedQueryId(result.queryId);
       setSubject('');
       setBody('');
     },
@@ -132,21 +157,34 @@ export function ComposeEnquiryPage() {
             <CardBody className="space-y-3 text-sm text-muted-foreground">
               {send.isSuccess ? (
                 <div className="rounded-md border border-status-green-line bg-status-green-bg px-3 py-2 text-status-green-fg">
-                  <p className="font-medium">Enquiry sent</p>
-                  <p className="mt-0.5 break-all">
+                  <p className="font-medium">Enquiry raised</p>
+                  {raisedQueryId && (
+                    <p className="mt-1">
+                      Your case is{' '}
+                      {paths.QUERY_DETAIL ? (
+                        <Link
+                          to={buildPath(paths.QUERY_DETAIL, { queryId: raisedQueryId })}
+                          className="font-semibold underline"
+                        >
+                          {raisedQueryId}
+                        </Link>
+                      ) : (
+                        <span className="font-semibold">{raisedQueryId}</span>
+                      )}
+                      . It is already on your dashboard.
+                    </p>
+                  )}
+                  <p className="mt-1 break-all">
                     Provider message id: {send.data?.providerMessageId}
-                  </p>
-                  <p className="mt-1">
-                    It is now sitting in the IPC mailbox. Front Office turns it into a Query Case from the Queries page.
                   </p>
                 </div>
               ) : (
                 <p>
-                  Your enquiry is delivered to the IPC query mailbox. Front Office then registers it as a Query Case, which is verified, assigned, drafted, reviewed, approved and finally dispatched back to you by email.
+                  Your enquiry opens a Query Case straight away and is emailed to the IPC query mailbox. Front Office verifies it, then it is assigned, drafted, reviewed, approved and finally dispatched back to you by email.
                 </p>
               )}
               <p>
-                You will not see the internal case here — only the reply that IPC sends you when the query is closed.
+                Track the case on your dashboard. You will also receive the reply by email once IPC closes the query.
               </p>
             </CardBody>
           </Card>
