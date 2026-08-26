@@ -52,6 +52,21 @@ async function markIngested(req, res, next) {
   }
 }
 
+async function deleteMessage(req, res, next) {
+  try {
+    const recipient = req.query.recipient || defaultRecipient();
+    const message = await mailbox.remove(recipient, req.params.messageId);
+    if (!message) {
+      return res
+        .status(HTTP_STATUS.NOT_FOUND)
+        .json({ error: 'Message not found', messageId: req.params.messageId });
+    }
+    return res.status(HTTP_STATUS.OK).json({ deleted: true, message });
+  } catch (error) {
+    return next(error);
+  }
+}
+
 async function resetMailbox(req, res, next) {
   try {
     await mailbox.reset();
@@ -62,4 +77,4 @@ async function resetMailbox(req, res, next) {
   }
 }
 
-export { listMessages, receiveMessage, markIngested, resetMailbox };
+export { listMessages, receiveMessage, markIngested, deleteMessage, resetMailbox };

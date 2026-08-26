@@ -54,6 +54,16 @@ async function markIngested(recipient, mailboxMessageId) {
   return toPlain(doc);
 }
 
+async function remove(recipient, mailboxMessageId) {
+  // The Counter doc is deliberately left alone: ids stay monotonic so a deleted
+  // message's id is never handed to a later one.
+  const doc = await MailboxMessage.findOneAndDelete({
+    to: normaliseAddress(recipient),
+    mailboxMessageId,
+  });
+  return toPlain(doc);
+}
+
 async function reset() {
   await Promise.all([
     MailboxMessage.deleteMany({}),
@@ -68,4 +78,4 @@ async function stats() {
 }
 
 export const backend = 'mongo';
-export { deliver, list, markIngested, reset, stats };
+export { deliver, list, markIngested, remove, reset, stats };

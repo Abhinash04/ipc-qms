@@ -14,15 +14,23 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
  * no real inbox is touched.
  */
 
-import { list, markIngested } from '../services/email/mailbox/gmailInboxReader.js';
+import { list, markIngested, remove } from '../services/email/mailbox/gmailInboxReader.js';
 
 const listMessages = vi.fn();
 const getMessage = vi.fn();
 const modifyMessage = vi.fn();
+const trashMessage = vi.fn();
 
 /** Stands in for the Gmail client; no credential is read, nothing is sent. */
 const fakeGmail = {
-  users: { messages: { list: listMessages, get: getMessage, modify: modifyMessage } },
+  users: {
+    messages: {
+      list: listMessages,
+      get: getMessage,
+      modify: modifyMessage,
+      trash: trashMessage,
+    },
+  },
 };
 
 const INQUIRER = 'inquirer@test.invalid';
@@ -193,5 +201,23 @@ describe('markIngested', () => {
       requestBody: { removeLabelIds: ['UNREAD'] },
     });
     expect(result.ingested).toBe(true);
+  });
+});
+
+describe('remove', () => {
+  it('moves the message to Trash rather than destroying it', async () => {
+    trashMessage.mockResolvedValue({ data: gmailMessage({ id: 'msg-1', subject: 'Doomed' }) });
+
+    const result = await remove(FRONT_OFFICE, 'msg-1', { client: fakeGmail });
+
+    expect(trashMessage).toHaveBeenCalledWith({ userId: 'me', id: 'msg-1' });
+    expect(result.mailboxMessageId).toBe('msg-1');
+    expect(result.subject).toBe('Doomed');
+  });
+
+  it('returns null when Gmail hands back no message', async () => {
+    trashMessage.mockResolvedValue({});
+
+    expect(await remove(FRONT_OFFICE, 'msg-1', { client: fakeGmail })).toBeNull();
   });
 });

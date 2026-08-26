@@ -45,6 +45,45 @@ describe('facade behaviour is identical regardless of backend', () => {
     expect(await mailbox.markIngested('ipc-query-mock@example.com', 'MSG-99999')).toBeNull();
   });
 
+  it('removes a single message and hands it back', async () => {
+    await mailbox.deliver({ to: 'ipc-query-mock@example.com', from: 'a@example.com', subject: 'Keep' });
+    await mailbox.deliver({ to: 'ipc-query-mock@example.com', from: 'a@example.com', subject: 'Doomed' });
+
+    const removed = await mailbox.remove('ipc-query-mock@example.com', 'MSG-00002');
+    expect(removed.subject).toBe('Doomed');
+
+    const remaining = await mailbox.list('ipc-query-mock@example.com');
+    expect(remaining).toHaveLength(1);
+    expect(remaining[0].subject).toBe('Keep');
+  });
+
+  it('returns null when removing an unknown message', async () => {
+    await mailbox.deliver({ to: 'ipc-query-mock@example.com', from: 'a@example.com', subject: 'Safe' });
+
+    expect(await mailbox.remove('ipc-query-mock@example.com', 'MSG-99999')).toBeNull();
+    expect(await mailbox.list('ipc-query-mock@example.com')).toHaveLength(1);
+  });
+
+  it('only removes from the recipient it was asked about', async () => {
+    await mailbox.deliver({ to: 'ipc-query-mock@example.com', from: 'a@example.com', subject: 'Dev' });
+    await mailbox.deliver({ to: 'lab.ipc@gov.in', from: 'a@example.com', subject: 'Prod' });
+
+    expect(await mailbox.remove('lab.ipc@gov.in', 'MSG-00001')).toBeNull();
+    expect(await mailbox.list('ipc-query-mock@example.com')).toHaveLength(1);
+  });
+
+  it('does not rewind the id counter after a removal', async () => {
+    await mailbox.deliver({ to: 'ipc-query-mock@example.com', from: 'a@example.com', subject: 'First' });
+    await mailbox.remove('ipc-query-mock@example.com', 'MSG-00001');
+
+    const next = await mailbox.deliver({
+      to: 'ipc-query-mock@example.com',
+      from: 'a@example.com',
+      subject: 'Second',
+    });
+    expect(next.mailboxMessageId).toBe('MSG-00002');
+  });
+
   it('keeps separate inboxes per recipient, so IPC_QUERY_EMAIL can change', async () => {
     await mailbox.deliver({ to: 'ipc-query-mock@example.com', from: 'a@example.com', subject: 'Dev' });
     await mailbox.deliver({ to: 'lab.ipc@gov.in', from: 'a@example.com', subject: 'Prod' });
@@ -181,7 +220,7 @@ describe('ingestion replay protection (backend guard)', () => {
 
 describe('the two mailbox implementations share one interface', () => {
   it('exposes the same operations', () => {
-    for (const fn of ['deliver', 'list', 'markIngested', 'reset', 'stats']) {
+    for (const fn of ['deliver', 'list', 'markIngested', 'remove', 'reset', 'stats']) {
       expect(typeof memoryMailbox[fn], `memory.${fn}`).toBe('function');
       expect(typeof mongoMailbox[fn], `mongo.${fn}`).toBe('function');
     }

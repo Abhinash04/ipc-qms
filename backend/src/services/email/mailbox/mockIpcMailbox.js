@@ -42,6 +42,19 @@ function markIngested(recipient, mailboxMessageId) {
   return message;
 }
 
+function remove(recipient, mailboxMessageId) {
+  const messages = inboxes.get(normaliseAddress(recipient));
+  if (!messages) return null;
+
+  const index = messages.findIndex((m) => m.mailboxMessageId === mailboxMessageId);
+  if (index === -1) return null;
+
+  // The counter is deliberately left alone: ids stay monotonic so a deleted
+  // message's id is never handed to a later one.
+  const [removed] = messages.splice(index, 1);
+  return removed;
+}
+
 function reset() {
   inboxes.clear();
   messageCounter = 0;
@@ -53,4 +66,4 @@ function stats() {
   return { recipients: inboxes.size, messages: total };
 }
 
-export { deliver, list, markIngested, reset, stats };
+export { deliver, list, markIngested, remove, reset, stats };

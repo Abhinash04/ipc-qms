@@ -59,6 +59,7 @@ const supportsDelivery = () => active() !== gmailInbox;
 const deliver = async (message) => active().deliver(message);
 const list = async (recipient, options) => active().list(recipient, options);
 const markIngested = async (recipient, id) => active().markIngested(recipient, id);
+const remove = async (recipient, id) => active().remove(recipient, id);
 const reset = async () => active().reset();
 const stats = async () => active().stats();
 
@@ -66,6 +67,7 @@ export {
   deliver,
   list,
   markIngested,
+  remove,
   reset,
   stats,
   describe,

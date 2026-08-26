@@ -233,6 +233,26 @@ describe('mailbox HTTP endpoints', () => {
     expect(missing.status).toBe(404);
   });
 
+  it('deletes a single message and 404s for an unknown id', async () => {
+    await emailService.sendEnquiry({ subject: 'Keep', body: 'a' });
+    await emailService.sendEnquiry({ subject: 'Doomed', body: 'b' });
+
+    const ok = await request(app).delete('/api/v1/mailbox/messages/MSG-00002');
+    expect(ok.status).toBe(200);
+    expect(ok.body.deleted).toBe(true);
+    expect(ok.body.message.subject).toBe('Doomed');
+
+    const remaining = await mailbox.list('front-office@test.invalid');
+    expect(remaining).toHaveLength(1);
+    expect(remaining[0].subject).toBe('Keep');
+
+    const missing = await request(app).delete('/api/v1/mailbox/messages/MSG-99999');
+    expect(missing.status).toBe(404);
+    // Prove the route was actually matched: the catch-all 404 answers with
+    // {error:'Not Found', path}, which would otherwise pass the status check.
+    expect(missing.body).toEqual({ error: 'Message not found', messageId: 'MSG-99999' });
+  });
+
   it('DELETE /mailbox clears the inbox', async () => {
     await emailService.sendEnquiry({ subject: 'Doomed', body: 'a' });
     const res = await request(app).delete('/api/v1/mailbox');
