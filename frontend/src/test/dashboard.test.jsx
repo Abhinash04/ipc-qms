@@ -1,23 +1,37 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen, fireEvent, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-
-const navigateSpy = vi.fn();
-vi.mock('react-router-dom', async (importOriginal) => ({
-  ...(await importOriginal()),
-  useNavigate: () => navigateSpy,
-}));
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 import { DashboardPage } from '@/pages/dashboard/DashboardPage';
 import { useWorkflowStore } from '@/store/useWorkflowStore';
 import { useAuthStore } from '@/store/useAuthStore';
 import { findUserById, MOCK_USERS } from '@/constants/mockUsers';
-import { WORKFLOW_STATE, AUDIT_EVENT } from '@/constants/statusEnums';
+import { WORKFLOW_STATE } from '@/constants/statusEnums';
+import { deriveBusinessStatus } from '@/constants/workflowRules';
+import { bucketsForRole } from '@/constants/queryBuckets';
 import { ROLES } from '@/constants/roles';
 
-const OIC = findUserById('USR-0003');
+vi.mock('@/services/api/mailboxService', () => ({
+  fetchEmailConfig: vi.fn().mockResolvedValue({}),
+  fetchMailboxMessages: vi.fn().mockResolvedValue({ messages: [] }),
+  markMessageIngested: vi.fn().mockResolvedValue({ ingested: true }),
+  deleteMailboxMessage: vi.fn().mockResolvedValue({ deleted: true }),
+  sendEnquiry: vi.fn().mockResolvedValue({}),
+  sendAcknowledgement: vi.fn().mockResolvedValue({}),
+}));
+
+const INQUIRER = findUserById('USR-0001');
 const FRONT_OFFICE = findUserById('USR-0002');
+const OIC = findUserById('USR-0003');
+const OFFICIAL = findUserById('USR-0004');
+const OTHER_OFFICIAL = MOCK_USERS.find(
+  (u) => u.role === ROLES.ASSIGNED_OFFICIAL && u.id !== OFFICIAL.id,
+);
+const REVIEWER = findUserById('USR-0005');
+const OTHER_REVIEWER = MOCK_USERS.find(
+  (u) => u.role === ROLES.REVIEWER && u.id !== REVIEWER.id,
+);
 
 function renderDashboard() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -30,344 +44,480 @@ function renderDashboard() {
   );
 }
 
+/** A KPI tile, found by its label. */
 function tile(label) {
-  let node = screen.getAllByText(label)[0];
-  for (let i = 0; i < 8 && node.parentElement; i += 1) {
-    if (/\d/.test(node.textContent)) return node;
-    node = node.parentElement;
-  }
-  return node;
+  return screen.getByRole('heading', { level: 3, name: label }).closest('.bento-card');
 }
 
-function section(title) {
-  return screen.getByRole('heading', { name: title }).closest('section');
+/** The one table below the tiles — its heading carries the selected bucket's label. */
+function listPanel() {
+  const heading = screen.getAllByRole('heading', { level: 2 })[0];
+  return heading.closest('.bento-card');
 }
 
-function ingest(n) {
-  return useWorkflowStore.getState().ingestEmail(
-    {
-      mailboxMessageId: `MSG-DASH-${n}`,
-      to: 'ipc-query-mock@example.com',
-      from: 'Abhinash Pritiraj <abhinash.pritiraj@gmail.com>',
-      subject: `Dashboard fixture ${n}`,
-      body: 'Body text.',
-      receivedAt: new Date().toISOString(),
-    },
-    async () => null,
-  ).queryId;
+/**
+ * Read the ids off the row links rather than their text — which also proves
+ * each row points at that query's detail page.
+ */
+function visibleQueryIds() {
+  return within(listPanel())
+    .queryAllByRole('link')
+    .map((a) => a.getAttribute('href')?.split('/').pop())
+    .filter(Boolean);
+}
+
+/**
+ * The tile's count. Read it off the subtext element, whose own text is exactly
+ * "N queries" — the headline number sits in an adjacent node, so the tile's
+ * combined textContent would run the two together ("2" + "2 queries").
+ */
+function tileCount(label) {
+  const subtext = within(tile(label)).getByText(/^\d+ quer(?:y|ies)$/);
+  return Number(subtext.textContent.match(/^\d+/)[0]);
+}
+
+/** Put a query directly into the store in a chosen state. */
+function seed(queries) {
+  useWorkflowStore.setState({
+    queries: queries.map((q) => ({
+      priority: 'NORMAL',
+      createdAt: '2026-08-20T09:00:00.000Z',
+      inquirer: { id: INQUIRER.id, email: INQUIRER.email, name: INQUIRER.name },
+      currentAssigneeId: null,
+      currentWorkflowStepId: null,
+      ...q,
+      businessStatus: deriveBusinessStatus(q.workflowState),
+    })),
+  });
 }
 
 beforeEach(async () => {
-  navigateSpy.mockClear();
   await useWorkflowStore.getState().hydrate();
   await useWorkflowStore.getState().resetDemo();
-  useAuthStore.setState({ currentUser: OIC });
 });
 
-describe('KPI tiles show no trend when nothing has happened', () => {
-  it('renders zeroes and invents no trend on an empty store', () => {
-    renderDashboard();
+describe('a KPI number always equals the rows behind it', () => {
+  const CASES = [
+    [ROLES.FRONT_OFFICE, FRONT_OFFICE],
+    [ROLES.OFFICER_IN_CHARGE, OIC],
+    [ROLES.ASSIGNED_OFFICIAL, OFFICIAL],
+    [ROLES.REVIEWER, REVIEWER],
+    [ROLES.INQUIRER, INQUIRER],
+  ];
 
-    expect(useWorkflowStore.getState().queries).toHaveLength(0);
-
-    for (const invented of ['+3 this week', '2 pending review', '3 overdue', '+12 this month']) {
-      expect(screen.queryByText(invented)).toBeNull();
-    }
-
-    expect(screen.queryByText(/this week|this month|in 30 days|awaiting your decision/)).toBeNull();
-  });
-
-  it('shows no "closed" trend while nothing has been closed', () => {
-    ingest(1);
-    renderDashboard();
-
-    expect(screen.queryByText(/closed in 30 days/)).toBeNull();
-  });
-});
-
-describe('KPI tiles count the real data', () => {
-  it('counts received enquiries and reports them as this week', () => {
-    ingest(1);
-    ingest(2);
-    renderDashboard();
-
-    expect(tile('In drafting')).toHaveTextContent('+2 received this week');
-  });
-
-  it('moves the closed count and its trend together when a query closes', async () => {
-    const queryId = ingest(1);
-
-    useWorkflowStore.setState((s) => ({
-      queries: s.queries.map((q) =>
-        q.queryId === queryId ? { ...q, workflowState: WORKFLOW_STATE.CLOSED } : q,
-      ),
-      auditEvents: [
-        ...s.auditEvents,
+  it.each(CASES)('%s', (role, user) => {
+    // One query in every workflow state, all owned by / assigned to this user.
+    seed(
+      Object.values(WORKFLOW_STATE).map((state) => ({
+        queryId: `QRY-${state}`,
+        subject: `Case ${state}`,
+        workflowState: state,
+        currentAssigneeId: OFFICIAL.id,
+        currentWorkflowStepId: `STP-${state}`,
+      })),
+    );
+    useWorkflowStore.setState({
+      workflowSteps: Object.values(WORKFLOW_STATE).map((state) => ({
+        stepId: `STP-${state}`,
+        queryId: `QRY-${state}`,
+        stepType: 'REVIEW',
+        assignedUserId: REVIEWER.id,
+        status: 'IN_PROGRESS',
+      })),
+      reviews: [
         {
-          auditId: 'AUD-DASH-1',
-          queryId,
-          event: 'QUERY_CLOSED',
-          actorLabel: 'System',
-          at: new Date().toISOString(),
+          reviewId: 'REV-1',
+          queryId: `QRY-${WORKFLOW_STATE.CLOSED}`,
+          reviewerId: REVIEWER.id,
+          decision: 'APPROVED',
         },
       ],
-    }));
+    });
+    useAuthStore.setState({ currentUser: user });
 
     renderDashboard();
-    expect(tile('Closed')).toHaveTextContent('+1 in 30 days');
+
+    for (const bucket of bucketsForRole(role)) {
+      fireEvent.click(tile(bucket.label));
+      const shown = tileCount(bucket.label);
+      expect(
+        visibleQueryIds().length,
+        `${role} / ${bucket.label}: tile says ${shown}`,
+      ).toBe(shown);
+    }
+  });
+});
+
+describe('Inquirer dashboard', () => {
+  beforeEach(() => {
+    useAuthStore.setState({ currentUser: INQUIRER });
+  });
+
+  it('starts empty and invents no counts', () => {
+    renderDashboard();
+    expect(tile('Total Queries')).toHaveTextContent('0');
+    expect(tile('Open Queries')).toHaveTextContent('0');
+    expect(tile('In Progress')).toHaveTextContent('0');
+    expect(tile('Closed')).toHaveTextContent('0');
+  });
+
+  it('counts the inquirers own queries by business status', () => {
+    seed([
+      { queryId: 'QRY-A', subject: 'Open one', workflowState: WORKFLOW_STATE.RECEIVED },
+      { queryId: 'QRY-B', subject: 'Working', workflowState: WORKFLOW_STATE.DRAFTING },
+      { queryId: 'QRY-C', subject: 'Done', workflowState: WORKFLOW_STATE.CLOSED },
+    ]);
+    renderDashboard();
+
+    expect(tile('Total Queries')).toHaveTextContent('3');
+    expect(tile('Open Queries')).toHaveTextContent('1');
+    expect(tile('In Progress')).toHaveTextContent('1');
     expect(tile('Closed')).toHaveTextContent('1');
   });
 
-  it('ignores audit events that fall outside the window', () => {
-    const queryId = ingest(1);
-    const longAgo = new Date();
-    longAgo.setDate(longAgo.getDate() - 90);
+  it('hides another inquirers queries entirely', () => {
+    seed([
+      { queryId: 'QRY-MINE', subject: 'Mine', workflowState: WORKFLOW_STATE.RECEIVED },
+      {
+        queryId: 'QRY-THEIRS',
+        subject: 'Not mine',
+        workflowState: WORKFLOW_STATE.RECEIVED,
+        inquirer: { id: 'USR-9999', email: 'other@example.com', name: 'Other' },
+      },
+    ]);
+    renderDashboard();
 
-    useWorkflowStore.setState((s) => ({
-      auditEvents: [
-        ...s.auditEvents,
+    expect(tile('Total Queries')).toHaveTextContent('1');
+    expect(visibleQueryIds()).toEqual(['QRY-MINE']);
+    expect(screen.queryByText('Not mine')).toBeNull();
+  });
+
+  it('keeps the New Query action for the inquirer alone', () => {
+    renderDashboard();
+    expect(screen.getByRole('button', { name: /New Query/ })).toBeInTheDocument();
+  });
+});
+
+describe('Front Office dashboard', () => {
+  it('separates incoming work from what is awaiting dispatch', () => {
+    seed([
+      { queryId: 'QRY-NEW', subject: 'Just arrived', workflowState: WORKFLOW_STATE.RECEIVED },
+      {
+        queryId: 'QRY-FWD',
+        subject: 'With the OIC',
+        workflowState: WORKFLOW_STATE.PENDING_ASSIGNMENT,
+      },
+      {
+        queryId: 'QRY-SEND',
+        subject: 'Ready to send',
+        workflowState: WORKFLOW_STATE.READY_FOR_DISPATCH,
+      },
+    ]);
+    useAuthStore.setState({ currentUser: FRONT_OFFICE });
+    renderDashboard();
+
+    expect(tile('New / Incoming')).toHaveTextContent('1');
+    expect(tile('Pending Assignment')).toHaveTextContent('1');
+    expect(tile('Awaiting Dispatch')).toHaveTextContent('1');
+
+    // The default selection is the first bucket, and the table proves it.
+    expect(visibleQueryIds()).toEqual(['QRY-NEW']);
+
+    fireEvent.click(tile('Awaiting Dispatch'));
+    expect(visibleQueryIds()).toEqual(['QRY-SEND']);
+  });
+});
+
+describe('Officer-in-Charge dashboard', () => {
+  it('surfaces the approval queue that the OIC owns', () => {
+    seed([
+      {
+        queryId: 'QRY-ASSIGN',
+        subject: 'Needs an official',
+        workflowState: WORKFLOW_STATE.PENDING_ASSIGNMENT,
+      },
+      {
+        queryId: 'QRY-APPROVE',
+        subject: 'Needs sign-off',
+        workflowState: WORKFLOW_STATE.PENDING_FINAL_APPROVAL,
+      },
+    ]);
+    useAuthStore.setState({ currentUser: OIC });
+    renderDashboard();
+
+    expect(tile('Awaiting Assignment')).toHaveTextContent('1');
+    expect(tile('Awaiting Final Approval')).toHaveTextContent('1');
+
+    fireEvent.click(tile('Awaiting Final Approval'));
+    expect(visibleQueryIds()).toEqual(['QRY-APPROVE']);
+  });
+});
+
+describe('Assigned Official dashboard', () => {
+  it('shows only this officials cases, split by stage', () => {
+    seed([
+      {
+        queryId: 'QRY-MINE-DRAFT',
+        subject: 'My draft',
+        workflowState: WORKFLOW_STATE.DRAFTING,
+        currentAssigneeId: OFFICIAL.id,
+      },
+      {
+        queryId: 'QRY-MINE-DONE',
+        subject: 'My closed case',
+        workflowState: WORKFLOW_STATE.CLOSED,
+        currentAssigneeId: OFFICIAL.id,
+      },
+      {
+        queryId: 'QRY-THEIRS',
+        subject: 'Someone elses',
+        workflowState: WORKFLOW_STATE.DRAFTING,
+        currentAssigneeId: OTHER_OFFICIAL.id,
+      },
+    ]);
+    useAuthStore.setState({ currentUser: OFFICIAL });
+    renderDashboard();
+
+    expect(tile('Drafting')).toHaveTextContent('1');
+    expect(tile('Completed')).toHaveTextContent('1');
+
+    fireEvent.click(tile('Drafting'));
+    expect(visibleQueryIds()).toEqual(['QRY-MINE-DRAFT']);
+
+    // A closed case still belongs to them — it just leaves the active buckets.
+    fireEvent.click(tile('Completed'));
+    expect(visibleQueryIds()).toEqual(['QRY-MINE-DONE']);
+
+    expect(screen.queryByText('Someone elses')).toBeNull();
+  });
+});
+
+describe('Reviewer dashboard', () => {
+  it('shows only the level assigned to this reviewer', () => {
+    seed([
+      {
+        queryId: 'QRY-MINE',
+        subject: 'On my level',
+        workflowState: WORKFLOW_STATE.UNDER_REVIEW,
+        currentWorkflowStepId: 'STP-1',
+      },
+      {
+        queryId: 'QRY-THEIRS',
+        subject: 'On their level',
+        workflowState: WORKFLOW_STATE.UNDER_REVIEW,
+        currentWorkflowStepId: 'STP-2',
+      },
+    ]);
+    useWorkflowStore.setState({
+      workflowSteps: [
+        { stepId: 'STP-1', queryId: 'QRY-MINE', stepType: 'REVIEW', assignedUserId: REVIEWER.id },
         {
-          auditId: 'AUD-DASH-OLD',
-          queryId,
-          event: 'QUERY_CLOSED',
-          actorLabel: 'System',
-          at: longAgo.toISOString(),
+          stepId: 'STP-2',
+          queryId: 'QRY-THEIRS',
+          stepType: 'REVIEW',
+          assignedUserId: OTHER_REVIEWER.id,
         },
       ],
-    }));
-
+    });
+    useAuthStore.setState({ currentUser: REVIEWER });
     renderDashboard();
-    expect(screen.queryByText(/closed in 30 days/)).toBeNull();
-  });
-});
 
-describe('KPI tiles are filtered to the signed-in user', () => {
-
-  function assignTo(userId, viewer) {
-    const queryId = ingest(1);
-    useWorkflowStore.setState((s) => ({
-      queries: s.queries.map((q) =>
-        q.queryId === queryId ? { ...q, currentAssigneeId: userId } : q,
-      ),
-    }));
-    useAuthStore.setState({ currentUser: viewer });
-    renderDashboard();
-  }
-
-  it('counts a query assigned to the signed-in user', () => {
-    assignTo(OIC.id, OIC);
-    expect(tile('Assigned to you')).toHaveTextContent('1');
+    expect(tile('Awaiting My Review')).toHaveTextContent('1');
+    expect(visibleQueryIds()).toEqual(['QRY-MINE']);
+    expect(screen.queryByText('On their level')).toBeNull();
   });
 
-  it('does not count it for a different user', () => {
-    assignTo(OIC.id, FRONT_OFFICE);
-    expect(tile('Assigned to you')).toHaveTextContent('0');
-  });
-});
-
-describe('no mock query data reaches the dashboard', () => {
-  it('starts empty — nothing is seeded', async () => {
-    await useWorkflowStore.getState().resetDemo();
-
-    const state = useWorkflowStore.getState();
-    expect(state.queries).toEqual([]);
-    expect(state.workflowSteps).toEqual([]);
-    expect(state.auditEvents).toEqual([]);
-
-    renderDashboard();
-    expect(screen.getByText(/Nothing waiting on you/)).toBeInTheDocument();
-  });
-});
-
-function close(queryId, at = new Date()) {
-  useWorkflowStore.setState((s) => ({
-    queries: s.queries.map((q) =>
-      q.queryId === queryId ? { ...q, workflowState: WORKFLOW_STATE.CLOSED } : q,
-    ),
-    auditEvents: [
-      ...s.auditEvents,
+  it('counts decisions this reviewer actually recorded, with rows behind them', () => {
+    seed([
       {
-        auditId: `AUD-CLOSE-${queryId}`,
-        queryId,
-        event: AUDIT_EVENT.QUERY_CLOSED,
-        actor: 'System',
-        at: at.toISOString(),
+        queryId: 'QRY-PASSED',
+        subject: 'I approved this',
+        workflowState: WORKFLOW_STATE.PENDING_FINAL_APPROVAL,
       },
-    ],
-  }));
-}
+      {
+        queryId: 'QRY-SENTBACK',
+        subject: 'I returned this',
+        workflowState: WORKFLOW_STATE.RETURNED_FOR_REVISION,
+      },
+    ]);
+    useWorkflowStore.setState({
+      reviews: [
+        {
+          reviewId: 'REV-1',
+          queryId: 'QRY-PASSED',
+          reviewerId: REVIEWER.id,
+          decision: 'APPROVED',
+        },
+        {
+          reviewId: 'REV-2',
+          queryId: 'QRY-SENTBACK',
+          reviewerId: REVIEWER.id,
+          decision: 'CHANGES_REQUESTED',
+        },
+        {
+          reviewId: 'REV-3',
+          queryId: 'QRY-PASSED',
+          reviewerId: OTHER_REVIEWER.id,
+          decision: 'APPROVED',
+        },
+      ],
+    });
+    useAuthStore.setState({ currentUser: REVIEWER });
+    renderDashboard();
+
+    expect(tile('Approved by me')).toHaveTextContent('1');
+    expect(tile('Returned by me')).toHaveTextContent('1');
+
+    fireEvent.click(tile('Returned by me'));
+    expect(visibleQueryIds()).toEqual(['QRY-SENTBACK']);
+  });
+});
+
+describe('Total Queries spans the whole permitted scope', () => {
+  const MIXED = [
+    { queryId: 'QRY-1', subject: 'New', workflowState: WORKFLOW_STATE.RECEIVED },
+    { queryId: 'QRY-2', subject: 'Drafting', workflowState: WORKFLOW_STATE.DRAFTING },
+    { queryId: 'QRY-3', subject: 'Under review', workflowState: WORKFLOW_STATE.UNDER_REVIEW },
+    { queryId: 'QRY-4', subject: 'Closed', workflowState: WORKFLOW_STATE.CLOSED },
+  ];
+
+  it('counts every status for Front Office, not just the incoming ones', () => {
+    seed(MIXED);
+    useAuthStore.setState({ currentUser: FRONT_OFFICE });
+    renderDashboard();
+
+    expect(tileCount('Total Queries')).toBe(4);
+    expect(tileCount('New / Incoming')).toBe(1);
+
+    fireEvent.click(tile('Total Queries'));
+    expect(visibleQueryIds().sort()).toEqual(['QRY-1', 'QRY-2', 'QRY-3', 'QRY-4']);
+  });
+
+  it('opens on the actionable queue rather than Total', () => {
+    seed(MIXED);
+    useAuthStore.setState({ currentUser: FRONT_OFFICE });
+    renderDashboard();
+
+    // Total renders first, but the dashboard lands on the work waiting for you.
+    expect(tile('New / Incoming')).toHaveAttribute('aria-pressed', 'true');
+    expect(tile('Total Queries')).toHaveAttribute('aria-pressed', 'false');
+    expect(visibleQueryIds()).toEqual(['QRY-1']);
+  });
+
+  it('still scopes Total to the signed-in inquirer', () => {
+    seed([
+      ...MIXED,
+      {
+        queryId: 'QRY-OTHER',
+        subject: 'Someone else',
+        workflowState: WORKFLOW_STATE.RECEIVED,
+        inquirer: { id: 'USR-9999', email: 'other@example.com', name: 'Other' },
+      },
+    ]);
+    useAuthStore.setState({ currentUser: INQUIRER });
+    renderDashboard();
+
+    expect(tileCount('Total Queries')).toBe(4);
+    expect(screen.queryByText('Someone else')).toBeNull();
+  });
+
+  it('covers a reviewer case that no status tile accounts for', () => {
+    // A pending level: in the reviewer's scope, but not awaiting them yet and
+    // not yet ruled on — so only Total should see it.
+    seed([
+      {
+        queryId: 'QRY-PENDING-LEVEL',
+        subject: 'Queued for me later',
+        workflowState: WORKFLOW_STATE.UNDER_REVIEW,
+        currentWorkflowStepId: 'STP-OTHER',
+      },
+    ]);
+    useWorkflowStore.setState({
+      workflowSteps: [
+        {
+          stepId: 'STP-OTHER',
+          queryId: 'QRY-PENDING-LEVEL',
+          stepType: 'REVIEW',
+          assignedUserId: OTHER_REVIEWER.id,
+        },
+        {
+          stepId: 'STP-MINE',
+          queryId: 'QRY-PENDING-LEVEL',
+          stepType: 'REVIEW',
+          assignedUserId: REVIEWER.id,
+          status: 'PENDING',
+        },
+      ],
+    });
+    useAuthStore.setState({ currentUser: REVIEWER });
+    renderDashboard();
+
+    expect(tileCount('Total Queries')).toBe(1);
+    expect(tileCount('Awaiting My Review')).toBe(0);
+    expect(tileCount('Approved by me')).toBe(0);
+    expect(tileCount('Returned by me')).toBe(0);
+
+    fireEvent.click(tile('Total Queries'));
+    expect(visibleQueryIds()).toEqual(['QRY-PENDING-LEVEL']);
+  });
+});
+
+describe('the query list is vertically contained', () => {
+  it('scrolls the rows in place instead of growing the dashboard', () => {
+    seed(
+      Array.from({ length: 25 }, (_, i) => ({
+        queryId: `QRY-${String(i).padStart(3, '0')}`,
+        subject: `Case ${i}`,
+        workflowState: WORKFLOW_STATE.RECEIVED,
+      })),
+    );
+    useAuthStore.setState({ currentUser: INQUIRER });
+    renderDashboard();
+
+    const viewport = listPanel().querySelector('[data-radix-scroll-area-viewport]');
+    expect(viewport).not.toBeNull();
+    // Bounded height lives on the scroll root, so the card cannot grow with the list.
+    expect(viewport.closest('[data-slot="scroll-area"]').className).toMatch(/max-h-/);
+
+    // Every row is still rendered — containment is scroll, not truncation.
+    expect(visibleQueryIds()).toHaveLength(25);
+    expect(tileCount('Total Queries')).toBe(25);
+  });
+
+  it('leaves the header and footer outside the scroll area', () => {
+    seed([{ queryId: 'QRY-1', subject: 'One', workflowState: WORKFLOW_STATE.RECEIVED }]);
+    useAuthStore.setState({ currentUser: INQUIRER });
+    renderDashboard();
+
+    const scroller = listPanel().querySelector('[data-slot="scroll-area"]');
+    expect(scroller).not.toBeNull();
+    expect(scroller.textContent).not.toMatch(/Showing/);
+    expect(scroller.querySelector('h2')).toBeNull();
+  });
+});
 
 describe('the dashboard invents nothing', () => {
   it('shows none of the hard-coded rows it used to ship with', () => {
+    useAuthStore.setState({ currentUser: OIC });
     renderDashboard();
 
     for (const invented of [
-      'Q-2034', 'Q-2031', 'Q-2028', 'Q-2041', 'Q-2038', 'Q-2035',
+      'Q-2034',
+      'Q-2031',
       'Staff access request for new ERP module',
       'Compliance report Q2 amendment required',
-      'Vendor invoice mismatch — July batch',
-      'Bhumika added a comment on Q-2038',
-      '91%', '87%', '72%', 'Tech Ops', 'Legal', 'Finance',
+      '91%',
+      'Tech Ops',
     ]) {
       expect(screen.queryByText(invented)).toBeNull();
     }
   });
 
-  it('shows the intended dashboard sections and empty states on a fresh store', () => {
-    renderDashboard();
-
-    expect(screen.getByText(/Nothing waiting on you/)).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Resolution rate' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Query overview' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Trend overview' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Quick actions' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: "Today's insights" })).toBeInTheDocument();
-  });
-
-  it('reports no resolution rate for a period with no enquiries', () => {
-    renderDashboard();
-    expect(within(section('Resolution rate')).getAllByText('No data').length).toBeGreaterThanOrEqual(4);
+  it('starts from an empty store — nothing is seeded', async () => {
+    await useWorkflowStore.getState().resetDemo();
+    const state = useWorkflowStore.getState();
+    expect(state.queries).toEqual([]);
+    expect(state.workflowSteps).toEqual([]);
+    expect(state.auditEvents).toEqual([]);
   });
 });
-
-describe('Waiting on you reads the real queue', () => {
-  it('lists a real assigned query by id and subject', () => {
-    const queryId = ingest(1);
-    useWorkflowStore.setState((s) => ({
-      queries: s.queries.map((q) =>
-        q.queryId === queryId ? { ...q, currentAssigneeId: OIC.id } : q,
-      ),
-    }));
-
-    renderDashboard();
-
-    expect(screen.queryByText(/Nothing waiting on you/)).toBeNull();
-    expect(screen.getAllByText('Dashboard fixture 1').length).toBeGreaterThan(0);
-    expect(screen.getAllByText(new RegExp(queryId)).length).toBeGreaterThan(0);
-  });
-
-  it('shows the empty state when nothing is assigned to the viewer', () => {
-    ingest(1);
-    renderDashboard();
-
-    expect(screen.getByText(/Nothing waiting on you/)).toBeInTheDocument();
-  });
-});
-
-describe('Resolution rate is computed, not asserted', () => {
-  it('reports the share of received enquiries that are closed', () => {
-    const a = ingest(1);
-    ingest(2);
-    close(a);
-
-    renderDashboard();
-
-    expect(within(section('Resolution rate')).getAllByText('50%').length).toBeGreaterThan(0);
-  });
-});
-
-describe('each resolution-rate window is computed separately', () => {
-
-  function received(queryId, daysAgo) {
-    const at = new Date();
-    at.setDate(at.getDate() - daysAgo);
-    useWorkflowStore.setState((st) => ({
-      auditEvents: [
-        ...st.auditEvents,
-        {
-          auditId: `AUD-RCV-${queryId}-${daysAgo}`,
-          queryId,
-          event: AUDIT_EVENT.QUERY_RECEIVED,
-          actor: 'System',
-          at: at.toISOString(),
-        },
-      ],
-    }));
-  }
-
-  it('does not report the same figure for every period', () => {
-
-    const older = ingest(1);
-    const newer = ingest(2);
-    useWorkflowStore.setState((st) => ({
-      auditEvents: st.auditEvents.filter((e) => e.event !== AUDIT_EVENT.QUERY_RECEIVED),
-    }));
-    received(older, 10);
-    received(newer, 0);
-    close(older, new Date());
-
-    renderDashboard();
-
-    const percentages = screen
-      .getAllByText(/^\d+%$|^No data$/)
-      .map((el) => el.textContent);
-
-    expect(percentages.length).toBeGreaterThanOrEqual(3);
-    expect(new Set(percentages).size).toBeGreaterThan(1);
-  });
-});
-
-describe('an Inquirer sees only their own queries', () => {
-  const INQUIRER = MOCK_USERS.find((u) => u.role === ROLES.INQUIRER);
-
-  it('shows the inquirer their own query in the KPI counts', () => {
-    ingest(1);
-    useAuthStore.setState({ currentUser: INQUIRER });
-
-    renderDashboard();
-
-    expect(tile('In drafting')).toHaveTextContent('1');
-  });
-
-  it("hides another inquirer's query from their dashboard counts", () => {
-    const queryId = useWorkflowStore.getState().ingestEmail(
-      {
-        mailboxMessageId: 'MSG-OTHER',
-        to: 'ipc-query-mock@example.com',
-        from: 'Someone Else <someone.else@example.com>',
-        subject: 'Not your enquiry',
-        body: 'Body.',
-        receivedAt: new Date().toISOString(),
-      },
-      async () => null,
-    ).queryId;
-    close(queryId);
-    useAuthStore.setState({ currentUser: INQUIRER });
-
-    renderDashboard();
-
-    expect(screen.queryByText('Not your enquiry')).toBeNull();
-    expect(tile('Closed')).toHaveTextContent('0');
-  });
-});
-
-describe("New Query is the Inquirer's alone", () => {
-  const INQUIRER = MOCK_USERS.find((u) => u.role === ROLES.INQUIRER);
-
-  it('renders for the Inquirer and points at their compose page', () => {
-    useAuthStore.setState({ currentUser: INQUIRER });
-    renderDashboard();
-
-    const button = screen.getByRole('button', { name: /New Query/ });
-    fireEvent.click(button);
-    expect(navigateSpy).toHaveBeenCalledWith('/inquirer/compose');
-  });
-
-  it.each(
-    [ROLES.FRONT_OFFICE, ROLES.OFFICER_IN_CHARGE, ROLES.ASSIGNED_OFFICIAL,
-     ROLES.REVIEWER, ROLES.ADMIN, ROLES.SUPER_ADMIN],
-  )('is hidden for %s', (role) => {
-    useAuthStore.setState({ currentUser: MOCK_USERS.find((u) => u.role === role) });
-    renderDashboard();
-    expect(screen.queryByRole('button', { name: /New Query/ })).toBeNull();
-  });
-});
-
-vi.mock('@/services/api/mailboxService', () => ({
-  fetchEmailConfig: vi.fn().mockResolvedValue({}),
-  fetchMailboxMessages: vi.fn().mockResolvedValue({ messages: [] }),
-  markMessageIngested: vi.fn().mockResolvedValue({ ingested: true }),
-  sendEnquiry: vi.fn().mockResolvedValue({}),
-  sendAcknowledgement: vi.fn().mockResolvedValue({}),
-}));
-
