@@ -58,11 +58,10 @@ export function Header() {
             title="Reset database to initial state"
           >
             <RotateCcwIcon className="h-4 w-4" />
-            <span className="hidden sm:inline-block">Reset demo data</span>
+            <span className="hidden sm:inline-block">Reset</span>
           </button>
 
           <div className="flex items-center gap-2.5">
-            <span className="hidden sm:inline-block text-[12.5px] font-medium text-slate-400">Viewing as</span>
             <Select value={currentUser?.id || ''} onValueChange={switchUser}>
               <SelectTrigger className="glass-control flex h-auto items-center gap-2.5 rounded-full px-3.5 py-1.5 text-[12.5px] font-bold text-slate-800 transition-all hover:-translate-y-0.5 focus:ring-0 focus:ring-offset-0 cursor-pointer [&>svg]:text-purple-600">
                 <SelectValue>

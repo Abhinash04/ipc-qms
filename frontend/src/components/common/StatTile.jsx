@@ -15,6 +15,7 @@ export function StatTile({
   illustrationType,
   className,
   onClick,
+  selected = false,
 }) {
   const blobColors = {
     assigned: "#3b82f6",
@@ -41,8 +42,15 @@ export function StatTile({
   return (
     <div
       onClick={onClick}
+      role={onClick ? "button" : undefined}
+      aria-pressed={onClick ? selected : undefined}
       className={cn(
-        "glass-panel aurora-panel bento-card group relative cursor-pointer select-none overflow-hidden rounded-[28px] p-5 sm:p-6 transition-all duration-300 hover:-translate-y-1 hover:shadow-xl active:scale-[0.99]",
+        "glass-panel aurora-panel bento-card group relative select-none overflow-hidden rounded-[28px] p-5 sm:p-6 transition-all duration-300",
+        // A tile that navigates nowhere should not advertise a click.
+        onClick &&
+          "cursor-pointer hover:-translate-y-1 hover:shadow-xl active:scale-[0.99]",
+        // The selected tile is the one the table below is showing.
+        selected && "ring-2 ring-offset-2 ring-purple-500/70 shadow-xl -translate-y-0.5",
         className,
       )}
       style={{ borderColor: cardBorder || "rgba(255,255,255,0.9)" }}

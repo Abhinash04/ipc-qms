@@ -52,7 +52,6 @@ export function DashboardActivity({ auditEvents = [] }) {
   return (
     <div className="glass-panel aurora-panel bento-card rounded-[30px] border border-white/80 p-6 sm:p-7 shadow-lg flex flex-col justify-between h-full bg-white/95 backdrop-blur-xl">
       <div>
-        {/* Header */}
         <div className="flex items-center justify-between pb-6 mb-5 border-b border-slate-100/80">
           <div className="flex items-center gap-3.5">
             <div className="flex h-13 w-13 shrink-0 items-center justify-center rounded-2xl bg-linear-to-br from-blue-500/10 via-indigo-500/10 to-purple-500/10 text-blue-600 border border-blue-200/50 shadow-2xs">
@@ -74,7 +73,6 @@ export function DashboardActivity({ auditEvents = [] }) {
           </span>
         </div>
 
-        {/* Activity List */}
         <div className="relative pl-2 space-y-3.5 my-2">
           {activity.length === 0 ? (
             <div className="py-12 px-4 text-center rounded-2xl border border-dashed border-slate-200/90 bg-slate-50/50 flex flex-col items-center justify-center">
