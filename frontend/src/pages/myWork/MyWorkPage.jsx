@@ -1,20 +1,18 @@
 import { QueryTable } from "@/components/workflow/QueryTable";
 import { useAuthStore } from "@/store/useAuthStore";
-import { useWorkflowStore } from "@/store/useWorkflowStore";
+import { useBucketFilter } from "@/hooks/useBucketFilter";
 import { useRoutePaths } from "@/hooks/useRoutePaths";
+import { ROLES } from "@/constants/roles";
 
 export function MyWorkPage() {
   const paths = useRoutePaths();
   const currentUser = useAuthStore((state) => state.currentUser);
-  const workflowSteps = useWorkflowStore((state) => state.workflowSteps);
-  const isMine = (query) => {
-    if (!currentUser) return false;
-    if (query.currentAssigneeId === currentUser.id) return true;
-    const step = workflowSteps.find(
-      (s) => s.stepId === query.currentWorkflowStepId,
-    );
-    return step?.assignedUserId === currentUser.id;
-  };
+  const isMine = useBucketFilter(ROLES.ASSIGNED_OFFICIAL, [
+    "assigned",
+    "drafting",
+    "submitted",
+    "returned",
+  ]);
 
   return (
     <QueryTable

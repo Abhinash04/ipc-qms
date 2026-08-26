@@ -175,16 +175,20 @@ export function QueryTable({
 
                 const createdDate = query.createdAt
                   ? new Date(query.createdAt)
-                  : new Date("2026-08-19T09:30:00");
-                const dateFormatted = createdDate.toLocaleDateString("en-GB", {
-                  day: "2-digit",
-                  month: "short",
-                  year: "numeric",
-                });
-                const timeFormatted = createdDate.toLocaleTimeString("en-US", {
-                  hour: "2-digit",
-                  minute: "2-digit",
-                });
+                  : null;
+                const dateFormatted = createdDate
+                  ? createdDate.toLocaleDateString("en-GB", {
+                      day: "2-digit",
+                      month: "short",
+                      year: "numeric",
+                    })
+                  : "—";
+                const timeFormatted = createdDate
+                  ? createdDate.toLocaleTimeString("en-US", {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })
+                  : "—";
 
                 return (
                   <Link

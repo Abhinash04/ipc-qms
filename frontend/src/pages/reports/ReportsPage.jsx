@@ -5,13 +5,10 @@ import { StatTile } from '@/components/common/StatTile';
 import { EmptyState } from '@/components/common/EmptyState';
 import { useWorkflowStore } from '@/store/useWorkflowStore';
 import { WORKFLOW_STATE, BUSINESS_STATUS } from '@/constants/statusEnums';
+import { STATE_GROUPS } from '@/constants/queryBuckets';
 import { useRoutePaths } from '@/hooks/useRoutePaths';
 
-const DRAFTING_STATES = [
-  WORKFLOW_STATE.ASSIGNED,
-  WORKFLOW_STATE.DRAFTING,
-  WORKFLOW_STATE.RETURNED_FOR_REVISION,
-];
+const DRAFTING_STATES = STATE_GROUPS.DRAFTING_STAGE;
 
 export function ReportsPage() {
   const paths = useRoutePaths();

@@ -1,25 +1,16 @@
 import { QueryTable } from "@/components/workflow/QueryTable";
 import { MailboxIngestButton } from "@/components/workflow/MailboxIngestButton";
 import { useRoutePaths } from "@/hooks/useRoutePaths";
+import { useBucketFilter } from "@/hooks/useBucketFilter";
 import { useAuthStore } from "@/store/useAuthStore";
-import { useWorkflowStore } from "@/store/useWorkflowStore";
 import { ROLES } from "@/constants/roles";
 
 export function QueriesListPage() {
   const paths = useRoutePaths();
   const currentUser = useAuthStore((state) => state.currentUser);
-  const workflowSteps = useWorkflowStore((state) => state.workflowSteps);
 
-  const filter = (query) => {
-    if (currentUser?.role === ROLES.ASSIGNED_OFFICIAL) {
-      if (query.currentAssigneeId === currentUser.id) return true;
-      const step = workflowSteps.find(
-        (s) => s.stepId === query.currentWorkflowStepId,
-      );
-      return step?.assignedUserId === currentUser.id;
-    }
-    return true;
-  };
+  // The role's own visibility rule — the same one the dashboard scopes by.
+  const filter = useBucketFilter(currentUser?.role);
 
   const isAssignedOfficial = currentUser?.role === ROLES.ASSIGNED_OFFICIAL;
 

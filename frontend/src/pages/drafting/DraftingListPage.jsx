@@ -1,15 +1,15 @@
 import { QueryTable } from "@/components/workflow/QueryTable";
 import { useRoutePaths } from "@/hooks/useRoutePaths";
-import { WORKFLOW_STATE } from "@/constants/statusEnums";
-
-const IN_DRAFTING = [
-  WORKFLOW_STATE.ASSIGNED,
-  WORKFLOW_STATE.DRAFTING,
-  WORKFLOW_STATE.RETURNED_FOR_REVISION,
-];
+import { useBucketFilter } from "@/hooks/useBucketFilter";
+import { ROLES } from "@/constants/roles";
 
 export function DraftingListPage() {
   const paths = useRoutePaths();
+  const filter = useBucketFilter(ROLES.ASSIGNED_OFFICIAL, [
+    "assigned",
+    "drafting",
+    "returned",
+  ]);
   return (
     <QueryTable
       title="Drafting"
@@ -20,8 +20,8 @@ export function DraftingListPage() {
         { label: "Drafting" },
       ]}
       detailPath={paths.DRAFTING_DETAIL}
-      filter={(q) => IN_DRAFTING.includes(q.workflowState)}
-      emptyMessage="Nothing to draft. A query appears here once the Officer-in-Charge assigns it."
+      filter={filter}
+      emptyMessage="Nothing to draft. A query appears here once the Officer-in-Charge assigns it to you."
     />
   );
 }
