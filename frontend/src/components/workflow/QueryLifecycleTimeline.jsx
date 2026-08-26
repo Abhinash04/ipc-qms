@@ -22,9 +22,14 @@ export function QueryLifecycleTimeline({ stages = [] }) {
   if (stages.length === 0) return null;
 
   return (
-    <div className="select-none">
-      <div className="hidden lg:block overflow-x-auto">
-        <ol className="flex min-w-max items-start gap-0">
+    <div className="@container min-w-0 select-none">
+      <div
+        className="hidden @2xl:block overflow-x-auto overscroll-x-contain"
+        tabIndex={0}
+        role="group"
+        aria-label="Workflow progress"
+      >
+        <ol className="flex items-start gap-0">
           {stages.map((stage, index) => (
             <li
               key={stage.key}
@@ -64,14 +69,16 @@ export function QueryLifecycleTimeline({ stages = [] }) {
 
               <p
                 className={cn(
-                  'mt-2 px-1 text-[12.5px] font-bold leading-snug',
+                  'mt-2 px-1 text-[12.5px] font-bold leading-snug wrap-break-word',
                   stage.status === STAGE_STATUS.PENDING ? 'text-slate-400' : 'text-slate-800',
                 )}
               >
                 {stage.label}
               </p>
               {stage.actor && (
-                <p className="px-1 text-[11.5px] font-medium text-slate-400">{stage.actor}</p>
+                <p className="px-1 text-[11.5px] font-medium text-slate-400 wrap-break-word">
+                  {stage.actor}
+                </p>
               )}
               {stage.status === STAGE_STATUS.CURRENT && stage.note && (
                 <p className="mt-1.5 rounded-lg border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] font-semibold text-amber-900">
@@ -83,7 +90,7 @@ export function QueryLifecycleTimeline({ stages = [] }) {
         </ol>
       </div>
 
-      <ol className="space-y-4 lg:hidden">
+      <ol className="space-y-4 @2xl:hidden">
         {stages.map((stage, index) => (
           <li
             key={stage.key}

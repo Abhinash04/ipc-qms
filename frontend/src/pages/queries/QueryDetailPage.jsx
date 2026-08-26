@@ -5,6 +5,7 @@ import { EmptyState } from '@/components/common/EmptyState';
 import { CaseSummaryBar } from '@/components/workflow/CaseSummaryBar';
 import { QueryLifecycleTimeline } from '@/components/workflow/QueryLifecycleTimeline';
 import { WorkflowActionsCard } from '@/components/workflow/WorkflowActionsCard';
+import { ReviewDecisionCard } from '@/components/workflow/ReviewDecisionCard';
 import { EmailThread } from '@/components/email/EmailThread';
 import { AiSummaryCard } from '@/components/ai/AiSummaryCard';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
@@ -73,8 +74,9 @@ export function QueryDetailPage() {
         </div>
 
         {!isInquirer && (
-          <div className="h-full">
+          <div className="h-full space-y-6">
             <WorkflowActionsCard />
+            {can(WORKFLOW_ACTION.APPROVE_REVIEW) && <ReviewDecisionCard />}
           </div>
         )}
       </div>

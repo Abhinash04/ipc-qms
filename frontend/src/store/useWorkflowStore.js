@@ -38,6 +38,92 @@ const actorName = (user) => user?.name || 'System';
 
 const byQuery = (rows, queryId) => rows.filter((r) => r.queryId === queryId);
 
+const QUERY_SOURCE = { EMAIL: 'Email', PORTAL: 'Portal' };
+
+/** Enquiries reach IPC by two channels; the mail copy of a portal enquiry may
+ *  arrive minutes later and must attach to the case rather than open a new one. */
+const PORTAL_CLAIM_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+const sameEmail = (a, b) =>
+  Boolean(a) && Boolean(b) && String(a).trim().toLowerCase() === String(b).trim().toLowerCase();
+
+/** "Re: Fwd: Monograph  query " and "monograph query" are the same subject. */
+const normaliseSubject = (subject) =>
+  String(subject || '')
+    .replace(/^(\s*(re|fwd|fw)\s*:\s*)+/i, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+
+/**
+ * Builds every record a new Query Case needs. Shared by both intake channels so
+ * a portal enquiry and an ingested email produce structurally identical cases.
+ */
+function buildNewCase(state, { subject, body, from, to, inquirer, attachments, timestamp, source, providerMessageId, providerThreadId, sourceMessageId, sourceMailboxMessageId }) {
+  let counters = state.counters;
+  const queryMint = mintYearScopedId(counters, 'QRY', timestamp);
+  counters = { ...counters, ...queryMint.bump };
+  const threadMint = mintYearScopedId(counters, 'THREAD', timestamp);
+  counters = { ...counters, ...threadMint.bump };
+  const messageMint = mintId(counters, 'MSG');
+
+  const query = {
+    queryId: queryMint.id,
+    threadId: threadMint.id,
+    sourceEmailId: messageMint.id,
+    sourceMailboxMessageId: sourceMailboxMessageId || null,
+    subject: subject || '(no subject)',
+    description: body || '',
+    source,
+    inquirer,
+    category: null,
+    priority: PRIORITY.NORMAL,
+    businessStatus: BUSINESS_STATUS.OPEN,
+    workflowState: WORKFLOW_STATE.RECEIVED,
+    currentAssigneeId: null,
+    currentWorkflowStepId: null,
+    assignmentDecision: null,
+    aiSummary: null,
+    attachments: attachments || [],
+    createdAt: timestamp,
+    updatedAt: timestamp,
+    dueDate: null,
+  };
+
+  const thread = {
+    threadId: threadMint.id,
+    queryId: queryMint.id,
+    subject: query.subject,
+    createdAt: timestamp,
+  };
+
+  const message = createEmailMessage({
+    messageId: messageMint.id,
+    threadId: threadMint.id,
+    queryId: queryMint.id,
+    direction: EMAIL_DIRECTION.INBOUND,
+    emailType: EMAIL_TYPE.INCOMING_QUERY,
+    from,
+    to,
+    cc: [],
+    bcc: [],
+    subject: query.subject,
+    body: query.description,
+    attachments: query.attachments,
+    timestamp,
+    providerMessageId: providerMessageId || null,
+    providerThreadId: providerThreadId || null,
+  });
+  message.sourceMessageId = sourceMessageId || null;
+
+  return {
+    query,
+    thread,
+    message,
+    bumps: { ...queryMint.bump, ...threadMint.bump, ...messageMint.bump },
+  };
+}
+
 function parseAddress(from) {
   if (!from) return '';
   const match = String(from).match(/<([^>]+)>/);
@@ -239,17 +325,6 @@ export const useWorkflowStore = create((set, get) => ({
 
     const timestamp = mailboxMessage.receivedAt || now();
 
-    let counters = state.counters;
-    const queryMint = mintYearScopedId(counters, 'QRY', timestamp);
-    counters = { ...counters, ...queryMint.bump };
-    const threadMint = mintYearScopedId(counters, 'THREAD', timestamp);
-    counters = { ...counters, ...threadMint.bump };
-    const messageMint = mintId(counters, 'MSG');
-
-    const queryId = queryMint.id;
-    const threadId = threadMint.id;
-    const messageId = messageMint.id;
-
     const inquirerEmail = parseAddress(mailboxMessage.from);
     const inquirer = {
       id: findUserByEmail(inquirerEmail)?.id || null,
@@ -257,66 +332,98 @@ export const useWorkflowStore = create((set, get) => ({
       email: inquirerEmail,
     };
 
-    const query = {
-      queryId,
-      threadId,
-      sourceEmailId: messageId,
-      subject: mailboxMessage.subject || '(no subject)',
-      description: mailboxMessage.body || '',
-      source: 'Email',
-      inquirer,
-      category: null,
-      priority: PRIORITY.NORMAL,
-      businessStatus: BUSINESS_STATUS.OPEN,
-      workflowState: WORKFLOW_STATE.RECEIVED,
-      currentAssigneeId: null,
-      currentWorkflowStepId: null,
-      assignmentDecision: null,
-      aiSummary: null,
-      attachments: mailboxMessage.attachments || [],
-      createdAt: timestamp,
-      updatedAt: timestamp,
-      dueDate: null,
-    };
+    // The inquirer may have raised this through the portal moments ago. Gmail
+    // ids are per-mailbox, so the sender's id never equals the id of the copy
+    // read from the Front Office inbox — match on content instead, or we mint a
+    // second case for the same enquiry.
+    const claimable = state.queries.find(
+      (q) =>
+        q.source === QUERY_SOURCE.PORTAL &&
+        !q.sourceMailboxMessageId &&
+        sameEmail(q.inquirer?.email, inquirerEmail) &&
+        normaliseSubject(q.subject) === normaliseSubject(mailboxMessage.subject) &&
+        new Date(timestamp) - new Date(q.createdAt) < PORTAL_CLAIM_WINDOW_MS,
+    );
 
-    const thread = {
-      threadId,
-      queryId,
-      subject: query.subject,
-      createdAt: timestamp,
-    };
+    if (claimable) {
+      const attached = get().attachToThread(claimable.queryId, mailboxMessage);
+      get().applyTransition({
+        queryId: claimable.queryId,
+        actor: null,
+        actorLabel: 'System',
+        event: AUDIT_EVENT.QUERY_RECEIVED,
+        patch: { sourceMailboxMessageId: sourceMessageId },
+        details: 'Mailbox copy of this portal enquiry matched to the existing case.',
+      });
+      return { ...attached, created: false, reason: 'claimed-by-portal-case' };
+    }
 
-    const message = createEmailMessage({
-      messageId,
-      threadId,
-      queryId,
-      direction: EMAIL_DIRECTION.INBOUND,
-      emailType: EMAIL_TYPE.INCOMING_QUERY,
+    return get().createCase({
+      subject: mailboxMessage.subject,
+      body: mailboxMessage.body,
       from: mailboxMessage.from,
       to: mailboxMessage.to,
-      cc: mailboxMessage.cc || [],
-      bcc: mailboxMessage.bcc || [],
-      subject: query.subject,
-      body: query.description,
-      attachments: query.attachments,
+      inquirer,
+      attachments: mailboxMessage.attachments,
       timestamp,
-      providerMessageId: mailboxMessage.providerMessageId || null,
-      providerThreadId: mailboxMessage.providerThreadId || null,
+      source: QUERY_SOURCE.EMAIL,
+      providerMessageId: mailboxMessage.providerMessageId,
+      providerThreadId: mailboxMessage.providerThreadId,
+      sourceMessageId,
+      sourceMailboxMessageId: sourceMessageId,
+      detail: `Query created from email "${mailboxMessage.subject || '(no subject)'}" received from ${inquirer.email}.`,
+      fetchSummary,
     });
-    message.sourceMessageId = sourceMessageId;
+  },
+
+  /**
+   * The portal intake channel: the signed-in Inquirer raises an enquiry and the
+   * case exists immediately, carrying their real identity rather than one
+   * parsed from a mail header.
+   */
+  raiseEnquiry: (
+    { subject, body, inquirer, providerMessageId, providerThreadId, attachments, to },
+    fetchSummary = fetchGemmaAiSummary,
+  ) => {
+    if (!inquirer?.email) {
+      throw new Error('raiseEnquiry: an inquirer with an email address is required');
+    }
+
+    return get().createCase({
+      subject,
+      body,
+      from: `${inquirer.name} <${inquirer.email}>`,
+      to: to || null,
+      inquirer,
+      attachments,
+      timestamp: now(),
+      source: QUERY_SOURCE.PORTAL,
+      providerMessageId,
+      providerThreadId,
+      sourceMessageId: providerMessageId || null,
+      // Left null so the inbound mail copy can still be claimed onto this case.
+      sourceMailboxMessageId: null,
+      detail: `Query raised through the inquirer portal by ${inquirer.name || inquirer.email}.`,
+      fetchSummary,
+    });
+  },
+
+  createCase: ({ detail, fetchSummary = fetchGemmaAiSummary, ...params }) => {
+    const { query, thread, message, bumps } = buildNewCase(get(), params);
+    const { queryId, threadId } = query;
 
     get().applyTransition({
       queryId,
       actor: null,
       actorLabel: 'System',
       event: AUDIT_EVENT.QUERY_RECEIVED,
-      details: `Query created from email "${query.subject}" received from ${inquirer.email}.`,
+      details: detail,
       notify: {
         recipientRole: 'FRONT_OFFICE',
         message: `${queryId} received and awaiting Front Office verification.`,
       },
       mutate: (base) => ({
-        counters: { ...base.counters, ...queryMint.bump, ...threadMint.bump, ...messageMint.bump },
+        counters: { ...base.counters, ...bumps },
         queries: [...base.queries, query],
         emailThreads: [...base.emailThreads, thread],
         emailMessages: [...base.emailMessages, message],
@@ -337,20 +444,22 @@ export const useWorkflowStore = create((set, get) => ({
       subject: query.subject,
       body: query.description,
       inquirerName: query.inquirer?.name,
-    }).then((gemmaSummary) => {
-      if (gemmaSummary) {
-        get().applyTransition({
-          queryId,
-          actor: null,
-          actorLabel: 'Gemma AI Summary Assistant',
-          event: AUDIT_EVENT.AI_SUMMARY_GENERATED,
-          patch: { aiSummary: gemmaSummary },
-          details: gemmaSummary.text,
-        });
-      }
-    }).catch(() => {});
+    })
+      .then((gemmaSummary) => {
+        if (gemmaSummary) {
+          get().applyTransition({
+            queryId,
+            actor: null,
+            actorLabel: 'Gemma AI Summary Assistant',
+            event: AUDIT_EVENT.AI_SUMMARY_GENERATED,
+            patch: { aiSummary: gemmaSummary },
+            details: gemmaSummary.text,
+          });
+        }
+      })
+      .catch(() => {});
 
-    return { queryId, threadId, messageId, created: true };
+    return { queryId, threadId, messageId: message.messageId, created: true };
   },
 
   attachToThread: (queryId, mailboxMessage) => {

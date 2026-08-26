@@ -67,7 +67,7 @@ function renderAs(user, path) {
 
 const decisionButtons = () => [
   screen.queryByRole('button', { name: 'Approve' }),
-  screen.queryByRole('button', { name: 'Return for revision' }),
+  screen.queryByRole('button', { name: 'Request changes' }),
 ];
 
 let queryId;

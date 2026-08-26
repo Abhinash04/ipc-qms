@@ -1,15 +1,18 @@
-import { useState } from 'react';
-import { Link } from 'react-router-dom';
-import { Lock, ArrowRight, Zap } from 'lucide-react';
-import { useQueryCase } from '@/hooks/useQueryCase';
-import { useWorkflowStore } from '@/store/useWorkflowStore';
-import { WORKFLOW_ACTION, CLARIFICATION_REQUIRED_ACTIONS } from '@/constants/workflowRules';
-import { WORKFLOW_STATE } from '@/constants/statusEnums';
-import { buildPath } from '@/constants/routePaths';
-import { SECTION } from '@/constants/routeSections';
-import { useRoutePaths } from '@/hooks/useRoutePaths';
-import { useWorkflowAction } from '@/hooks/useWorkflowAction';
-import { ActionError } from '@/components/workflow/ActionError';
+import { useState } from "react";
+import { Link } from "react-router-dom";
+import { Lock, ArrowRight, Zap } from "lucide-react";
+import { useQueryCase } from "@/hooks/useQueryCase";
+import { useWorkflowStore } from "@/store/useWorkflowStore";
+import {
+  WORKFLOW_ACTION,
+  CLARIFICATION_REQUIRED_ACTIONS,
+} from "@/constants/workflowRules";
+import { WORKFLOW_STATE } from "@/constants/statusEnums";
+import { buildPath } from "@/constants/routePaths";
+import { SECTION } from "@/constants/routeSections";
+import { useRoutePaths } from "@/hooks/useRoutePaths";
+import { useWorkflowAction } from "@/hooks/useWorkflowAction";
+import { ActionError } from "@/components/workflow/ActionError";
 
 const ACTION_SECTIONS = {
   [WORKFLOW_ACTION.ASSIGN]: SECTION.ASSIGNMENT_DETAIL,
@@ -23,16 +26,21 @@ const ACTION_SECTIONS = {
 };
 
 const ACTION_LABELS = {
-  [WORKFLOW_ACTION.ASSIGN]: 'Assign query',
-  [WORKFLOW_ACTION.GENERATE_AI_DRAFT]: 'Start drafting',
-  [WORKFLOW_ACTION.SUBMIT_FOR_REVIEW]: 'Continue drafting',
-  [WORKFLOW_ACTION.APPROVE_REVIEW]: 'Review draft',
-  [WORKFLOW_ACTION.FINAL_APPROVE]: 'Final approval',
-  [WORKFLOW_ACTION.DISPATCH]: 'Dispatch response',
+  [WORKFLOW_ACTION.ASSIGN]: "Assign query",
+  [WORKFLOW_ACTION.GENERATE_AI_DRAFT]: "Start drafting",
+  [WORKFLOW_ACTION.SUBMIT_FOR_REVIEW]: "Continue drafting",
+  [WORKFLOW_ACTION.APPROVE_REVIEW]: "Review draft",
+  [WORKFLOW_ACTION.FINAL_APPROVE]: "Final approval",
+  [WORKFLOW_ACTION.DISPATCH]: "Dispatch response",
 };
 
+const STEP_OWNED_ACTIONS = [
+  WORKFLOW_ACTION.APPROVE_REVIEW,
+  WORKFLOW_ACTION.REQUEST_REVISION,
+];
+
 export function WorkflowActionsCard() {
-  const { queryId, query, currentUser, can } = useQueryCase();
+  const { queryId, query, currentStep, currentUser, can } = useQueryCase();
   const paths = useRoutePaths();
   const { run, error, clearError } = useWorkflowAction();
   const verifyQuery = useWorkflowStore((state) => state.verifyQuery);
@@ -41,8 +49,18 @@ export function WorkflowActionsCard() {
 
   if (!query) return null;
 
+  const ownsCurrentStep =
+    !currentStep?.assignedUserId ||
+    currentStep.assignedUserId === currentUser?.id;
+
   const availableLinks = Object.entries(ACTION_SECTIONS)
-    .filter(([action, section]) => can(action) && ACTION_LABELS[action] && paths[section])
+    .filter(
+      ([action, section]) =>
+        can(action) &&
+        ACTION_LABELS[action] &&
+        paths[section] &&
+        (!STEP_OWNED_ACTIONS.includes(action) || ownsCurrentStep),
+    )
     .map(([action, section]) => ({
       action,
       path: paths[section],
@@ -65,7 +83,9 @@ export function WorkflowActionsCard() {
           Available actions
         </h2>
         <p className="text-[14.5px] font-medium text-slate-400 m-0 mt-1">
-          For <span className="font-bold text-slate-700">{currentUser?.name}</span> — actions change with the query&apos;s stage.
+          For{" "}
+          <span className="font-bold text-slate-700">{currentUser?.name}</span>{" "}
+          — actions change with the query&apos;s stage.
         </p>
       </div>
 
@@ -74,7 +94,8 @@ export function WorkflowActionsCard() {
 
         {isClosed && (
           <p className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-[15px] font-medium text-slate-500 leading-relaxed m-0">
-            This query is closed. Its full audit history remains available below.
+            This query is closed. Its full audit history remains available
+            below.
           </p>
         )}
 
@@ -101,7 +122,11 @@ export function WorkflowActionsCard() {
         )}
 
         {links.map((link) => (
-          <Link key={link.path} to={buildPath(link.path, { queryId })} className="block">
+          <Link
+            key={link.path}
+            to={buildPath(link.path, { queryId })}
+            className="block"
+          >
             <button
               type="button"
               className="w-full py-3.5 px-4 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-extrabold text-[16px] transition-all cursor-pointer flex items-center justify-center gap-2"
@@ -121,30 +146,39 @@ export function WorkflowActionsCard() {
             </div>
           )}
 
-        {/* Transfer / Pullback Section */}
         <div className="space-y-2 pt-3 border-t border-slate-100">
-          {[WORKFLOW_ACTION.TRANSFER, WORKFLOW_ACTION.PULLBACK].map((action) => (
-            <div key={action}>
-              <button
-                type="button"
-                onClick={() => setShowClarification(showClarification === action ? null : action)}
-                className="w-full flex items-center gap-2.5 px-4 py-3 rounded-2xl bg-slate-50 hover:bg-slate-100 text-slate-700 font-bold text-[15px] border border-slate-200/60 transition-all cursor-pointer"
-              >
-                <Lock className="h-4 w-4 text-slate-400 shrink-0" />
-                <span>{CLARIFICATION_REQUIRED_ACTIONS[action].label}</span>
-              </button>
-              {showClarification === action && (
-                <div className="mt-2 rounded-2xl border border-amber-200 bg-amber-50/90 p-3.5 text-[14px] font-medium text-amber-900 space-y-1.5">
-                  <p className="font-bold text-[14.5px] text-amber-950">Client clarification required before this can be enabled:</p>
-                  <ul className="list-disc space-y-1 pl-4 text-amber-900/90">
-                    {CLARIFICATION_REQUIRED_ACTIONS[action].openQuestions.map((q) => (
-                      <li key={q}>{q}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </div>
-          ))}
+          {[WORKFLOW_ACTION.TRANSFER, WORKFLOW_ACTION.PULLBACK].map(
+            (action) => (
+              <div key={action}>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setShowClarification(
+                      showClarification === action ? null : action,
+                    )
+                  }
+                  className="w-full flex items-center gap-2.5 px-4 py-3 rounded-2xl bg-slate-50 hover:bg-slate-100 text-slate-700 font-bold text-[15px] border border-slate-200/60 transition-all cursor-pointer"
+                >
+                  <Lock className="h-4 w-4 text-slate-400 shrink-0" />
+                  <span>{CLARIFICATION_REQUIRED_ACTIONS[action].label}</span>
+                </button>
+                {showClarification === action && (
+                  <div className="mt-2 rounded-2xl border border-amber-200 bg-amber-50/90 p-3.5 text-[14px] font-medium text-amber-900 space-y-1.5">
+                    <p className="font-bold text-[14.5px] text-amber-950">
+                      Client clarification required before this can be enabled:
+                    </p>
+                    <ul className="list-disc space-y-1 pl-4 text-amber-900/90">
+                      {CLARIFICATION_REQUIRED_ACTIONS[action].openQuestions.map(
+                        (q) => (
+                          <li key={q}>{q}</li>
+                        ),
+                      )}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            ),
+          )}
         </div>
       </div>
     </div>
