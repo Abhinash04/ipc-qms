@@ -111,7 +111,7 @@ export function ScrollingMarquee({ className = "" }) {
   const marqueeItems = [...IPC_ANNOUNCEMENTS, ...IPC_ANNOUNCEMENTS];
 
   return (
-    <div className={`px-5 lg:px-7 mb-3 select-none ${className}`}>
+    <div className={`px-3 sm:px-5 lg:px-7 mb-3 select-none ${className}`}>
       <div className="relative overflow-hidden rounded-2xl bg-linear-to-r from-white/95 via-slate-50/90 to-indigo-50/85 backdrop-blur-xl border border-white/90 shadow-[0_4px_20px_rgba(37,99,235,0.06)] group">
         <div className="h-0.5 w-full bg-linear-to-r from-blue-500 via-indigo-500 to-purple-500 opacity-80" />
 
@@ -173,7 +173,7 @@ export function ScrollingMarquee({ className = "" }) {
           onClick={() => setSelectedAnnouncement(null)}
         >
           <div
-            className="relative w-full max-w-lg overflow-hidden rounded-3xl bg-white p-6 shadow-2xl border border-slate-100 animate-in zoom-in-95 duration-200"
+            className="relative w-[calc(100vw-2rem)] max-w-lg overflow-hidden rounded-3xl bg-white p-4 sm:p-6 shadow-2xl border border-slate-100 animate-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-start justify-between gap-4 border-b border-slate-100 pb-4">

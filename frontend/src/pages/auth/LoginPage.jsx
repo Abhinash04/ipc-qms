@@ -83,7 +83,7 @@ export function LoginPage() {
 
   return (
     <div className="h-screen w-screen flex flex-col md:flex-row overflow-hidden bg-white select-none">
-      <div className="w-full md:w-5/12 lg:w-5/12 h-full bg-linear-to-br from-[#0f172a] via-[#1e1b4b] to-[#312e81] text-white p-8 sm:p-12 lg:p-16 flex flex-col justify-between items-center text-center relative overflow-hidden shrink-0 shadow-2xl z-10">
+      <div className="hidden md:flex w-full md:w-5/12 lg:w-5/12 h-full bg-linear-to-br from-[#0f172a] via-[#1e1b4b] to-[#312e81] text-white p-8 sm:p-12 lg:p-16 flex-col justify-between items-center text-center relative overflow-hidden shrink-0 shadow-2xl z-10">
         <div className="pointer-events-none absolute -top-32 -left-32 w-96 h-96 rounded-full bg-indigo-500/15 blur-3xl" />
         <div className="pointer-events-none absolute -bottom-32 -right-32 w-96 h-96 rounded-full bg-purple-500/15 blur-3xl" />
 
@@ -146,13 +146,13 @@ export function LoginPage() {
         </div>
       </div>
 
-      <div className="w-full md:w-7/12 lg:w-7/12 h-full bg-white p-8 sm:p-12 lg:p-16 flex flex-col justify-center items-center overflow-y-auto">
-        <div className="w-full max-w-120 my-auto space-y-7">
+      <div className="w-full md:w-7/12 lg:w-7/12 h-full bg-white p-5 sm:p-12 lg:p-16 flex flex-col justify-center items-center overflow-y-auto">
+        <div className="w-full max-w-120 my-auto space-y-5 sm:space-y-7">
           <div className="text-center">
-            <h2 className="font-heading text-[44px] sm:text-[52px] font-black text-slate-900 leading-none mb-3 tracking-tight text-center">
+            <h2 className="font-heading text-4xl sm:text-[52px] font-black text-slate-900 leading-none mb-2 sm:mb-3 tracking-tight text-center">
               Sign in
             </h2>
-            <p className="text-[17.5px] font-bold text-slate-500 text-center">
+            <p className="text-[15px] sm:text-[17.5px] font-bold text-slate-500 text-center px-1 sm:px-0">
               Enter your credentials to continue to your workspace.
             </p>
           </div>
@@ -161,15 +161,15 @@ export function LoginPage() {
             <button
               type="button"
               onClick={() => setShowMocks(!showMocks)}
-              className="w-full flex items-center justify-between px-4.5 py-4 rounded-2xl bg-indigo-50/70 hover:bg-indigo-100/70 border border-indigo-200/90 text-[15.5px] font-black text-slate-800 transition-all shadow-2xs cursor-pointer"
+              className="w-full flex items-center justify-between px-3 sm:px-4.5 py-3.5 sm:py-4 rounded-2xl bg-indigo-50/70 hover:bg-indigo-100/70 border border-indigo-200/90 text-[14px] sm:text-[15.5px] font-black text-slate-800 transition-all shadow-2xs cursor-pointer"
             >
               <div className="flex items-center gap-3">
                 <div className="w-8.5 h-8.5 rounded-xl bg-indigo-600 text-white flex items-center justify-center shrink-0 shadow-xs">
                   <LayoutGrid className="w-5 h-5" strokeWidth={2.2} />
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5 sm:gap-2">
                   <span>Mock Credentials</span>
-                  <span className="text-[11.5px] font-black uppercase px-2.5 py-0.5 rounded-full bg-indigo-200/80 text-indigo-900 tracking-wider">
+                  <span className="text-[10px] sm:text-[11.5px] font-black uppercase px-2 py-0.5 rounded-full bg-indigo-200/80 text-indigo-900 tracking-wider">
                     Dev Only
                   </span>
                 </div>
@@ -250,11 +250,11 @@ export function LoginPage() {
             )}
           </div>
 
-          <form onSubmit={submit} className="space-y-6">
+          <form onSubmit={submit} className="space-y-4 sm:space-y-6 pt-1 sm:pt-0">
             <div>
               <label
                 htmlFor="login-email"
-                className="block text-[16px] font-black text-slate-800 mb-2.5"
+                className="block text-[15px] sm:text-[16px] font-black text-slate-800 mb-1.5 sm:mb-2.5"
               >
                 Email
               </label>
@@ -269,7 +269,7 @@ export function LoginPage() {
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="you@ipc.example"
                   required
-                  className="w-full pl-13 pr-4 py-4.5 rounded-2xl border border-slate-200/90 bg-slate-50/50 hover:bg-white focus:bg-white text-[17px] sm:text-[18px] font-bold text-slate-900 placeholder-slate-400 outline-none transition-all focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 shadow-2xs"
+                  className="w-full pl-11 sm:pl-13 pr-4 py-3.5 sm:py-4.5 rounded-2xl border border-slate-200/90 bg-slate-50/50 hover:bg-white focus:bg-white text-base sm:text-[18px] font-bold text-slate-900 placeholder-slate-400 outline-none transition-all focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 shadow-2xs"
                 />
               </div>
             </div>
@@ -277,7 +277,7 @@ export function LoginPage() {
             <div>
               <label
                 htmlFor="login-password"
-                className="block text-[16px] font-black text-slate-800 mb-2.5"
+                className="block text-[15px] sm:text-[16px] font-black text-slate-800 mb-1.5 sm:mb-2.5"
               >
                 Password
               </label>
@@ -292,12 +292,13 @@ export function LoginPage() {
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
                   required
-                  className="w-full pl-13 pr-12 py-4.5 rounded-2xl border border-slate-200/90 bg-slate-50/50 hover:bg-white focus:bg-white text-[17px] sm:text-[18px] font-bold text-slate-900 placeholder-slate-400 outline-none transition-all focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 shadow-2xs"
+                  className="w-full pl-11 sm:pl-13 pr-12 py-3.5 sm:py-4.5 rounded-2xl border border-slate-200/90 bg-slate-50/50 hover:bg-white focus:bg-white text-base sm:text-[18px] font-bold text-slate-900 placeholder-slate-400 outline-none transition-all focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 shadow-2xs"
                 />
                 <button
                   type="button"
+                  aria-label={showPassword ? "Hide password" : "Show password"}
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
+                  className="absolute right-2 sm:right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors cursor-pointer p-2"
                 >
                   {showPassword ? (
                     <EyeOff className="w-5.5 h-5.5" />
@@ -320,7 +321,7 @@ export function LoginPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-4.5 px-8 rounded-2xl bg-linear-to-r from-[#4f46e5] via-ring to-[#8b5cf6] text-white font-black text-[17px] shadow-xl shadow-indigo-500/30 hover:opacity-95 active:scale-[0.99] transition-all cursor-pointer flex items-center justify-center gap-3 mt-3 disabled:opacity-70 disabled:cursor-not-allowed"
+              className="w-full py-3.5 sm:py-4.5 px-8 rounded-2xl bg-linear-to-r from-[#4f46e5] via-ring to-[#8b5cf6] text-white font-black text-base sm:text-[17px] shadow-xl shadow-indigo-500/30 hover:opacity-95 active:scale-[0.99] transition-all cursor-pointer flex items-center justify-center gap-3 mt-4 sm:mt-5 disabled:opacity-70 disabled:cursor-not-allowed"
             >
               {loading ? (
                 <>

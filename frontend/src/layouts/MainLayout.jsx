@@ -3,6 +3,7 @@ import { Sidebar } from "@/components/layout/Sidebar";
 import { Header } from "@/components/layout/Header";
 import { ScrollingMarquee } from "@/components/common/ScrollingMarquee";
 import { MailboxAutoSync } from "@/components/workflow/MailboxAutoSync";
+import { MobileNav } from "@/components/layout/MobileNav";
 
 export function MainLayout() {
   return (
@@ -17,10 +18,11 @@ export function MainLayout() {
       <div className="relative z-20 flex flex-1 flex-col min-w-0 min-h-0">
         <Header />
         <ScrollingMarquee className="mt-3" />
-        <main className="relative z-10 flex-1 overflow-y-auto px-5 py-5 lg:px-7 lg:py-6">
+        <main className="relative z-10 flex-1 overflow-y-auto px-5 py-5 pb-24 lg:px-7 lg:py-6 lg:pb-6">
           <Outlet />
         </main>
       </div>
+      <MobileNav />
     </div>
   );
 }

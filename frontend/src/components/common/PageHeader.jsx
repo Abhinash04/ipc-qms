@@ -46,7 +46,7 @@ export function PageHeader({
   const activeEmoji = titleData.emoji || greetingData.emoji;
 
   return (
-    <div className="glass-panel aurora-panel bento-card mb-3.5 flex flex-col gap-2 rounded-2xl px-4 py-1.5 sm:flex-row sm:items-center sm:justify-between lg:px-5 lg:py-2 border border-blue-100/80 bg-[linear-gradient(135deg,#eff6ff_0%,#ffffff_50%,#f5f3ff_100%)] shadow-[0_2px_12px_rgba(37,99,235,0.05)] relative overflow-hidden">
+    <div className="glass-panel aurora-panel bento-card mb-3.5 flex flex-col gap-2 rounded-2xl px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-5 sm:py-4 lg:px-6 lg:py-5 border border-blue-100/80 bg-[linear-gradient(135deg,#eff6ff_0%,#ffffff_50%,#f5f3ff_100%)] shadow-[0_2px_12px_rgba(37,99,235,0.05)] relative overflow-hidden">
       <div className="pointer-events-none absolute -right-10 -top-10 h-28 w-28 rounded-full bg-indigo-400/10 blur-2xl" />
       <div className="pointer-events-none absolute -left-10 -bottom-10 h-28 w-28 rounded-full bg-blue-400/10 blur-2xl" />
 
@@ -60,7 +60,7 @@ export function PageHeader({
         )}
         <div>
           {greetingData.text && (
-            <div className="text-[10.5px] font-black text-blue-600 tracking-wider uppercase leading-none mb-1">
+            <div className="text-[10px] sm:text-[10.5px] font-black text-blue-600 tracking-wider uppercase leading-none mb-1 sm:mb-1.5">
               {greetingData.text}
             </div>
           )}
