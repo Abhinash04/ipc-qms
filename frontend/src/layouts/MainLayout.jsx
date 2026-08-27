@@ -1,6 +1,7 @@
 import { Outlet } from "react-router-dom";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Header } from "@/components/layout/Header";
+import { ScrollingMarquee } from "@/components/common/ScrollingMarquee";
 import { MailboxAutoSync } from "@/components/workflow/MailboxAutoSync";
 
 export function MainLayout() {
@@ -13,12 +14,14 @@ export function MainLayout() {
         <div className="absolute bottom-[8%] right-[24%] h-72 w-72 rounded-full bg-cyan-200/18 blur-3xl" />
       </div>
       <Sidebar />
-      <div className="relative z-10 flex flex-1 flex-col overflow-hidden">
+      <div className="relative z-20 flex flex-1 flex-col min-w-0 min-h-0">
         <Header />
-        <main className="relative flex-1 overflow-y-auto px-5 py-5 lg:px-7 lg:py-6">
+        <ScrollingMarquee className="mt-3" />
+        <main className="relative z-10 flex-1 overflow-y-auto px-5 py-5 lg:px-7 lg:py-6">
           <Outlet />
         </main>
       </div>
     </div>
   );
 }
+
