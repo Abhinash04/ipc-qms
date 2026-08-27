@@ -15,7 +15,7 @@ import { createEmailMessage, EMAIL_DIRECTION, EMAIL_TYPE } from '@/constants/ema
 import { buildSeedState } from '@/constants/mockDomain';
 import { summarise, recommendAssignee, draftResponse } from '@/services/ai/mockAiService';
 import { loadAll, replaceAll, persistTransition, isEmpty } from '@/services/db/db';
-import { sendResponse, forwardQuery } from '@/services/api/mailboxService';
+import { sendResponse, forwardQuery, sendAcknowledgement } from '@/services/api/mailboxService';
 import { fetchGemmaAiSummary, fetchGemmaAiDraft } from '@/services/api/aiService';
 import { assembleDraftEmail } from '@/services/ai/draftComposer';
 
@@ -552,15 +552,86 @@ export const useWorkflowStore = create((set, get) => ({
     return { messageId: message.messageId, created: true };
   },
 
-  verifyQuery: (queryId, actor) => {
+  /**
+   * The one place an acknowledgement is sent. Never rejects — callers such as
+   * verifyQuery hand the promise on to code that does not await it, so a
+   * rejection would surface as an unhandled rejection.
+   */
+  acknowledgeInquirer: async (queryId, actor, send = sendAcknowledgement) => {
+    const state = get();
+    const query = state.queries.find((q) => q.queryId === queryId);
+    if (!query) return { acknowledged: false, error: `${queryId} does not exist` };
+
+    // Ingestion may already have acknowledged this one. recordAcknowledgement
+    // guards the store; this guards the mail, so the inquirer is never emailed
+    // twice for the same query.
+    const already = state.emailMessages.find(
+      (m) => m.queryId === queryId && m.emailType === EMAIL_TYPE.ACKNOWLEDGEMENT,
+    );
+    if (already) return { acknowledged: true, alreadySent: true };
+
+    try {
+      const sent = await send({ to: query.inquirer?.email, queryId });
+      get().recordAcknowledgement({
+        queryId,
+        from: sent.from,
+        to: sent.to,
+        subject: sent.subject,
+        body: sent.body,
+        timestamp: sent.sentAt,
+        providerMessageId: sent.providerMessageId,
+      });
+      return { acknowledged: true };
+    } catch (error) {
+      return { acknowledged: false, error: error?.message || String(error) };
+    }
+  },
+
+  /**
+   * Deliberately not `async`: assertCan must keep throwing synchronously for
+   * callers that expect it to. The email work is the returned promise, so the
+   * workflow transition lands before any mail is attempted.
+   */
+  verifyQuery: (queryId, actor, send = sendAcknowledgement) => {
     assertCan(get(), WORKFLOW_ACTION.VERIFY, queryId, actor);
-    return get().applyTransition({
+    get().applyTransition({
       queryId,
       actor,
       event: AUDIT_EVENT.QUERY_REGISTERED,
       patch: { workflowState: WORKFLOW_STATE.FRONT_OFFICE_VERIFICATION },
       details: 'Front Office verified the query details and attachments.',
     });
+    return get().acknowledgeInquirer(queryId, actor, send);
+  },
+
+  /**
+   * The Front Office point-of-contact action, as one click: register the query,
+   * acknowledge the inquirer, forward the enquiry on.
+   *
+   * Composes the existing primitives rather than replacing them — verifyQuery
+   * sets FRONT_OFFICE_VERIFICATION synchronously, which is exactly the state
+   * forwardToOic requires, so no workflow rule changes.
+   */
+  validateAndForward: async (queryId, actor) => {
+    const ack = await get().verifyQuery(queryId, actor);
+
+    // The acknowledgement and the forward are independent obligations: a failed
+    // email to the inquirer must not stop the query reaching the OIC.
+    let forwarded = false;
+    let forwardError = null;
+    try {
+      await get().forwardToOic(queryId, actor);
+      forwarded = true;
+    } catch (error) {
+      forwardError = error?.message || String(error);
+    }
+
+    return {
+      acknowledged: Boolean(ack?.acknowledged),
+      acknowledgementError: ack?.error || null,
+      forwarded,
+      forwardError,
+    };
   },
 
   forwardToOic: async (queryId, actor, forward = forwardQuery) => {

@@ -117,7 +117,9 @@ async function acknowledge(queryId, inquirerAddress, recordAcknowledgement) {
 
 async function verifyAndForward(queryId, actor, verifyQuery, forwardToOic) {
   try {
-    verifyQuery(queryId, actor);
+    // Awaited so the acknowledgement promise settles inside this try. The chain
+    // already acknowledged above, so verifyQuery's own attempt is a no-op.
+    await verifyQuery(queryId, actor);
   } catch {
     return false;
   }

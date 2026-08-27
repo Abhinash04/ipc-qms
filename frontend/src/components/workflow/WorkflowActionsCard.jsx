@@ -43,9 +43,45 @@ export function WorkflowActionsCard() {
   const { queryId, query, currentStep, currentUser, can } = useQueryCase();
   const paths = useRoutePaths();
   const { run, error, clearError } = useWorkflowAction();
-  const verifyQuery = useWorkflowStore((state) => state.verifyQuery);
+  const validateAndForward = useWorkflowStore(
+    (state) => state.validateAndForward,
+  );
   const forwardToOic = useWorkflowStore((state) => state.forwardToOic);
+  const acknowledgeInquirer = useWorkflowStore(
+    (state) => state.acknowledgeInquirer,
+  );
   const [showClarification, setShowClarification] = useState(null);
+  // The query is registered either way; these only report the emails that failed.
+  const [ackError, setAckError] = useState(null);
+  const [forwardError, setForwardError] = useState(null);
+  const [retrying, setRetrying] = useState(false);
+
+  const validate = async () => {
+    setAckError(null);
+    setForwardError(null);
+    const result = await validateAndForward(queryId, currentUser);
+    if (!result.acknowledged) setAckError(result.acknowledgementError);
+    if (!result.forwarded) setForwardError(result.forwardError);
+  };
+
+  const retryAcknowledgement = async () => {
+    setRetrying(true);
+    const result = await acknowledgeInquirer(queryId, currentUser);
+    setRetrying(false);
+    setAckError(result.acknowledged ? null : result.error);
+  };
+
+  const retryForward = async () => {
+    setRetrying(true);
+    try {
+      await forwardToOic(queryId, currentUser);
+      setForwardError(null);
+    } catch (caught) {
+      setForwardError(caught?.message || String(caught));
+    } finally {
+      setRetrying(false);
+    }
+  };
 
   if (!query) return null;
 
@@ -77,20 +113,66 @@ export function WorkflowActionsCard() {
   const isClosed = query.workflowState === WORKFLOW_STATE.CLOSED;
 
   return (
-    <div className="bg-white rounded-3xl border border-slate-200/80 p-6 shadow-sm select-none flex flex-col h-full space-y-5">
+    // No h-full: the card sizes to its actions rather than filling the row.
+    <div className="bg-white rounded-3xl border border-slate-200/80 p-5 shadow-sm select-none flex flex-col space-y-4">
       <div>
         <h2 className="font-heading text-[22px] font-black text-slate-900 m-0">
           Available actions
         </h2>
-        <p className="text-[14.5px] font-medium text-slate-400 m-0 mt-1">
+        {/* <p className="text-[14.5px] font-medium text-slate-400 m-0 mt-1">
           For{" "}
           <span className="font-bold text-slate-700">{currentUser?.name}</span>{" "}
           — actions change with the query&apos;s stage.
-        </p>
+        </p> */}
       </div>
 
       <div className="space-y-3">
         <ActionError message={error} onDismiss={clearError} />
+
+        {/* The verification itself succeeded — only the email did not, so this
+            is a warning rather than the red "Action refused" banner. */}
+        {ackError && (
+          <div
+            role="status"
+            className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-[14px] text-amber-900"
+          >
+            <p className="font-bold m-0">Acknowledgement email not sent</p>
+            <p className="m-0 mt-0.5 text-[13px] font-medium text-amber-800">
+              The query is verified, but the inquirer was not emailed. {ackError}
+            </p>
+            <button
+              type="button"
+              onClick={retryAcknowledgement}
+              disabled={retrying}
+              className="mt-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white px-3.5 py-1.5 text-[12.5px] font-extrabold transition-all cursor-pointer disabled:opacity-60"
+            >
+              {retrying ? "Sending…" : "Retry sending"}
+            </button>
+          </div>
+        )}
+
+        {/* Same treatment for the forward: the query is registered, it just did
+            not reach the Officer-in-Charge yet. */}
+        {forwardError && (
+          <div
+            role="status"
+            className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-[14px] text-amber-900"
+          >
+            <p className="font-bold m-0">Not forwarded to the Officer-in-Charge</p>
+            <p className="m-0 mt-0.5 text-[13px] font-medium text-amber-800">
+              The query is registered, but the enquiry was not forwarded on.{" "}
+              {forwardError}
+            </p>
+            <button
+              type="button"
+              onClick={retryForward}
+              disabled={retrying}
+              className="mt-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white px-3.5 py-1.5 text-[12.5px] font-extrabold transition-all cursor-pointer disabled:opacity-60"
+            >
+              {retrying ? "Forwarding…" : "Retry forwarding"}
+            </button>
+          </div>
+        )}
 
         {isClosed && (
           <p className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-[15px] font-medium text-slate-500 leading-relaxed m-0">
@@ -102,11 +184,11 @@ export function WorkflowActionsCard() {
         {can(WORKFLOW_ACTION.VERIFY) && (
           <button
             type="button"
-            onClick={() => run(() => verifyQuery(queryId, currentUser))}
-            className="w-full py-3.5 px-4 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-[16px] shadow-md shadow-blue-500/20 transition-all cursor-pointer flex items-center justify-center gap-2"
+            onClick={() => run(validate)}
+            className="w-full py-3 px-4 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-[16px] shadow-md shadow-blue-500/20 transition-all cursor-pointer flex items-center justify-center gap-2"
           >
             <Zap className="h-4 w-4" />
-            <span>Verify query details</span>
+            <span>Validate Query</span>
           </button>
         )}
 
@@ -114,7 +196,7 @@ export function WorkflowActionsCard() {
           <button
             type="button"
             onClick={() => run(() => forwardToOic(queryId, currentUser))}
-            className="w-full py-3.5 px-4 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-[16px] shadow-md shadow-indigo-500/20 transition-all cursor-pointer flex items-center justify-center gap-2"
+            className="w-full py-3 px-4 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-[16px] shadow-md shadow-indigo-500/20 transition-all cursor-pointer flex items-center justify-center gap-2"
           >
             <ArrowRight className="h-4 w-4" />
             <span>Forward to Officer-in-Charge</span>
@@ -129,7 +211,7 @@ export function WorkflowActionsCard() {
           >
             <button
               type="button"
-              className="w-full py-3.5 px-4 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-extrabold text-[16px] transition-all cursor-pointer flex items-center justify-center gap-2"
+              className="w-full py-3 px-4 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-extrabold text-[16px] transition-all cursor-pointer flex items-center justify-center gap-2"
             >
               <span>{link.label}</span>
               <ArrowRight className="h-4 w-4 text-slate-400" />
@@ -142,7 +224,7 @@ export function WorkflowActionsCard() {
           !can(WORKFLOW_ACTION.FORWARD) &&
           links.length === 0 && (
             <div className="rounded-2xl border border-slate-200/90 bg-slate-50/80 p-4 text-[15px] font-medium text-slate-500 leading-relaxed">
-              No actions available to you at this stage. Switch user in the header to act as the role this query is waiting on.
+              No actions available to you at this stage.
             </div>
           )}
 
