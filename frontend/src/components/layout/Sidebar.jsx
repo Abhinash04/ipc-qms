@@ -90,7 +90,7 @@ export function Sidebar() {
         initial={false}
         animate={{ width: open ? WIDTH_OPEN : WIDTH_CLOSED }}
         transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
-        className="relative z-20 flex h-screen shrink-0 flex-col overflow-hidden p-3 select-none"
+        className="hidden lg:flex relative z-20 h-screen shrink-0 flex-col overflow-hidden p-3 select-none"
       >
         <div className="relative flex h-full w-full flex-col overflow-hidden rounded-[28px] border border-white/80 bg-[linear-gradient(to_top,#accbee_0%,#e7f0fd_100%)] text-slate-900 shadow-[0_16px_40px_rgba(172,203,238,0.3)] backdrop-blur-2xl">
           <div className="pointer-events-none absolute inset-0 z-0 opacity-40">
@@ -111,7 +111,7 @@ export function Sidebar() {
                 <img
                   src="/anuvadini_new_logo 2.png"
                   alt="Anuvadini Logo"
-                  className="object-contain mix-blend-multiply transition-all filter drop-shadow-xs w-52.5 sm:w-58.75 h-18.75 sm:h-21.25 scale-110"
+                  className="object-contain mix-blend-multiply transition-all filter drop-shadow-xs w-48 sm:w-52 h-16 sm:h-18 pr-2"
                 />
               ) : (
                 <img

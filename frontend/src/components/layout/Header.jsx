@@ -55,6 +55,7 @@ export function Header() {
 
   const hoverTimerRef = useRef(null);
   const bellRef = useRef(null);
+  const notifRef = useRef(null);
 
   const userNotifications = notifications.filter(
     (n) => n.recipientRole === currentUser?.role,
@@ -64,9 +65,15 @@ export function Header() {
   const updatePopoverPos = () => {
     if (bellRef.current) {
       const rect = bellRef.current.getBoundingClientRect();
+      const idealRight = Math.max(16, window.innerWidth - rect.right);
+      const popoverWidth = window.innerWidth < 640 ? 336 : 384; 
+      
+      const maxRight = window.innerWidth - popoverWidth - 16;
+      const actualRight = Math.min(idealRight, Math.max(16, maxRight));
+
       setPopoverPos({
         top: rect.bottom + 10,
-        right: Math.max(16, window.innerWidth - rect.right),
+        right: actualRight,
       });
     }
   };
@@ -84,13 +91,26 @@ export function Header() {
   };
 
   useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (
+        notifRef.current &&
+        !notifRef.current.contains(event.target) &&
+        bellRef.current &&
+        !bellRef.current.contains(event.target)
+      ) {
+        setIsNotifOpen(false);
+      }
+    };
+
     if (isNotifOpen) {
       updatePopoverPos();
       window.addEventListener("resize", updatePopoverPos);
       window.addEventListener("scroll", updatePopoverPos);
+      document.addEventListener("mousedown", handleClickOutside);
       return () => {
         window.removeEventListener("resize", updatePopoverPos);
         window.removeEventListener("scroll", updatePopoverPos);
+        document.removeEventListener("mousedown", handleClickOutside);
       };
     }
   }, [isNotifOpen]);
@@ -121,11 +141,11 @@ export function Header() {
   };
 
   return (
-    <header className="relative z-30 px-5 pt-5 lg:px-7">
+    <header className="relative z-30 px-3 pt-4 sm:px-5 sm:pt-5 lg:px-7">
       <div className="pointer-events-none absolute inset-x-10 top-4 h-20 rounded-full bg-[radial-gradient(circle,rgba(124,77,255,0.12)_0%,rgba(52,120,246,0.1)_40%,rgba(255,255,255,0)_75%)] blur-2xl" />
-      <div className="glass-panel aurora-panel flex min-h-20 items-center justify-between rounded-[28px] px-5 py-3">
-        <div className="flex items-center gap-6">
-          <IpcLogo size="md" variant="light" />
+      <div className="glass-panel aurora-panel flex flex-col lg:flex-row min-h-20 lg:items-center justify-between rounded-[24px] sm:rounded-[28px] px-3 sm:px-5 py-3 gap-4 lg:gap-0">
+        <div className="flex flex-col sm:flex-row lg:items-center gap-3 sm:gap-6 w-full lg:w-auto">
+          <IpcLogo size="md" variant="light" className="w-full sm:w-auto" />
 
           {persistenceError && (
             <div className="hidden xl:flex items-center gap-3 pl-4 border-l border-white/50">
@@ -139,12 +159,8 @@ export function Header() {
           )}
         </div>
 
-        <div className="flex items-center gap-3">
-          <div
-            className="relative"
-            onMouseEnter={handleMouseEnter}
-            onMouseLeave={handleMouseLeave}
-          >
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3 w-full lg:w-auto justify-end sm:justify-start lg:justify-end">
+          <div className="relative">
             <button
               ref={bellRef}
               onClick={() => setIsNotifOpen((prev) => !prev)}
@@ -215,15 +231,14 @@ export function Header() {
       {isNotifOpen &&
         createPortal(
           <div
+            ref={notifRef}
             style={{
               position: "fixed",
               top: `${popoverPos.top}px`,
               right: `${popoverPos.right}px`,
               zIndex: 999999,
             }}
-            onMouseEnter={handleMouseEnter}
-            onMouseLeave={handleMouseLeave}
-            className="w-84 sm:w-96 rounded-2xl border border-slate-200/90 bg-white/98 p-4.5 shadow-[0_25px_80px_rgba(15,23,42,0.35)] backdrop-blur-3xl transition-all animate-in fade-in zoom-in-95 duration-150 select-none"
+            className="w-84 sm:w-96 max-w-[calc(100vw-32px)] rounded-2xl border border-slate-200/90 bg-white/98 p-4.5 shadow-[0_25px_80px_rgba(15,23,42,0.35)] backdrop-blur-3xl transition-all animate-in fade-in zoom-in-95 duration-150 select-none"
           >
             {/* Popover Header */}
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">

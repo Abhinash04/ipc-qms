@@ -13,7 +13,7 @@ import {
 
 export function HeroBannerCard() {
   return (
-    <div className="relative overflow-hidden rounded-[30px] border border-white/90 bg-linear-to-r from-white/95 via-slate-50/90 to-blue-50/85 p-6 sm:p-7 shadow-[0_12px_36px_rgba(37,99,235,0.08)] backdrop-blur-xl mb-6 group">
+    <div className="relative overflow-hidden rounded-[24px] sm:rounded-[30px] border border-white/90 bg-linear-to-r from-white/95 via-slate-50/90 to-blue-50/85 p-5 sm:p-7 shadow-[0_12px_36px_rgba(37,99,235,0.08)] backdrop-blur-xl mb-6 group">
       <motion.div
         animate={{
           scale: [1, 1.2, 1],
@@ -39,9 +39,9 @@ export function HeroBannerCard() {
               Indian Pharmacopoeia Commission — QMS Portal
             </span>
           </div>
-          <h1 className="font-heading text-2xl sm:text-3xl lg:text-[34px] font-black tracking-tight text-slate-900 leading-tight">
+          <h1 className="font-heading text-2xl sm:text-3xl lg:text-[34px] font-black tracking-tight text-slate-900 leading-tight break-words whitespace-normal">
             IPC QMS —{" "}
-            <span className="bg-linear-to-r from-blue-600 via-indigo-600 to-purple-600 bg-clip-text text-transparent">
+            <span className="bg-linear-to-r from-blue-600 via-indigo-600 to-purple-600 bg-clip-text text-transparent block sm:inline">
               Query Management System
             </span>
           </h1>
@@ -66,8 +66,8 @@ export function HeroBannerCard() {
           </div>
         </div>
 
-        <div className="shrink-0 pt-3 lg:pt-0 self-center">
-          <div className="relative flex items-center justify-center p-6 sm:p-7 rounded-4xl bg-linear-to-br from-white/80 via-blue-50/70 to-indigo-50/80 border border-white/90 shadow-xl backdrop-blur-2xl">
+        <div className="shrink-0 pt-3 lg:pt-0 self-center lg:self-auto w-full lg:w-auto">
+          <div className="relative flex flex-col sm:flex-row items-center justify-center p-5 sm:p-7 rounded-[24px] sm:rounded-4xl bg-linear-to-br from-white/80 via-blue-50/70 to-indigo-50/80 border border-white/90 shadow-xl backdrop-blur-2xl">
             <motion.div
               animate={{ rotate: 360 }}
               transition={{ duration: 15, repeat: Infinity, ease: "linear" }}
@@ -113,8 +113,8 @@ export function HeroBannerCard() {
                 </motion.div>
               </motion.div>
 
-              <div className="space-y-1.5 min-w-42.5">
-                <div className="flex items-center gap-2">
+              <div className="space-y-1.5 min-w-0 flex-1 text-center sm:text-left mt-3 sm:mt-0">
+                <div className="flex items-center justify-center sm:justify-start gap-2">
                   <span className="relative flex h-2.5 w-2.5">
                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
                     <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-blue-600"></span>
@@ -124,12 +124,12 @@ export function HeroBannerCard() {
                   </span>
                 </div>
 
-                <h4 className="text-sm font-black text-slate-900 leading-snug flex items-center gap-1.5">
+                <h4 className="text-sm font-black text-slate-900 leading-snug flex items-center justify-center sm:justify-start gap-1.5">
                   <span>Digital Query Ingestion</span>
                   <Send className="h-3.5 w-3.5 text-indigo-600 animate-pulse" />
                 </h4>
 
-                <div className="flex items-center gap-1.5 pt-0.5">
+                <div className="flex flex-wrap justify-center sm:justify-start items-center gap-1.5 pt-0.5">
                   <span className="inline-flex items-center gap-1 text-[10.5px] font-bold text-slate-600 bg-white/90 px-2.5 py-0.5 rounded-full border border-slate-200/80 shadow-2xs">
                     <Inbox className="h-3 w-3 text-indigo-500" /> Auto-synced
                   </span>

@@ -74,7 +74,7 @@ export function DashboardQueryList({
         </div>
 
         {items.length > 0 && (
-          <div className="grid grid-cols-[140px_1fr_180px_120px] gap-3 px-5 py-3 bg-slate-50/80 border border-slate-100 rounded-2xl text-[11px] font-extrabold text-slate-400 tracking-wider uppercase mb-3">
+          <div className="hidden md:grid grid-cols-[140px_1fr_180px_120px] gap-3 px-5 py-3 bg-slate-50/80 border border-slate-100 rounded-2xl text-[11px] font-extrabold text-slate-400 tracking-wider uppercase mb-3">
             <span>Query ID</span>
             <span>Subject / Enquiry</span>
             <span className="text-center">Status</span>
@@ -126,37 +126,50 @@ export function DashboardQueryList({
                 <Link
                   key={query.queryId}
                   to={getQueryDetailPath(query.queryId)}
-                  className="group relative grid grid-cols-[140px_1fr_180px_120px] items-center gap-3 bg-white rounded-2xl border border-slate-200/70 p-3.5 shadow-2xs hover:shadow-md hover:border-purple-300 transition-all duration-200 cursor-pointer overflow-hidden"
+                  className="group relative flex flex-col md:grid md:grid-cols-[140px_1fr_180px_120px] md:items-center gap-3 bg-white rounded-2xl border border-slate-200/70 p-3.5 shadow-2xs hover:shadow-md hover:border-purple-300 transition-all duration-200 cursor-pointer overflow-hidden"
                 >
                   <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-linear-to-b from-purple-500 to-indigo-600 rounded-l-2xl" />
-                  <div className="flex items-center gap-2.5 pl-2 min-w-0">
-                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-purple-50 text-purple-600 border border-purple-100/60">
-                      <FileText className="h-4.5 w-4.5" strokeWidth={2} />
+                  
+                  <div className="flex items-center justify-between min-w-0 md:justify-start w-full md:w-auto pl-2">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-purple-50 text-purple-600 border border-purple-100/60">
+                        <FileText className="h-4.5 w-4.5" strokeWidth={2} />
+                      </div>
+                      <span className="font-heading text-[13px] font-black text-purple-700 group-hover:underline truncate">
+                        {query.queryId}
+                      </span>
                     </div>
-                    <span className="font-heading text-[13px] font-black text-purple-700 group-hover:underline truncate">
-                      {query.queryId}
-                    </span>
+                    <div className="md:hidden flex shrink-0">
+                      <span
+                        className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[9.5px] font-extrabold border shadow-2xs ${getPriorityStyle(query.priority)}`}
+                      >
+                        {query.priority || "NORMAL"}
+                      </span>
+                    </div>
                   </div>
-                  <div className="min-w-0 px-1">
+                  
+                  <div className="min-w-0 px-2 md:px-1 w-full md:w-auto">
                     <div className="text-[13.5px] font-extrabold text-slate-900 truncate group-hover:text-purple-700 transition-colors">
                       {query.subject || "(No Subject)"}
                     </div>
-                    <div className="flex items-center gap-2 text-[11.5px] font-medium text-slate-400 mt-0.5">
-                      <span className="inline-flex items-center gap-1">
+                    <div className="flex items-center gap-2 text-[11.5px] font-medium text-slate-400 mt-0.5 flex-wrap">
+                      <span className="inline-flex items-center gap-1 shrink-0">
                         <Mail className="h-3 w-3 text-purple-500" />
                         Received {formattedDate}
                       </span>
-                      <span>•</span>
-                      <span>{formattedTime}</span>
+                      <span className="shrink-0">•</span>
+                      <span className="shrink-0">{formattedTime}</span>
                     </div>
                   </div>
-                  <div className="flex justify-center">
+
+                  <div className="flex px-2 md:px-0 md:justify-center w-full md:w-auto mt-1 md:mt-0">
                     <span className="inline-flex items-center gap-1.5 rounded-full bg-purple-50/90 px-3.5 py-1 text-[11px] font-extrabold text-purple-700 border border-purple-200/80 shadow-2xs truncate max-w-full">
                       <Clock className="h-3.5 w-3.5 text-purple-600 shrink-0" />
                       <span className="truncate">{statusText}</span>
                     </span>
                   </div>
-                  <div className="flex justify-center">
+
+                  <div className="hidden md:flex justify-center">
                     <span
                       className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[11px] font-extrabold border shadow-2xs ${getPriorityStyle(query.priority)}`}
                     >
