@@ -1,28 +1,43 @@
-import { useState, useRef, useEffect } from 'react';
-import { createPortal } from 'react-dom';
-import { useNavigate } from 'react-router-dom';
-import { RotateCcwIcon, Bell, CheckCircle2, Inbox, Clock, Tag, X, ExternalLink } from 'lucide-react';
+import { useState, useRef, useEffect } from "react";
+import { createPortal } from "react-dom";
+import { useNavigate } from "react-router-dom";
+import {
+  RotateCcwIcon,
+  Bell,
+  CheckCircle2,
+  Inbox,
+  Clock,
+  Tag,
+  X,
+  ExternalLink,
+} from "lucide-react";
 
-import { roleHome, sectionPath, buildPath } from '@/constants/routePaths';
-import { SECTION } from '@/constants/routeSections';
-import { useAuthStore } from '@/store/useAuthStore';
-import { useWorkflowStore } from '@/store/useWorkflowStore';
-import { ROLE_LABELS } from '@/constants/roles';
-import { MOCK_USERS, findUserById } from '@/constants/mockUsers';
-import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select';
-import { IpcLogo } from '@/components/common/IpcLogo';
+import { roleHome, sectionPath, buildPath } from "@/constants/routePaths";
+import { SECTION } from "@/constants/routeSections";
+import { useAuthStore } from "@/store/useAuthStore";
+import { useWorkflowStore } from "@/store/useWorkflowStore";
+import { ROLE_LABELS } from "@/constants/roles";
+import { MOCK_USERS, findUserById } from "@/constants/mockUsers";
+import {
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectItem,
+} from "@/components/ui/select";
+import { IpcLogo } from "@/components/common/IpcLogo";
 
 const SWITCHABLE_USERS = MOCK_USERS;
 
 function initials(name) {
   return (
-    String(name || '')
+    String(name || "")
       .trim()
       .split(/\s+/)
       .slice(0, 2)
       .map((word) => word[0])
-      .join('')
-      .toUpperCase() || '?'
+      .join("")
+      .toUpperCase() || "?"
   );
 }
 
@@ -37,11 +52,13 @@ export function Header() {
   const [isNotifOpen, setIsNotifOpen] = useState(false);
   const [activeModalNotif, setActiveModalNotif] = useState(null);
   const [popoverPos, setPopoverPos] = useState({ top: 90, right: 24 });
-  
+
   const hoverTimerRef = useRef(null);
   const bellRef = useRef(null);
 
-  const userNotifications = notifications.filter((n) => n.recipientRole === currentUser?.role);
+  const userNotifications = notifications.filter(
+    (n) => n.recipientRole === currentUser?.role,
+  );
   const notifCount = userNotifications.length;
 
   const updatePopoverPos = () => {
@@ -69,11 +86,11 @@ export function Header() {
   useEffect(() => {
     if (isNotifOpen) {
       updatePopoverPos();
-      window.addEventListener('resize', updatePopoverPos);
-      window.addEventListener('scroll', updatePopoverPos);
+      window.addEventListener("resize", updatePopoverPos);
+      window.addEventListener("scroll", updatePopoverPos);
       return () => {
-        window.removeEventListener('resize', updatePopoverPos);
-        window.removeEventListener('scroll', updatePopoverPos);
+        window.removeEventListener("resize", updatePopoverPos);
+        window.removeEventListener("scroll", updatePopoverPos);
       };
     }
   }, [isNotifOpen]);
@@ -87,8 +104,13 @@ export function Header() {
     setIsNotifOpen(false);
     if (notif.queryId && currentUser?.role) {
       try {
-        const queryDetailPath = sectionPath(currentUser.role, SECTION.QUERY_DETAIL);
-        const targetPath = buildPath(queryDetailPath, { queryId: notif.queryId });
+        const queryDetailPath = sectionPath(
+          currentUser.role,
+          SECTION.QUERY_DETAIL,
+        );
+        const targetPath = buildPath(queryDetailPath, {
+          queryId: notif.queryId,
+        });
         navigate(targetPath);
       } catch {
         setActiveModalNotif(notif);
@@ -107,7 +129,10 @@ export function Header() {
 
           {persistenceError && (
             <div className="hidden xl:flex items-center gap-3 pl-4 border-l border-white/50">
-              <span className="glass-pill inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[11.5px] font-bold bg-red-50 border-red-200 text-red-700" title={persistenceError}>
+              <span
+                className="glass-pill inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[11.5px] font-bold bg-red-50 border-red-200 text-red-700"
+                title={persistenceError}
+              >
                 Storage unavailable
               </span>
             </div>
@@ -115,7 +140,6 @@ export function Header() {
         </div>
 
         <div className="flex items-center gap-3">
-          {/* Header Notification Bell Icon */}
           <div
             className="relative"
             onMouseEnter={handleMouseEnter}
@@ -147,27 +171,38 @@ export function Header() {
           </button>
 
           <div className="flex items-center gap-2.5">
-            <Select value={currentUser?.id || ''} onValueChange={switchUser}>
+            <Select value={currentUser?.id || ""} onValueChange={switchUser}>
               <SelectTrigger className="glass-control flex h-auto items-center gap-2.5 rounded-full px-3.5 py-1.5 text-[12.5px] font-bold text-slate-800 transition-all hover:-translate-y-0.5 focus:ring-0 focus:ring-offset-0 cursor-pointer [&>svg]:text-purple-600">
                 <SelectValue>
                   <div className="flex items-center gap-2">
                     <div className="flex h-6 w-6 items-center justify-center rounded-full bg-[linear-gradient(135deg,#7C4DFF,#3478F6)] text-[10.5px] font-black text-white shadow-[0_8px_16px_rgba(124,77,255,0.3)]">
                       {initials(currentUser?.name)}
                     </div>
-                    <span className="font-extrabold text-slate-800">{currentUser?.name}</span>
-                    <span className="hidden lg:inline-block text-slate-400 font-medium">— {ROLE_LABELS[currentUser?.role]}</span>
+                    <span className="font-extrabold text-slate-800">
+                      {currentUser?.name}
+                    </span>
+                    <span className="hidden lg:inline-block text-slate-400 font-medium">
+                      — {ROLE_LABELS[currentUser?.role]}
+                    </span>
                   </div>
                 </SelectValue>
               </SelectTrigger>
               <SelectContent className="glass-panel w-77.5 max-h-96 rounded-2xl p-1.5 shadow-xl z-50">
                 {SWITCHABLE_USERS.map((user) => (
-                  <SelectItem key={user.id} value={user.id} className="rounded-xl px-3 py-2.5 cursor-pointer transition-colors hover:bg-white/80">
+                  <SelectItem
+                    key={user.id}
+                    value={user.id}
+                    className="rounded-xl px-3 py-2.5 cursor-pointer transition-colors hover:bg-white/80"
+                  >
                     <div className="flex items-center gap-3">
                       <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[#f3e8ff] text-status-purple-fg text-[11px] font-extrabold shrink-0 border border-purple-200/50">
                         {initials(user.name)}
                       </span>
                       <span className="text-[13px] font-extrabold text-slate-800 leading-tight">
-                        {user.name} <span className="font-medium text-slate-400">— {ROLE_LABELS[user.role]}</span>
+                        {user.name}{" "}
+                        <span className="font-medium text-slate-400">
+                          — {ROLE_LABELS[user.role]}
+                        </span>
                       </span>
                     </div>
                   </SelectItem>
@@ -177,13 +212,11 @@ export function Header() {
           </div>
         </div>
       </div>
-
-      {/* Hover Notification Dropdown Popover via React Portal directly into document.body */}
       {isNotifOpen &&
         createPortal(
           <div
             style={{
-              position: 'fixed',
+              position: "fixed",
               top: `${popoverPos.top}px`,
               right: `${popoverPos.right}px`,
               zIndex: 999999,
@@ -225,9 +258,12 @@ export function Header() {
                   <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-50 border border-slate-100 text-slate-300">
                     <Inbox className="h-5.5 w-5.5" />
                   </div>
-                  <p className="text-xs font-bold text-slate-600">No new notifications</p>
-                  <p className="text-[11px] text-slate-400 max-w-[220px]">
-                    All incoming query updates for {ROLE_LABELS[currentUser?.role]} will appear here.
+                  <p className="text-xs font-bold text-slate-600">
+                    No new notifications
+                  </p>
+                  <p className="text-[11px] text-slate-400 max-w-55">
+                    All incoming query updates for{" "}
+                    {ROLE_LABELS[currentUser?.role]} will appear here.
                   </p>
                 </div>
               ) : (
@@ -243,11 +279,11 @@ export function Header() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between gap-1">
                         <span className="text-[12.5px] font-bold text-slate-900 truncate group-hover:text-indigo-600 transition-colors">
-                          {notif.title || `Query ${notif.queryId || 'Update'}`}
+                          {notif.title || `Query ${notif.queryId || "Update"}`}
                         </span>
                         <div className="flex items-center gap-1 text-[10px] font-semibold text-slate-400 shrink-0">
                           <Clock className="h-3 w-3 text-slate-400" />
-                          <span>{notif.time || 'Just now'}</span>
+                          <span>{notif.time || "Just now"}</span>
                         </div>
                       </div>
                       <p className="text-[11.5px] font-medium text-slate-600 line-clamp-2 mt-1 leading-snug">
@@ -271,13 +307,11 @@ export function Header() {
               )}
             </div>
           </div>,
-          document.body
+          document.body,
         )}
-
-      {/* Notification Detail Overlay Modal (if clicked non-query notification) */}
       {activeModalNotif &&
         createPortal(
-          <div className="fixed inset-0 z-[999999] flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4 animate-in fade-in duration-200 select-none">
+          <div className="fixed inset-0 z-999999 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4 animate-in fade-in duration-200 select-none">
             <div className="w-full max-w-md rounded-2xl border border-slate-200/90 bg-white p-6 shadow-2xl space-y-4">
               <div className="flex items-center justify-between pb-3 border-b border-slate-100">
                 <div className="flex items-center gap-2.5">
@@ -288,7 +322,9 @@ export function Header() {
                     <h3 className="font-heading text-sm font-extrabold text-slate-900">
                       Notification Details
                     </h3>
-                    <p className="text-xs text-slate-400">{activeModalNotif.time || 'Recent Alert'}</p>
+                    <p className="text-xs text-slate-400">
+                      {activeModalNotif.time || "Recent Alert"}
+                    </p>
                   </div>
                 </div>
                 <button
@@ -301,7 +337,8 @@ export function Header() {
 
               <div className="space-y-2">
                 <h4 className="text-sm font-bold text-slate-900">
-                  {activeModalNotif.title || `Notification ${activeModalNotif.queryId || ''}`}
+                  {activeModalNotif.title ||
+                    `Notification ${activeModalNotif.queryId || ""}`}
                 </h4>
                 <p className="text-xs leading-relaxed text-slate-600 bg-slate-50 p-3.5 rounded-xl border border-slate-100 font-medium">
                   {activeModalNotif.message || activeModalNotif.text}
@@ -318,7 +355,7 @@ export function Header() {
               </div>
             </div>
           </div>,
-          document.body
+          document.body,
         )}
     </header>
   );

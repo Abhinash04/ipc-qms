@@ -1,25 +1,37 @@
-import { useState } from 'react';
-import { useQuery, useMutation } from '@tanstack/react-query';
-import { Link } from 'react-router-dom';
-import { SendIcon, MailIcon, CheckCircle2Icon, AlertCircleIcon, InfoIcon, ShieldCheckIcon, ClockIcon } from 'lucide-react';
-import { Breadcrumb } from '@/components/common/Breadcrumb';
-import { PageHeader } from '@/components/common/PageHeader';
-import { useRoutePaths } from '@/hooks/useRoutePaths';
-import { buildPath } from '@/constants/routePaths';
-import { useAuthStore } from '@/store/useAuthStore';
-import { useWorkflowStore } from '@/store/useWorkflowStore';
-import { fetchEmailConfig, sendEnquiry } from '@/services/api/mailboxService';
-import { cn } from '@/utils/cn';
+import { useState } from "react";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { Link } from "react-router-dom";
+import {
+  SendIcon,
+  MailIcon,
+  CheckCircle2Icon,
+  AlertCircleIcon,
+  InfoIcon,
+  ShieldCheckIcon,
+  ClockIcon,
+} from "lucide-react";
+import { Breadcrumb } from "@/components/common/Breadcrumb";
+import { PageHeader } from "@/components/common/PageHeader";
+import { useRoutePaths } from "@/hooks/useRoutePaths";
+import { buildPath } from "@/constants/routePaths";
+import { useAuthStore } from "@/store/useAuthStore";
+import { useWorkflowStore } from "@/store/useWorkflowStore";
+import { fetchEmailConfig, sendEnquiry } from "@/services/api/mailboxService";
+import { cn } from "@/utils/cn";
 
 export function ComposeEnquiryPage() {
   const paths = useRoutePaths();
   const currentUser = useAuthStore((state) => state.currentUser);
   const raiseEnquiry = useWorkflowStore((state) => state.raiseEnquiry);
-  const [subject, setSubject] = useState('');
-  const [body, setBody] = useState('');
+  const [subject, setSubject] = useState("");
+  const [body, setBody] = useState("");
   const [raisedQueryId, setRaisedQueryId] = useState(null);
 
-  const config = useQuery({ queryKey: ['emailConfig'], queryFn: fetchEmailConfig, retry: false });
+  const config = useQuery({
+    queryKey: ["emailConfig"],
+    queryFn: fetchEmailConfig,
+    retry: false,
+  });
   const send = useMutation({
     mutationFn: async () => {
       const sent = await sendEnquiry({ subject: subject.trim(), body });
@@ -28,36 +40,36 @@ export function ComposeEnquiryPage() {
         body,
         inquirer: {
           id: currentUser?.id || null,
-          name: currentUser?.name || '',
-          email: currentUser?.email || '',
+          name: currentUser?.name || "",
+          email: currentUser?.email || "",
         },
         to: config.data?.ipcQueryEmail || null,
         providerMessageId: sent?.providerMessageId || null,
-        // Deliberately not storing sent.providerThreadId: a thread id is private
-        // to the mailbox that produced it, and this one is the inquirer's. Front
-        // Office cannot reply into it. The mailbox copy, when claimed, brings the
-        // Front Office thread id that everyone downstream can actually use.
       });
       return { ...sent, queryId: raised.queryId };
     },
     onSuccess: (result) => {
       setRaisedQueryId(result.queryId);
-      setSubject('');
-      setBody('');
+      setSubject("");
+      setBody("");
     },
   });
 
   const from = config.data
     ? `${config.data.inquirer.name} <${config.data.inquirer.email}>`
-    : 'Loading…';
-  const to = config.data?.ipcQueryEmail || 'Loading…';
+    : "Loading…";
+  const to = config.data?.ipcQueryEmail || "Loading…";
   const transport = config.data?.transport;
-  const canSend = Boolean(config.data) && subject.trim() !== '' && body.trim() !== '';
+  const canSend =
+    Boolean(config.data) && subject.trim() !== "" && body.trim() !== "";
 
   return (
     <div className="space-y-5">
       <Breadcrumb
-        items={[{ label: 'Dashboard', path: paths.DASHBOARD }, { label: 'Raise Enquiry' }]}
+        items={[
+          { label: "Dashboard", path: paths.DASHBOARD },
+          { label: "Raise Enquiry" },
+        ]}
       />
       <PageHeader
         title="Raise Enquiry"
@@ -70,54 +82,69 @@ export function ComposeEnquiryPage() {
           <div>
             <p className="font-bold text-red-900">Backend unreachable</p>
             <p className="mt-0.5 text-red-700">
-              Could not load the email configuration. Start the backend (npm start in /backend) and reload this page.
+              Could not load the email configuration. Start the backend (npm
+              start in /backend) and reload this page.
             </p>
           </div>
         </div>
       )}
 
-      {transport === 'mock' && (
+      {transport === "mock" && (
         <div className="rounded-xl border border-blue-200 bg-blue-50/90 p-4 text-sm text-blue-900 shadow-2xs flex items-start gap-3">
           <InfoIcon className="h-5 w-5 text-blue-600 shrink-0 mt-0.5" />
           <div>
-            <p className="font-bold text-blue-950">Mock transport active — no mail leaves this machine</p>
+            <p className="font-bold text-blue-950">
+              Mock transport active — no mail leaves this machine
+            </p>
             <p className="mt-0.5 text-blue-800">
-              The enquiry is delivered straight into the mock IPC mailbox ({to}). Nothing is sent over the internet, and that address is a reserved test domain that cannot receive real mail.
+              The enquiry is delivered straight into the mock IPC mailbox ({to}
+              ). Nothing is sent over the internet, and that address is a
+              reserved test domain that cannot receive real mail.
             </p>
           </div>
         </div>
       )}
 
-      {transport === 'gmail' && (
+      {transport === "gmail" && (
         <div className="rounded-xl border border-amber-200 bg-amber-50/90 p-4 text-sm text-amber-900 shadow-2xs flex items-start gap-3">
           <ShieldCheckIcon className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
           <div>
-            <p className="font-bold text-amber-950">Gmail transport active — this sends a real email</p>
+            <p className="font-bold text-amber-950">
+              Gmail transport active — this sends a real email
+            </p>
             <p className="mt-0.5 text-amber-800">
-              The message is sent from {from} through Gmail and will appear in that account&apos;s Sent folder.
+              The message is sent from {from} through Gmail and will appear in
+              that account&apos;s Sent folder.
             </p>
           </div>
         </div>
       )}
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        {/* Main Compose Form Container */}
         <div className="lg:col-span-2">
           <div className="rounded-[20px] border border-slate-200/90 bg-white p-6 sm:p-7 shadow-[0_4px_20px_rgba(0,0,0,0.03)] space-y-6">
             <div className="flex items-center gap-3 pb-4.5 border-b border-slate-100">
-              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-white shadow-[0_6px_16px_rgba(37,99,235,0.3)]">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-linear-to-tr from-blue-600 to-indigo-600 text-white shadow-[0_6px_16px_rgba(37,99,235,0.3)]">
                 <MailIcon className="h-5.5 w-5.5 text-white" />
               </div>
               <div>
-                <h2 className="text-lg font-extrabold text-slate-900 leading-tight tracking-tight">New enquiry</h2>
-                <p className="text-xs font-medium text-slate-500 mt-0.5">Fill in the subject and message details to submit a new enquiry case.</p>
+                <h2 className="text-lg font-extrabold text-slate-900 leading-tight tracking-tight">
+                  New enquiry
+                </h2>
+                <p className="text-xs font-medium text-slate-500 mt-0.5">
+                  Fill in the subject and message details to submit a new
+                  enquiry case.
+                </p>
               </div>
             </div>
 
             <div className="space-y-4.5">
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div className="space-y-1.5">
-                  <label htmlFor="enquiry-from" className="text-[11.5px] font-bold text-slate-600 uppercase tracking-wider">
+                  <label
+                    htmlFor="enquiry-from"
+                    className="text-[11.5px] font-bold text-slate-600 uppercase tracking-wider"
+                  >
                     From
                   </label>
                   <div className="relative">
@@ -131,7 +158,10 @@ export function ComposeEnquiryPage() {
                 </div>
 
                 <div className="space-y-1.5">
-                  <label htmlFor="enquiry-to" className="text-[11.5px] font-bold text-slate-600 uppercase tracking-wider">
+                  <label
+                    htmlFor="enquiry-to"
+                    className="text-[11.5px] font-bold text-slate-600 uppercase tracking-wider"
+                  >
                     To
                   </label>
                   <div className="relative">
@@ -146,7 +176,10 @@ export function ComposeEnquiryPage() {
               </div>
 
               <div className="space-y-1.5">
-                <label htmlFor="enquiry-subject" className="text-[11.5px] font-bold text-slate-600 uppercase tracking-wider">
+                <label
+                  htmlFor="enquiry-subject"
+                  className="text-[11.5px] font-bold text-slate-600 uppercase tracking-wider"
+                >
                   Subject
                 </label>
                 <input
@@ -159,7 +192,10 @@ export function ComposeEnquiryPage() {
               </div>
 
               <div className="space-y-1.5">
-                <label htmlFor="enquiry-body" className="text-[11.5px] font-bold text-slate-600 uppercase tracking-wider">
+                <label
+                  htmlFor="enquiry-body"
+                  className="text-[11.5px] font-bold text-slate-600 uppercase tracking-wider"
+                >
                   Message
                 </label>
                 <textarea
@@ -180,17 +216,17 @@ export function ComposeEnquiryPage() {
                   className={cn(
                     "inline-flex items-center justify-center gap-2 rounded-xl px-6.5 py-3 text-sm font-bold text-white transition-all duration-200 shadow-md",
                     canSend && !send.isPending
-                      ? "bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-blue-500/25 hover:scale-[1.01] active:scale-[0.99] cursor-pointer"
-                      : "bg-slate-300 text-slate-500 cursor-not-allowed shadow-none"
+                      ? "bg-linear-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-blue-500/25 hover:scale-[1.01] active:scale-[0.99] cursor-pointer"
+                      : "bg-slate-300 text-slate-500 cursor-not-allowed shadow-none",
                   )}
                 >
                   <SendIcon className="h-4 w-4" aria-hidden="true" />
-                  <span>{send.isPending ? 'Sending…' : 'Send enquiry'}</span>
+                  <span>{send.isPending ? "Sending…" : "Send enquiry"}</span>
                 </button>
 
                 {send.isError && (
                   <p className="text-xs font-semibold text-rose-600">
-                    Send failed: {send.error?.message || 'unknown error'}
+                    Send failed: {send.error?.message || "unknown error"}
                   </p>
                 )}
               </div>
@@ -205,7 +241,9 @@ export function ComposeEnquiryPage() {
               <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-indigo-50 border border-indigo-100 text-indigo-600">
                 <ClockIcon className="h-4.5 w-4.5" />
               </div>
-              <h2 className="text-sm font-bold text-slate-900">What happens next</h2>
+              <h2 className="text-sm font-bold text-slate-900">
+                What happens next
+              </h2>
             </div>
 
             <div className="space-y-4 text-xs leading-relaxed text-slate-600">
@@ -217,16 +255,20 @@ export function ComposeEnquiryPage() {
                   </div>
                   {raisedQueryId && (
                     <p className="text-emerald-800">
-                      Your case is{' '}
+                      Your case is{" "}
                       {paths.QUERY_DETAIL ? (
                         <Link
-                          to={buildPath(paths.QUERY_DETAIL, { queryId: raisedQueryId })}
+                          to={buildPath(paths.QUERY_DETAIL, {
+                            queryId: raisedQueryId,
+                          })}
                           className="font-bold text-emerald-950 underline hover:text-emerald-700"
                         >
                           {raisedQueryId}
                         </Link>
                       ) : (
-                        <span className="font-bold text-emerald-950">{raisedQueryId}</span>
+                        <span className="font-bold text-emerald-950">
+                          {raisedQueryId}
+                        </span>
                       )}
                       . It is already visible on your dashboard.
                     </p>
@@ -242,7 +284,11 @@ export function ComposeEnquiryPage() {
                       1
                     </div>
                     <p className="text-slate-600 leading-relaxed">
-                      <strong className="font-semibold text-slate-900">Instant Query Creation:</strong> Your enquiry opens a Query Case straight away and is emailed to the IPC query mailbox.
+                      <strong className="font-semibold text-slate-900">
+                        Instant Query Creation:
+                      </strong>{" "}
+                      Your enquiry opens a Query Case straight away and is
+                      emailed to the IPC query mailbox.
                     </p>
                   </div>
 
@@ -251,7 +297,11 @@ export function ComposeEnquiryPage() {
                       2
                     </div>
                     <p className="text-slate-600 leading-relaxed">
-                      <strong className="font-semibold text-slate-900">Verification & Processing:</strong> Front Office verifies it, then it is assigned, drafted, reviewed, approved, and dispatched back to you.
+                      <strong className="font-semibold text-slate-900">
+                        Verification & Processing:
+                      </strong>{" "}
+                      Front Office verifies it, then it is assigned, drafted,
+                      reviewed, approved, and dispatched back to you.
                     </p>
                   </div>
 
@@ -260,7 +310,11 @@ export function ComposeEnquiryPage() {
                       3
                     </div>
                     <p className="text-slate-600 leading-relaxed">
-                      <strong className="font-semibold text-slate-900">Live Case Tracking:</strong> Track the case status live on your dashboard and receive reply updates by email once closed.
+                      <strong className="font-semibold text-slate-900">
+                        Live Case Tracking:
+                      </strong>{" "}
+                      Track the case status live on your dashboard and receive
+                      reply updates by email once closed.
                     </p>
                   </div>
                 </div>

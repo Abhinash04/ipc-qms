@@ -47,7 +47,6 @@ export function PageHeader({
 
   return (
     <div className="glass-panel aurora-panel bento-card mb-3.5 flex flex-col gap-2 rounded-2xl px-4 py-1.5 sm:flex-row sm:items-center sm:justify-between lg:px-5 lg:py-2 border border-blue-100/80 bg-[linear-gradient(135deg,#eff6ff_0%,#ffffff_50%,#f5f3ff_100%)] shadow-[0_2px_12px_rgba(37,99,235,0.05)] relative overflow-hidden">
-      {/* Decorative gradient corner light */}
       <div className="pointer-events-none absolute -right-10 -top-10 h-28 w-28 rounded-full bg-indigo-400/10 blur-2xl" />
       <div className="pointer-events-none absolute -left-10 -bottom-10 h-28 w-28 rounded-full bg-blue-400/10 blur-2xl" />
 

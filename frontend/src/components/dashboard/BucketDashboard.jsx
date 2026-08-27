@@ -1,6 +1,5 @@
 import { useMemo, useState } from "react";
 import { FileText } from "lucide-react";
-
 import { PageHeader } from "@/components/common/PageHeader";
 import { StatTile } from "@/components/common/StatTile";
 import { DashboardQueryList } from "@/components/dashboard/DashboardQueryList";
@@ -42,7 +41,8 @@ const TONE_STYLES = {
     numColor: "#1d4ed8",
     subtextColor: "text-blue-700",
     badgeBg: "bg-blue-100 text-blue-800 border-blue-300",
-    iconBg: "bg-gradient-to-tr from-blue-600 to-indigo-600 text-white shadow-blue-500/25",
+    iconBg:
+      "bg-gradient-to-tr from-blue-600 to-indigo-600 text-white shadow-blue-500/25",
     accentColor: "blue",
   },
   amber: {
@@ -51,7 +51,8 @@ const TONE_STYLES = {
     numColor: "#d97706",
     subtextColor: "text-amber-700",
     badgeBg: "bg-amber-100 text-amber-800 border-amber-300",
-    iconBg: "bg-gradient-to-tr from-amber-500 to-orange-500 text-white shadow-amber-500/25",
+    iconBg:
+      "bg-gradient-to-tr from-amber-500 to-orange-500 text-white shadow-amber-500/25",
     accentColor: "amber",
   },
   sky: {
@@ -60,7 +61,8 @@ const TONE_STYLES = {
     numColor: "#0284c7",
     subtextColor: "text-sky-700",
     badgeBg: "bg-sky-100 text-sky-800 border-sky-300",
-    iconBg: "bg-gradient-to-tr from-sky-500 to-blue-500 text-white shadow-sky-500/25",
+    iconBg:
+      "bg-gradient-to-tr from-sky-500 to-blue-500 text-white shadow-sky-500/25",
     accentColor: "sky",
   },
   purple: {
@@ -69,7 +71,8 @@ const TONE_STYLES = {
     numColor: "#9333ea",
     subtextColor: "text-purple-700",
     badgeBg: "bg-purple-100 text-purple-800 border-purple-300",
-    iconBg: "bg-gradient-to-tr from-purple-600 to-indigo-600 text-white shadow-purple-500/25",
+    iconBg:
+      "bg-gradient-to-tr from-purple-600 to-indigo-600 text-white shadow-purple-500/25",
     accentColor: "purple",
   },
   rose: {
@@ -78,7 +81,8 @@ const TONE_STYLES = {
     numColor: "#e11d48",
     subtextColor: "text-rose-700",
     badgeBg: "bg-rose-100 text-rose-800 border-rose-300",
-    iconBg: "bg-gradient-to-tr from-rose-500 to-red-600 text-white shadow-rose-500/25",
+    iconBg:
+      "bg-gradient-to-tr from-rose-500 to-red-600 text-white shadow-rose-500/25",
     accentColor: "rose",
   },
   emerald: {
@@ -87,7 +91,8 @@ const TONE_STYLES = {
     numColor: "#059669",
     subtextColor: "text-emerald-700",
     badgeBg: "bg-emerald-100 text-emerald-800 border-emerald-300",
-    iconBg: "bg-gradient-to-tr from-emerald-500 to-teal-600 text-white shadow-emerald-500/25",
+    iconBg:
+      "bg-gradient-to-tr from-emerald-500 to-teal-600 text-white shadow-emerald-500/25",
     accentColor: "emerald",
   },
   slate: {
@@ -96,7 +101,8 @@ const TONE_STYLES = {
     numColor: "#334155",
     subtextColor: "text-slate-700",
     badgeBg: "bg-slate-100 text-slate-800 border-slate-300",
-    iconBg: "bg-gradient-to-tr from-slate-600 to-slate-800 text-white shadow-slate-500/25",
+    iconBg:
+      "bg-gradient-to-tr from-slate-600 to-slate-800 text-white shadow-slate-500/25",
     accentColor: "slate",
   },
 };
@@ -205,7 +211,9 @@ export function BucketDashboard({
           }
         />
 
-        {sidePanel && <div className="sticky top-6 self-start">{sidePanel}</div>}
+        {sidePanel && (
+          <div className="sticky top-6 self-start">{sidePanel}</div>
+        )}
       </div>
     </div>
   );

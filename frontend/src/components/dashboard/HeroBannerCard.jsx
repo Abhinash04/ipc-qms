@@ -1,11 +1,19 @@
 import { motion } from "framer-motion";
-import { ShieldCheck, Sparkles, Compass, Mail, CheckCircle, Send, Inbox, Zap, Lock } from "lucide-react";
+import {
+  ShieldCheck,
+  Sparkles,
+  Compass,
+  Mail,
+  CheckCircle,
+  Send,
+  Inbox,
+  Zap,
+  Lock,
+} from "lucide-react";
 
 export function HeroBannerCard() {
   return (
-    <div className="relative overflow-hidden rounded-[30px] border border-white/90 bg-gradient-to-r from-white/95 via-slate-50/90 to-blue-50/85 p-6 sm:p-7 shadow-[0_12px_36px_rgba(37,99,235,0.08)] backdrop-blur-xl mb-6 group">
-      
-      {/* Animated Glowing Light Orbs in Background */}
+    <div className="relative overflow-hidden rounded-[30px] border border-white/90 bg-linear-to-r from-white/95 via-slate-50/90 to-blue-50/85 p-6 sm:p-7 shadow-[0_12px_36px_rgba(37,99,235,0.08)] backdrop-blur-xl mb-6 group">
       <motion.div
         animate={{
           scale: [1, 1.2, 1],
@@ -24,31 +32,24 @@ export function HeroBannerCard() {
       />
 
       <div className="relative z-10 flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
-        
-        {/* Left Info Details Section */}
         <div className="space-y-3.5 max-w-2xl">
-          {/* Top Subtitle Tag */}
-          <div className="inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-blue-50 to-indigo-50 px-3.5 py-1 text-[11.5px] font-extrabold text-blue-700 border border-blue-200/70 shadow-2xs">
+          <div className="inline-flex items-center gap-2 rounded-full bg-linear-to-r from-blue-50 to-indigo-50 px-3.5 py-1 text-[11.5px] font-extrabold text-blue-700 border border-blue-200/70 shadow-2xs">
             <Compass className="h-3.5 w-3.5 text-blue-600 animate-spin-slow" />
             <span className="uppercase tracking-wider">
               Indian Pharmacopoeia Commission — QMS Portal
             </span>
           </div>
-
-          {/* Main Hero Heading */}
           <h1 className="font-heading text-2xl sm:text-3xl lg:text-[34px] font-black tracking-tight text-slate-900 leading-tight">
             IPC QMS —{" "}
-            <span className="bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 bg-clip-text text-transparent">
+            <span className="bg-linear-to-r from-blue-600 via-indigo-600 to-purple-600 bg-clip-text text-transparent">
               Query Management System
             </span>
           </h1>
-
-          {/* Detailed Subtext */}
           <p className="text-xs sm:text-sm font-medium leading-relaxed text-slate-600 max-w-xl">
-            Indian Pharmacopoeia Commission (IPC QMS) — official Query Management System for handling technical enquiries, monograph reviews, reference standards, and automated dispatch operations.
+            Indian Pharmacopoeia Commission (IPC QMS) — official Query
+            Management System for handling technical enquiries, monograph
+            reviews, reference standards, and automated dispatch operations.
           </p>
-
-          {/* Bottom Feature Pill Badges */}
           <div className="flex flex-wrap items-center gap-2 pt-1">
             <span className="inline-flex items-center gap-1.5 rounded-xl bg-white/90 px-3 py-1 text-[11.5px] font-bold text-slate-700 border border-slate-200/80 shadow-2xs">
               <Sparkles className="h-3.5 w-3.5 text-amber-500" />
@@ -65,46 +66,54 @@ export function HeroBannerCard() {
           </div>
         </div>
 
-        {/* Right Side: Mind-Blowing Animated Email & Inbox Graphics Container */}
         <div className="shrink-0 pt-3 lg:pt-0 self-center">
-          <div className="relative flex items-center justify-center p-6 sm:p-7 rounded-[32px] bg-gradient-to-br from-white/80 via-blue-50/70 to-indigo-50/80 border border-white/90 shadow-xl backdrop-blur-2xl">
-            
-            {/* Animated Rotating Gradient Border Halo */}
+          <div className="relative flex items-center justify-center p-6 sm:p-7 rounded-4xl bg-linear-to-br from-white/80 via-blue-50/70 to-indigo-50/80 border border-white/90 shadow-xl backdrop-blur-2xl">
             <motion.div
               animate={{ rotate: 360 }}
               transition={{ duration: 15, repeat: Infinity, ease: "linear" }}
-              className="pointer-events-none absolute -inset-1 rounded-[34px] bg-gradient-to-r from-blue-500/20 via-indigo-500/30 to-purple-500/20 blur-md"
+              className="pointer-events-none absolute -inset-1 rounded-[34px] bg-linear-to-r from-blue-500/20 via-indigo-500/30 to-purple-500/20 blur-md"
             />
 
             <div className="relative z-10 flex items-center gap-5">
-              
-              {/* Floating 3D Animated Mailbox Envelope Icon Box */}
               <motion.div
                 animate={{ y: [0, -8, 0] }}
-                transition={{ duration: 3.5, repeat: Infinity, ease: "easeInOut" }}
-                className="relative flex h-20 w-20 shrink-0 items-center justify-center rounded-3xl bg-gradient-to-tr from-blue-600 via-indigo-600 to-purple-600 text-white shadow-[0_12px_30px_rgba(37,99,235,0.4)] border border-white/40"
+                transition={{
+                  duration: 3.5,
+                  repeat: Infinity,
+                  ease: "easeInOut",
+                }}
+                className="relative flex h-20 w-20 shrink-0 items-center justify-center rounded-3xl bg-linear-to-tr from-blue-600 via-indigo-600 to-purple-600 text-white shadow-[0_12px_30px_rgba(37,99,235,0.4)] border border-white/40"
               >
-                <Mail className="h-9 w-9 text-white drop-shadow-md" strokeWidth={2.2} />
+                <Mail
+                  className="h-9 w-9 text-white drop-shadow-md"
+                  strokeWidth={2.2}
+                />
 
                 {/* Pulsing Signal Rays around Envelope */}
                 <motion.span
                   animate={{ scale: [1, 1.4, 1], opacity: [0.8, 0, 0.8] }}
-                  transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+                  transition={{
+                    duration: 2,
+                    repeat: Infinity,
+                    ease: "easeInOut",
+                  }}
                   className="absolute inset-0 rounded-3xl border-2 border-cyan-400"
                 />
 
-                {/* Floating Checkmark Pill Badge */}
                 <motion.div
                   animate={{ scale: [0.9, 1.1, 0.9] }}
-                  transition={{ duration: 2.5, repeat: Infinity, ease: "easeInOut" }}
+                  transition={{
+                    duration: 2.5,
+                    repeat: Infinity,
+                    ease: "easeInOut",
+                  }}
                   className="absolute -top-2.5 -right-2.5 flex h-7 w-7 items-center justify-center rounded-full bg-emerald-500 text-white shadow-md border-2 border-white"
                 >
                   <CheckCircle className="h-4 w-4" strokeWidth={2.8} />
                 </motion.div>
               </motion.div>
 
-              {/* Email Query Status & Live Animation Text */}
-              <div className="space-y-1.5 min-w-[170px]">
+              <div className="space-y-1.5 min-w-42.5">
                 <div className="flex items-center gap-2">
                   <span className="relative flex h-2.5 w-2.5">
                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
@@ -120,7 +129,6 @@ export function HeroBannerCard() {
                   <Send className="h-3.5 w-3.5 text-indigo-600 animate-pulse" />
                 </h4>
 
-                {/* Floating Ticker Pill */}
                 <div className="flex items-center gap-1.5 pt-0.5">
                   <span className="inline-flex items-center gap-1 text-[10.5px] font-bold text-slate-600 bg-white/90 px-2.5 py-0.5 rounded-full border border-slate-200/80 shadow-2xs">
                     <Inbox className="h-3 w-3 text-indigo-500" /> Auto-synced
@@ -130,11 +138,9 @@ export function HeroBannerCard() {
                   </span>
                 </div>
               </div>
-
             </div>
           </div>
         </div>
-
       </div>
     </div>
   );
