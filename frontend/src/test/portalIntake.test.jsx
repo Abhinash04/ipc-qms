@@ -121,6 +121,16 @@ describe("raising an enquiry opens a case straight away", () => {
     expect(raised.sourceMailboxMessageId).toBeNull();
   });
 
+  it("does not carry the inquirers own Gmail thread id", async () => {
+    const raised = await raiseThroughPortal();
+
+    // sendEnquiry returns a thread id, but it is private to the inquirer's
+    // mailbox. Storing it made Front Office's forward reply into a thread it
+    // cannot see, which Gmail rejects — the 404 on /emails/forward.
+    const incoming = s().emailMessages.find((m) => m.queryId === raised.queryId);
+    expect(incoming.providerThreadId).toBeNull();
+  });
+
   it("shows it on the inquirers own dashboard with no refresh", async () => {
     const raised = await raiseThroughPortal();
 

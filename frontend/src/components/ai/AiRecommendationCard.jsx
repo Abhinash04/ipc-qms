@@ -60,8 +60,8 @@ export function AiRecommendationCard({ query, onAssign, currentAssigneeId, varia
   if (!query) return null;
 
   const outerClass = variant === 'embedded'
-    ? "select-none h-full"
-    : "bg-linear-to-br from-indigo-50/80 via-purple-50/30 to-white rounded-3xl border border-indigo-200/80 p-6 shadow-sm select-none h-full";
+    ? "select-none"
+    : "bg-linear-to-br from-indigo-50/80 via-purple-50/30 to-white rounded-3xl border border-indigo-200/80 p-6 shadow-sm select-none";
 
   return (
     <div className={outerClass}>

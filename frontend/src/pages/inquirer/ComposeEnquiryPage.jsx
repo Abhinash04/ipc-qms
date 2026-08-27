@@ -39,7 +39,10 @@ export function ComposeEnquiryPage() {
         },
         to: config.data?.ipcQueryEmail || null,
         providerMessageId: sent?.providerMessageId || null,
-        providerThreadId: sent?.providerThreadId || null,
+        // Deliberately not storing sent.providerThreadId: a thread id is private
+        // to the mailbox that produced it, and this one is the inquirer's. Front
+        // Office cannot reply into it. The mailbox copy, when claimed, brings the
+        // Front Office thread id that everyone downstream can actually use.
       });
       return { ...sent, queryId: raised.queryId };
     },
