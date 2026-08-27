@@ -4,22 +4,24 @@ import { FileText } from "lucide-react";
 import { PageHeader } from "@/components/common/PageHeader";
 import { StatTile } from "@/components/common/StatTile";
 import { DashboardQueryList } from "@/components/dashboard/DashboardQueryList";
+import { HeroBannerCard } from "@/components/dashboard/HeroBannerCard";
 import {
   bucketsForRole,
   defaultBucketKey,
   visibleQueries,
 } from "@/constants/queryBuckets";
 import { getTimeBasedGreeting } from "@/utils/greeting";
+import { cn } from "@/utils/cn";
 
 const TONES = {
-  total: "slate",
-  open: "blue",
+  total: "blue",
+  open: "amber",
   incoming: "blue",
   assigned: "blue",
-  inProgress: "blue",
+  inProgress: "sky",
   pendingAssignment: "amber",
   awaitingAssignment: "amber",
-  awaitingFinalApproval: "amber",
+  awaitingFinalApproval: "purple",
   awaitingReview: "amber",
   drafting: "amber",
   awaitingDispatch: "purple",
@@ -35,46 +37,67 @@ const TONES = {
 
 const TONE_STYLES = {
   blue: {
-    cardBg: "linear-gradient(180deg, #f4f8ff 0%, #ffffff 100%)",
-    cardBorder: "#bfdbfe",
-    numColor: "#2563eb",
-    subtextColor: "text-blue-600",
-    illustrationType: "assigned",
+    cardBg: "linear-gradient(180deg, #dbeafe 0%, #ffffff 100%)",
+    cardBorder: "#93c5fd",
+    numColor: "#1d4ed8",
+    subtextColor: "text-blue-700",
+    badgeBg: "bg-blue-100 text-blue-800 border-blue-300",
+    iconBg: "bg-gradient-to-tr from-blue-600 to-indigo-600 text-white shadow-blue-500/25",
+    accentColor: "blue",
   },
   amber: {
-    cardBg: "linear-gradient(180deg, #fffdf2 0%, #ffffff 100%)",
+    cardBg: "linear-gradient(180deg, #fef3c7 0%, #ffffff 100%)",
     cardBorder: "#fde68a",
     numColor: "#d97706",
-    subtextColor: "text-amber-600",
-    illustrationType: "drafting",
+    subtextColor: "text-amber-700",
+    badgeBg: "bg-amber-100 text-amber-800 border-amber-300",
+    iconBg: "bg-gradient-to-tr from-amber-500 to-orange-500 text-white shadow-amber-500/25",
+    accentColor: "amber",
+  },
+  sky: {
+    cardBg: "linear-gradient(180deg, #e0f2fe 0%, #ffffff 100%)",
+    cardBorder: "#7dd3fc",
+    numColor: "#0284c7",
+    subtextColor: "text-sky-700",
+    badgeBg: "bg-sky-100 text-sky-800 border-sky-300",
+    iconBg: "bg-gradient-to-tr from-sky-500 to-blue-500 text-white shadow-sky-500/25",
+    accentColor: "sky",
   },
   purple: {
-    cardBg: "linear-gradient(180deg, #faf5ff 0%, #ffffff 100%)",
-    cardBorder: "#e9d5ff",
+    cardBg: "linear-gradient(180deg, #f3e8ff 0%, #ffffff 100%)",
+    cardBorder: "#d8b4fe",
     numColor: "#9333ea",
-    subtextColor: "text-purple-600",
-    illustrationType: "review",
+    subtextColor: "text-purple-700",
+    badgeBg: "bg-purple-100 text-purple-800 border-purple-300",
+    iconBg: "bg-gradient-to-tr from-purple-600 to-indigo-600 text-white shadow-purple-500/25",
+    accentColor: "purple",
   },
   rose: {
-    cardBg: "linear-gradient(180deg, #fff5f6 0%, #ffffff 100%)",
-    cardBorder: "#fecdd3",
+    cardBg: "linear-gradient(180deg, #ffe4e6 0%, #ffffff 100%)",
+    cardBorder: "#fca5a5",
     numColor: "#e11d48",
-    subtextColor: "text-rose-600",
-    illustrationType: "review",
+    subtextColor: "text-rose-700",
+    badgeBg: "bg-rose-100 text-rose-800 border-rose-300",
+    iconBg: "bg-gradient-to-tr from-rose-500 to-red-600 text-white shadow-rose-500/25",
+    accentColor: "rose",
   },
   emerald: {
-    cardBg: "linear-gradient(180deg, #f0fdf4 0%, #ffffff 100%)",
-    cardBorder: "#bbf7d0",
+    cardBg: "linear-gradient(180deg, #d1fae5 0%, #ffffff 100%)",
+    cardBorder: "#6ee7b7",
     numColor: "#059669",
-    subtextColor: "text-emerald-600",
-    illustrationType: "closed",
+    subtextColor: "text-emerald-700",
+    badgeBg: "bg-emerald-100 text-emerald-800 border-emerald-300",
+    iconBg: "bg-gradient-to-tr from-emerald-500 to-teal-600 text-white shadow-emerald-500/25",
+    accentColor: "emerald",
   },
   slate: {
-    cardBg: "linear-gradient(180deg, #f8fafc 0%, #ffffff 100%)",
-    cardBorder: "#e2e8f0",
-    numColor: "#475569",
-    subtextColor: "text-slate-600",
-    illustrationType: "assigned",
+    cardBg: "linear-gradient(180deg, #f1f5f9 0%, #ffffff 100%)",
+    cardBorder: "#cbd5e1",
+    numColor: "#334155",
+    subtextColor: "text-slate-700",
+    badgeBg: "bg-slate-100 text-slate-800 border-slate-300",
+    iconBg: "bg-gradient-to-tr from-slate-600 to-slate-800 text-white shadow-slate-500/25",
+    accentColor: "slate",
   },
 };
 
@@ -117,6 +140,15 @@ export function BucketDashboard({
     buckets.find((b) => b.key === selectedKey) || buckets[0] || null;
   const rows = selected ? recordsByKey[selected.key] || [] : [];
 
+  const gridColsClass = useMemo(() => {
+    const len = buckets.length;
+    if (len >= 6) return "xl:grid-cols-6";
+    if (len === 5) return "xl:grid-cols-5";
+    if (len === 4) return "xl:grid-cols-4";
+    if (len === 3) return "xl:grid-cols-3";
+    return "xl:grid-cols-4";
+  }, [buckets.length]);
+
   return (
     <div className="space-y-5">
       <PageHeader
@@ -126,10 +158,18 @@ export function BucketDashboard({
         actions={actions}
       />
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+      <HeroBannerCard role={role} userName={currentUser?.name} />
+
+      <div
+        className={cn(
+          "grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 lg:gap-3.5 items-stretch",
+          gridColsClass,
+        )}
+      >
         {buckets.map((bucket) => {
           const count = recordsByKey[bucket.key]?.length ?? 0;
           const tone = styleFor(bucket.key);
+
           return (
             <StatTile
               key={bucket.key}
