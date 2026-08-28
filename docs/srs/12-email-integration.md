@@ -32,6 +32,23 @@ the query.
 
 ## 12.3 Current Implementation
 
-None. `MOCK_QUERY.source` is hardcoded to `"Email"` in
-`frontend/src/constants/mockQuery.js` to represent the intended intake channel; no ingestion
-or dispatch integration exists.
+Email ingestion and dispatch (Gmail transport + mailbox polling) exist; see
+`backend/src/services/email/`. Sections above describing "None" predate that work and cover
+the parts of this document (threading rules, provider choice already made) that remain
+otherwise unrevised.
+
+## 12.4 Attachments
+
+Attachments are supported end-to-end: upload (`POST /api/v1/attachments`), real MIME
+multipart on outbound Gmail sends, byte download of inbound Gmail attachments, and the
+Front Officer's Forward to the Officer-in-Charge. See `backend/src/services/attachments/`.
+
+The Forward-to-OIC path is **fail-closed**: if any attachment associated with the query
+cannot be resolved (unknown id, missing bytes on disk, checksum mismatch), the forward is
+aborted before any email is sent and returns `409` naming the unavailable attachment(s). The
+Officer-in-Charge never receives a forward that looks complete but is silently missing a
+document.
+
+**Security note:** the attachment endpoints have no authentication or authorization — see
+`backend/README.md` "Security status: NOT production-ready" for the full explanation and
+what is required before deployment.

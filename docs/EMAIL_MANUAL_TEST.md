@@ -179,8 +179,11 @@ real names, and the mock users for the drafting and review steps.
   acknowledges, verifies and forwards. Verification is still recorded with Bhumika as the actor —
   it is the click that disappeared, not the checkpoint. The manual **Forward to Officer-in-Charge**
   button remains for retries.
-- **Attachments are metadata only** — name, type and size are recorded; file bytes are never
-  downloaded or stored.
+- **Attachments** now carry real bytes end to end: upload on the enquiry form, real MIME
+  parts on outbound Gmail sends, downloaded bytes for inbound Gmail attachments, and full
+  files on the Front Officer's forward to the Officer-in-Charge. See the checklist below.
+  The attachment endpoints have no authentication — see `backend/README.md` "Security
+  status".
 - **The QMS case lives in the browser that registered it.** Query state is held in that browser's
   IndexedDB, so opening the QMS in another browser or profile shows no cases. Abhinash's device
   genuinely does not matter — ingestion is server-side and the inquirer comes from the `From`
@@ -192,6 +195,23 @@ real names, and the mock users for the drafting and review steps.
   is no Gmail trace for Neha, Amit or Kavita. Intended for this phase.
 - **Gmail decides threading.** A reply Gmail places on a new thread (for instance after a heavily
   edited subject) is treated as a new enquiry.
+
+## Live-Gmail attachment checklist
+
+With `EMAIL_TRANSPORT=gmail`, `MAILBOX_SOURCE=gmail`, and `npm run gmail:preflight` clean:
+
+1. Sign in as Abhinash → **Raise Enquiry** → attach a PDF, a PNG, and an XLSX → Send.
+2. **Abhinash → Sent** contains the enquiry with all 3 attachments; open each from Gmail.
+3. **Bhumika → Inbox** receives the mail with all 3 attachments intact.
+4. Bhumika → **Check IPC mailbox** → open the case → Attachments tab shows all 3; the PDF and
+   PNG preview in-app, the XLSX offers Download.
+5. Bhumika → **Forward to Officer-in-Charge**.
+6. **Jatin → Inbox** receives the forward with all 3 original files, each downloadable and
+   openable, byte-identical to what Abhinash sent.
+7. Deliberately delete one attachment's file on disk (`backend/storage/attachments/<id>.bin`)
+   and press **Forward** again (or **Retry forwarding** if already forwarded once) — the UI
+   must show an error naming the missing file, the query must stay un-forwarded, and Jatin's
+   inbox must receive nothing for that attempt.
 - `ipc-query-mock@example.com` remains the mock-mode address and **can never receive mail**:
   `example.com` is reserved by RFC 2606 with a null MX, so anything sent there bounces. That is
   deliberate — the mock address must never reach a real mailbox.

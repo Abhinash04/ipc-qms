@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { PaperclipIcon, ShieldCheck } from 'lucide-react';
+import { ShieldCheck } from 'lucide-react';
 import { Breadcrumb } from '@/components/common/Breadcrumb';
 import { EmptyState } from '@/components/common/EmptyState';
+import { AttachmentList } from '@/components/attachments/AttachmentList';
 import { CaseSummaryBar } from '@/components/workflow/CaseSummaryBar';
 import { QueryLifecycleTimeline } from '@/components/workflow/QueryLifecycleTimeline';
 import { WorkflowActionsCard } from '@/components/workflow/WorkflowActionsCard';
@@ -213,22 +214,7 @@ export function QueryDetailPage() {
             </TabsContent>
 
             <TabsContent value="attachments" className="mt-0 pt-5">
-              {query.attachments.length === 0 ? (
-                <EmptyState icon={PaperclipIcon} title="No attachments" />
-              ) : (
-                <ul className="space-y-2">
-                  {query.attachments.map((att) => (
-                    <li
-                      key={att.id}
-                      className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold"
-                    >
-                      <PaperclipIcon className="h-4 w-4 text-slate-400" aria-hidden="true" />
-                      <span className="flex-1 text-slate-800">{att.name}</span>
-                      <span className="text-xs font-bold text-slate-400">{att.sizeKb} KB</span>
-                    </li>
-                  ))}
-                </ul>
-              )}
+              <AttachmentList attachments={query.attachments} />
             </TabsContent>
           </Tabs>
           </div>

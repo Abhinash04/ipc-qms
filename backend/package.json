@@ -24,7 +24,8 @@
     "googleapis": "^174.0.1",
     "helmet": "^8.3.0",
     "mongoose": "^9.9.2",
-    "morgan": "^1.11.0"
+    "morgan": "^1.11.0",
+    "multer": "^2.2.0"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

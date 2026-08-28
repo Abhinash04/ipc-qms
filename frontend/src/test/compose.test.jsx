@@ -122,7 +122,7 @@ describe('compose enquiry page', () => {
       });
     });
 
-    expect(await screen.findByText('Enquiry raised')).toBeInTheDocument();
+    expect(await screen.findByText('Enquiry raised successfully')).toBeInTheDocument();
     expect(screen.getByText(/mock-msg-1/)).toBeInTheDocument();
 
     // Sending is not the whole job — the case must exist straight away.
