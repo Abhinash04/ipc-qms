@@ -23,6 +23,10 @@ function errorHandler(err, req, res, next) {
 
   res.status(status).json({
     error: err.message || 'Internal Server Error',
+    // Structured extras a thrower opts into (e.g. AttachmentUnavailableError's
+    // `unavailableAttachments`) — never request bodies/headers, and only what
+    // the error explicitly attached.
+    ...(err.details || {}),
     ...(env.NODE_ENV === 'development' ? { stack: err.stack } : {}),
   });
 }

@@ -1,4 +1,6 @@
 import { defineConfig } from 'vitest/config';
+import os from 'node:os';
+import path from 'node:path';
 
 export default defineConfig({
   test: {
@@ -27,6 +29,8 @@ export default defineConfig({
       FRONT_OFFICE_EMAIL: 'front-office@test.invalid',
       OFFICER_IN_CHARGE_NAME: 'Test Officer',
       OFFICER_IN_CHARGE_EMAIL: 'officer@test.invalid',
+      // Isolated from the real dev store; setup.js resets it between tests.
+      ATTACHMENT_DIR: path.join(os.tmpdir(), 'qms-test-attachments'),
     },
   },
 });

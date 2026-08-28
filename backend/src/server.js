@@ -53,5 +53,15 @@ connectDb().finally(() => {
     console.log(`Email transport: ${transport}`);
     console.log(`Query recipient: ${recipient}`);
     console.log(`Mailbox source:  ${source}`);
+
+    // See backend/README.md "Security status: NOT production-ready" and
+    // middleware/authorizeAttachmentAccess.js — the attachment endpoints are
+    // always mounted, and there is currently no authentication mechanism in
+    // this backend for them to enforce against.
+    console.warn(
+      '[qms] Attachment endpoints (/api/v1/attachments/*) are mounted without ' +
+        'authentication or authorization. Do not expose this server outside a ' +
+        'trusted network until backend auth is implemented.',
+    );
   });
 });

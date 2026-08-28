@@ -12,6 +12,7 @@ docs/markdown/
 
 backend/node_modules/
 backend/.env
+backend/storage/
 
 credentials.json
 token.json

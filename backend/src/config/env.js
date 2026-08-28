@@ -1,4 +1,5 @@
 import dotenv from 'dotenv';
+import path from 'path';
 
 dotenv.config();
 
@@ -38,6 +39,17 @@ const env = {
   // a summary inside the automatic intake chain — gemmaService falls back on
   // abort, so a dead endpoint delays that forward but never loses it.
   GEMMA_TIMEOUT_MS: parseInt(process.env.GEMMA_TIMEOUT_MS || '12000', 10),
+
+  // ── Attachments ──────────────────────────────────────────────────────────
+  // Disk is the only store that works whether or not Mongo is connected
+  // (Mongo is optional here — see config/db.js) and is what can feed real
+  // bytes into a Gmail MIME multipart.
+  ATTACHMENT_DIR: process.env.ATTACHMENT_DIR || path.join(process.cwd(), 'storage', 'attachments'),
+  ATTACHMENT_MAX_FILE_MB: parseInt(process.env.ATTACHMENT_MAX_FILE_MB || '10', 10),
+  // Smaller than the 25MB Gmail cap on purpose: base64 inflates payload size
+  // by ~33%, and the cap is on the *encoded* message.
+  ATTACHMENT_MAX_TOTAL_MB: parseInt(process.env.ATTACHMENT_MAX_TOTAL_MB || '15', 10),
+  ATTACHMENT_MAX_FILES: parseInt(process.env.ATTACHMENT_MAX_FILES || '10', 10),
 };
 
 function validateEmailConfig(config = env) {
