@@ -9,6 +9,7 @@ import {
   ArrowRight,
   Trash2Icon,
   X,
+  PaperclipIcon,
 } from "lucide-react";
 
 import { Breadcrumb } from "@/components/common/Breadcrumb";
@@ -320,6 +321,12 @@ export function MailboxInboxPage() {
                       <div className="flex items-center gap-1.5 text-[11.5px] font-medium text-slate-400 mt-0.5">
                         <MailIcon className="h-3.5 w-3.5 text-purple-500 shrink-0" />
                         <span className="truncate">Email Enquiry</span>
+                        {message.attachments?.length > 0 && (
+                          <span className="ml-1 inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[10.5px] font-bold text-slate-500">
+                            <PaperclipIcon className="h-3 w-3" aria-hidden="true" />
+                            {message.attachments.length}
+                          </span>
+                        )}
                       </div>
                     </div>
 
