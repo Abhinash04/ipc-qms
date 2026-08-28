@@ -13,7 +13,7 @@ import {
 
 export function HeroBannerCard() {
   return (
-    <div className="relative overflow-hidden rounded-[24px] sm:rounded-[30px] border border-white/90 bg-linear-to-r from-white/95 via-slate-50/90 to-blue-50/85 p-5 sm:p-7 shadow-[0_12px_36px_rgba(37,99,235,0.08)] backdrop-blur-xl mb-6 group">
+    <div className="relative overflow-hidden rounded-3xl sm:rounded-[30px] border border-white/90 bg-linear-to-r from-white/95 via-slate-50/90 to-blue-50/85 p-5 sm:p-7 shadow-[0_12px_36px_rgba(37,99,235,0.08)] backdrop-blur-xl mb-6 group">
       <motion.div
         animate={{
           scale: [1, 1.2, 1],
@@ -39,7 +39,7 @@ export function HeroBannerCard() {
               Indian Pharmacopoeia Commission — QMS Portal
             </span>
           </div>
-          <h1 className="font-heading text-2xl sm:text-3xl lg:text-[34px] font-black tracking-tight text-slate-900 leading-tight break-words whitespace-normal">
+          <h1 className="font-heading text-2xl sm:text-3xl lg:text-[34px] font-black tracking-tight text-slate-900 leading-tight wrap-break-word whitespace-normal">
             IPC QMS —{" "}
             <span className="bg-linear-to-r from-blue-600 via-indigo-600 to-purple-600 bg-clip-text text-transparent block sm:inline">
               Query Management System
@@ -67,7 +67,7 @@ export function HeroBannerCard() {
         </div>
 
         <div className="shrink-0 pt-3 lg:pt-0 self-center lg:self-auto w-full lg:w-auto">
-          <div className="relative flex flex-col sm:flex-row items-center justify-center p-5 sm:p-7 rounded-[24px] sm:rounded-4xl bg-linear-to-br from-white/80 via-blue-50/70 to-indigo-50/80 border border-white/90 shadow-xl backdrop-blur-2xl">
+          <div className="relative flex flex-col sm:flex-row items-center justify-center p-5 sm:p-7 rounded-3xl sm:rounded-4xl bg-linear-to-br from-white/80 via-blue-50/70 to-indigo-50/80 border border-white/90 shadow-xl backdrop-blur-2xl">
             <motion.div
               animate={{ rotate: 360 }}
               transition={{ duration: 15, repeat: Infinity, ease: "linear" }}

@@ -17,6 +17,9 @@ import { buildPath } from "@/constants/routePaths";
 import { useAuthStore } from "@/store/useAuthStore";
 import { useWorkflowStore } from "@/store/useWorkflowStore";
 import { fetchEmailConfig, sendEnquiry } from "@/services/api/mailboxService";
+import { uploadAttachments } from "@/services/api/attachmentService";
+import { AttachmentPicker } from "@/components/attachments/AttachmentPicker";
+import { hasBlockingErrors } from "@/constants/attachmentPolicy";
 import { cn } from "@/utils/cn";
 
 export function ComposeEnquiryPage() {
@@ -25,6 +28,7 @@ export function ComposeEnquiryPage() {
   const raiseEnquiry = useWorkflowStore((state) => state.raiseEnquiry);
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
+  const [pendingFiles, setPendingFiles] = useState([]);
   const [raisedQueryId, setRaisedQueryId] = useState(null);
 
   const config = useQuery({
@@ -34,7 +38,18 @@ export function ComposeEnquiryPage() {
   });
   const send = useMutation({
     mutationFn: async () => {
-      const sent = await sendEnquiry({ subject: subject.trim(), body });
+      // Attachments upload first: a failed upload must block the send rather
+      // than register a case that silently has no files.
+      let attachments;
+      if (pendingFiles.length > 0) {
+        const uploaded = await uploadAttachments(pendingFiles.map((entry) => entry.file));
+        attachments = uploaded;
+      }
+
+      const enquiryPayload = { subject: subject.trim(), body };
+      if (attachments) enquiryPayload.attachments = attachments;
+      const sent = await sendEnquiry(enquiryPayload);
+
       const raised = raiseEnquiry({
         subject: subject.trim(),
         body,
@@ -45,6 +60,7 @@ export function ComposeEnquiryPage() {
         },
         to: config.data?.ipcQueryEmail || null,
         providerMessageId: sent?.providerMessageId || null,
+        attachments,
       });
       return { ...sent, queryId: raised.queryId };
     },
@@ -52,6 +68,7 @@ export function ComposeEnquiryPage() {
       setRaisedQueryId(result.queryId);
       setSubject("");
       setBody("");
+      setPendingFiles([]);
     },
   });
 
@@ -61,7 +78,10 @@ export function ComposeEnquiryPage() {
   const to = config.data?.ipcQueryEmail || "Loading…";
   const transport = config.data?.transport;
   const canSend =
-    Boolean(config.data) && subject.trim() !== "" && body.trim() !== "";
+    Boolean(config.data) &&
+    subject.trim() !== "" &&
+    body.trim() !== "" &&
+    !hasBlockingErrors(pendingFiles);
 
   return (
     <div className="space-y-5">
@@ -207,6 +227,12 @@ export function ComposeEnquiryPage() {
                   placeholder="Dear Sir/Madam,&#10;&#10;I am writing to seek clarification regarding…"
                 />
               </div>
+
+              <AttachmentPicker
+                files={pendingFiles}
+                onChange={setPendingFiles}
+                disabled={send.isPending}
+              />
 
               <div className="pt-2 flex items-center gap-4">
                 <button

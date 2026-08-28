@@ -53,7 +53,6 @@ export function Header() {
   const [activeModalNotif, setActiveModalNotif] = useState(null);
   const [popoverPos, setPopoverPos] = useState({ top: 90, right: 24 });
 
-  const hoverTimerRef = useRef(null);
   const bellRef = useRef(null);
   const notifRef = useRef(null);
 
@@ -76,18 +75,6 @@ export function Header() {
         right: actualRight,
       });
     }
-  };
-
-  const handleMouseEnter = () => {
-    if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
-    updatePopoverPos();
-    setIsNotifOpen(true);
-  };
-
-  const handleMouseLeave = () => {
-    hoverTimerRef.current = setTimeout(() => {
-      setIsNotifOpen(false);
-    }, 280);
   };
 
   useEffect(() => {
@@ -143,7 +130,7 @@ export function Header() {
   return (
     <header className="relative z-30 px-3 pt-4 sm:px-5 sm:pt-5 lg:px-7">
       <div className="pointer-events-none absolute inset-x-10 top-4 h-20 rounded-full bg-[radial-gradient(circle,rgba(124,77,255,0.12)_0%,rgba(52,120,246,0.1)_40%,rgba(255,255,255,0)_75%)] blur-2xl" />
-      <div className="glass-panel aurora-panel flex flex-col lg:flex-row min-h-20 lg:items-center justify-between rounded-[24px] sm:rounded-[28px] px-3 sm:px-5 py-3 gap-4 lg:gap-0">
+      <div className="glass-panel aurora-panel flex flex-col lg:flex-row min-h-20 lg:items-center justify-between rounded-3xl sm:rounded-[28px] px-3 sm:px-5 py-3 gap-4 lg:gap-0">
         <div className="flex flex-col sm:flex-row lg:items-center gap-3 sm:gap-6 w-full lg:w-auto">
           <IpcLogo size="md" variant="light" className="w-full sm:w-auto" />
 
