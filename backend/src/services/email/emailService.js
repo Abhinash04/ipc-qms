@@ -10,6 +10,7 @@ import * as mockTransport from './transports/mockTransport.js';
 import * as mailbox from './mailbox/mockIpcMailbox.js';
 import { buildAcknowledgement } from './templates/acknowledgement.js';
 import * as gemmaService from '../ai/gemmaService.js';
+import { resolveAttachments, toPublicRecord } from '../attachments/resolveAttachments.js';
 
 /**
  * Email orchestration.
@@ -64,7 +65,15 @@ function getEmailConfig() {
   };
 }
 
-/** Send a message on behalf of `asRole`. */
+/**
+ * Send a message on behalf of `asRole`.
+ *
+ * Attachment refs (`{attachmentId}`) are resolved to real bytes here, before
+ * any transport sees the message — see resolveAttachments.js. This is the
+ * fail-closed gate: an unknown, missing, or corrupted attachment throws
+ * before a single byte is dispatched, for every send path (enquiry, forward,
+ * response) alike.
+ */
 async function sendEmail(message, { asRole = null, asEmail = null } = {}) {
   if (!message?.from) throw Object.assign(new Error('"from" is required'), { status: 400 });
 
@@ -73,14 +82,22 @@ async function sendEmail(message, { asRole = null, asEmail = null } = {}) {
     throw Object.assign(new Error('at least one recipient is required'), { status: 400 });
   }
 
-  const normalised = { ...message, to: recipients };
+  const resolvedAttachments = await resolveAttachments(message.attachments);
+
+  const normalised = { ...message, to: recipients, attachments: resolvedAttachments };
   const transport = await getTransport(env.EMAIL_TRANSPORT, asRole, asEmail);
   // The Gmail client is keyed by role; when an address was supplied, use the
   // role that address actually belongs to rather than the one assumed.
   const resolvedRole = asEmail ? identityForEmail(asEmail)?.role || asRole : asRole;
   const result = await transport.send(normalised, { asRole: resolvedRole });
 
-  return { ...normalised, ...result, sentAt: normalised.timestamp || new Date().toISOString() };
+  return {
+    ...normalised,
+    // Bytes never echo back over HTTP — only metadata leaves this function.
+    attachments: resolvedAttachments.map(toPublicRecord),
+    ...result,
+    sentAt: normalised.timestamp || new Date().toISOString(),
+  };
 }
 
 /** Inquirer → Front Officer. Sender identity is config, not caller input. */
@@ -118,13 +135,28 @@ async function sendAcknowledgement({ to, queryId, timestamp, providerThreadId })
   );
 }
 
-async function forwardToOfficerInCharge({ queryId, subject, body, timestamp, providerThreadId, aiSummary = null }) {
+async function forwardToOfficerInCharge({
+  queryId,
+  subject,
+  body,
+  timestamp,
+  providerThreadId,
+  aiSummary = null,
+  attachments = [],
+}) {
   const frontOffice = identityForRole(IDENTITY_ROLES.FRONT_OFFICE);
   const officer = identityForRole(IDENTITY_ROLES.OFFICER_IN_CHARGE);
 
   if (!officer?.email) {
     throw Object.assign(new Error('No Officer-in-Charge address is configured'), { status: 500 });
   }
+
+  // Fail closed BEFORE the Gemma call: the OIC must never receive a forward
+  // that looks complete but is quietly missing a document, and a missing
+  // attachment must not still cost an LLM round trip. sendEmail resolves
+  // again right before dispatch — cheap, and keeps this check independent of
+  // that internal detail rather than relying on it.
+  await resolveAttachments(attachments);
 
   let summary = aiSummary;
   if (!summary) {
@@ -151,6 +183,7 @@ async function forwardToOfficerInCharge({ queryId, subject, body, timestamp, pro
       to: [officer.email],
       subject: `Fwd: ${subject} [${queryId}]`,
       body: fullBody,
+      attachments,
       timestamp,
       providerThreadId,
     },

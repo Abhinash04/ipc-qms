@@ -1,5 +1,8 @@
+import { createHash } from 'crypto';
 import { IDENTITY_ROLES, identityForRole, allIdentities } from '../../../config/identities.js';
 import { getGmailClient } from '../transports/gmailTransport.js';
+import * as attachmentStore from '../../attachments/attachmentStore.js';
+import { validateFile } from '../../attachments/attachmentPolicy.js';
 
 /**
  * Roles whose mail may start a Query Case. Only the inquirer writes in; mail
@@ -136,6 +139,63 @@ function toMailboxMessage(message, recipient) {
   };
 }
 
+/**
+ * Deterministic id from (messageId, providerAttachmentId). This is what makes
+ * re-polling the same mail idempotent without a lookup index: fetching the
+ * same Gmail attachment twice writes the same id, so `saveWithId` just
+ * overwrites bytes that are already identical.
+ */
+function deterministicAttachmentId(seed) {
+  const hex = createHash('sha1').update(seed).digest('hex').slice(0, 32);
+  return `att_${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`;
+}
+
+/**
+ * Downloads real bytes for a message's attachments and persists them to disk,
+ * turning `extractAttachments`'s provider metadata into records the rest of
+ * the app can actually preview/download/forward. A failure on any single
+ * attachment (bad type, download error, oversize) is caught and recorded on
+ * that entry rather than failing the whole poll — one bad attachment on one
+ * email must not stop every other enquiry from being ingested.
+ */
+async function materialiseAttachments(gmail, messageId, attachments) {
+  return Promise.all(
+    attachments.map(async (att) => {
+      if (!att.id) {
+        return { ...att, attachmentId: null, materializeError: 'no attachmentId on the Gmail part' };
+      }
+
+      const check = validateFile({ filename: att.name, mimeType: att.mimeType, size: null });
+      if (!check.ok) {
+        return { ...att, attachmentId: null, materializeError: check.reason };
+      }
+
+      try {
+        const response = await gmail.users.messages.attachments.get({
+          userId: 'me',
+          messageId,
+          id: att.id,
+        });
+        // Gmail's attachment payload is base64url, same as the raw message —
+        // unlike extractBody's stale plain 'base64' decode (a pre-existing,
+        // separate issue, left untouched here).
+        const buffer = Buffer.from(response.data?.data || '', 'base64url');
+        const id = deterministicAttachmentId(`${messageId}:${att.id}`);
+        const meta = await attachmentStore.saveWithId(id, {
+          buffer,
+          filename: att.name,
+          mimeType: att.mimeType,
+          providerMessageId: messageId,
+          providerAttachmentId: att.id,
+        });
+        return { ...att, attachmentId: meta.attachmentId, sizeKb: Math.max(1, Math.round(meta.size / 1024)) };
+      } catch (error) {
+        return { ...att, attachmentId: null, materializeError: error.message };
+      }
+    }),
+  );
+}
+
 const ROLE = IDENTITY_ROLES.FRONT_OFFICE;
 
 async function deliver() {
@@ -167,13 +227,21 @@ async function list(recipient, { unreadOnly = false, max = 25, client = null } =
     }),
   );
 
-  return (
-    messages
-      // Never hand back mail that may not open a case, whatever the search
-      // returned. The Gmail query is the first filter, this is the binding one.
-      .filter(isEligibleEnquiry)
-      // Oldest first, matching the other stores' insertion ordering.
-      .sort((a, b) => new Date(a.receivedAt) - new Date(b.receivedAt))
+  const eligible = messages
+    // Never hand back mail that may not open a case, whatever the search
+    // returned. The Gmail query is the first filter, this is the binding one.
+    .filter(isEligibleEnquiry)
+    // Oldest first, matching the other stores' insertion ordering.
+    .sort((a, b) => new Date(a.receivedAt) - new Date(b.receivedAt));
+
+  // Bytes are only downloaded for mail that may actually open a case — after
+  // eligibility filtering, not before.
+  return Promise.all(
+    eligible.map(async (message) => {
+      if (!message.attachments?.length) return message;
+      const materialised = await materialiseAttachments(gmail, message.providerMessageId, message.attachments);
+      return { ...message, attachments: materialised };
+    }),
   );
 }
 
@@ -216,5 +284,5 @@ async function stats() {
   return { recipients: 1, messages: messages.length };
 }
 
-export { deliver, list, markIngested, remove, reset, stats, toMailboxMessage, extractAttachments };
+export { deliver, list, markIngested, remove, reset, stats, toMailboxMessage, extractAttachments, materialiseAttachments };
 export const backend = 'gmail';

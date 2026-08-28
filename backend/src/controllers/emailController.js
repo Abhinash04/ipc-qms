@@ -27,7 +27,7 @@ async function sendAcknowledgement(req, res, next) {
 
 async function forwardQuery(req, res, next) {
   try {
-    const { queryId, subject, body, timestamp, providerThreadId } = req.body || {};
+    const { queryId, subject, body, timestamp, providerThreadId, attachments } = req.body || {};
     if (!queryId) {
       throw Object.assign(new Error('"queryId" is required'), { status: 400 });
     }
@@ -37,6 +37,7 @@ async function forwardQuery(req, res, next) {
       body,
       timestamp,
       providerThreadId,
+      attachments,
     });
     res.status(HTTP_STATUS.CREATED).json(result);
   } catch (error) {
