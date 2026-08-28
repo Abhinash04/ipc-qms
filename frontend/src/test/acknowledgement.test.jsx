@@ -269,6 +269,12 @@ describe('the email thread on the case workspace', () => {
     renderAt(`/super-admin/queries/${queryId}`);
 
     expect(await screen.findByText('Email thread')).toBeInTheDocument();
+
+    // Only the newest message is expanded now, so reveal and open the earlier
+    // one before checking both carry human-readable labels.
+    fireEvent.click(screen.getByRole('button', { name: /Show 1 previous message/ }));
+    fireEvent.click(screen.getByRole('button', { expanded: false }));
+
     expect(screen.getByText('Received by IPC')).toBeInTheDocument();
     expect(screen.getByText('Sent by IPC')).toBeInTheDocument();
     expect(screen.getByText('Original enquiry')).toBeInTheDocument();

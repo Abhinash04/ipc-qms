@@ -190,6 +190,23 @@ async function markIngested(recipient, mailboxMessageId, { client = null } = {})
   return toMailboxMessage(updated.data, recipient || identityForRole(ROLE)?.email);
 }
 
+/**
+ * Unlike `deliver` and `reset`, this one does touch the real account — but it
+ * only moves the message to Trash, where Gmail keeps it recoverable for 30
+ * days. Nothing is permanently destroyed.
+ */
+async function remove(recipient, mailboxMessageId, { client = null } = {}) {
+  const gmail = client || getGmailClient(ROLE);
+
+  const trashed = await gmail.users.messages.trash({
+    userId: 'me',
+    id: mailboxMessageId,
+  });
+
+  if (!trashed?.data) return null;
+  return toMailboxMessage(trashed.data, recipient || identityForRole(ROLE)?.email);
+}
+
 async function reset() {
   throw new Error('gmailInboxReader.reset is not supported: it would modify a real Gmail account');
 }
@@ -199,5 +216,5 @@ async function stats() {
   return { recipients: 1, messages: messages.length };
 }
 
-export { deliver, list, markIngested, reset, stats, toMailboxMessage, extractAttachments };
+export { deliver, list, markIngested, remove, reset, stats, toMailboxMessage, extractAttachments };
 export const backend = 'gmail';

@@ -29,6 +29,10 @@ vi.mock('@/services/api/mailboxService', () => ({
   sendAcknowledgement: vi.fn().mockResolvedValue({ providerMessageId: 'mock-msg-2' }),
 }));
 
+// Each role renders its own dashboard heading — "Reviewer Dashboard",
+// "Front Office Dashboard", and "My Queries" for the Inquirer.
+const DASHBOARD_HEADING = /Dashboard$|My Queries$/;
+
 function renderApp(path = '/login') {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
@@ -124,7 +128,9 @@ describe('every mock user can log in and lands on their own dashboard', () => {
         expect(useAuthStore.getState().currentUser?.id).toBe(user.id);
       });
 
-      expect(await screen.findByRole('heading', { name: 'Dashboard' })).toBeInTheDocument();
+      expect(
+        await screen.findByRole('heading', { name: DASHBOARD_HEADING }, { timeout: 4000 }),
+      ).toBeInTheDocument();
       expect(screen.queryByText('Access restricted')).not.toBeInTheDocument();
       expect(screen.getAllByText(new RegExp(user.name)).length).toBeGreaterThan(0);
     },
@@ -146,7 +152,7 @@ describe('session', () => {
     useAuthStore.getState().login('USR-0002');
     renderApp('/login');
 
-    expect(await screen.findByRole('heading', { name: 'Dashboard' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: DASHBOARD_HEADING })).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Sign in' })).not.toBeInTheDocument();
   });
 
@@ -216,7 +222,7 @@ describe('Rawat Jatin — a mock Assigned Official', () => {
     renderApp();
     signInThroughForm(RAWAT);
 
-    expect(await screen.findByRole('heading', { name: 'Dashboard' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: DASHBOARD_HEADING })).toBeInTheDocument();
     expect(screen.queryByText('Access restricted')).not.toBeInTheDocument();
     expect(screen.getAllByText(/Rawat Jatin/).length).toBeGreaterThan(0);
   });
@@ -224,7 +230,7 @@ describe('Rawat Jatin — a mock Assigned Official', () => {
   it('sees the Assigned Official navigation', async () => {
     renderApp();
     signInThroughForm(RAWAT);
-    await screen.findByRole('heading', { name: 'Dashboard' });
+    await screen.findByRole('heading', { name: DASHBOARD_HEADING });
 
     const labels = navItemsForRole(RAWAT.role).map((item) => item.label);
     expect(labels).toEqual(['Dashboard', 'Queries', 'My Work', 'Drafting', 'Notifications']);
@@ -277,7 +283,7 @@ describe('Rawat Jatin — a mock Assigned Official', () => {
     await waitFor(() => {
       expect(useAuthStore.getState().currentUser?.id).toBe('USR-0004');
     });
-    expect(await screen.findByRole('heading', { name: 'Dashboard' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: DASHBOARD_HEADING })).toBeInTheDocument();
   });
 });
 

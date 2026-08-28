@@ -122,8 +122,17 @@ describe('compose enquiry page', () => {
       });
     });
 
-    expect(await screen.findByText('Enquiry sent')).toBeInTheDocument();
+    expect(await screen.findByText('Enquiry raised')).toBeInTheDocument();
     expect(screen.getByText(/mock-msg-1/)).toBeInTheDocument();
+
+    // Sending is not the whole job — the case must exist straight away.
+    const raised = useWorkflowStore
+      .getState()
+      .queries.find((q) => q.subject === 'Clarification regarding submission requirements');
+    expect(raised).toBeDefined();
+    expect(raised.source).toBe('Portal');
+    expect(raised.inquirer.id).toBe('USR-TEST');
+    expect(screen.getByText(raised.queryId)).toBeInTheDocument();
   });
 
   it('reports a send failure instead of pretending it worked', async () => {
@@ -136,7 +145,9 @@ describe('compose enquiry page', () => {
     fireEvent.click(screen.getByRole('button', { name: /Send enquiry/ }));
 
     expect(await screen.findByText(/Send failed: Network Error/)).toBeInTheDocument();
-    expect(screen.queryByText('Enquiry sent')).not.toBeInTheDocument();
+    expect(screen.queryByText('Enquiry raised')).not.toBeInTheDocument();
+    // A failed send must not leave a phantom case behind.
+    expect(useWorkflowStore.getState().queries.some((q) => q.subject === 'S')).toBe(false);
   });
 
   it('tells the inquirer when the backend is unreachable', async () => {

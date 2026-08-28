@@ -3,6 +3,16 @@ import '@testing-library/jest-dom/vitest';
 import { afterEach, beforeEach, expect, vi } from 'vitest';
 import { cleanup } from '@testing-library/react';
 
+// jsdom has no ResizeObserver, and Radix ScrollArea constructs one. Layout is
+// never asserted here, so a no-op is enough to let those components mount.
+if (!globalThis.ResizeObserver) {
+  globalThis.ResizeObserver = class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  };
+}
+
 vi.mock('@/services/api/aiService', () => ({
   fetchGemmaAiSummary: async () => null,
   fetchGemmaAiRecommendations: async () => null,

@@ -1,9 +1,13 @@
 import { QueryTable } from "@/components/workflow/QueryTable";
 import { useRoutePaths } from "@/hooks/useRoutePaths";
-import { WORKFLOW_STATE } from "@/constants/statusEnums";
+import { useBucketFilter } from "@/hooks/useBucketFilter";
+import { ROLES } from "@/constants/roles";
 
 export function ApprovalsListPage() {
   const paths = useRoutePaths();
+  const filter = useBucketFilter(ROLES.OFFICER_IN_CHARGE, [
+    "awaitingFinalApproval",
+  ]);
   return (
     <QueryTable
       title="Approvals"
@@ -14,7 +18,7 @@ export function ApprovalsListPage() {
         { label: "Approvals" },
       ]}
       detailPath={paths.APPROVAL_DETAIL}
-      filter={(q) => q.workflowState === WORKFLOW_STATE.PENDING_FINAL_APPROVAL}
+      filter={filter}
       emptyMessage="Nothing awaiting final approval. All review levels must complete first."
     />
   );

@@ -1,15 +1,17 @@
-import { useCallback, useMemo } from 'react';
-import { useParams } from 'react-router-dom';
-import { useWorkflowStore } from '@/store/useWorkflowStore';
-import { useAuthStore } from '@/store/useAuthStore';
-import { canPerform } from '@/constants/workflowRules';
-import { findUserById } from '@/constants/mockUsers';
+import { useCallback, useMemo } from "react";
+import { useParams } from "react-router-dom";
+import { useWorkflowStore } from "@/store/useWorkflowStore";
+import { useAuthStore } from "@/store/useAuthStore";
+import { canPerform } from "@/constants/workflowRules";
+import { findUserById } from "@/constants/mockUsers";
 
 export function useQueryCase() {
   const params = useParams();
   const queryId = params.queryId || null;
   const currentUser = useAuthStore((state) => state.currentUser);
-  const query = useWorkflowStore((state) => state.queries.find((q) => q.queryId === queryId) || null);
+  const query = useWorkflowStore(
+    (state) => state.queries.find((q) => q.queryId === queryId) || null,
+  );
   const allSteps = useWorkflowStore((state) => state.workflowSteps);
   const allVersions = useWorkflowStore((state) => state.responseVersions);
   const allReviews = useWorkflowStore((state) => state.reviews);
@@ -56,10 +58,14 @@ export function useQueryCase() {
   );
 
   const latestVersion = versions.length ? versions[versions.length - 1] : null;
-  const assignee = query?.currentAssigneeId ? findUserById(query.currentAssigneeId) : null;
+  const assignee = query?.currentAssigneeId
+    ? findUserById(query.currentAssigneeId)
+    : null;
 
   const can = useCallback(
-    (action) => Boolean(query) && canPerform(currentUser?.role, action, query.workflowState),
+    (action) =>
+      Boolean(query) &&
+      canPerform(currentUser?.role, action, query.workflowState),
     [query, currentUser?.role],
   );
 
@@ -78,6 +84,19 @@ export function useQueryCase() {
       currentUser,
       can,
     }),
-    [queryId, query, steps, reviews, versions, latestVersion, audit, messages, currentStep, assignee, currentUser, can],
+    [
+      queryId,
+      query,
+      steps,
+      reviews,
+      versions,
+      latestVersion,
+      audit,
+      messages,
+      currentStep,
+      assignee,
+      currentUser,
+      can,
+    ],
   );
 }

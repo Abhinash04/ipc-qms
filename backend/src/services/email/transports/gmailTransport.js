@@ -67,16 +67,39 @@ export function buildRawMessage(message) {
     .replace(/=+$/, '');
 }
 
-export async function send(message, { asRole = IDENTITY_ROLES.INQUIRER } = {}) {
-  const gmail = getGmailClient(asRole);
+/**
+ * A thread id is private to the mailbox that produced it. Replying into one
+ * that belongs to another account is rejected, and Gmail is inconsistent about
+ * whether that reads as 400 or 404 — so accept both.
+ */
+function isUnusableThread(error) {
+  const status = error?.status ?? error?.code ?? error?.response?.status;
+  return status === 400 || status === 404;
+}
 
-  const res = await gmail.users.messages.send({
-    userId: 'me',
-    requestBody: {
-      raw: buildRawMessage(message),
-      ...(message.providerThreadId ? { threadId: message.providerThreadId } : {}),
-    },
-  });
+export async function send(
+  message,
+  { asRole = IDENTITY_ROLES.INQUIRER, client = null } = {},
+) {
+  const gmail = client || getGmailClient(asRole);
+  const raw = buildRawMessage(message);
+
+  const attempt = (threadId) =>
+    gmail.users.messages.send({
+      userId: 'me',
+      requestBody: { raw, ...(threadId ? { threadId } : {}) },
+    });
+
+  let res;
+  try {
+    res = await attempt(message.providerThreadId);
+  } catch (error) {
+    // Threading is a presentation nicety; delivery is the job. Fall back to an
+    // unthreaded send rather than losing the message. Anything else is a real
+    // failure and stays loud.
+    if (!message.providerThreadId || !isUnusableThread(error)) throw error;
+    res = await attempt(null);
+  }
 
   return {
     providerMessageId: res.data.id,

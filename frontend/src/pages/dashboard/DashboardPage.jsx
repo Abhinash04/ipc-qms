@@ -8,58 +8,33 @@ import { AssignedOfficialDashboard } from "./roles/AssignedOfficialDashboard";
 import { ReviewerDashboard } from "./roles/ReviewerDashboard";
 import { InquirerDashboard } from "./roles/InquirerDashboard";
 
+const DASHBOARD_FOR_ROLE = {
+  [ROLES.FRONT_OFFICE]: FrontOfficeDashboard,
+  [ROLES.OFFICER_IN_CHARGE]: OICDashboard,
+  [ROLES.ASSIGNED_OFFICIAL]: AssignedOfficialDashboard,
+  [ROLES.REVIEWER]: ReviewerDashboard,
+  [ROLES.INQUIRER]: InquirerDashboard,
+};
+
 export function DashboardPage() {
   const currentUser = useAuthStore((state) => state.currentUser);
   const queries = useWorkflowStore((state) => state.queries);
   const workflowSteps = useWorkflowStore((state) => state.workflowSteps);
   const auditEvents = useWorkflowStore((state) => state.auditEvents);
+  const reviews = useWorkflowStore((state) => state.reviews);
 
   if (!currentUser) return null;
 
-  switch (currentUser.role) {
-    case ROLES.FRONT_OFFICE:
-      return (
-        <FrontOfficeDashboard
-          currentUser={currentUser}
-          queries={queries}
-          auditEvents={auditEvents}
-        />
-      );
-    case ROLES.OFFICER_IN_CHARGE:
-      return (
-        <OICDashboard
-          currentUser={currentUser}
-          queries={queries}
-          auditEvents={auditEvents}
-        />
-      );
-    case ROLES.ASSIGNED_OFFICIAL:
-      return (
-        <AssignedOfficialDashboard
-          currentUser={currentUser}
-          queries={queries}
-          workflowSteps={workflowSteps}
-          auditEvents={auditEvents}
-        />
-      );
-    case ROLES.REVIEWER:
-      return (
-        <ReviewerDashboard
-          currentUser={currentUser}
-          queries={queries}
-          workflowSteps={workflowSteps}
-          auditEvents={auditEvents}
-        />
-      );
-    case ROLES.INQUIRER:
-      return <InquirerDashboard currentUser={currentUser} queries={queries} />;
-    default:
-      return (
-        <OICDashboard
-          currentUser={currentUser}
-          queries={queries}
-          auditEvents={auditEvents}
-        />
-      );
-  }
+  // Admin and Super Admin fall through to the systemwide view.
+  const Dashboard = DASHBOARD_FOR_ROLE[currentUser.role] || OICDashboard;
+
+  return (
+    <Dashboard
+      currentUser={currentUser}
+      queries={queries}
+      workflowSteps={workflowSteps}
+      auditEvents={auditEvents}
+      reviews={reviews}
+    />
+  );
 }

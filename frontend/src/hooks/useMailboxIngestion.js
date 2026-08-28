@@ -1,26 +1,34 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useState } from "react";
 
-import { useWorkflowStore } from '@/store/useWorkflowStore';
-import { useAuthStore } from '@/store/useAuthStore';
+import { useWorkflowStore } from "@/store/useWorkflowStore";
+import { useAuthStore } from "@/store/useAuthStore";
 import {
   fetchMailboxMessages,
   markMessageIngested,
   sendAcknowledgement,
-} from '@/services/api/mailboxService';
+} from "@/services/api/mailboxService";
 
 export function useMailboxIngestion() {
   const ingestEmail = useWorkflowStore((state) => state.ingestEmail);
-  const recordAcknowledgement = useWorkflowStore((state) => state.recordAcknowledgement);
+  const recordAcknowledgement = useWorkflowStore(
+    (state) => state.recordAcknowledgement,
+  );
   const verifyQuery = useWorkflowStore((state) => state.verifyQuery);
   const forwardToOic = useWorkflowStore((state) => state.forwardToOic);
   const currentUser = useAuthStore((state) => state.currentUser);
 
-  const [state, setState] = useState({ running: false, error: null, lastResult: null });
+  const [state, setState] = useState({
+    running: false,
+    error: null,
+    lastResult: null,
+  });
 
   const ingestNow = useCallback(async () => {
     setState((prev) => ({ ...prev, running: true, error: null }));
     try {
-      const { messages = [] } = await fetchMailboxMessages({ unreadOnly: true });
+      const { messages = [] } = await fetchMailboxMessages({
+        unreadOnly: true,
+      });
 
       const created = [];
       const skipped = [];
@@ -39,16 +47,31 @@ export function useMailboxIngestion() {
 
         if (!result.created) continue;
 
-        if (await acknowledge(result.queryId, message.from, recordAcknowledgement)) {
+        if (
+          await acknowledge(result.queryId, message.from, recordAcknowledgement)
+        ) {
           acknowledged.push(result.queryId);
         }
 
-        if (await verifyAndForward(result.queryId, currentUser, verifyQuery, forwardToOic)) {
+        if (
+          await verifyAndForward(
+            result.queryId,
+            currentUser,
+            verifyQuery,
+            forwardToOic,
+          )
+        ) {
           forwarded.push(result.queryId);
         }
       }
 
-      const result = { fetched: messages.length, created, skipped, acknowledged, forwarded };
+      const result = {
+        fetched: messages.length,
+        created,
+        skipped,
+        acknowledged,
+        forwarded,
+      };
       setState({ running: false, error: null, lastResult: result });
       return result;
     } catch (error) {
@@ -63,7 +86,13 @@ export function useMailboxIngestion() {
         error: message,
       };
     }
-  }, [ingestEmail, recordAcknowledgement, verifyQuery, forwardToOic, currentUser]);
+  }, [
+    ingestEmail,
+    recordAcknowledgement,
+    verifyQuery,
+    forwardToOic,
+    currentUser,
+  ]);
 
   return { ...state, ingestNow };
 }
@@ -88,7 +117,9 @@ async function acknowledge(queryId, inquirerAddress, recordAcknowledgement) {
 
 async function verifyAndForward(queryId, actor, verifyQuery, forwardToOic) {
   try {
-    verifyQuery(queryId, actor);
+    // Awaited so the acknowledgement promise settles inside this try. The chain
+    // already acknowledged above, so verifyQuery's own attempt is a no-op.
+    await verifyQuery(queryId, actor);
   } catch {
     return false;
   }

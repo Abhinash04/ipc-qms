@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import {
   MailIcon,
@@ -7,6 +7,8 @@ import {
   ShieldAlert,
   CheckCircle2,
   ArrowRight,
+  Trash2Icon,
+  X,
 } from "lucide-react";
 
 import { Breadcrumb } from "@/components/common/Breadcrumb";
@@ -22,7 +24,10 @@ import {
 import { useMailboxIngestion } from "@/hooks/useMailboxIngestion";
 import { useRoutePaths } from "@/hooks/useRoutePaths";
 import { useWorkflowStore } from "@/store/useWorkflowStore";
-import { fetchMailboxMessages } from "@/services/api/mailboxService";
+import {
+  fetchMailboxMessages,
+  deleteMailboxMessage,
+} from "@/services/api/mailboxService";
 import { buildPath } from "@/constants/routePaths";
 import { useAuthStore } from "@/store/useAuthStore";
 import { ROLE_SLUG } from "@/constants/permissions";
@@ -37,12 +42,23 @@ export function MailboxInboxPage() {
   const { running, error, lastResult, ingestNow } = useMailboxIngestion();
 
   const [autoRefresh, setAutoRefresh] = useState(false);
+  const [confirmingId, setConfirmingId] = useState(null);
+
+  const queryClient = useQueryClient();
 
   const inbox = useQuery({
     queryKey: ["mailbox", "all"],
     queryFn: () => fetchMailboxMessages({ unreadOnly: false }),
     retry: false,
     refetchInterval: autoRefresh ? AUTO_REFRESH_MS : false,
+  });
+
+  const deleteMessage = useMutation({
+    mutationFn: (mailboxMessageId) => deleteMailboxMessage(mailboxMessageId),
+    onSuccess: () => {
+      setConfirmingId(null);
+      queryClient.invalidateQueries({ queryKey: ["mailbox"] });
+    },
   });
 
   const messages = inbox.data?.messages || [];
@@ -167,6 +183,18 @@ export function MailboxInboxPage() {
           </div>
         </div>
 
+        {deleteMessage.isError && (
+          <p
+            role="alert"
+            className="mb-4 rounded-2xl border border-rose-200 bg-rose-50/90 px-4 py-3 text-[13px] font-bold text-rose-700"
+          >
+            Could not delete that message.{" "}
+            {deleteMessage.error?.response?.data?.error ||
+              deleteMessage.error?.message ||
+              "Please try again."}
+          </p>
+        )}
+
         {messages.length === 0 ? (
           <div className="py-12 px-4 text-center rounded-2xl border border-dashed border-slate-200/90 bg-slate-50/50 flex flex-col items-center justify-center">
             <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-50 text-blue-600 border border-blue-100/60 shadow-2xs mb-3">
@@ -183,12 +211,13 @@ export function MailboxInboxPage() {
         ) : (
           <div>
             {/* Column Header */}
-            <div className="grid grid-cols-[60px_220px_1fr_200px_160px] gap-4 px-5 py-3.5 bg-slate-50/80 border border-slate-100 rounded-2xl text-[11px] font-extrabold text-slate-400 tracking-wider uppercase mb-3">
+            <div className="hidden xl:grid grid-cols-[60px_220px_1fr_200px_160px_150px] gap-4 px-5 py-3.5 bg-slate-50/80 border border-slate-100 rounded-2xl text-[11px] font-extrabold text-slate-400 tracking-wider uppercase mb-3">
               <span className="text-center">S.No.</span>
               <span>From / Sender</span>
               <span>Subject & Content</span>
               <span>Received On</span>
               <span className="text-center">Query Case</span>
+              <span className="text-center">Actions</span>
             </div>
 
             {/* List Rows */}
@@ -231,39 +260,51 @@ export function MailboxInboxPage() {
                 return (
                   <div
                     key={message.mailboxMessageId}
-                    className="group relative grid grid-cols-[60px_220px_1fr_200px_160px] items-center gap-4 bg-white rounded-2xl border border-slate-200/70 p-4 shadow-2xs hover:shadow-md hover:border-purple-300 transition-all duration-200"
+                    className="group relative flex flex-col xl:grid xl:grid-cols-[60px_220px_1fr_200px_160px_150px] items-start xl:items-center gap-3 xl:gap-4 bg-white rounded-2xl border border-slate-200/70 p-4 shadow-2xs hover:shadow-md hover:border-purple-300 transition-all duration-200"
                   >
                     {/* Left Accent Bar */}
                     <div
                       className={`absolute left-0 top-0 bottom-0 w-1.5 rounded-l-2xl ${known ? "bg-emerald-500" : "bg-amber-500"}`}
                     />
 
-                    {/* S.No */}
-                    <div className="flex justify-center pl-2">
+                    {/* S.No - Desktop Only */}
+                    <div className="hidden xl:flex justify-center pl-2">
                       <span className="flex h-7 w-7 items-center justify-center rounded-full bg-slate-100 font-extrabold text-[12px] text-slate-700">
                         {index + 1}
                       </span>
                     </div>
 
-                    {/* From */}
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div className="flex h-9.5 w-9.5 shrink-0 items-center justify-center rounded-xl bg-purple-50 text-purple-700 font-extrabold text-[12px] border border-purple-100">
-                        {senderInitials}
-                      </div>
-                      <div className="min-w-0">
-                        <div className="text-[13.5px] font-extrabold text-slate-900 truncate">
-                          {senderName}
+                    {/* From / Sender + Mobile Date */}
+                    <div className="flex items-center justify-between xl:justify-start w-full xl:w-auto gap-3 min-w-0">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="flex h-9.5 w-9.5 shrink-0 items-center justify-center rounded-xl bg-purple-50 text-purple-700 font-extrabold text-[12px] border border-purple-100">
+                          {senderInitials}
                         </div>
-                        {senderEmail && (
-                          <div className="text-[11px] font-medium text-slate-400 truncate">
-                            {senderEmail}
+                        <div className="min-w-0">
+                          <div className="text-[13.5px] font-extrabold text-slate-900 truncate">
+                            {senderName}
                           </div>
-                        )}
+                          {senderEmail && (
+                            <div className="text-[11px] font-medium text-slate-400 truncate">
+                              {senderEmail}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      
+                      {/* Mobile Date */}
+                      <div className="xl:hidden flex flex-col items-end shrink-0 text-right pl-2">
+                        <div className="text-[12px] font-bold text-slate-800">
+                          {dateFormatted}
+                        </div>
+                        <div className="text-[10px] font-medium text-slate-400 mt-0.5">
+                          {timeFormatted}
+                        </div>
                       </div>
                     </div>
 
                     {/* Subject */}
-                    <div className="min-w-0 px-1">
+                    <div className="min-w-0 w-full xl:w-auto px-1 xl:px-0">
                       <TooltipProvider>
                         <Tooltip>
                           <TooltipTrigger asChild>
@@ -282,8 +323,8 @@ export function MailboxInboxPage() {
                       </div>
                     </div>
 
-                    {/* Received */}
-                    <div>
+                    {/* Received - Desktop Only */}
+                    <div className="hidden xl:block">
                       <div className="text-[13px] font-bold text-slate-800">
                         {dateFormatted}
                       </div>
@@ -292,21 +333,116 @@ export function MailboxInboxPage() {
                       </div>
                     </div>
 
-                    {/* Query Case */}
-                    <div className="flex justify-center">
-                      {known && paths.QUERY_DETAIL ? (
-                        <Link
-                          to={getQueryDetailPath(queryId)}
-                          className="inline-flex items-center gap-1.5 rounded-xl bg-linear-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white px-4 py-2 text-[12px] font-black shadow-sm transition-all hover:scale-105"
-                        >
-                          <span>{queryId}</span>
-                          <ArrowRight className="h-3.5 w-3.5" />
-                        </Link>
-                      ) : (
-                        <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200/80 px-3.5 py-1.5 text-[11.5px] font-extrabold shadow-2xs">
-                          <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
-                          Not registered
+                    {/* Query Case and Mobile Actions */}
+                    <div className="flex items-center justify-between xl:justify-center w-full xl:w-auto mt-2 xl:mt-0 pt-3 xl:pt-0 border-t border-slate-100 xl:border-0">
+                      <div className="flex items-center gap-2">
+                        <span className="xl:hidden text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                          Query Case:
                         </span>
+                        {known && paths.QUERY_DETAIL ? (
+                          <Link
+                            to={getQueryDetailPath(queryId)}
+                            className="inline-flex items-center gap-1.5 rounded-xl bg-linear-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white px-3.5 py-1.5 xl:px-4 xl:py-2 text-[11.5px] xl:text-[12px] font-black shadow-sm transition-all hover:scale-105"
+                          >
+                            <span>{queryId}</span>
+                            <ArrowRight className="h-3.5 w-3.5" />
+                          </Link>
+                        ) : (
+                          <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200/80 px-3 py-1 xl:px-3.5 xl:py-1.5 text-[10.5px] xl:text-[11.5px] font-extrabold shadow-2xs">
+                            <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse shrink-0" />
+                            Not registered
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Actions - Mobile */}
+                      <div className="xl:hidden flex justify-center">
+                        {confirmingId === message.mailboxMessageId ? (
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                deleteMessage.mutate(message.mailboxMessageId)
+                              }
+                              disabled={deleteMessage.isPending}
+                              className="rounded-xl bg-rose-600 hover:bg-rose-700 text-white px-3 py-1.5 text-[11px] font-extrabold shadow-sm transition-all active:scale-95 cursor-pointer disabled:opacity-60"
+                            >
+                              {deleteMessage.isPending ? "..." : "Yes"}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setConfirmingId(null)}
+                              disabled={deleteMessage.isPending}
+                              className="rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-500 p-1.5 transition-all cursor-pointer disabled:opacity-60"
+                            >
+                              <X className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setConfirmingId(message.mailboxMessageId)
+                            }
+                            className="rounded-xl border border-rose-200 bg-rose-50 hover:bg-rose-100 text-rose-600 p-2 transition-all active:scale-95 cursor-pointer"
+                          >
+                            <Trash2Icon className="h-4 w-4" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Actions - Desktop */}
+                    <div className="hidden xl:flex justify-center">
+                      {confirmingId === message.mailboxMessageId ? (
+                        <div className="flex flex-col items-center gap-1.5">
+                          <span className="text-[11px] font-extrabold text-slate-500 uppercase tracking-wider">
+                            Delete?
+                          </span>
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                deleteMessage.mutate(message.mailboxMessageId)
+                              }
+                              disabled={deleteMessage.isPending}
+                              className="rounded-xl bg-rose-600 hover:bg-rose-700 text-white px-3 py-1.5 text-[11.5px] font-extrabold shadow-sm transition-all active:scale-95 cursor-pointer disabled:opacity-60"
+                            >
+                              {deleteMessage.isPending ? "Deleting…" : "Yes"}
+                            </button>
+                            <button
+                              type="button"
+                              aria-label="Cancel delete"
+                              onClick={() => setConfirmingId(null)}
+                              disabled={deleteMessage.isPending}
+                              className="rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-500 p-1.5 transition-all cursor-pointer disabled:opacity-60"
+                            >
+                              <X className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <button
+                                type="button"
+                                aria-label={`Delete message ${message.mailboxMessageId}`}
+                                onClick={() =>
+                                  setConfirmingId(message.mailboxMessageId)
+                                }
+                                className="rounded-xl border border-rose-200 bg-rose-50 hover:bg-rose-100 text-rose-600 p-2 transition-all active:scale-95 cursor-pointer"
+                              >
+                                <Trash2Icon className="h-4 w-4" />
+                              </button>
+                            </TooltipTrigger>
+                            <TooltipContent className="max-w-70 wrap-break-word">
+                              {known
+                                ? `Removes the mailbox copy only. Query Case ${queryId} will remain.`
+                                : "Remove this message from the IPC mailbox."}
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
                       )}
                     </div>
                   </div>

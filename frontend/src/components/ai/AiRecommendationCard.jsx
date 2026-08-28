@@ -12,8 +12,8 @@ export function AiRecommendationCard({ query, onAssign, currentAssigneeId, varia
 
   const [gemma, setGemma] = useState({ queryId: null, recs: null });
   const [loading, setLoading] = useState(false);
-  const [showAll, setShowAll] = useState(false);
-
+  const [showAll, setShowAll] = useState(false); 
+ 
   const recommendations =
     (gemma.queryId === query?.queryId ? gemma.recs : null) ?? localRecommendations;
 
@@ -60,8 +60,8 @@ export function AiRecommendationCard({ query, onAssign, currentAssigneeId, varia
   if (!query) return null;
 
   const outerClass = variant === 'embedded'
-    ? "select-none h-full"
-    : "bg-linear-to-br from-indigo-50/80 via-purple-50/30 to-white rounded-3xl border border-indigo-200/80 p-6 shadow-sm select-none h-full";
+    ? "select-none"
+    : "bg-linear-to-br from-indigo-50/80 via-purple-50/30 to-white rounded-3xl border border-indigo-200/80 p-6 shadow-sm select-none";
 
   return (
     <div className={outerClass}>
@@ -128,7 +128,7 @@ export function AiRecommendationCard({ query, onAssign, currentAssigneeId, varia
                     {onAssign && (
                       <button
                         type="button"
-                        onClick={() => onAssign(rec.userId)}
+                        onClick={() => onAssign(rec.userId)} 
                         disabled={isAssigned}
                         className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[12px] font-bold transition-all cursor-pointer disabled:opacity-70 disabled:cursor-not-allowed ${
                           isAssigned

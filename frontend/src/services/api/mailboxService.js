@@ -21,6 +21,14 @@ export async function markMessageIngested(mailboxMessageId, { recipient } = {}) 
   return data;
 }
 
+export async function deleteMailboxMessage(mailboxMessageId, { recipient } = {}) {
+  const { data } = await axiosClient.delete(
+    `/mailbox/messages/${encodeURIComponent(mailboxMessageId)}`,
+    { params: recipient ? { recipient } : {} },
+  );
+  return data;
+}
+
 export async function sendEnquiry({ subject, body, attachments = [], cc = [] }) {
   const { data } = await axiosClient.post('/emails/enquiry', { subject, body, attachments, cc });
   return data;

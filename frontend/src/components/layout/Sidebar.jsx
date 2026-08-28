@@ -1,44 +1,37 @@
-import { useState } from 'react';
-import { NavLink, useNavigate } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
-import { LogOut, Menu } from 'lucide-react';
+import { useState } from "react";
+import { NavLink, useNavigate } from "react-router-dom";
+import { motion } from "framer-motion";
+import { ChevronLeft, ChevronRight, LogOut } from "lucide-react";
 
-import { navItemsForRole } from '@/constants/navigation';
-import { ROLE_LABELS } from '@/constants/roles';
-import { SECTION } from '@/constants/routeSections';
-import { ROUTE_PATHS } from '@/constants/routePaths';
-import { useAuthStore } from '@/store/useAuthStore';
-import { useWorkflowStore } from '@/store/useWorkflowStore';
-import { cn } from '@/utils/cn';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { navItemsForRole } from "@/constants/navigation";
+import { SECTION } from "@/constants/routeSections";
+import { ROUTE_PATHS } from "@/constants/routePaths";
+import { useAuthStore } from "@/store/useAuthStore";
+import { useWorkflowStore } from "@/store/useWorkflowStore";
+import { cn } from "@/utils/cn";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
-
-const STORAGE_KEY = 'qms.sidebar.collapsed';
-const WIDTH_OPEN = 240;
+const STORAGE_KEY = "qms.sidebar.collapsed";
+const WIDTH_OPEN = 255;
 
 export const RAIL_ITEM = 44;
 export const RAIL_PADDING = 16;
 export const WIDTH_CLOSED = RAIL_ITEM + RAIL_PADDING * 2;
 
-const RAIL_SQUARE = 'h-11 w-11 shrink-0 items-center justify-center rounded-[10px]';
 const FOCUS_RING =
-  'outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-0';
+  "outline-none focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-0";
 
 function readCollapsed() {
   try {
-    return localStorage.getItem(STORAGE_KEY) === 'true';
+    return localStorage.getItem(STORAGE_KEY) === "true";
   } catch {
     return false;
   }
-}
-
-function ZoneDivider({ open }) {
-  return (
-    <div
-      aria-hidden="true"
-      className={cn('h-px bg-blue-400/20', open ? 'mx-4 my-3' : 'mx-auto my-3 w-8')}
-    />
-  );
 }
 
 function RailTooltip({ open, label, children }) {
@@ -48,8 +41,8 @@ function RailTooltip({ open, label, children }) {
       <TooltipTrigger asChild>{children}</TooltipTrigger>
       <TooltipContent
         side="right"
-        sideOffset={12}
-        className="bg-sidebar-tooltip text-white border-blue-500/30 font-medium"
+        sideOffset={14}
+        className="bg-slate-900 text-white border border-slate-700 font-extrabold text-xs shadow-2xl backdrop-blur-md"
       >
         {label}
       </TooltipContent>
@@ -59,11 +52,16 @@ function RailTooltip({ open, label, children }) {
 
 export function Sidebar() {
   const currentUser = useAuthStore((state) => state.currentUser);
+  const logout = useAuthStore((state) => state.logout);
   const notifications = useWorkflowStore((state) => state.notifications);
+  const navigate = useNavigate();
+
   const [collapsed, setCollapsed] = useState(readCollapsed);
   const open = !collapsed;
 
-  const notifCount = notifications.filter(n => n.recipientRole === currentUser?.role).length;
+  const notifCount = notifications.filter(
+    (n) => n.recipientRole === currentUser?.role,
+  ).length;
 
   const toggle = () => {
     setCollapsed((prev) => {
@@ -71,62 +69,165 @@ export function Sidebar() {
       try {
         localStorage.setItem(STORAGE_KEY, String(next));
       } catch {
-        // ignore storage errors
+        // ignore storage error
       }
       return next;
     });
   };
 
-  const items = navItemsForRole(currentUser?.role);
+  const handleLogout = () => {
+    logout();
+    navigate(ROUTE_PATHS.LOGIN);
+  };
+
+  const items = navItemsForRole(currentUser?.role).filter(
+    (item) => item.section !== SECTION.NOTIFICATIONS,
+  );
 
   return (
     <TooltipProvider delayDuration={150}>
       <motion.aside
         initial={false}
         animate={{ width: open ? WIDTH_OPEN : WIDTH_CLOSED }}
-        transition={{ duration: 0.2, ease: 'easeInOut' }}
-        className="relative z-10 flex h-screen shrink-0 flex-col overflow-hidden border-r border-white/10 bg-[linear-gradient(180deg,#112a67_0%,#1b48a7_48%,#10285f_100%)] text-white shadow-[0_28px_60px_rgba(15,23,42,0.28)] transition-all duration-200 select-none"
+        transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
+        className="hidden lg:flex relative z-20 h-screen shrink-0 flex-col overflow-hidden p-3 select-none"
       >
-        <div className="pointer-events-none absolute inset-0 z-0">
-          <div className="absolute left-[-20%] top-[12%] h-56 w-56 rounded-full bg-blue-300/10 blur-3xl" />
-          <div className="absolute right-[-22%] top-[36%] h-64 w-64 rounded-full bg-violet-400/10 blur-3xl" />
-        </div>
-        <div className="pointer-events-none absolute bottom-0 left-0 z-0 select-none opacity-18">
-          <svg width="240" height="270" viewBox="0 0 240 270" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M28 228H212" stroke="rgba(191,219,254,0.38)" strokeWidth="1.2" />
-            <path d="M47 228V178H193V228" stroke="rgba(147,197,253,0.25)" strokeWidth="1.2" />
-            <path d="M58 178H182L170 156H70L58 178Z" stroke="rgba(191,219,254,0.34)" strokeWidth="1.2" />
-            <path d="M84 156V130H156V156" stroke="rgba(191,219,254,0.3)" strokeWidth="1.2" />
-            <path d="M120 116L162 130H78L120 116Z" stroke="rgba(191,219,254,0.32)" strokeWidth="1.2" />
-            <path d="M90 178V228M120 178V228M150 178V228" stroke="rgba(147,197,253,0.24)" strokeWidth="1.2" />
-            <path d="M36 246H204" stroke="rgba(191,219,254,0.2)" strokeWidth="1.2" strokeDasharray="4 6" />
-          </svg>
-        </div>
-
-        <TitleSection open={open} onToggle={toggle} />
-        <ZoneDivider open={open} />
-
-        {open && (
-          <div className="px-4 pt-1 pb-1 text-[10.5px] font-extrabold uppercase tracking-widest text-blue-200/60 select-none">
-            Main Menu
+        <div className="relative flex h-full w-full flex-col overflow-hidden rounded-[28px] border border-white/80 bg-[linear-gradient(to_top,#accbee_0%,#e7f0fd_100%)] text-slate-900 shadow-[0_16px_40px_rgba(172,203,238,0.3)] backdrop-blur-2xl">
+          <div className="pointer-events-none absolute inset-0 z-0 opacity-40">
+            <div className="absolute -left-12 -top-12 h-52 w-52 rounded-full bg-white/30 blur-3xl" />
+            <div className="absolute -right-12 top-1/2 h-56 w-56 rounded-full bg-rose-300/30 blur-3xl" />
           </div>
-        )}
-        <nav
-          aria-label="Primary"
-          className={cn(
-            'relative z-10 flex flex-1 flex-col gap-2.5 overflow-y-auto overflow-x-hidden px-3.5 py-2',
-            !open && 'items-center',
-          )}
-        >
-          {items.map((item) => (
-            <NavItem key={item.path} item={item} open={open} notifCount={notifCount} />
-          ))}
-        </nav>
 
-        <div className="relative z-10 mt-auto">
-          <ZoneDivider open={open} />
-          <div className={cn('flex flex-col pb-4', open ? 'px-3.5' : 'items-center px-3.5')}>
-            {currentUser && <UserFooter open={open} user={currentUser} />}
+          <div
+            className={cn(
+              "relative z-10 flex shrink-0 items-center py-3.5 transition-all border-b border-white/30",
+              open
+                ? "px-4 justify-between"
+                : "flex-col justify-center gap-2.5 px-2 pb-3",
+            )}
+          >
+            <div className="flex items-center min-w-0 flex-1 justify-center">
+              {open ? (
+                <img
+                  src="/anuvadini_new_logo 2.png"
+                  alt="Anuvadini Logo"
+                  className="object-contain mix-blend-multiply transition-all filter drop-shadow-xs w-48 sm:w-52 h-16 sm:h-18 pr-2"
+                />
+              ) : (
+                <img
+                  src="/anuvadini-icon.png"
+                  alt="Anuvadini Icon"
+                  className="object-contain mix-blend-multiply transition-all filter drop-shadow-xs h-10 w-10 p-0.5"
+                />
+              )}
+            </div>
+
+            <button
+              type="button"
+              onClick={toggle}
+              title={open ? "Collapse sidebar" : "Expand sidebar"}
+              aria-label={open ? "Collapse sidebar" : "Expand sidebar"}
+              className={cn(
+                "flex items-center justify-center text-slate-900 shadow-2xs border border-white/50 transition-all cursor-pointer shrink-0 hover:bg-white/50",
+                open
+                  ? "h-7.5 w-7.5 rounded-xl bg-white/35"
+                  : "h-8.5 w-8.5 rounded-full bg-white/35",
+              )}
+            >
+              <ChevronLeft
+                className={cn(
+                  "h-4 w-4 transition-transform duration-200",
+                  !open && "rotate-180",
+                )}
+              />
+            </button>
+          </div>
+
+          <div className="relative z-10 flex-1 overflow-y-auto overflow-x-hidden py-3">
+            <nav
+              aria-label="Primary"
+              className={cn(
+                "flex flex-col gap-2",
+                open ? "px-3" : "items-center px-2",
+              )}
+            >
+              {items.map((item) => (
+                <NavItem
+                  key={item.path}
+                  item={item}
+                  open={open}
+                  notifCount={notifCount}
+                />
+              ))}
+            </nav>
+          </div>
+
+          <div className="relative z-10 p-3 border-t border-white/30 bg-white/20 backdrop-blur-md flex flex-col gap-2.5 justify-center items-center">
+            <RailTooltip
+              open={open}
+              label="IPC-QMS — Quality Management System"
+            >
+              <div
+                className={cn(
+                  "flex items-center gap-2.5 rounded-2xl bg-white/50 border border-white/70 shadow-2xs transition-all",
+                  open
+                    ? "w-full px-3 py-2"
+                    : "h-10 w-10 justify-center p-0 rounded-full",
+                )}
+              >
+                <div className="flex h-7.5 w-7.5 shrink-0 items-center justify-center rounded-xl bg-[linear-gradient(135deg,#2563eb_0%,#6366f1_50%,#8b5cf6_100%)] text-white shadow-xs">
+                  <svg
+                    className="w-4.5 h-4.5 text-white"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                  >
+                    <path
+                      d="M12 2L20.66 7V17L12 22L3.34 17V7L12 2Z"
+                      stroke="white"
+                      strokeWidth="2.2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                    <path
+                      d="M12 7.5L16.33 10V15L12 17.5L7.67 15V10L12 7.5Z"
+                      stroke="white"
+                      strokeWidth="1.8"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                </div>
+
+                {open && (
+                  <div className="flex min-w-0 flex-col justify-center">
+                    <div className="font-heading text-[13px] font-black leading-none text-slate-900 truncate">
+                      IPC-QMS
+                    </div>
+                    <div className="mt-0.5 text-[9.5px] font-bold text-slate-700 truncate">
+                      Quality Management System
+                    </div>
+                  </div>
+                )}
+              </div>
+            </RailTooltip>
+
+            <RailTooltip open={open} label="Sign out session">
+              <button
+                type="button"
+                onClick={handleLogout}
+                className={cn(
+                  "flex items-center justify-center font-black transition-all duration-200 cursor-pointer border",
+                  "bg-white/40 hover:bg-rose-600 text-slate-900 hover:text-white border-white/60 hover:border-rose-600 active:scale-[0.98]",
+                  open
+                    ? "w-full py-2.5 px-3 rounded-2xl gap-2 text-xs shadow-2xs"
+                    : "h-10 w-10 rounded-full text-sm",
+                )}
+              >
+                <LogOut className="h-4 w-4 shrink-0" strokeWidth={2.4} />
+                {open && <span>Sign out session</span>}
+              </button>
+            </RailTooltip>
           </div>
         </div>
       </motion.aside>
@@ -138,175 +239,62 @@ function NavItem({ item, open, notifCount }) {
   const { label, path, icon: Icon, section } = item;
   const isNotifications = section === SECTION.NOTIFICATIONS;
 
-  const link = (
-    <NavLink
-      to={path}
-      end={section === SECTION.DASHBOARD}
-      aria-label={label}
-      className={({ isActive }) =>
-        cn(
-          'relative flex items-center rounded-2xl text-[15px] transition-all duration-200',
-          FOCUS_RING,
-          open ? 'gap-3.5 justify-start px-4 py-3.5' : `${RAIL_SQUARE} justify-center`,
-          isActive
-            ? 'bg-[linear-gradient(135deg,rgba(52,120,246,0.95),rgba(68,145,255,0.88))] font-bold text-white border border-white/18 shadow-[0_14px_26px_rgba(12,20,56,0.34)] backdrop-blur-md before:absolute before:inset-px before:rounded-[15px] before:border before:border-white/15 before:content-[""]'
-            : 'font-semibold text-blue-100/92 hover:bg-white/10 hover:text-white',
-        )
-      }
-    >
-      {({ isActive }) => (
-        <>
-          <Icon className={cn("h-5 w-5 shrink-0", isActive ? "text-white" : "text-blue-200")} strokeWidth={2} aria-hidden="true" />
-          {open && (
-            <span className="flex-1 truncate leading-none tracking-wide">
-              {label}
-            </span>
-          )}
-          {open && isNotifications && notifCount > 0 && (
-            <span className="ml-auto flex h-5.5 min-w-5.5 items-center justify-center rounded-full bg-blue-400/40 px-2 text-[12px] font-extrabold text-white shadow-xs">
-              {notifCount}
-            </span>
-          )}
-        </>
-      )}
-    </NavLink>
-  );
-
   return (
     <RailTooltip open={open} label={label}>
-      {link}
-    </RailTooltip>
-  );
-}
-
-function TitleSection({ open, onToggle }) {
-  return (
-    <div
-      className={cn(
-        'relative z-10 flex shrink-0 items-center py-4.5 transition-all',
-        open ? 'px-4 justify-between' : 'flex-col justify-center gap-3 px-2',
-      )}
-    >
-      <div className="flex items-center gap-3 min-w-0">
-        <div className="flex h-9.5 w-9.5 shrink-0 items-center justify-center rounded-xl border border-white/25 bg-[linear-gradient(180deg,rgba(255,255,255,0.22),rgba(255,255,255,0.08))] text-white shadow-[0_14px_24px_rgba(8,15,40,0.3)] backdrop-blur-md">
-          <span className="font-heading text-[17px] font-black tracking-tight text-white drop-shadow-xs">Q</span>
-        </div>
-        <AnimatePresence>
-          {open && (
-            <motion.div
-              initial={{ opacity: 0, x: -5 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -5 }}
-              transition={{ duration: 0.15 }}
-              className="flex min-w-0 flex-col justify-center"
-            >
-              <div className="font-heading text-[20px] font-black leading-none tracking-tight text-white">
-                QMS
-              </div>
-              <div className="mt-1 text-[10.5px] font-semibold leading-tight text-blue-100/72 truncate">
-                Query Management System
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </div>
-      
-      <button
-        type="button"
-        onClick={onToggle}
-        title={open ? "Collapse sidebar" : "Expand sidebar"}
-        aria-label={open ? "Collapse sidebar" : "Expand sidebar"}
-        className="flex items-center justify-center h-8 w-8 rounded-lg text-blue-200/80 hover:bg-white/10 hover:text-white transition-colors cursor-pointer shrink-0"
+      <NavLink
+        to={path}
+        end={section === SECTION.DASHBOARD}
+        aria-label={label}
+        className={({ isActive }) =>
+          cn(
+            "group relative flex items-center transition-all duration-200",
+            FOCUS_RING,
+            open
+              ? "gap-3 px-3.5 py-3 rounded-2xl text-xs"
+              : "h-10 w-10 rounded-full justify-center text-xs border border-white/40",
+            isActive
+              ? "bg-[linear-gradient(135deg,#2563eb_0%,#6366f1_50%,#8b5cf6_100%)] text-white font-black shadow-lg shadow-indigo-500/25 border border-white/30"
+              : "font-black text-slate-800/90 hover:bg-white/40 hover:text-slate-950 border-white/40",
+          )
+        }
       >
-        <Menu className="h-5 w-5" />
-      </button>
-    </div>
-  );
-}
+        {({ isActive }) => (
+          <>
+            <Icon
+              className={cn(
+                "h-4.5 w-4.5 shrink-0 transition-transform duration-200 group-hover:scale-105",
+                isActive
+                  ? "text-white drop-shadow-xs"
+                  : "text-slate-800 group-hover:text-slate-950",
+              )}
+              strokeWidth={2.4}
+              aria-hidden="true"
+            />
 
-function initials(name) {
-  return (
-    String(name || '')
-      .trim()
-      .split(/\s+/)
-      .slice(0, 2)
-      .map((word) => word[0])
-      .join('')
-      .toUpperCase() || '?'
-  );
-}
-
-function UserFooter({ open, user }) {
-  const logout = useAuthStore((state) => state.logout);
-  const navigate = useNavigate();
-  const handleLogout = (e) => {
-    e.stopPropagation();
-    logout();
-    navigate(ROUTE_PATHS.LOGIN);
-  };
-
-  const role = ROLE_LABELS[user.role];
-
-  const avatar = (
-    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-blue-600 border border-blue-300/40 text-[13px] font-bold text-white shadow-sm">
-      {initials(user.name)}
-    </div>
-  );
-
-  if (!open) {
-    return (
-      <>
-        <RailTooltip open={open} label={`${user.name} · ${role}`}>
-          <div
-            tabIndex={0}
-            role="img"
-            aria-label={`Signed in as ${user.name}, ${role}`}
-            className={cn('flex transition-opacity hover:opacity-80', RAIL_SQUARE, FOCUS_RING)}
-          >
-            {avatar}
-          </div>
-        </RailTooltip>
-
-        <RailTooltip open={open} label="Sign out">
-          <button
-            type="button"
-            onClick={handleLogout}
-            aria-label="Sign out"
-            className={cn(
-              'mt-1 flex text-blue-200 transition-colors hover:bg-white/10 hover:text-white',
-              RAIL_SQUARE,
-              FOCUS_RING,
+            {open && (
+              <span className="flex-1 truncate leading-none tracking-tight text-[13px]">
+                {label}
+              </span>
             )}
-          >
-            <LogOut className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
-          </button>
-        </RailTooltip>
-      </>
-    );
-  }
 
-  return (
-    <div className="group flex items-center justify-between gap-2.5 rounded-[20px] border border-white/14 bg-white/12 p-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.18),0_16px_24px_rgba(5,11,38,0.16)] backdrop-blur-md transition-colors hover:bg-white/16">
-      <div className="flex items-center gap-2.5 min-w-0">
-        {avatar}
-        <div className="min-w-0 flex-1 overflow-hidden">
-          <div className="truncate text-[13px] font-bold leading-tight text-white">
-            {user.name}
-          </div>
-          <div className="mt-0.5 truncate text-[11px] font-medium leading-tight text-blue-200/80">
-            {role}
-          </div>
-        </div>
-      </div>
-      <button
-        type="button"
-        onClick={handleLogout}
-        title="Sign out"
-        aria-label="Sign out"
-        className="flex h-8 w-8 items-center justify-center rounded-lg text-blue-200/80 hover:bg-white/15 hover:text-white transition-colors cursor-pointer shrink-0"
-      >
-        <LogOut className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
-      </button>
-    </div>
+            {open && isNotifications && notifCount > 0 && (
+              <span className="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-rose-600 px-1.5 text-[11px] font-black text-white shadow-xs">
+                {notifCount}
+              </span>
+            )}
+
+            {!open && isNotifications && notifCount > 0 && (
+              <span className="absolute -top-1 -right-1 flex h-4.5 min-w-4.5 items-center justify-center rounded-full bg-rose-600 px-1 text-[10px] font-black text-white shadow-xs border border-white">
+                {notifCount}
+              </span>
+            )}
+
+            {open && !isActive && (
+              <ChevronRight className="h-3.5 w-3.5 text-slate-700/60 opacity-0 group-hover:opacity-100 transition-opacity shrink-0 ml-auto" />
+            )}
+          </>
+        )}
+      </NavLink>
+    </RailTooltip>
   );
 }

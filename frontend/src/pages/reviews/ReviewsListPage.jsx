@@ -1,22 +1,11 @@
 import { QueryTable } from "@/components/workflow/QueryTable";
 import { useRoutePaths } from "@/hooks/useRoutePaths";
-import { WORKFLOW_STATE } from "@/constants/statusEnums";
-import { useAuthStore } from "@/store/useAuthStore";
-import { useWorkflowStore } from "@/store/useWorkflowStore";
+import { useBucketFilter } from "@/hooks/useBucketFilter";
+import { ROLES } from "@/constants/roles";
 
 export function ReviewsListPage() {
   const paths = useRoutePaths();
-  const currentUser = useAuthStore((state) => state.currentUser);
-  const workflowSteps = useWorkflowStore((state) => state.workflowSteps);
-
-  const isMyReview = (query) => {
-    if (!currentUser) return false;
-    if (query.workflowState !== WORKFLOW_STATE.UNDER_REVIEW) return false;
-    const step = workflowSteps.find(
-      (s) => s.stepId === query.currentWorkflowStepId,
-    );
-    return step?.assignedUserId === currentUser.id;
-  };
+  const isMyReview = useBucketFilter(ROLES.REVIEWER, ["awaitingReview"]);
 
   return (
     <QueryTable

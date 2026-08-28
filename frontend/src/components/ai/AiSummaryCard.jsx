@@ -1,10 +1,15 @@
 import { useState } from 'react';
 import { Sparkles, RefreshCw, Loader2 } from 'lucide-react';
 import { fetchGemmaAiSummary } from '@/services/api/aiService';
+import { cn } from '@/utils/cn';
+
+/** The overview shows a gist; the full output is one click away. */
+const KEY_POINT_PREVIEW = 3;
 
 export function AiSummaryCard({ summary: initialSummary, query, onSummaryUpdated, variant = 'card' }) {
   const [summary, setSummary] = useState(initialSummary);
   const [loading, setLoading] = useState(false);
+  const [expanded, setExpanded] = useState(false);
 
   const handleGenerateAiSummary = async () => {
     if (!query) return;
@@ -31,9 +36,15 @@ export function AiSummaryCard({ summary: initialSummary, query, onSummaryUpdated
 
   const currentSummary = summary || initialSummary;
 
+  const keyPoints = currentSummary?.keyPoints || [];
+  const visibleKeyPoints = expanded ? keyPoints : keyPoints.slice(0, KEY_POINT_PREVIEW);
+  const hasMoreKeyPoints = keyPoints.length > KEY_POINT_PREVIEW;
+  // Roughly the point at which the clamp starts hiding text.
+  const hasMoreText = (currentSummary?.text?.length || 0) > 220;
+
   const outerClass = variant === 'embedded'
-    ? "select-none h-full"
-    : "bg-linear-to-br from-indigo-50/80 via-purple-50/30 to-white rounded-3xl border border-indigo-200/80 p-6 shadow-sm select-none h-full";
+    ? "select-none"
+    : "bg-linear-to-br from-indigo-50/80 via-purple-50/30 to-white rounded-3xl border border-indigo-200/80 p-6 shadow-sm select-none";
 
   return (
     <div className={outerClass}>
@@ -89,22 +100,37 @@ export function AiSummaryCard({ summary: initialSummary, query, onSummaryUpdated
           </div>
         ) : (
           <>
-            <p className="text-[16px] font-semibold text-slate-800 leading-relaxed m-0">
+            <p
+              className={cn(
+                'text-[15px] font-semibold text-slate-800 leading-relaxed m-0',
+                !expanded && 'line-clamp-3',
+              )}
+            >
               {currentSummary.text}
             </p>
 
             {currentSummary.keyPoints?.length > 0 && (
-              <div className="rounded-2xl bg-white/90 p-4 border border-purple-100 shadow-2xs space-y-2">
-                <p className="text-[15px] font-black text-slate-900 m-0">Key Points Raised:</p>
-                <ul className="space-y-1.5 pl-0 m-0 list-none">
-                  {currentSummary.keyPoints.map((point, index) => (
-                    <li key={index} className="flex items-start gap-2 text-[14.5px] font-medium text-slate-600 leading-snug">
+              <div className="rounded-2xl bg-white/90 p-3.5 border border-purple-100 shadow-2xs space-y-1.5">
+                <p className="text-[14px] font-black text-slate-900 m-0">Key Points Raised:</p>
+                <ul className="space-y-1 pl-0 m-0 list-none">
+                  {visibleKeyPoints.map((point, index) => (
+                    <li key={index} className="flex items-start gap-2 text-[13.5px] font-medium text-slate-600 leading-snug">
                       <span className="w-1.5 h-1.5 rounded-full bg-purple-500 shrink-0 mt-1.5" />
                       <span>{point}</span>
                     </li>
                   ))}
                 </ul>
               </div>
+            )}
+
+            {(hasMoreText || hasMoreKeyPoints) && (
+              <button
+                type="button"
+                onClick={() => setExpanded((open) => !open)}
+                className="w-full py-1.5 text-[12.5px] font-bold text-slate-500 hover:text-purple-700 bg-white/70 hover:bg-purple-50 border border-slate-200/70 rounded-xl transition-colors cursor-pointer"
+              >
+                {expanded ? 'Show less' : 'View full summary'}
+              </button>
             )}
 
             {currentSummary.topics?.length > 0 && (

@@ -1,15 +1,14 @@
 import { QueryTable } from "@/components/workflow/QueryTable";
 import { useRoutePaths } from "@/hooks/useRoutePaths";
-import { WORKFLOW_STATE } from "@/constants/statusEnums";
-
-const DISPATCHABLE = [
-  WORKFLOW_STATE.READY_FOR_DISPATCH,
-  WORKFLOW_STATE.DISPATCHED,
-  WORKFLOW_STATE.CLOSED,
-];
+import { useBucketFilter } from "@/hooks/useBucketFilter";
+import { ROLES } from "@/constants/roles";
 
 export function DispatchListPage() {
   const paths = useRoutePaths();
+  const filter = useBucketFilter(ROLES.FRONT_OFFICE, [
+    "awaitingDispatch",
+    "dispatched",
+  ]);
   return (
     <QueryTable
       title="Dispatch"
@@ -20,7 +19,7 @@ export function DispatchListPage() {
         { label: "Dispatch" },
       ]}
       detailPath={paths.DISPATCH_DETAIL}
-      filter={(q) => DISPATCHABLE.includes(q.workflowState)}
+      filter={filter}
       emptyMessage="Nothing ready for dispatch. A query appears here after final approval."
     />
   );
