@@ -1,7 +1,6 @@
 import { NavLink, useNavigate } from "react-router-dom";
 import { LogOut } from "lucide-react";
 import { navItemsForRole } from "@/constants/navigation";
-import { SECTION } from "@/constants/routeSections";
 import { ROUTE_PATHS } from "@/constants/routePaths";
 import { useAuthStore } from "@/store/useAuthStore";
 import { cn } from "@/utils/cn";
@@ -11,9 +10,8 @@ export function MobileNav() {
   const logout = useAuthStore((state) => state.logout);
   const navigate = useNavigate();
   
-  const items = navItemsForRole(currentUser?.role).filter(
-    (item) => item.section !== SECTION.NOTIFICATIONS,
-  );
+  // Notifications is excluded at the source now — see routeSections.js.
+  const items = navItemsForRole(currentUser?.role);
 
   if (items.length === 0) return null;
 
@@ -28,7 +26,7 @@ export function MobileNav() {
             end={item.path === "/" || item.path.endsWith("/dashboard")}
             className={({ isActive }) =>
               cn(
-                "flex flex-col items-center justify-center gap-1 min-w-[64px] py-1.5 px-2 rounded-xl transition-all cursor-pointer",
+                "flex flex-col items-center justify-center gap-1 min-w-16 py-1.5 px-2 rounded-xl transition-all cursor-pointer",
                 isActive
                   ? "text-blue-600 bg-blue-50/80"
                   : "text-slate-500 hover:text-slate-900 hover:bg-slate-50",
@@ -59,7 +57,7 @@ export function MobileNav() {
           logout();
           navigate(ROUTE_PATHS.LOGIN);
         }}
-        className="flex flex-col items-center justify-center gap-1 min-w-[64px] py-1.5 px-2 rounded-xl transition-all cursor-pointer text-slate-500 hover:text-rose-600 hover:bg-rose-50"
+        className="flex flex-col items-center justify-center gap-1 min-w-16 py-1.5 px-2 rounded-xl transition-all cursor-pointer text-slate-500 hover:text-rose-600 hover:bg-rose-50"
       >
         <LogOut className="h-5 w-5 transition-transform" strokeWidth={2} />
         <span className="text-[10px] font-bold leading-none tracking-tight">

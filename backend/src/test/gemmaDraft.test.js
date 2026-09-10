@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import request from 'supertest';
+import { AUTH } from './helpers/auth.js';
 
 import app from '../app.js';
 import env from '../config/env.js';
@@ -480,14 +481,14 @@ describe('topic headings', () => {
 
 describe('POST /api/v1/ai/draft', () => {
   it('rejects a request with neither subject nor body', async () => {
-    const response = await request(app).post('/api/v1/ai/draft').send({});
+    const response = await request(app).post('/api/v1/ai/draft').set(AUTH).send({});
     expect(response.status).toBe(400);
     expect(response.body.success).toBe(false);
     expect(response.body.error).toMatch(/subject.*body/i);
   });
 
   it('returns the sectioned draft shape', async () => {
-    const response = await request(app).post('/api/v1/ai/draft').send(MULTI);
+    const response = await request(app).post('/api/v1/ai/draft').set(AUTH).send(MULTI);
     expect(response.status).toBe(200);
     expect(response.body.success).toBe(true);
     expect(Array.isArray(response.body.draft.answers)).toBe(true);

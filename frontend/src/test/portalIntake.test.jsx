@@ -70,7 +70,7 @@ async function raiseThroughPortal(subject = SUBJECT) {
     target: { value: BODY },
   });
   fireEvent.click(screen.getByRole("button", { name: /Send enquiry/ }));
-  await screen.findByText("Enquiry raised");
+  await screen.findByText("Enquiry raised successfully");
   unmount();
   return s().queries.find((q) => q.subject === subject);
 }

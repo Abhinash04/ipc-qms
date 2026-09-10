@@ -44,7 +44,12 @@ export const SECTIONS = {
   [SECTION.APPROVAL_DETAIL]: { segment: 'approvals/:queryId' },
   [SECTION.DISPATCH]: { segment: 'dispatch', label: 'Dispatch', icon: Send, nav: true },
   [SECTION.DISPATCH_DETAIL]: { segment: 'dispatch/:queryId' },
-  [SECTION.NOTIFICATIONS]: { segment: 'notifications', label: 'Notifications', icon: Bell, nav: true },
+  // No `nav`: the Header's bell owns notifications, so this is not a sidebar
+  // item. The route still exists and is still permission-gated — only its
+  // appearance in navItemsForRole is withdrawn. Sidebar and MobileNav each
+  // used to filter it out themselves, which meant navItemsForRole disagreed
+  // with every component that rendered it.
+  [SECTION.NOTIFICATIONS]: { segment: 'notifications', label: 'Notifications', icon: Bell },
   [SECTION.REPORTS]: { segment: 'reports', label: 'Reports', icon: BarChart3, nav: true },
   [SECTION.ADMINISTRATION]: { segment: 'administration', label: 'Administration', icon: Settings, nav: true },
   [SECTION.USERS]: { segment: 'users', label: 'Users', icon: Users },

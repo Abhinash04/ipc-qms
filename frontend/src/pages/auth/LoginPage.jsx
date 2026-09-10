@@ -6,38 +6,12 @@ import {
   Eye,
   EyeOff,
   LogIn,
-  LayoutGrid,
-  ChevronDown,
   CheckCircle2,
   Loader2,
 } from "lucide-react";
 
-import {
-  MOCK_USERS,
-  MOCK_PASSWORD,
-  findUserByEmail,
-} from "@/constants/mockUsers";
-import { ROLE_LABELS } from "@/constants/roles";
 import { roleHome } from "@/constants/routePaths";
 import { useAuthStore } from "@/store/useAuthStore";
-
-const roleColors = {
-  Inquirer: { bg: "#eff6ff", text: "#2563eb", border: "#bfdbfe" },
-  "Front Office": { bg: "#f0fdf4", text: "#16a34a", border: "#bbf7d0" },
-  "Officer-in-Charge": { bg: "#fffbeb", text: "#d97706", border: "#fde68a" },
-  "Assigned Official": { bg: "#f5f3ff", text: "#7c3aed", border: "#ddd6fe" },
-  Reviewer: { bg: "#fdf2f8", text: "#db2777", border: "#fbcfe8" },
-  Admin: { bg: "#fff1f2", text: "#e11d48", border: "#fecdd3" },
-  "Super Admin": { bg: "#fff7ed", text: "#ea580c", border: "#fed7aa" },
-};
-
-function getInitials(name) {
-  return (name || "")
-    .split(" ")
-    .map((n) => n[0])
-    .slice(0, 2)
-    .join("");
-}
 
 export function LoginPage() {
   const currentUser = useAuthStore((state) => state.currentUser);
@@ -48,37 +22,27 @@ export function LoginPage() {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [activeUser, setActiveUser] = useState(null);
   const [error, setError] = useState(null);
-  const [showMocks, setShowMocks] = useState(false);
 
   if (currentUser) return <Navigate to={roleHome(currentUser.role)} replace />;
 
-  const submit = (event) => {
+  const submit = async (event) => {
     event.preventDefault();
     setLoading(true);
     setError(null);
 
-    setTimeout(() => {
-      setLoading(false);
-      const user = findUserByEmail(email);
-
-      if (!user || password !== MOCK_PASSWORD) {
-        setError("Incorrect email or password.");
-        return;
-      }
-
-      login(user.id);
+    try {
+      const user = await login(email, password);
       navigate(roleHome(user.role), { replace: true });
-    }, 600);
-  };
-
-  const applyCredentials = (user) => {
-    setEmail(user.email);
-    setPassword(MOCK_PASSWORD);
-    setActiveUser(user.name);
-    setError(null);
-    setShowMocks(false);
+    } catch (caught) {
+      // The server answers with one message for an unknown address and a wrong
+      // password alike, so that a failed sign-in cannot enumerate accounts.
+      setError(
+        caught?.response?.data?.error || "Incorrect email or password.",
+      );
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -155,99 +119,6 @@ export function LoginPage() {
             <p className="text-[15px] sm:text-[17.5px] font-bold text-slate-500 text-center px-1 sm:px-0">
               Enter your credentials to continue to your workspace.
             </p>
-          </div>
-
-          <div className="relative z-30">
-            <button
-              type="button"
-              onClick={() => setShowMocks(!showMocks)}
-              className="w-full flex items-center justify-between px-3 sm:px-4.5 py-3.5 sm:py-4 rounded-2xl bg-indigo-50/70 hover:bg-indigo-100/70 border border-indigo-200/90 text-[14px] sm:text-[15.5px] font-black text-slate-800 transition-all shadow-2xs cursor-pointer"
-            >
-              <div className="flex items-center gap-3">
-                <div className="w-8.5 h-8.5 rounded-xl bg-indigo-600 text-white flex items-center justify-center shrink-0 shadow-xs">
-                  <LayoutGrid className="w-5 h-5" strokeWidth={2.2} />
-                </div>
-                <div className="flex items-center gap-1.5 sm:gap-2">
-                  <span>Mock Credentials</span>
-                  <span className="text-[10px] sm:text-[11.5px] font-black uppercase px-2 py-0.5 rounded-full bg-indigo-200/80 text-indigo-900 tracking-wider">
-                    Dev Only
-                  </span>
-                </div>
-              </div>
-              <ChevronDown
-                className={`w-5.5 h-5.5 text-indigo-600 transition-transform duration-200 ${showMocks ? "rotate-180" : ""}`}
-              />
-            </button>
-
-            {showMocks && (
-              <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-2xl border border-slate-200/90 shadow-2xl p-3.5 z-50 animate-in fade-in-50 zoom-in-95">
-                <div className="p-2 border-b border-slate-100 mb-2 flex justify-between items-center">
-                  <span className="text-[13px] font-extrabold text-slate-600">
-                    Quick select demo user:
-                  </span>
-                  <span className="text-[12px] font-mono font-black bg-slate-100 px-2.5 py-1 rounded-lg text-indigo-700">
-                    Password: {MOCK_PASSWORD}
-                  </span>
-                </div>
-
-                <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
-                  {MOCK_USERS.map((user) => {
-                    const roleLabel = ROLE_LABELS[user.role] || user.role;
-                    const c = roleColors[roleLabel] ?? {
-                      bg: "#f8fafc",
-                      text: "#64748b",
-                      border: "#e2e8f0",
-                    };
-                    const isActive = activeUser === user.name;
-
-                    return (
-                      <div
-                        key={user.id}
-                        className={`flex items-center justify-between p-3 rounded-xl border transition-all ${
-                          isActive
-                            ? "bg-indigo-50/90 border-indigo-200 shadow-2xs"
-                            : "bg-white border-slate-200/60 hover:border-slate-300 hover:bg-slate-50"
-                        }`}
-                      >
-                        <div className="flex items-center gap-3 min-w-0">
-                          <span
-                            className="w-8.5 h-8.5 rounded-full flex items-center justify-center font-black text-[12.5px] shrink-0 border shadow-2xs"
-                            style={{
-                              backgroundColor: c.bg,
-                              color: c.text,
-                              borderColor: c.border,
-                            }}
-                          >
-                            {getInitials(user.name)}
-                          </span>
-                          <div className="min-w-0 flex-1 truncate">
-                            <div className="text-[14.5px] font-black text-slate-800 truncate leading-tight">
-                              {user.name}
-                            </div>
-                            <div className="text-[12.5px] font-bold text-slate-500 truncate mt-0.5">
-                              {roleLabel}
-                            </div>
-                          </div>
-                        </div>
-
-                        <button
-                          type="button"
-                          onClick={() => applyCredentials(user)}
-                          aria-label={`Use Credentials for ${user.name}`}
-                          className={`px-3.5 py-1.5 rounded-lg text-[12.5px] font-black transition-all shrink-0 ml-2 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
-                            isActive
-                              ? "bg-indigo-600 text-white shadow-xs"
-                              : "bg-slate-100 text-slate-700 hover:bg-slate-200"
-                          }`}
-                        >
-                          {isActive ? "✓ Selected" : "Use"}
-                        </button>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
           </div>
 
           <form onSubmit={submit} className="space-y-4 sm:space-y-6 pt-1 sm:pt-0">

@@ -47,26 +47,40 @@ GET /api/v1/health
 
 Returns `200` with a small JSON payload confirming the service is up.
 
-## Security status: NOT production-ready
+## Security status: authenticated, but not yet case-scoped
 
-This backend has **no authentication mechanism of any kind** — no JWT, no session, no
-`req.user`, no middleware on any route. Every endpoint under `/api/v1`, including the
-attachment endpoints below, is reachable by anyone who can send it an HTTP request. RBAC
-(`frontend/src/constants/workflowRules.js`, `frontend/src/routes/ProtectedRoute.jsx`) is
-enforced only in the browser; it is a usability boundary for the app's own UI, not a security
-control, and does not stop a direct API call.
+### What is enforced
 
-**Attachment endpoints in particular** (`POST /api/v1/attachments`, `GET
-/api/v1/attachments/:id`, `GET /api/v1/attachments/:id/meta`) let anyone who can reach this
-server upload or read any stored document — attachment ids are unguessable, but that is
-obscurity, not authorization. `src/middleware/authorizeAttachmentAccess.js` is a deliberate
-pass-through seam left in the request chain for exactly this gap; it is a `TODO`, not an
-implementation.
+Every endpoint except `GET /api/v1/health` and `POST /api/v1/auth/login` requires a session.
+Sign-in posts credentials to `/auth/login`, which returns a JWT in an **httpOnly cookie**
+(`qms.session`); `middleware/verifyToken.js` puts the principal on `req.user`, and
+`middleware/verifyRole.js` gates each route by role — `verifyRole(...)` for plain role lists,
+`verifyAction(...)` for workflow actions via `constants/workflowActions.js`.
 
-**Before any production deployment:**
-1. Add real authentication to the API (JWT/session, `req.user`).
-2. Implement `authorizeAttachmentAccess`: an Inquirer may read only their own case's
-   attachments; Front Officer, Officer-in-Charge, and the assigned official per the roles in
-   `workflowRules.js`.
-3. Do the same for every other existing route (`DELETE /mailbox` and friends are equally open
-   today) — this is a pre-existing gap the attachment feature inherits, not one it introduces.
+The cookie, rather than an `Authorization` header, is what makes attachment preview and
+download work: `attachmentUrl()` builds bare URLs for `<img>`, `<iframe>` and `<a download>`,
+and those cannot carry a header.
+
+Destructive mailbox routes (`DELETE /api/v1/mailbox`, `POST /mailbox/receive`) are restricted
+to `SUPER_ADMIN`, because under `MAILBOX_SOURCE=gmail` they operate on a real account.
+
+Required configuration — the server refuses to start without them: `JWT_SECRET` (≥32 chars)
+and `QMS_SEED_PASSWORD`. See `.env.example`.
+
+### What is NOT enforced yet
+
+1. **Case-level authorization.** Any *authenticated* user can read any attachment by id.
+   `authorizeAttachmentAccess` checks only that a session exists, because the server has no
+   Query Case records to check ownership against — case state lives in the browser's
+   IndexedDB until Phase 2. An Inquirer should reach only their own case's attachments.
+2. **Workflow-state authorization.** `verifyAction` enforces the role half of the frontend's
+   `canPerform(role, action, state)`. The `ACTION_VALID_STATES` half needs server-side case
+   state, so a permitted role is not currently blocked from acting on a case in the wrong
+   state.
+3. **Token revocation.** Tokens are stateless; logout clears the cookie but a copied token
+   stays valid until it expires (`SESSION_TTL_SECONDS`, default 8h).
+4. **Real user provisioning.** Accounts are seeded from `src/constants/users.js` and all share
+   `QMS_SEED_PASSWORD`. This is a development mechanism, not a user store — replace it with
+   per-user credentials before production.
+
+Until (1) and (2) land, do not expose this server outside a trusted network.

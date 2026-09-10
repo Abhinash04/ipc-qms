@@ -362,48 +362,23 @@ export function MailboxInboxPage() {
                         )}
                       </div>
 
-                      {/* Actions - Mobile */}
-                      <div className="xl:hidden flex justify-center">
-                        {confirmingId === message.mailboxMessageId ? (
-                          <div className="flex items-center gap-1.5">
-                            <button
-                              type="button"
-                              onClick={() =>
-                                deleteMessage.mutate(message.mailboxMessageId)
-                              }
-                              disabled={deleteMessage.isPending}
-                              className="rounded-xl bg-rose-600 hover:bg-rose-700 text-white px-3 py-1.5 text-[11px] font-extrabold shadow-sm transition-all active:scale-95 cursor-pointer disabled:opacity-60"
-                            >
-                              {deleteMessage.isPending ? "..." : "Yes"}
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setConfirmingId(null)}
-                              disabled={deleteMessage.isPending}
-                              className="rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-500 p-1.5 transition-all cursor-pointer disabled:opacity-60"
-                            >
-                              <X className="h-3.5 w-3.5" />
-                            </button>
-                          </div>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setConfirmingId(message.mailboxMessageId)
-                            }
-                            className="rounded-xl border border-rose-200 bg-rose-50 hover:bg-rose-100 text-rose-600 p-2 transition-all active:scale-95 cursor-pointer"
-                          >
-                            <Trash2Icon className="h-4 w-4" />
-                          </button>
-                        )}
-                      </div>
                     </div>
 
-                    {/* Actions - Desktop */}
-                    <div className="hidden xl:flex justify-center">
+                    {/*
+                      One action block for every breakpoint. It used to be
+                      rendered twice — once `xl:hidden`, once `hidden xl:flex`.
+                      CSS hid one of them, but both stayed in the accessibility
+                      tree and in the DOM, so every row exposed two identically
+                      named "Yes" buttons and the compact copy's icon buttons
+                      carried no accessible name at all.
+                    */}
+                    <div className="flex justify-center w-full xl:w-auto">
                       {confirmingId === message.mailboxMessageId ? (
                         <div className="flex flex-col items-center gap-1.5">
-                          <span className="text-[11px] font-extrabold text-slate-500 uppercase tracking-wider">
+                          {/* Desktop-only caption: the compact layout never
+                              showed one, and the buttons are self-explanatory
+                              next to the row they belong to. */}
+                          <span className="hidden xl:block text-[11px] font-extrabold text-slate-500 uppercase tracking-wider">
                             Delete?
                           </span>
                           <div className="flex items-center gap-1.5">

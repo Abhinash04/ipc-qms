@@ -1,0 +1,86 @@
+import HTTP_STATUS from '../constants/httpStatus.js';
+import authConfig, { cookieOptions } from '../config/authConfig.js';
+import { signToken } from '../services/auth/tokenService.js';
+import { verifyCredentials, findById, toPublicUser } from '../services/auth/userDirectory.js';
+import * as audit from '../services/audit/auditService.js';
+import { AUDIT_ACTIONS, AUDIT_RESULTS } from '../constants/auditActions.js';
+import { ACTOR_TYPES } from '../constants/roles.js';
+
+/**
+ * Session endpoints — step 1 of the chain in .claude/backend-rules.md.
+ *
+ * The token is delivered as an httpOnly cookie rather than in the response
+ * body, so no script can read it and the browser attaches it automatically to
+ * `<img src>`, `<iframe src>` and `<a download>` requests — which is what makes
+ * attachment preview and download work at all, since those cannot carry an
+ * Authorization header.
+ */
+
+async function login(req, res, next) {
+  try {
+    const { email, password } = req.body || {};
+
+    if (!email || !password) {
+      throw Object.assign(new Error('"email" and "password" are required'), {
+        status: HTTP_STATUS.BAD_REQUEST,
+      });
+    }
+
+    const user = await verifyCredentials(email, password);
+
+    if (!user) {
+      await audit.record({
+        action: AUDIT_ACTIONS.LOGIN_FAILED,
+        result: AUDIT_RESULTS.DENIED,
+        actorType: ACTOR_TYPES.HUMAN,
+        // The address attempted, not a resolved user — on a failed login there
+        // may be no user, and which address was tried is the point.
+        details: { email: String(email).trim().toLowerCase() },
+      });
+
+      // One message for an unknown address and a wrong password alike —
+      // distinguishing them enumerates valid accounts. userDirectory runs the
+      // bcrypt compare either way so the timing matches too.
+      return res
+        .status(HTTP_STATUS.UNAUTHORIZED)
+        .json({ error: 'Invalid email or password' });
+    }
+
+    await audit.record({
+      action: AUDIT_ACTIONS.LOGIN_SUCCEEDED,
+      actorType: ACTOR_TYPES.HUMAN,
+      actorId: user.id,
+      actorRole: user.role,
+    });
+
+    res.cookie(authConfig.COOKIE_NAME, signToken(user), cookieOptions());
+    return res.status(HTTP_STATUS.OK).json({ user });
+  } catch (error) {
+    return next(error);
+  }
+}
+
+/**
+ * Clearing the cookie is the whole of logout: tokens are stateless, so a copy
+ * taken before this call stays valid until it expires — see tokenService.js.
+ */
+function logout(req, res) {
+  const { maxAge, ...options } = cookieOptions();
+  res.clearCookie(authConfig.COOKIE_NAME, options);
+  return res.status(HTTP_STATUS.OK).json({ ok: true });
+}
+
+/** Who the caller is. Requires verifyToken. */
+function me(req, res) {
+  // The claims are enough to answer, but reading the directory means a user
+  // removed since the token was signed no longer resolves.
+  const user = findById(req.user.id);
+
+  if (!user) {
+    return res.status(HTTP_STATUS.UNAUTHORIZED).json({ error: 'Authentication required' });
+  }
+
+  return res.status(HTTP_STATUS.OK).json({ user: toPublicUser(user) });
+}
+
+export { login, logout, me };

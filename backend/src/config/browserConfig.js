@@ -1,0 +1,72 @@
+/**
+ * Configuration for attaching to the human's already-authenticated Chrome.
+ *
+ * Getters rather than a snapshot, matching config/nicConfig.js — the suite
+ * varies the environment between cases and a snapshot would force
+ * `vi.resetModules()`.
+ *
+ * There is deliberately no credential here and no launch option. This module
+ * can only describe how to ATTACH to a browser a human already opened and
+ * logged into; it cannot start one.
+ */
+const browserConfig = {
+  /**
+   * Where Chrome exposes the DevTools Protocol.
+   *
+   * Chrome 144+ can enable this on the running instance, default profile
+   * included, via chrome://inspect/#remote-debugging. Before 144 — and as a
+   * fallback if that toggle does not produce a reachable endpoint — Chrome
+   * must be launched with `--remote-debugging-port=9222` AND a non-default
+   * `--user-data-dir`, because Chrome 136+ ignores the flag on the default
+   * profile.
+   */
+  get cdpEndpoint() {
+    return (process.env.NIC_CDP_ENDPOINT || 'http://localhost:9222').trim();
+  },
+
+  /**
+   * Hosts that identify a NICeMail tab. NICeMail is Zoho-backed, so a
+   * deployment may sit on either the gov.in front door or the mgovcloud
+   * infrastructure behind it.
+   */
+  get urlPatterns() {
+    const raw = (process.env.NIC_WEBMAIL_URL_PATTERNS || 'mail.gov.in,mgovcloud.in').trim();
+    return raw
+      .split(',')
+      .map((entry) => entry.trim().toLowerCase())
+      .filter(Boolean);
+  },
+
+  /** Title fragments used as a secondary signal when the URL is ambiguous. */
+  get titlePatterns() {
+    const raw = (process.env.NIC_WEBMAIL_TITLE_PATTERNS || 'mail,inbox,nic').trim();
+    return raw
+      .split(',')
+      .map((entry) => entry.trim().toLowerCase())
+      .filter(Boolean);
+  },
+
+  /**
+   * The only address the browser send action will mail. Falls back to the
+   * IMAP-side test recipient so both paths agree, then to the mailbox itself.
+   */
+  get testRecipient() {
+    return (
+      process.env.NIC_BROWSER_TEST_RECIPIENT ||
+      process.env.NIC_TEST_RECIPIENT ||
+      process.env.NIC_EMAIL ||
+      ''
+    ).trim();
+  },
+
+  get timeoutMs() {
+    return parseInt(process.env.NIC_BROWSER_TIMEOUT_MS || '20000', 10);
+  },
+
+  /** Where failure screenshots go. Diagnostics only; never on the happy path. */
+  get artifactDir() {
+    return (process.env.NIC_BROWSER_ARTIFACT_DIR || 'storage/browser-artifacts').trim();
+  },
+};
+
+export default browserConfig;
