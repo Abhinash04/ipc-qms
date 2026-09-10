@@ -6,6 +6,7 @@ import mailboxRoutes from './mailboxRoutes.js';
 import aiRoutes from './aiRoutes.js';
 import attachmentRoutes from './attachmentRoutes.js';
 import nicRoutes from './nicRoutes.js';
+import auditRoutes from './auditRoutes.js';
 
 const router = express.Router();
 
@@ -19,6 +20,7 @@ router.use(mailboxRoutes);
 router.use('/ai', aiRoutes);
 router.use(attachmentRoutes);
 router.use(nicRoutes);
+router.use(auditRoutes);
 
 export default router;
 
