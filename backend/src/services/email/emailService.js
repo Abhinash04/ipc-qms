@@ -11,6 +11,9 @@ import * as mailbox from './mailbox/mockIpcMailbox.js';
 import { buildAcknowledgement } from './templates/acknowledgement.js';
 import * as gemmaService from '../ai/gemmaService.js';
 import { resolveAttachments, toPublicRecord } from '../attachments/resolveAttachments.js';
+import * as audit from '../audit/auditService.js';
+import { AUDIT_ACTIONS } from '../../constants/auditActions.js';
+import { ACTOR_TYPES } from '../../constants/roles.js';
 
 /**
  * Email orchestration.
@@ -160,12 +163,28 @@ async function forwardToOfficerInCharge({
 
   let summary = aiSummary;
   if (!summary) {
+    // This summary is generated inline rather than through POST /ai/summary,
+    // so it has to be audited here or it would be the one AI call the agent
+    // makes that never appears in the trail.
+    const startedAt = Date.now();
     summary = await gemmaService.generateSummary({ subject, body });
+
+    await audit.record({
+      action: AUDIT_ACTIONS.AI_SUMMARY_GENERATED,
+      actorType: ACTOR_TYPES.AGENT,
+      queryId,
+      aiMetadata: {
+        latencyMs: Date.now() - startedAt,
+        fallback: Boolean(summary?.fallback),
+        aiGenerated: !summary?.fallback,
+        trigger: 'forward',
+      },
+    });
   }
 
   const formattedSummaryBlock = [
     '======================================================================',
-    '🤖 GEMMA AI QUERY SUMMARY (For Officer-in-Charge Review):',
+    '🤖 PRAVAH AI QUERY SUMMARY (For Officer-in-Charge Review):',
     summary.text,
     summary.keyPoints?.length ? `Key Points:\n${summary.keyPoints.map((p) => ` • ${p}`).join('\n')}` : '',
     summary.topics?.length ? `Topics: ${summary.topics.join(', ')}` : '',

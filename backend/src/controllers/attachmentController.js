@@ -2,6 +2,21 @@ import multer from 'multer';
 import HTTP_STATUS from '../constants/httpStatus.js';
 import * as store from '../services/attachments/attachmentStore.js';
 import { validateUpload, limits } from '../services/attachments/attachmentPolicy.js';
+import * as audit from '../services/audit/auditService.js';
+import { AUDIT_ACTIONS } from '../constants/auditActions.js';
+import { ACTOR_TYPES } from '../constants/roles.js';
+
+/** Who touched which document, and when. Never the bytes or the content. */
+const recordAttachment = (req, action, meta) =>
+  audit.record({
+    action,
+    actorType: ACTOR_TYPES.HUMAN,
+    actorId: req.user?.id ?? null,
+    actorRole: req.user?.role ?? null,
+    attachmentId: meta.attachmentId,
+    queryId: meta.queryId ?? null,
+    details: { filename: meta.filename, mimeType: meta.mimeType, size: meta.size },
+  });
 
 /**
  * Memory storage: files are validated and persisted through attachmentStore
@@ -59,6 +74,8 @@ async function uploadFiles(req, res, next) {
       ),
     );
 
+    await Promise.all(saved.map((meta) => recordAttachment(req, AUDIT_ACTIONS.ATTACHMENT_UPLOADED, meta)));
+
     res.status(HTTP_STATUS.CREATED).json({ attachments: saved.map(toPublicRecord) });
   } catch (error) {
     next(error);
@@ -115,6 +132,8 @@ async function serveFile(req, res, next) {
     );
     res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
     res.removeHeader('X-Frame-Options');
+
+    await recordAttachment(req, AUDIT_ACTIONS.ATTACHMENT_DOWNLOADED, meta);
     res.send(buffer);
   } catch (error) {
     next(error);

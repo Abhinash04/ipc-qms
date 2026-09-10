@@ -52,7 +52,7 @@ describe('Gemma AI Integration & REST API Tests', () => {
 
     expect(forwardResult).toBeDefined();
     expect(forwardResult.aiSummary).toEqual(mockSummary);
-    expect(forwardResult.body).toContain('🤖 GEMMA AI QUERY SUMMARY');
+    expect(forwardResult.body).toContain('🤖 PRAVAH AI QUERY SUMMARY');
     expect(forwardResult.body).toContain('Abhinash asks about monograph dissolution test standards.');
   });
 });

@@ -488,6 +488,13 @@ describe('POST /api/v1/ai/draft', () => {
   });
 
   it('returns the sectioned draft shape', async () => {
+    // The model is unreachable here, so the endpoint answers from its
+    // deterministic fallback. Mocked explicitly rather than left to a real
+    // request to gemma.test.invalid: that call sits inside a 12s
+    // GEMMA_TIMEOUT_MS abort window and overruns vitest's 5s budget whenever
+    // DNS does not fail instantly.
+    global.fetch = vi.fn().mockRejectedValue(new Error('model unreachable'));
+
     const response = await request(app).post('/api/v1/ai/draft').set(AUTH).send(MULTI);
     expect(response.status).toBe(200);
     expect(response.body.success).toBe(true);
@@ -495,5 +502,47 @@ describe('POST /api/v1/ai/draft', () => {
     expect(response.body.draft.answers.length).toBeGreaterThan(0);
     expect(Array.isArray(response.body.draft.contextUsed)).toBe(true);
     expect(typeof response.body.draft.subject).toBe('string');
+  });
+
+  it('returns the model-generated draft when the model answers', async () => {
+    // Both model calls are mocked — the decomposition, then the draft itself —
+    // so the endpoint's success path runs without touching the network.
+    mockCalls(
+      decomposition(['What is the legal status of the Indian Pharmacopoeia?']),
+      draftReply([
+        {
+          question: 1,
+          topic: 'Legal status of IP monographs',
+          sufficiency: 'ANSWERED',
+          paragraphs: ['The Indian Pharmacopoeia is recognised under the Drugs and Cosmetics Act.'],
+          sources: [],
+        },
+      ]),
+    );
+
+    const response = await request(app).post('/api/v1/ai/draft').set(AUTH).send(ENQUIRY);
+
+    expect(response.status).toBe(200);
+    expect(response.body.success).toBe(true);
+
+    const { draft } = response.body;
+
+    // The discriminator: these two are what separate a real model answer from
+    // the deterministic fallback the sibling test above exercises.
+    expect(draft.aiGenerated).toBe(true);
+    expect(draft.fallback).toBe(false);
+
+    // The model's own content survives the endpoint intact — a fallback would
+    // have substituted its own subject and body.
+    expect(draft.subject).toBe('Response');
+    expect(draft.answers).toHaveLength(1);
+    expect(draft.answers[0].topic).toBe('Legal status of IP monographs');
+    expect(draft.answers[0].sufficiency).toBe(SUFFICIENCY.ANSWERED);
+    expect(draft.answers[0].paragraphs).toEqual([
+      'The Indian Pharmacopoeia is recognised under the Drugs and Cosmetics Act.',
+    ]);
+    expect(Array.isArray(draft.contextUsed)).toBe(true);
+
+    expect(global.fetch).toHaveBeenCalledTimes(2);
   });
 });

@@ -1,6 +1,25 @@
 import HTTP_STATUS from '../constants/httpStatus.js';
 import env from '../config/env.js';
 import { IDENTITY_ROLES, identityForRole } from '../config/identities.js';
+import * as audit from '../services/audit/auditService.js';
+import { AUDIT_ACTIONS } from '../constants/auditActions.js';
+import { ACTOR_TYPES } from '../constants/roles.js';
+
+/** Mailbox state changes, so an administrator can trace an email's handling. */
+const recordMailbox = (req, action, message) =>
+  audit.record({
+    action,
+    actorType: ACTOR_TYPES.HUMAN,
+    actorId: req.user?.id ?? null,
+    actorRole: req.user?.role ?? null,
+    messageId: message?.mailboxMessageId ?? null,
+    threadId: message?.providerThreadId ?? null,
+    details: {
+      from: message?.from ?? null,
+      subject: message?.subject ?? null,
+      attachments: Array.isArray(message?.attachments) ? message.attachments.length : 0,
+    },
+  });
 
 const defaultRecipient = () =>
   identityForRole(IDENTITY_ROLES.FRONT_OFFICE)?.email || env.IPC_QUERY_EMAIL;
@@ -46,6 +65,7 @@ async function markIngested(req, res, next) {
         .status(HTTP_STATUS.NOT_FOUND)
         .json({ error: 'Message not found', messageId: req.params.messageId });
     }
+    await recordMailbox(req, AUDIT_ACTIONS.EMAIL_RECEIVED, message);
     return res.status(HTTP_STATUS.OK).json(message);
   } catch (error) {
     return next(error);
@@ -61,6 +81,7 @@ async function deleteMessage(req, res, next) {
         .status(HTTP_STATUS.NOT_FOUND)
         .json({ error: 'Message not found', messageId: req.params.messageId });
     }
+    await recordMailbox(req, AUDIT_ACTIONS.EMAIL_DELETED, message);
     return res.status(HTTP_STATUS.OK).json({ deleted: true, message });
   } catch (error) {
     return next(error);
