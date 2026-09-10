@@ -14,8 +14,13 @@ versions, completed review steps, and the audit trail — and must create an aud
 - Whether the workflow continues from its current step after transfer, or restarts a step.
 - Whether a transfer reason is mandatory.
 
-Until confirmed, no transfer action is implemented — `QUERY_TRANSFERRED` exists only as a
-documented audit-event name (see [srs/09-audit-and-compliance.md](../srs/09-audit-and-compliance.md)).
+**Status: built, deliberately disabled.** `transferQuery` exists in
+`frontend/src/store/useWorkflowStore.js` and emits `QUERY_TRANSFERRED` (see
+[srs/09-audit-and-compliance.md](../srs/09-audit-and-compliance.md)), but the action is listed in
+`CLARIFICATION_REQUIRED_ACTIONS` (`frontend/src/constants/workflowRules.js`), and `canPerform`
+returns `false` for anything in that list **before** consulting the role table. So no role can
+invoke it and no UI offers it. Removing the entry from that list is the single change that turns it
+on once the questions above are answered.
 
 ## Pullback
 
@@ -33,13 +38,20 @@ pullback must create an audit event (`QUERY_PULLED_BACK`).
 - Whether a reason is required for pullback.
 - Whether pullback is allowed after final approval has already been granted.
 
-Until confirmed, no pullback action is implemented — `QUERY_PULLED_BACK` and the
-`PULLED_BACK` workflow state exist only as documented names.
+**Status: built, deliberately disabled.** `pullBackQuery` exists in the store and emits
+`QUERY_PULLED_BACK`, and `PULLED_BACK` is a declared `WORKFLOW_STATE`. As with transfer, the action
+sits in `CLARIFICATION_REQUIRED_ACTIONS`, so `canPerform` refuses it for every role and no UI
+exposes it.
 
 ## Why These Are Deliberately Unresolved
 
-Guessing these rules now risks building UI/API shapes that don't match the client's actual
+Guessing these rules risks building UI/API shapes that don't match the client's actual
 process (e.g. a "pullback reason" field that turns out not to be required, or a permission
 check that's too strict/loose). Both are flagged in
 [srs/14-open-questions-and-client-clarifications.md](../srs/14-open-questions-and-client-clarifications.md)
-for explicit client sign-off before implementation.
+for explicit client sign-off.
+
+The mechanics were built anyway — they are cheap and the audit-event shape was already settled — but
+gated behind `CLARIFICATION_REQUIRED_ACTIONS` so the *policy* questions stay open. That way the
+client's answers determine who may act and from which states, without the transition logic having to
+be written from scratch afterwards.

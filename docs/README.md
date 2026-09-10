@@ -1,14 +1,30 @@
 # QMS Documentation
 
-Documentation for the Query Management System, built for an IPC client. **Current phase:
-Initial Architecture & Foundation** — see the root [README.md](../README.md) for setup.
+Documentation for the Query Management System, built for an IPC client.
 
-**New here?** Start with [HANDOFF.md](./HANDOFF.md) — status at a glance, getting started,
-mock login identities, known issues, and what's next.
+**New here?** Start with [HANDOFF.md](./HANDOFF.md) — status at a glance, how to run it, what is
+real versus mock, known gaps, and what to do next.
+
+For the implementation as it actually stands, the two READMEs are the primary reference:
+[backend/README.md](../backend/README.md) (routes, database, email pipeline, AI grounding,
+configuration) and [frontend/README.md](../frontend/README.md) (routing/RBAC, state, API layer,
+design system).
+
+## Operational Guides
+
+- [auth.md](./auth.md) — the 13 development accounts, their roles and landing dashboards, how
+  sign-in works, and the known limitations of the seeded-account mechanism. **Contains no
+  credentials** — the password is referenced by environment-variable name.
+- [EMAIL_MANUAL_TEST.md](./EMAIL_MANUAL_TEST.md) — manual procedure for proving real Gmail sends
+  and the browser end-to-end workflow across four real accounts.
+- [NIC_EMAIL_PHASE0.md](./NIC_EMAIL_PHASE0.md) — the feasibility gate for NIC government email
+  (`@gov.in`) over IMAP/SMTP. **Phase 0 has not passed**; nothing downstream should be built until
+  it does.
 
 ## SRS (`srs/`)
 
-The software requirements specification, in reading order:
+The software requirements specification, in reading order. These files define *what the system must
+do*; where they describe implementation status, defer to the READMEs.
 
 1. [Introduction](./srs/01-introduction.md)
 2. [System Overview](./srs/02-system-overview.md)
@@ -23,21 +39,33 @@ The software requirements specification, in reading order:
 11. [Dashboard & Reporting](./srs/11-dashboard-and-reporting.md)
 12. [Email Integration](./srs/12-email-integration.md)
 13. [Data Model](./srs/13-data-model.md)
-14. [Open Questions & Client Clarifications](./srs/14-open-questions-and-client-clarifications.md) — **read this before assuming anything is settled.**
+14. [Open Questions & Client Clarifications](./srs/14-open-questions-and-client-clarifications.md) — **the register of what still needs client sign-off.**
 
 ## Architecture (`architecture/`)
 
 - [System Architecture](./architecture/system-architecture.md)
-- [Frontend Architecture](./architecture/frontend-architecture.md) — includes the full route plan.
+- [Frontend Architecture](./architecture/frontend-architecture.md) — includes the route plan.
 - [Backend Architecture](./architecture/backend-architecture.md)
 - [Workflow Engine](./architecture/workflow-engine.md) — the dynamic review-level model.
 
 ## Workflow (`workflow/`)
 
-- [Query Lifecycle](./workflow/query-lifecycle.md) — narrative walkthrough of `QRY-2026-00427`.
+- [Query Lifecycle](./workflow/query-lifecycle.md) — narrative walkthrough of one case.
 - [Role / Permission Matrix](./workflow/role-permission-matrix.md)
 - [Workflow Rules](./workflow/workflow-rules.md) — transfer & pullback specifics.
+- [Query & Email Management Flow](./workflow/query_email_management_flow.md) — analysis of the
+  client's reference email thread and the work it implies.
+- [AI Email Generation — Production Flow](./workflow/AI_Email_Generation_Production_Flow.md) — the
+  step-by-step production flow for AI-generated replies.
 
 ## API (`api/`)
 
-- [API Plan](./api/api-plan.md) — planned REST resources; only `/health` exists today.
+- [API Plan](./api/api-plan.md) — the implemented REST surface, and what remains planned.
+
+## Not documentation: `docs/markdown/`
+
+`docs/markdown/` holds IPC source material — guidance documents, amendment lists, notices and FAQs
+— used to build the AI's grounding corpus. It is **gitignored and not part of the repository**, and
+it is not project documentation. See
+[backend/README.md](../backend/README.md#ai-grounding-layer) for how it is ingested and why
+`npm run ingest:ipc` cannot be re-run on a fresh clone.

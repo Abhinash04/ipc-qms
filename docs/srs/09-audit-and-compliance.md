@@ -35,7 +35,7 @@ data layer, and should map 1:1 to backend audit-log rows once persistence exists
 Each audit record conceptually captures: `event`, `queryId`, `actor` (user or `System`/`AI`),
 `at` (timestamp), and an optional `details` payload (e.g. previous vs new assignee for
 `ASSIGNMENT_OVERRIDDEN`). Exact schema is finalized alongside
-[13-data-model.md](./13-data-model.md) once PostgreSQL integration begins.
+[13-data-model.md](./13-data-model.md). Server-side audit records are persisted in MongoDB (`backend/src/models/AuditEvent.js`) and queryable via `GET /api/v1/audit`; the client-side case lifecycle trail lives in IndexedDB alongside the cases it describes.
 
 ## 9.4 Retention & Immutability
 

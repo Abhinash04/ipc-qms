@@ -1,6 +1,6 @@
 # 12. Email Integration
 
-## 12.1 Proposed Architecture (Not Confirmed)
+## 12.1 Architecture (Implemented)
 
 ```
 Inbound mailbox
@@ -49,6 +49,11 @@ aborted before any email is sent and returns `409` naming the unavailable attach
 Officer-in-Charge never receives a forward that looks complete but is silently missing a
 document.
 
-**Security note:** the attachment endpoints have no authentication or authorization — see
-`backend/README.md` "Security status: NOT production-ready" for the full explanation and
-what is required before deployment.
+**Security note:** the attachment endpoints require a session and a role, but **not a relationship
+to the case** — any authenticated user can read any attachment by id. See
+[backend/README.md](../../backend/README.md#security-status-authenticated-but-not-yet-case-scoped)
+for what is required before deployment.
+
+**Attachments fail closed on send.** Every referenced file is verified (existence, bytes, SHA-256)
+before an outbound message leaves; an unresolvable attachment aborts the send with a 409 naming it,
+rather than delivering a message with documents silently missing.

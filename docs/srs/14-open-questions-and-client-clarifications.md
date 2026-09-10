@@ -9,8 +9,8 @@ Every item below is tagged:
 ## Email
 
 - Automatic or manual email ingestion? — *Client Clarification Required*
-- Which email provider/API? — *Client Clarification Required*
-- Does the system need email threading (replies attach to the same query)? — *Client Clarification Required*
+- Which email provider/API? — **Resolved in implementation**: Gmail API (OAuth2, per-role refresh tokens) with a mock transport for development. A NICeMail (`@gov.in`) IMAP/SMTP path is built but blocked at Phase 0 — see [../NIC_EMAIL_PHASE0.md](../NIC_EMAIL_PHASE0.md). Client confirmation of the production choice still outstanding.
+- Does the system need email threading (replies attach to the same query)? — **Resolved in implementation**: yes, threading is implemented (RFC 5322 headers, provider thread ids); a reply attaches to the existing case rather than opening a new one.
 - How should an incoming reply mid-workflow be handled? — *Client Clarification Required*
 - Should outgoing dispatch email be automatic on approval, or require a Front Office confirmation step? — *Client Clarification Required*
 - Email is the primary intake source for the sample query. — *Confirmed Requirement* (per spec example)
@@ -144,7 +144,7 @@ There is no model behind it yet; the interface is the swap point.
 
 ## Roles
 
-- The six roles (`SUPER_ADMIN`, `ADMIN`, `FRONT_OFFICE`, `OFFICER_IN_CHARGE`, `ASSIGNED_OFFICIAL`, `REVIEWER`) plus external `INQUIRER`. — *Confirmed Requirement*
+- Seven roles: `SUPER_ADMIN`, `ADMIN`, `FRONT_OFFICE`, `OFFICER_IN_CHARGE`, `ASSIGNED_OFFICIAL`, `REVIEWER`, `INQUIRER`. — *Confirmed Requirement*. Note `INQUIRER` was originally scoped as external and non-signing-in; the implementation gives it an in-app account with its own dashboard and Raise Enquiry form.
 - Can a single user hold multiple roles? — *Client Clarification Required*
 - Can queries be assigned across divisions, or only within the inquirer's/query's division? — *Client Clarification Required*
 - Is delegation (acting on behalf of another user, e.g. during leave) required? — *Client Clarification Required*
