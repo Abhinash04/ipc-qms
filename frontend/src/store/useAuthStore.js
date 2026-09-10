@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import * as authService from '@/services/api/authService';
 import { setUnauthorizedHandler } from '@/services/api/axiosClient';
+import { notify } from '@/services/notify';
 
 /**
  * The signed-in session.
@@ -42,6 +43,7 @@ export const useAuthStore = create((set) => ({
     } finally {
       // Clear locally even if the request failed — the user asked to leave.
       set({ currentUser: null, authReady: true });
+      notify.info('Signed out');
     }
   },
 
@@ -49,4 +51,12 @@ export const useAuthStore = create((set) => ({
   clearSession: () => set({ currentUser: null, authReady: true }),
 }));
 
-setUnauthorizedHandler(() => useAuthStore.getState().clearSession());
+setUnauthorizedHandler(() => {
+  // Only worth saying if we thought we were signed in. Without this the toast
+  // would also fire for a stray 401 on a page nobody is authenticated on.
+  const wasSignedIn = Boolean(useAuthStore.getState().currentUser);
+  useAuthStore.getState().clearSession();
+  if (wasSignedIn) {
+    notify.warning('Your session has expired', 'Sign in again to continue.');
+  }
+});

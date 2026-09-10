@@ -100,14 +100,6 @@ export const MOCK_USERS = [
   },
 ];
 
-/**
- * NOTE: this list is the frontend's *display* directory — it resolves a user
- * id to a name for audit rows, assignee labels and reviewer chains. It is no
- * longer used to authenticate anyone: sign-in is server-side against
- * backend/src/constants/users.js, and the shared demo password that used to
- * live here has been removed. Keep the ids, emails and roles in step with the
- * backend list.
- */
 export function findUserById(id) {
   return MOCK_USERS.find((user) => user.id === id) || null;
 }

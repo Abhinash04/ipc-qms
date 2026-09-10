@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { useAuthStore } from '@/store/useAuthStore';
-import { useMailboxIngestion } from '@/hooks/useMailboxIngestion';
+import { useMailboxIngestion, notifyIngestResult } from '@/hooks/useMailboxIngestion';
 import { ROLES } from '@/constants/roles';
 
 const POLL_MS = 30000;
@@ -19,7 +19,12 @@ export function MailboxAutoSync() {
 
     const timer = setInterval(() => {
       if (latest.current.running) return;
-      latest.current.ingestNow().catch(() => {});
+      // A background poll speaks up only when it registered something or when
+      // the mailbox could not be reached — never to say "nothing happened".
+      latest.current
+        .ingestNow()
+        .then((result) => notifyIngestResult(result, { announceIdle: false }))
+        .catch(() => {});
     }, POLL_MS);
 
     return () => clearInterval(timer);

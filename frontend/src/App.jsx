@@ -1,5 +1,6 @@
 import { BrowserRouter } from 'react-router-dom';
 import { AppRoutes } from '@/routes/AppRoutes';
+import { NotificationHost } from '@/components/notifications/NotificationHost';
 import { useWorkflowStore } from '@/store/useWorkflowStore';
 import { useAuthStore } from '@/store/useAuthStore';
 
@@ -23,6 +24,10 @@ function HydrationGate({ children }) {
 function App() {
   return (
     <HydrationGate>
+      {/* Outside the router so the login screen gets toasts too. Mounted after
+          the gate, so the store is hydrated and the seeded audit history is
+          never replayed as a burst of notifications. */}
+      <NotificationHost />
       <BrowserRouter>
         <AppRoutes />
       </BrowserRouter>

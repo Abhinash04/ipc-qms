@@ -33,6 +33,10 @@ import { AdminRolesPage } from '@/pages/admin/AdminRolesPage';
 import { AdminDivisionsPage } from '@/pages/admin/AdminDivisionsPage';
 import { AdminWorkflowsPage } from '@/pages/admin/AdminWorkflowsPage';
 import { AdminCategoriesPage } from '@/pages/admin/AdminCategoriesPage';
+import { AdminActivityPage } from '@/pages/admin/AdminActivityPage';
+import { AdminEmailActivityPage } from '@/pages/admin/AdminEmailActivityPage';
+import { AdminAiActivityPage } from '@/pages/admin/AdminAiActivityPage';
+import { AdminSettingsPage } from '@/pages/admin/AdminSettingsPage';
 
 const SECTION_ELEMENT = {
   [SECTION.DASHBOARD]: <DashboardPage />,
@@ -59,6 +63,10 @@ const SECTION_ELEMENT = {
   [SECTION.DIVISIONS]: <AdminDivisionsPage />,
   [SECTION.WORKFLOWS]: <AdminWorkflowsPage />,
   [SECTION.CATEGORIES]: <AdminCategoriesPage />,
+  [SECTION.ADMIN_ACTIVITY]: <AdminActivityPage />,
+  [SECTION.ADMIN_EMAIL]: <AdminEmailActivityPage />,
+  [SECTION.ADMIN_AI]: <AdminAiActivityPage />,
+  [SECTION.ADMIN_SETTINGS]: <AdminSettingsPage />,
 };
 
 export function AppRoutes() {

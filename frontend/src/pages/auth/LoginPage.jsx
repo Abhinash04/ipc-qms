@@ -12,6 +12,7 @@ import {
 
 import { roleHome } from "@/constants/routePaths";
 import { useAuthStore } from "@/store/useAuthStore";
+import { notify } from "@/services/notify";
 
 export function LoginPage() {
   const currentUser = useAuthStore((state) => state.currentUser);
@@ -33,13 +34,15 @@ export function LoginPage() {
 
     try {
       const user = await login(email, password);
+      notify.success(`Welcome back, ${user.name || user.email}`);
       navigate(roleHome(user.role), { replace: true });
     } catch (caught) {
       // The server answers with one message for an unknown address and a wrong
       // password alike, so that a failed sign-in cannot enumerate accounts.
-      setError(
-        caught?.response?.data?.error || "Incorrect email or password.",
-      );
+      const message =
+        caught?.response?.data?.error || "Incorrect email or password.";
+      setError(message);
+      notify.error("Sign-in failed", message);
     } finally {
       setLoading(false);
     }

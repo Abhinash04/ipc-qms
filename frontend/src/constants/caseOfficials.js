@@ -2,15 +2,6 @@ import { AUDIT_EVENT, WORKFLOW_STATE } from './statusEnums';
 import { findUserById } from './mockUsers';
 import { reviewLevelName, STAGE_STATUS } from './queryLifecycle';
 
-/**
- * Who is handling this case, and where each of them stands.
- *
- * This is deliberately not derived from `buildLifecycle`: that returns process
- * *stages*, and its Front Office rows carry the literal string "Front Office"
- * rather than the person who acted. The people come from audit actors (which
- * store real names), the current assignee, and the review steps.
- */
-
 const PENDING_ASSIGNMENT_STATES = [
   WORKFLOW_STATE.RECEIVED,
   WORKFLOW_STATE.FRONT_OFFICE_VERIFICATION,
@@ -40,7 +31,6 @@ export function buildCaseOfficials({ query, steps = [], audit = [] } = {}) {
     ),
   ];
 
-  // Front Office own the case until it is forwarded, and again at dispatch.
   const forwarded = seen.has(AUDIT_EVENT.QUERY_FORWARDED);
   rows.push(
     official(
@@ -105,7 +95,6 @@ export function buildCaseOfficials({ query, steps = [], audit = [] } = {}) {
       );
     });
 
-  // Only worth listing once the case is actually heading for approval.
   const finalStep = steps.find((s) => s.stepType === 'FINAL_APPROVAL');
   if (finalStep && !PENDING_ASSIGNMENT_STATES.includes(state)) {
     rows.push(

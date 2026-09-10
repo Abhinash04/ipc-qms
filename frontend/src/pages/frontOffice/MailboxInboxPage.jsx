@@ -22,7 +22,10 @@ import {
   TooltipTrigger,
   TooltipContent,
 } from "@/components/ui/tooltip";
-import { useMailboxIngestion } from "@/hooks/useMailboxIngestion";
+import {
+  useMailboxIngestion,
+  notifyIngestResult,
+} from "@/hooks/useMailboxIngestion";
 import { useRoutePaths } from "@/hooks/useRoutePaths";
 import { useWorkflowStore } from "@/store/useWorkflowStore";
 import {
@@ -66,7 +69,7 @@ export function MailboxInboxPage() {
   const loadError = inbox.isError ? inbox.error?.message : null;
 
   const registerAll = async () => {
-    await ingestNow();
+    notifyIngestResult(await ingestNow());
     await inbox.refetch();
   };
 

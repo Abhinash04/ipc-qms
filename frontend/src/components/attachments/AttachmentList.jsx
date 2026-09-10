@@ -21,17 +21,26 @@ function normalise(raw) {
   };
 }
 
+/**
+ * An entry with neither an id nor a name describes no file at all. The real
+ * fix for phantom attachments is in the backend reader — this only stops a
+ * malformed legacy record from rendering as a nameless row.
+ */
+const describesAFile = (raw) =>
+  Boolean(raw) && Boolean(raw.attachmentId || raw.id || raw.filename || raw.name);
+
 export function AttachmentList({ attachments = [] }) {
   const [previewing, setPreviewing] = useState(null);
+  const real = attachments.filter(describesAFile);
 
-  if (attachments.length === 0) {
+  if (real.length === 0) {
     return <EmptyState icon={PaperclipIcon} title="No attachments" />;
   }
 
   return (
     <>
       <ul className="space-y-2">
-        {attachments.map((raw, index) => {
+        {real.map((raw, index) => {
           const att = normalise(raw);
           return (
             <li
