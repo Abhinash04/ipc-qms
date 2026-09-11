@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import request from 'supertest';
+import { AUTH } from './helpers/auth.js';
 import app from '../app.js';
 import { send as gmailSend } from '../services/email/transports/gmailTransport.js';
 import { materialiseAttachments } from '../services/email/mailbox/gmailInboxReader.js';
@@ -55,7 +56,7 @@ describe('end-to-end attachment flow', () => {
     const uploaded = [];
     for (const fixture of FIXTURES) {
       const res = await request(app)
-        .post('/api/v1/attachments')
+        .post('/api/v1/attachments').set(AUTH)
         .attach('files', fixture.bytes, { filename: fixture.filename, contentType: fixture.contentType });
       expect(res.status).toBe(201);
       uploaded.push(res.body.attachments[0]);
@@ -102,7 +103,7 @@ describe('end-to-end attachment flow', () => {
     //    attachments survive, subject and recipient are the usual forward
     //    semantics, unchanged by attachments being present.
     const forwardRes = await request(app)
-      .post('/api/v1/emails/forward')
+      .post('/api/v1/emails/forward').set(AUTH)
       .send({
         queryId: 'QRY-2026-00099',
         subject: 'Enquiry with attachments',
@@ -126,7 +127,7 @@ describe('end-to-end attachment flow', () => {
     const sendSpy = vi.spyOn(mockTransport, 'send');
 
     const failedForward = await request(app)
-      .post('/api/v1/emails/forward')
+      .post('/api/v1/emails/forward').set(AUTH)
       .send({
         queryId: 'QRY-2026-00100',
         subject: 'Enquiry with attachments (retry)',

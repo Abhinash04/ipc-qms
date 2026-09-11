@@ -1,7 +1,11 @@
 import dotenv from 'dotenv';
 import path from 'path';
+import { fileURLToPath } from 'url';
 
 dotenv.config();
+
+/** The backend package root — this file is at <root>/src/config/env.js. */
+const BACKEND_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 
 const EMAIL_TRANSPORTS = { MOCK: 'mock', GMAIL: 'gmail' };
 const MAILBOX_SOURCES = { AUTO: 'auto', GMAIL: 'gmail' };
@@ -44,7 +48,13 @@ const env = {
   // Disk is the only store that works whether or not Mongo is connected
   // (Mongo is optional here — see config/db.js) and is what can feed real
   // bytes into a Gmail MIME multipart.
-  ATTACHMENT_DIR: process.env.ATTACHMENT_DIR || path.join(process.cwd(), 'storage', 'attachments'),
+  // Resolved against the backend package root rather than process.cwd(), so a
+  // relative override names the same directory however the process was
+  // launched. Resolving against the cwd let `backend/storage/attachments` —
+  // read while the cwd was already `backend/` — create a second, stray
+  // `backend/backend/storage/attachments` tree. An absolute value passes
+  // through unchanged, which is what the test harness relies on.
+  ATTACHMENT_DIR: path.resolve(BACKEND_ROOT, process.env.ATTACHMENT_DIR || 'storage/attachments'),
   ATTACHMENT_MAX_FILE_MB: parseInt(process.env.ATTACHMENT_MAX_FILE_MB || '10', 10),
   // Smaller than the 25MB Gmail cap on purpose: base64 inflates payload size
   // by ~33%, and the cap is on the *encoded* message.

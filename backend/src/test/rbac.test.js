@@ -1,0 +1,129 @@
+import { describe, it, expect } from 'vitest';
+import request from 'supertest';
+import app from '../app.js';
+import { authHeader } from './helpers/auth.js';
+import { ROLES, ACTOR_TYPES } from '../constants/roles.js';
+import { CAPABILITIES, can, capabilitiesFor } from '../constants/capabilities.js';
+import { WORKFLOW_ACTION, roleCanPerform } from '../constants/workflowActions.js';
+
+/**
+ * The authorization half of the chain in .claude/backend-rules.md:
+ * 401 = no session, 403 = a session that may not do this.
+ *
+ * Allowed roles are asserted as "not 403" rather than as a success status,
+ * because several of these endpoints legitimately answer 400 for an empty
+ * body. What matters here is that authorization did not stop them.
+ */
+
+const as = (role) => authHeader(role);
+
+describe('401 — no session at all', () => {
+  it.each([
+    ['get', '/api/v1/emails/config'],
+    ['get', '/api/v1/mailbox/messages'],
+    ['post', '/api/v1/emails/forward'],
+    ['post', '/api/v1/ai/summary'],
+    ['get', '/api/v1/attachments/att_00000000-0000-4000-8000-000000000000'],
+  ])('%s %s', async (method, path) => {
+    const res = await request(app)[method](path);
+    expect(res.status).toBe(401);
+  });
+
+  it('leaves /health and /auth/login public', async () => {
+    expect((await request(app).get('/api/v1/health')).status).toBe(200);
+    expect((await request(app).post('/api/v1/auth/login').send({})).status).toBe(400);
+  });
+});
+
+describe('403 — a session without the role', () => {
+  it('only an Inquirer (or Super Admin) may send an enquiry', async () => {
+    expect((await request(app).post('/api/v1/emails/enquiry').set(as(ROLES.REVIEWER)).send({})).status).toBe(403);
+    expect((await request(app).post('/api/v1/emails/enquiry').set(as(ROLES.INQUIRER)).send({})).status).not.toBe(403);
+  });
+
+  it('only the Front Office (or Super Admin) may acknowledge', async () => {
+    expect(
+      (await request(app).post('/api/v1/emails/acknowledgement').set(as(ROLES.ASSIGNED_OFFICIAL)).send({})).status,
+    ).toBe(403);
+    expect(
+      (await request(app).post('/api/v1/emails/acknowledgement').set(as(ROLES.FRONT_OFFICE)).send({})).status,
+    ).not.toBe(403);
+  });
+
+  it('only roles that may FORWARD reach the forward endpoint', async () => {
+    expect((await request(app).post('/api/v1/emails/forward').set(as(ROLES.REVIEWER)).send({})).status).toBe(403);
+    expect((await request(app).post('/api/v1/emails/forward').set(as(ROLES.FRONT_OFFICE)).send({})).status).not.toBe(403);
+  });
+
+  it('the mailbox is the Front Officer\'s — other staff may not read it', async () => {
+    expect((await request(app).get('/api/v1/mailbox/messages').set(as(ROLES.REVIEWER))).status).toBe(403);
+    expect((await request(app).get('/api/v1/mailbox/messages').set(as(ROLES.FRONT_OFFICE))).status).not.toBe(403);
+  });
+
+  it('wiping the whole mailbox is Super Admin only — not even the Front Officer', async () => {
+    expect((await request(app).delete('/api/v1/mailbox').set(as(ROLES.FRONT_OFFICE))).status).toBe(403);
+  });
+
+  it('any signed-in role may use the AI helpers', async () => {
+    for (const role of [ROLES.INQUIRER, ROLES.REVIEWER, ROLES.ASSIGNED_OFFICIAL]) {
+      const res = await request(app).post('/api/v1/ai/summary').set(as(role)).send({});
+      expect(res.status).not.toBe(403);
+    }
+  });
+});
+
+describe('workflow-action authorization mirrors the frontend table', () => {
+  it('permits the roles the matrix permits', () => {
+    expect(roleCanPerform(ROLES.FRONT_OFFICE, WORKFLOW_ACTION.DISPATCH)).toBe(true);
+    expect(roleCanPerform(ROLES.OFFICER_IN_CHARGE, WORKFLOW_ACTION.ASSIGN)).toBe(true);
+    expect(roleCanPerform(ROLES.REVIEWER, WORKFLOW_ACTION.APPROVE_REVIEW)).toBe(true);
+  });
+
+  it('refuses the ones it does not', () => {
+    expect(roleCanPerform(ROLES.REVIEWER, WORKFLOW_ACTION.FORWARD)).toBe(false);
+    expect(roleCanPerform(ROLES.INQUIRER, WORKFLOW_ACTION.DISPATCH)).toBe(false);
+    expect(roleCanPerform(ROLES.ADMIN, WORKFLOW_ACTION.VERIFY)).toBe(false);
+  });
+
+  it('hard-disables the actions still awaiting client clarification', () => {
+    for (const role of Object.values(ROLES)) {
+      expect(roleCanPerform(role, WORKFLOW_ACTION.TRANSFER)).toBe(false);
+      expect(roleCanPerform(role, WORKFLOW_ACTION.PULLBACK)).toBe(false);
+    }
+  });
+});
+
+describe('NIC agent capabilities', () => {
+  const agent = { actorType: ACTOR_TYPES.AGENT, role: ROLES.SUPER_ADMIN };
+
+  it('lets the agent read and prepare', () => {
+    expect(can(agent, CAPABILITIES.NIC_READ)).toBe(true);
+    expect(can(agent, CAPABILITIES.NIC_PREPARE)).toBe(true);
+  });
+
+  it('never lets the agent send or delete — even carrying a Super Admin role', () => {
+    expect(can(agent, CAPABILITIES.NIC_SEND)).toBe(false);
+    expect(can(agent, CAPABILITIES.NIC_DESTRUCTIVE)).toBe(false);
+  });
+
+  it('gives the Front Officer the full set', () => {
+    const frontOffice = { actorType: ACTOR_TYPES.HUMAN, role: ROLES.FRONT_OFFICE };
+    expect(capabilitiesFor(frontOffice)).toEqual(Object.values(CAPABILITIES));
+  });
+
+  it('gives read-only roles read only', () => {
+    const reviewer = { actorType: ACTOR_TYPES.HUMAN, role: ROLES.REVIEWER };
+    expect(capabilitiesFor(reviewer)).toEqual([CAPABILITIES.NIC_READ]);
+  });
+
+  it('gives the Inquirer and Admin nothing on the official mailbox', () => {
+    expect(capabilitiesFor({ actorType: ACTOR_TYPES.HUMAN, role: ROLES.INQUIRER })).toEqual([]);
+    expect(capabilitiesFor({ actorType: ACTOR_TYPES.HUMAN, role: ROLES.ADMIN })).toEqual([]);
+  });
+
+  it('fails closed on a missing actor, unknown role or unknown capability', () => {
+    expect(can(null, CAPABILITIES.NIC_READ)).toBe(false);
+    expect(can({ role: 'MADE_UP' }, CAPABILITIES.NIC_READ)).toBe(false);
+    expect(can({ role: ROLES.SUPER_ADMIN }, 'NIC_INVENTED')).toBe(false);
+  });
+});

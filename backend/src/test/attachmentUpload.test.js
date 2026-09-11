@@ -1,11 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import request from 'supertest';
+import { AUTH } from './helpers/auth.js';
 import app from '../app.js';
 
 describe('POST /api/v1/attachments', () => {
   it('uploads a single file and returns metadata only, never bytes', async () => {
     const res = await request(app)
-      .post('/api/v1/attachments')
+      .post('/api/v1/attachments').set(AUTH)
       .attach('files', Buffer.from('%PDF-1.4 fake pdf bytes'), { filename: 'spec.pdf', contentType: 'application/pdf' });
 
     expect(res.status).toBe(201);
@@ -21,7 +22,7 @@ describe('POST /api/v1/attachments', () => {
 
   it('uploads multiple files of different types in one request', async () => {
     const res = await request(app)
-      .post('/api/v1/attachments')
+      .post('/api/v1/attachments').set(AUTH)
       .attach('files', Buffer.from('pdf-bytes'), { filename: 'a.pdf', contentType: 'application/pdf' })
       .attach('files', Buffer.from('png-bytes'), { filename: 'b.png', contentType: 'image/png' })
       .attach('files', Buffer.from('xlsx-bytes'), {
@@ -35,7 +36,7 @@ describe('POST /api/v1/attachments', () => {
 
   it('rejects an unsupported file type', async () => {
     const res = await request(app)
-      .post('/api/v1/attachments')
+      .post('/api/v1/attachments').set(AUTH)
       .attach('files', Buffer.from('MZ...'), { filename: 'virus.exe', contentType: 'application/x-msdownload' });
 
     expect(res.status).toBe(400);
@@ -46,14 +47,14 @@ describe('POST /api/v1/attachments', () => {
   it('rejects an oversize file', async () => {
     const oversize = Buffer.alloc(11 * 1024 * 1024); // > default 10MB
     const res = await request(app)
-      .post('/api/v1/attachments')
+      .post('/api/v1/attachments').set(AUTH)
       .attach('files', oversize, { filename: 'huge.pdf', contentType: 'application/pdf' });
 
     expect(res.status).toBe(400);
   });
 
   it('rejects an empty request', async () => {
-    const res = await request(app).post('/api/v1/attachments').field('note', 'no files attached');
+    const res = await request(app).post('/api/v1/attachments').set(AUTH).field('note', 'no files attached');
     expect(res.status).toBe(400);
   });
 });
@@ -61,14 +62,14 @@ describe('POST /api/v1/attachments', () => {
 describe('GET /api/v1/attachments/:id', () => {
   async function uploadOne() {
     const res = await request(app)
-      .post('/api/v1/attachments')
+      .post('/api/v1/attachments').set(AUTH)
       .attach('files', Buffer.from('hello attachment bytes'), { filename: 'note.txt', contentType: 'text/plain' });
     return res.body.attachments[0];
   }
 
   it('serves the exact original bytes inline by default', async () => {
     const { attachmentId } = await uploadOne();
-    const res = await request(app).get(`/api/v1/attachments/${attachmentId}`);
+    const res = await request(app).get(`/api/v1/attachments/${attachmentId}`).set(AUTH);
 
     expect(res.status).toBe(200);
     expect(res.text).toBe('hello attachment bytes');
@@ -79,7 +80,7 @@ describe('GET /api/v1/attachments/:id', () => {
 
   it('serves as a download when ?download=1 is set', async () => {
     const { attachmentId } = await uploadOne();
-    const res = await request(app).get(`/api/v1/attachments/${attachmentId}?download=1`);
+    const res = await request(app).get(`/api/v1/attachments/${attachmentId}?download=1`).set(AUTH);
 
     expect(res.status).toBe(200);
     expect(res.headers['content-disposition']).toMatch(/^attachment;/);
@@ -87,18 +88,18 @@ describe('GET /api/v1/attachments/:id', () => {
   });
 
   it('404s for an unknown id', async () => {
-    const res = await request(app).get('/api/v1/attachments/att_00000000-0000-4000-8000-000000000000');
+    const res = await request(app).get('/api/v1/attachments/att_00000000-0000-4000-8000-000000000000').set(AUTH);
     expect(res.status).toBe(404);
   });
 
   it('rejects a malformed id without touching the filesystem', async () => {
-    const res = await request(app).get('/api/v1/attachments/..%2f..%2fetc%2fpasswd');
+    const res = await request(app).get('/api/v1/attachments/..%2f..%2fetc%2fpasswd').set(AUTH);
     expect(res.status).toBe(400);
   });
 
   it('GET /api/v1/attachments/:id/meta returns metadata without bytes', async () => {
     const { attachmentId } = await uploadOne();
-    const res = await request(app).get(`/api/v1/attachments/${attachmentId}/meta`);
+    const res = await request(app).get(`/api/v1/attachments/${attachmentId}/meta`).set(AUTH);
 
     expect(res.status).toBe(200);
     expect(res.body).toEqual({
@@ -110,7 +111,7 @@ describe('GET /api/v1/attachments/:id', () => {
   });
 
   it('meta 404s for an unknown id', async () => {
-    const res = await request(app).get('/api/v1/attachments/att_00000000-0000-4000-8000-000000000000/meta');
+    const res = await request(app).get('/api/v1/attachments/att_00000000-0000-4000-8000-000000000000/meta').set(AUTH);
     expect(res.status).toBe(404);
   });
 });

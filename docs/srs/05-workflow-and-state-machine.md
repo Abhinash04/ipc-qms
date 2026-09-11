@@ -30,14 +30,14 @@ flowchart TD
     START([Incoming Query Email])
 
     subgraph INQUIRER["Inquirer"]
-        A["Rajesh Kumar<br/><br/>
+        A["Abhinash Pritiraj<br/><br/>
         Sends Email Query<br/>
         Subject: Clarification regarding eligibility criteria<br/>
         for Government Training Programme"]
     end
 
     subgraph FO1["Phase 1 — Front Office: Query Intake"]
-        B["Priya Sharma<br/><b>Front Office</b><br/><br/>
+        B["Bhumika Makker<br/><b>Front Office</b><br/><br/>
         Receives Email"]
 
         C["System creates Query Case<br/><br/>
@@ -57,7 +57,7 @@ flowchart TD
     end
 
     subgraph ASSIGN["Phase 2 — Assignment"]
-        G["Anil Verma<br/><b>Officer-in-Charge</b><br/><br/>
+        G["Jatin Rawat<br/><b>Officer-in-Charge</b><br/><br/>
         Receives Query"]
 
         H["AI Assignment Assistant<br/><br/>
@@ -136,7 +136,7 @@ flowchart TD
     end
 
     subgraph APPROVAL["Phase 5 — Final Approval"]
-        AE["Anil Verma<br/><b>Officer-in-Charge</b><br/><br/>
+        AE["Jatin Rawat<br/><b>Officer-in-Charge</b><br/><br/>
         Receives Reviewed Draft"]
 
         AF{"Final Approval Decision"}
@@ -151,14 +151,14 @@ flowchart TD
     end
 
     subgraph DISPATCH["Phase 6 — Response & Closure"]
-        AJ["Priya Sharma<br/><b>Front Office</b><br/><br/>
+        AJ["Bhumika Makker<br/><b>Front Office</b><br/><br/>
         Receives Approved Response"]
 
         AK["Final Response Preview<br/>
         Verify Recipient & Attachments"]
 
         AL["Send Response to<br/>
-        Rajesh Kumar"]
+        Abhinash Pritiraj"]
 
         AM["Outgoing Email +<br/>
         Delivery Details Stored"]

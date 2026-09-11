@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import request from 'supertest';
+import { AUTH } from './helpers/auth.js';
 
 import app from '../app.js';
 import * as emailService from '../services/email/emailService.js';
@@ -189,7 +190,7 @@ describe('transport resolution — credentials are never borrowed', () => {
 
 describe('email HTTP surface', () => {
   it('publishes the participant directory without any credential', async () => {
-    const res = await request(app).get('/api/v1/emails/config');
+    const res = await request(app).get('/api/v1/emails/config').set(AUTH);
 
     expect(res.status).toBe(200);
     expect(res.body.participants).toHaveLength(3);
@@ -203,7 +204,7 @@ describe('email HTTP surface', () => {
 
   it('addresses an enquiry to the Front Officer, not to the old shared mailbox', async () => {
     const res = await request(app)
-      .post('/api/v1/emails/enquiry')
+      .post('/api/v1/emails/enquiry').set(AUTH)
       .send({ subject: 'Query', body: 'Body' });
 
     expect(res.status).toBe(201);
@@ -212,19 +213,19 @@ describe('email HTTP surface', () => {
 
   it('forwards an existing query and requires its id', async () => {
     const ok = await request(app)
-      .post('/api/v1/emails/forward')
+      .post('/api/v1/emails/forward').set(AUTH)
       .send({ queryId: 'QRY-2026-00001', subject: 'Query', body: 'quoted' });
     expect(ok.status).toBe(201);
     expect(ok.body.to).toEqual(['officer@test.invalid']);
 
-    const bad = await request(app).post('/api/v1/emails/forward').send({ subject: 'x' });
+    const bad = await request(app).post('/api/v1/emails/forward').set(AUTH).send({ subject: 'x' });
     expect(bad.status).toBe(400);
   });
 
   it('delivers the enquiry into the Front Officer inbox, which is what she polls', async () => {
-    await request(app).post('/api/v1/emails/enquiry').send({ subject: 'Inbox check', body: 'b' });
+    await request(app).post('/api/v1/emails/enquiry').set(AUTH).send({ subject: 'Inbox check', body: 'b' });
 
-    const res = await request(app).get('/api/v1/mailbox/messages');
+    const res = await request(app).get('/api/v1/mailbox/messages').set(AUTH);
     expect(res.body.recipient).toBe('front-office@test.invalid');
     expect(res.body.messages).toHaveLength(1);
     expect(res.body.messages[0].subject).toBe('Inbox check');
@@ -449,7 +450,7 @@ describe('sending while the mailbox is a real Gmail inbox', () => {
   });
 
   it('POST /emails/response succeeds instead of 500', async () => {
-    const res = await request(app).post('/api/v1/emails/response').send({
+    const res = await request(app).post('/api/v1/emails/response').set(AUTH).send({
       to: 'inquirer@test.invalid',
       subject: 'Re: Clarification [QRY-2026-00001]',
       body: 'The approved response.',
@@ -462,12 +463,12 @@ describe('sending while the mailbox is a real Gmail inbox', () => {
 
   it('the acknowledgement and forward survive it too — same code path', async () => {
     const ack = await request(app)
-      .post('/api/v1/emails/acknowledgement')
+      .post('/api/v1/emails/acknowledgement').set(AUTH)
       .send({ to: 'inquirer@test.invalid', queryId: 'QRY-2026-00001' });
     expect(ack.status).toBe(201);
 
     const forward = await request(app)
-      .post('/api/v1/emails/forward')
+      .post('/api/v1/emails/forward').set(AUTH)
       .send({ queryId: 'QRY-2026-00001', subject: 'Clarification', body: 'quoted' });
     expect(forward.status).toBe(201);
   });
@@ -482,7 +483,7 @@ describe('sending while the mailbox is a real Gmail inbox', () => {
   });
 
   it('records nothing in the local mailbox, because there is none to record in', async () => {
-    await request(app).post('/api/v1/emails/response').send({
+    await request(app).post('/api/v1/emails/response').set(AUTH).send({
       to: 'inquirer@test.invalid',
       subject: 'Re: test',
       body: 'x',

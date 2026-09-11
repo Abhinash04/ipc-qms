@@ -99,20 +99,56 @@ function extractBody(payload) {
 }
 
 /**
+ * Did the sender deliberately attach this part as a file?
+ *
+ * A filename alone does not mean "attachment", which is what this used to
+ * test. Gmail names inline parts too: an email signature logo arrives as
+ * `image001.png` with a real `attachmentId`, and image/png is an allowed type
+ * — so every signature became a document on the case, was written to disk,
+ * and was forwarded to the Officer-in-Charge as though the inquirer had sent
+ * it.
+ *
+ * RFC 2183 is the authority. `Content-Disposition: attachment` is the sender
+ * saying "this is a separate file"; `inline` says "render me inside the body";
+ * and a `Content-ID` means the HTML body references this part, so it is
+ * decoration rather than a document.
+ */
+function isRealAttachment(part) {
+  if (!part?.filename) return false;
+
+  const disposition = header(part, 'Content-Disposition').trim().toLowerCase();
+  const hasContentId = Boolean(header(part, 'Content-ID'));
+
+  if (disposition.startsWith('attachment')) return true;
+  if (disposition.startsWith('inline')) return false;
+
+  // No Content-Disposition at all. Fall back to "named, fetchable, and not
+  // referenced by the body" rather than defaulting to true — a part nothing
+  // can reference, which Gmail will hand us bytes for, is almost certainly a
+  // genuine attachment from a client that omitted the header.
+  return !hasContentId && Boolean(part.body?.attachmentId);
+}
+
+/**
  * Attachment METADATA only — name, type, size. The file bytes are never
- * downloaded or stored; `attachmentId` is the handle Gmail would need to fetch
- * one later.
+ * downloaded or stored here; `attachmentId` is the handle Gmail would need to
+ * fetch one later.
  */
 function extractAttachments(payload, found = []) {
   for (const part of payload?.parts || []) {
-    if (part.filename) {
+    if (isRealAttachment(part)) {
       found.push({
         id: part.body?.attachmentId || null,
         name: part.filename,
         mimeType: part.mimeType || 'application/octet-stream',
         sizeKb: Math.max(1, Math.round((part.body?.size || 0) / 1024)),
       });
+      // Do not descend into a part that is itself an attachment. A forwarded
+      // message attached as .eml is one attachment, not one plus every file
+      // that happens to live inside it.
+      continue;
     }
+
     if (part.parts) extractAttachments(part, found);
   }
   return found;

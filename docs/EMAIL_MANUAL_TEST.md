@@ -11,7 +11,7 @@ Two things cannot be proven by the automated suite, and this document is how you
 ## Who is real, who is mock
 
 | Role              | Person               | Address                     | Sends real mail |
-| ----------------- | -------------------- | --------------------------- | --------------- |
+| -------------------| ----------------------| -----------------------------| -----------------|
 | Inquirer          | Abhinash Pritiraj    | abhinash.pritiraj@gmail.com | yes             |
 | Front Office      | Bhumika Makker       | bhoomikamakker@gmail.com    | yes             |
 | Officer-in-Charge | Jatin Rawat          | rawatjatin436@gmail.com     | yes             |

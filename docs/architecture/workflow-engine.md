@@ -37,8 +37,13 @@ Draft → Review 1 → Review 2 → Review 3 → Review 4 → Final Approval
 ```
 
 without any change to the data model or the components that render it
-(`frontend/src/components/workflow/WorkflowTimeline.jsx` renders any length of
+(`frontend/src/components/workflow/QueryLifecycleTimeline.jsx` renders any length of
 `workflowSteps` sorted by `sequence`).
+
+> **Implementation status.** This model is **implemented client-side** in
+> `frontend/src/store/useWorkflowStore.js`, persisted to IndexedDB. It is **not yet implemented
+> server-side** — there is no Case or WorkflowStep collection in the backend, which is why this
+> document still describes the shape the server should adopt.
 
 ## Step Lifecycle
 
@@ -46,24 +51,32 @@ A step's `status` moves `PENDING → IN_PROGRESS → COMPLETED`. A query's
 `currentWorkflowStepId` always points at the step actively being worked — advancing to the
 next step means completing the current one and marking the next `IN_PROGRESS`.
 
-## Add / Delete / Reorder (Conceptual — Not Implemented)
+## Add / Delete / Reorder
 
 - **Add a review level**: insert a new `WorkflowStep` with `stepType: REVIEW` at the desired
-  `sequence`, shifting subsequent sequence numbers.
+  `sequence`, shifting subsequent sequence numbers. **Implemented** — `addReviewLevel` in
+  `useWorkflowStore`, driven from the drafting screen; levels are named "Reviewer I / II / III" in
+  sequence order.
 - **Delete a review level**: only permitted while `status = PENDING` (a completed review's
   decision is part of the audit trail and should not disappear); removing it shifts later
-  sequence numbers down.
-- **Reorder**: renumber `sequence` for the affected steps.
+  sequence numbers down. **Implemented** — `deleteReviewLevel`.
+- **Reorder**: renumber `sequence` for the affected steps. **Not implemented** — levels can be
+  added and removed but not moved.
 
-Who is authorized to perform each of these operations is an open question — see
+Who is authorized to perform each of these operations remains an open question — see
 [srs/14-open-questions-and-client-clarifications.md](../srs/14-open-questions-and-client-clarifications.md#review).
-None of add/delete/reorder is implemented in this phase; `mockQuery.js` ships a fixed
-4-step example (Draft → Review 1 → Review 2 → Final Approval) purely to demonstrate the
-shape.
+Today the Assigned Official building the draft manages the chain, and submission for review is
+blocked until at least one reviewer exists.
+
+There is no `mockQuery.js`; the store seeds entirely empty and every step is created by real
+workflow activity.
 
 ## Relationship to Workflow State
 
-A query's coarse `workflowState` (e.g. `UNDER_REVIEW`) is derived from where its
-`currentWorkflowStepId` sits, not stored independently of the steps — once the workflow
-engine is implemented, advancing a step should be the single place that also updates
-`workflowState` and appends the corresponding audit event, so the two can never drift apart.
+A query's coarse `workflowState` (e.g. `UNDER_REVIEW`) tracks where its `currentWorkflowStepId`
+sits. In the client implementation this invariant is held by `applyTransition`, the store's single
+writer: it is the only place that changes `workflowState`, it **derives `businessStatus` from it**
+via `deriveBusinessStatus` so those two can never disagree, and it **always appends exactly one
+audit event**. A server-side implementation should preserve that property — one commit point that
+updates the step, the state and the audit record together, rather than three call sites that can
+drift apart.

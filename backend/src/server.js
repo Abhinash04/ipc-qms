@@ -1,5 +1,6 @@
 import app from './app.js';
 import env, { assertValidEmailConfig, EMAIL_TRANSPORTS } from './config/env.js';
+import { assertValidAuthConfig } from './config/authConfig.js';
 import { connectDb } from './config/db.js';
 import { IDENTITY_ROLES, identityForRole } from './config/identities.js';
 import * as mailbox from './services/email/mailbox/index.js';
@@ -11,6 +12,9 @@ import * as mailbox from './services/email/mailbox/index.js';
 
 try {
   assertValidEmailConfig();
+  // Fail fast rather than starting a server whose every sign-in would throw
+  // on a missing signing secret.
+  assertValidAuthConfig();
 } catch (error) {
   console.error(`\n${error.message}\n`);
   process.exit(1);
@@ -54,14 +58,13 @@ connectDb().finally(() => {
     console.log(`Query recipient: ${recipient}`);
     console.log(`Mailbox source:  ${source}`);
 
-    // See backend/README.md "Security status: NOT production-ready" and
-    // middleware/authorizeAttachmentAccess.js — the attachment endpoints are
-    // always mounted, and there is currently no authentication mechanism in
-    // this backend for them to enforce against.
+    // Every route below /auth and /health now requires a session, and roles
+    // are enforced per route. What is still missing is the case-level half:
+    // see the TODO in middleware/authorizeAttachmentAccess.js.
     console.warn(
-      '[qms] Attachment endpoints (/api/v1/attachments/*) are mounted without ' +
-        'authentication or authorization. Do not expose this server outside a ' +
-        'trusted network until backend auth is implemented.',
+      '[qms] Authorization is role-level only. Any signed-in user can read any ' +
+        'attachment by id, because Query Case ownership is not yet server-side. ' +
+        'Do not expose this server outside a trusted network.',
     );
   });
 });

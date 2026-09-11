@@ -8,10 +8,14 @@ import '@fontsource/dm-sans/700.css'
 import './index.css'
 import App from './App.jsx'
 import { useWorkflowStore } from '@/store/useWorkflowStore'
+import { useAuthStore } from '@/store/useAuthStore'
 
 const queryClient = new QueryClient()
 
 useWorkflowStore.getState().hydrate()
+// Restores the session from the httpOnly cookie before the router decides
+// which route the visitor is allowed on.
+useAuthStore.getState().hydrate()
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>

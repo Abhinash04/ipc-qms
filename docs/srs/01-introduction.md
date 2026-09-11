@@ -9,13 +9,18 @@ and closure.
 
 ## 1.2 Scope
 
-This phase of work delivers the **initial software foundation**: repository structure,
-frontend/backend scaffolding, routing skeleton, mock authentication/RBAC, mock data, and this
-documentation set. It does **not** implement real authentication, email ingestion, AI
-integration, database persistence, or the workflow engine — those are scoped for later phases
-once the open questions in
-[14-open-questions-and-client-clarifications.md](./14-open-questions-and-client-clarifications.md)
-are resolved with the client.
+This document specifies the system as a whole. It is a **requirements** document — for what is
+built today, see [docs/HANDOFF.md](../HANDOFF.md) and the two READMEs.
+
+Delivered since this was first written: real authentication (JWT in an httpOnly cookie with
+role-based route guards), the email pipeline (mock and Gmail transports, inbox ingestion,
+acknowledgement, forwarding, dispatch), AI integration (Pravah Gemma grounded in an indexed IPC
+corpus), server-side persistence (MongoDB for the mailbox and audit trail), attachments, and the
+workflow state-transition engine with dynamic review levels.
+
+Still outstanding: **server-side Query Cases** — case state lives in the browser's IndexedDB, which
+is what blocks case-level authorization — and the items still awaiting client sign-off in
+[14-open-questions-and-client-clarifications.md](./14-open-questions-and-client-clarifications.md).
 
 ## 1.3 Objectives
 
@@ -44,5 +49,8 @@ are resolved with the client.
 - The client will confirm the open items in
   [14-open-questions-and-client-clarifications.md](./14-open-questions-and-client-clarifications.md)
   before the workflow engine, real email integration, and real AI integration are built.
-- PostgreSQL is the intended production database; no ORM or schema has been chosen yet.
-- The system is used internally by IPC staff; inquirers are external and do not log in.
+- **MongoDB (via Mongoose)** is the database. An earlier assumption that PostgreSQL would be used
+  was not carried through — there is no PostgreSQL client in the project.
+- The system is used internally by IPC staff. Inquirers were originally assumed to be external and
+  not to log in; the implementation gives the Inquirer role an in-app account with a dashboard, a
+  Raise Enquiry form and read access to their own cases.

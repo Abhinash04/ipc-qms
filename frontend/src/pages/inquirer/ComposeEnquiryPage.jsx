@@ -20,6 +20,7 @@ import { fetchEmailConfig, sendEnquiry } from "@/services/api/mailboxService";
 import { uploadAttachments } from "@/services/api/attachmentService";
 import { AttachmentPicker } from "@/components/attachments/AttachmentPicker";
 import { hasBlockingErrors } from "@/constants/attachmentPolicy";
+import { notify } from "@/services/notify";
 import { cn } from "@/utils/cn";
 
 export function ComposeEnquiryPage() {
@@ -42,13 +43,49 @@ export function ComposeEnquiryPage() {
       // than register a case that silently has no files.
       let attachments;
       if (pendingFiles.length > 0) {
-        const uploaded = await uploadAttachments(pendingFiles.map((entry) => entry.file));
-        attachments = uploaded;
+        // One toast that follows the upload from progress to outcome, so the
+        // success message cannot appear unless the request actually resolved.
+        const toastId = notify.loading(
+          `Uploading ${pendingFiles.length} file${pendingFiles.length === 1 ? "" : "s"}…`,
+        );
+        try {
+          attachments = await uploadAttachments(
+            pendingFiles.map((entry) => entry.file),
+            {
+              onUploadProgress: (event) => {
+                if (!event.total) return;
+                const percent = Math.round((event.loaded / event.total) * 100);
+                notify.loading(
+                  `Uploading ${pendingFiles.length} file${pendingFiles.length === 1 ? "" : "s"}…`,
+                  `${percent}%`,
+                  { id: toastId },
+                );
+              },
+            },
+          );
+          notify.success("Attachments uploaded", null, { id: toastId });
+        } catch (caught) {
+          notify.error(
+            "Attachment upload failed",
+            `${caught?.message || String(caught)} — your enquiry was not sent.`,
+            { id: toastId },
+          );
+          throw caught;
+        }
       }
 
       const enquiryPayload = { subject: subject.trim(), body };
       if (attachments) enquiryPayload.attachments = attachments;
-      const sent = await sendEnquiry(enquiryPayload);
+
+      let sent;
+      try {
+        sent = await sendEnquiry(enquiryPayload);
+      } catch (caught) {
+        // Named separately from the upload so the user knows which step failed
+        // and that the files themselves went through.
+        notify.error("Could not send your enquiry", caught);
+        throw caught;
+      }
 
       const raised = raiseEnquiry({
         subject: subject.trim(),
