@@ -1,6 +1,6 @@
 # 12. Email Integration
 
-## 12.1 Proposed Architecture (Not Confirmed)
+## 12.1 Architecture (Implemented)
 
 ```
 Inbound mailbox
@@ -32,6 +32,28 @@ the query.
 
 ## 12.3 Current Implementation
 
-None. `MOCK_QUERY.source` is hardcoded to `"Email"` in
-`frontend/src/constants/mockQuery.js` to represent the intended intake channel; no ingestion
-or dispatch integration exists.
+Email ingestion and dispatch (Gmail transport + mailbox polling) exist; see
+`backend/src/services/email/`. Sections above describing "None" predate that work and cover
+the parts of this document (threading rules, provider choice already made) that remain
+otherwise unrevised.
+
+## 12.4 Attachments
+
+Attachments are supported end-to-end: upload (`POST /api/v1/attachments`), real MIME
+multipart on outbound Gmail sends, byte download of inbound Gmail attachments, and the
+Front Officer's Forward to the Officer-in-Charge. See `backend/src/services/attachments/`.
+
+The Forward-to-OIC path is **fail-closed**: if any attachment associated with the query
+cannot be resolved (unknown id, missing bytes on disk, checksum mismatch), the forward is
+aborted before any email is sent and returns `409` naming the unavailable attachment(s). The
+Officer-in-Charge never receives a forward that looks complete but is silently missing a
+document.
+
+**Security note:** the attachment endpoints require a session and a role, but **not a relationship
+to the case** — any authenticated user can read any attachment by id. See
+[backend/README.md](../../backend/README.md#security-status-authenticated-but-not-yet-case-scoped)
+for what is required before deployment.
+
+**Attachments fail closed on send.** Every referenced file is verified (existence, bytes, SHA-256)
+before an outbound message leaves; an unresolvable attachment aborts the send with a 409 naming it,
+rather than delivering a message with documents silently missing.

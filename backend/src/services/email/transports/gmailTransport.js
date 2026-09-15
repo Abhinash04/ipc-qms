@@ -1,4 +1,5 @@
 import { google } from 'googleapis';
+import { randomBytes } from 'crypto';
 import env from '../../../config/env.js';
 import { identityForRole, IDENTITY_ROLES } from '../../../config/identities.js';
 
@@ -47,18 +48,68 @@ export async function authenticatedAddress(role) {
 
 const asList = (value) => (Array.isArray(value) ? value.join(', ') : value || '');
 
-export function buildRawMessage(message) {
-  const headers = [
+// eslint-disable-next-line no-control-regex -- deliberately includes the ASCII control range
+const isAscii = (str) => /^[\x00-\x7F]*$/.test(str || '');
+
+/** ASCII-safe fallback for the plain (non-`*=`) filename parameter. */
+const asciiFilename = (name) => String(name || 'attachment').replace(/[^\x20-\x7E]/g, '_').replace(/"/g, "'");
+
+/** RFC 2045 §6.8: base64 body lines must not exceed 76 characters. */
+const wrapBase64 = (base64) => base64.replace(/(.{76})/g, '$1\r\n');
+
+function baseHeaders(message) {
+  return [
     `From: ${message.from}`,
     `To: ${asList(message.to)}`,
     message.cc?.length ? `Cc: ${asList(message.cc)}` : null,
     message.bcc?.length ? `Bcc: ${asList(message.bcc)}` : null,
     `Subject: ${message.subject || '(no subject)'}`,
     'MIME-Version: 1.0',
-    'Content-Type: text/plain; charset="UTF-8"',
   ].filter(Boolean);
+}
 
-  const raw = `${headers.join('\r\n')}\r\n\r\n${message.body || ''}`;
+/**
+ * With no attachments this produces the exact single-part output the
+ * original implementation did, byte for byte — pinned by a regression test.
+ * With attachments it switches to `multipart/mixed`: one text/plain part for
+ * the body, then one base64 part per attachment. Non-ASCII filenames use the
+ * RFC 5987/6266 `filename*=UTF-8''…` form alongside an ASCII fallback so both
+ * old and new mail clients render a sane name.
+ *
+ * This function stays pure — it only ever receives `{filename, mimeType,
+ * content: Buffer}` records that emailService has already resolved from disk;
+ * it does no file I/O of its own.
+ */
+export function buildRawMessage(message) {
+  const attachments = (message.attachments || []).filter((att) => att && Buffer.isBuffer(att.content));
+
+  let raw;
+  if (attachments.length === 0) {
+    const headers = [...baseHeaders(message), 'Content-Type: text/plain; charset="UTF-8"'];
+    raw = `${headers.join('\r\n')}\r\n\r\n${message.body || ''}`;
+  } else {
+    const boundary = `qms_${randomBytes(16).toString('hex')}`;
+    const headers = [...baseHeaders(message), `Content-Type: multipart/mixed; boundary="${boundary}"`];
+
+    const bodyPart = [`--${boundary}`, 'Content-Type: text/plain; charset="UTF-8"', '', message.body || ''].join(
+      '\r\n',
+    );
+
+    const attachmentParts = attachments.map((att) => {
+      const ascii = asciiFilename(att.filename);
+      const utf8Star = isAscii(att.filename) ? '' : `; filename*=UTF-8''${encodeURIComponent(att.filename)}`;
+      return [
+        `--${boundary}`,
+        `Content-Type: ${att.mimeType || 'application/octet-stream'}; name="${ascii}"`,
+        'Content-Transfer-Encoding: base64',
+        `Content-Disposition: attachment; filename="${ascii}"${utf8Star}`,
+        '',
+        wrapBase64(att.content.toString('base64')),
+      ].join('\r\n');
+    });
+
+    raw = [headers.join('\r\n'), '', bodyPart, ...attachmentParts, `--${boundary}--`, ''].join('\r\n');
+  }
 
   return Buffer.from(raw)
     .toString('base64')

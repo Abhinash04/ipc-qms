@@ -27,7 +27,12 @@ async function send(message, { asRole = null } = {}) {
       bcc: message.bcc || [],
       subject: message.subject,
       body: message.body,
-      attachments: message.attachments || [],
+      // The deposited copy carries attachment metadata + attachmentId only —
+      // the bytes stay on disk under attachmentStore, addressable by that id,
+      // matching what a real Gmail inbox read would produce.
+      attachments: (message.attachments || []).map(
+        ({ attachmentId, filename, mimeType, size }) => ({ attachmentId, filename, mimeType, size }),
+      ),
       receivedAt: message.timestamp,
     });
   }

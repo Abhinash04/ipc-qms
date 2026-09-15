@@ -7,6 +7,7 @@ import {
   markMessageIngested,
   sendAcknowledgement,
 } from "@/services/api/mailboxService";
+import { notify, beginBatch, endBatch } from "@/services/notify";
 
 export function useMailboxIngestion() {
   const ingestEmail = useWorkflowStore((state) => state.ingestEmail);
@@ -25,6 +26,7 @@ export function useMailboxIngestion() {
 
   const ingestNow = useCallback(async () => {
     setState((prev) => ({ ...prev, running: true, error: null }));
+    beginBatch();
     try {
       const { messages = [] } = await fetchMailboxMessages({
         unreadOnly: true,
@@ -85,6 +87,8 @@ export function useMailboxIngestion() {
         forwarded: [],
         error: message,
       };
+    } finally {
+      endBatch();
     }
   }, [
     ingestEmail,
@@ -95,6 +99,40 @@ export function useMailboxIngestion() {
   ]);
 
   return { ...state, ingestNow };
+}
+
+/**
+ * The one toast for a whole mailbox sweep.
+ *
+ * `announceIdle` is false for the 30-second background poll — a timer that
+ * found nothing is not news. A failure is always reported, because a mailbox
+ * that has silently stopped being read is exactly the thing the Front Office
+ * needs to know about.
+ */
+export function notifyIngestResult(result, { announceIdle = true } = {}) {
+  if (result.error) {
+    notify.error("Could not check the IPC mailbox", result.error);
+    return;
+  }
+
+  const created = result.created.length;
+  if (created === 0) {
+    if (announceIdle) notify.info("No new mail");
+    return;
+  }
+
+  const parts = [];
+  if (result.acknowledged.length > 0) {
+    parts.push(`${result.acknowledged.length} acknowledged`);
+  }
+  if (result.forwarded.length > 0) {
+    parts.push(`${result.forwarded.length} forwarded to the Officer-in-Charge`);
+  }
+
+  notify.success(
+    `${created} new case${created === 1 ? "" : "s"} registered`,
+    parts.join(" · ") || null,
+  );
 }
 
 async function acknowledge(queryId, inquirerAddress, recordAcknowledgement) {

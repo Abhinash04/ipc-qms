@@ -51,12 +51,25 @@ export async function sendResponse({ to, subject, body, attachments = [], cc = [
   return data;
 }
 
-export async function forwardQuery({ queryId, subject, body, providerThreadId }) {
-  const { data } = await axiosClient.post('/emails/forward', {
-    queryId,
-    subject,
-    body,
-    providerThreadId,
-  });
-  return data;
+export async function forwardQuery({ queryId, subject, body, providerThreadId, attachments = [] }) {
+  try {
+    const { data } = await axiosClient.post('/emails/forward', {
+      queryId,
+      subject,
+      body,
+      providerThreadId,
+      attachments,
+    });
+    return data;
+  } catch (error) {
+    // The backend fails a forward closed (409) when an attachment cannot be
+    // resolved — surface exactly which one, rather than a generic HTTP error,
+    // so the Front Officer knows what to fix before retrying.
+    const unavailable = error?.response?.data?.unavailableAttachments;
+    if (unavailable?.length) {
+      const names = unavailable.map((u) => u.filename || u.attachmentId).join(', ');
+      throw new Error(`Missing attachment(s): ${names}`, { cause: error });
+    }
+    throw error;
+  }
 }

@@ -11,8 +11,12 @@
 | `ASSIGNED_OFFICIAL` | Drafts the response for an assigned query.                               |
 | `REVIEWER`          | Reviews a draft at one review level.                                     |
 
-`INQUIRER` also exists in the mock user dataset (the external party who submitted the query)
-but is not part of the internal role hierarchy below — inquirers do not log into QMS.
+| `INQUIRER`          | The party who submitted the query. Raises enquiries and tracks their own cases. |
+
+`INQUIRER` sits outside the internal approval hierarchy shown below, but **is a signed-in role** in
+the implementation: it holds a dashboard, a Raise Enquiry form and read access to its own cases
+(`ROLE_SECTIONS[INQUIRER]` in `frontend/src/constants/permissions.js`). An earlier draft of this
+document said inquirers do not log in; that is no longer accurate. Seven roles in total.
 
 ## 3.2 Role Hierarchy
 
@@ -41,18 +45,29 @@ workflow action (assign, draft, review, transfer, pull back, approve, dispatch) 
 
 ## 3.3 Mock Users
 
-The frontend prototype uses a centralized, fictional user dataset (`frontend/src/constants/mockUsers.js`)
-— these are development identities only, not real IPC employees:
+Thirteen development identities are seeded from `backend/src/constants/users.js` (mirrored for
+display in `frontend/src/constants/mockUsers.js`, which the backend file is authoritative over).
+These are development identities only, not real IPC employees:
 
-| ID | Name | Role | Division |
-| --- | --- | --- | --- |
-| USR-0001 | Rajesh Kumar | INQUIRER | — |
-| USR-0002 | Priya Sharma | FRONT_OFFICE | Administration |
-| USR-0003 | Anil Verma | OFFICER_IN_CHARGE | Training & Development |
-| USR-0004 | Neha Singh | ASSIGNED_OFFICIAL | Training & Development |
-| USR-0005 | Amit Mehta | REVIEWER | Policy & Compliance |
-| USR-0006 | Kavita Rao | REVIEWER | Policy & Compliance |
-| USR-0007 | Suresh Gupta | ADMIN | Administration |
-| USR-0008 | System Administrator | SUPER_ADMIN | Administration |
+| ID | Name | Role |
+| --- | --- | --- |
+| USR-0001 | Abhinash Pritiraj | INQUIRER |
+| USR-0002 | Bhumika Makker | FRONT_OFFICE |
+| USR-0003 | Jatin Rawat | OFFICER_IN_CHARGE |
+| USR-0004 | Neha Singh | ASSIGNED_OFFICIAL |
+| USR-0009 | Rawat Jatin | ASSIGNED_OFFICIAL |
+| USR-0010 | Meera Iyer | ASSIGNED_OFFICIAL |
+| USR-0011 | Arjun Nair | ASSIGNED_OFFICIAL |
+| USR-0012 | Sana Qureshi | ASSIGNED_OFFICIAL |
+| USR-0013 | Vikram Desai | ASSIGNED_OFFICIAL |
+| USR-0005 | Amit Mehta | REVIEWER |
+| USR-0006 | Kavita Rao | REVIEWER |
+| USR-0007 | Suresh Gupta | ADMIN |
+| USR-0008 | System Administrator | SUPER_ADMIN |
 
-The mock frontend session is seeded as **Neha Singh (USR-0004, ASSIGNED_OFFICIAL)**.
+Note `Rawat Jatin` (USR-0009) and `Jatin Rawat` (USR-0003) are **different people** — a deliberate
+near-collision the test suite pins, so name-matching code cannot conflate them.
+
+There is a real login screen; all accounts share the development password `QMS_SEED_PASSWORD`. Full
+detail, including each role's landing dashboard and section access, is in
+[docs/auth.md](../auth.md).

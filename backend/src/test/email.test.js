@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import request from 'supertest';
+import { AUTH } from './helpers/auth.js';
 import app from '../app.js';
 import env, { validateEmailConfig } from '../config/env.js';
 import * as emailService from '../services/email/emailService.js';
@@ -136,7 +137,7 @@ describe('acknowledgement template', () => {
 
 describe('email HTTP endpoints', () => {
   it('GET /emails/config returns the composer configuration', async () => {
-    const res = await request(app).get('/api/v1/emails/config');
+    const res = await request(app).get('/api/v1/emails/config').set(AUTH);
     expect(res.status).toBe(200);
     expect(res.body.transport).toBe('mock');
     expect(res.body.ipcQueryEmail).toBe('front-office@test.invalid');
@@ -145,7 +146,7 @@ describe('email HTTP endpoints', () => {
 
   it('POST /emails/enquiry sends and returns the stored message', async () => {
     const res = await request(app)
-      .post('/api/v1/emails/enquiry')
+      .post('/api/v1/emails/enquiry').set(AUTH)
       .send({ subject: 'Monograph query', body: 'Details here', timestamp: '2026-08-17T09:00:00.000Z' });
 
     expect(res.status).toBe(201);
@@ -155,7 +156,7 @@ describe('email HTTP endpoints', () => {
 
   it('POST /emails/acknowledgement sends the acknowledgement', async () => {
     const res = await request(app)
-      .post('/api/v1/emails/acknowledgement')
+      .post('/api/v1/emails/acknowledgement').set(AUTH)
       .send({ to: 'inquirer@test.invalid', queryId: 'QRY-2026-00001' });
 
     expect(res.status).toBe(201);
@@ -164,13 +165,13 @@ describe('email HTTP endpoints', () => {
   });
 
   it('rejects a response with no recipient', async () => {
-    const res = await request(app).post('/api/v1/emails/response').send({ subject: 'x', body: 'y' });
+    const res = await request(app).post('/api/v1/emails/response').set(AUTH).send({ subject: 'x', body: 'y' });
     expect(res.status).toBe(400);
   });
 
   it('carries the query id in the acknowledgement subject, so the thread is identifiable', async () => {
     const res = await request(app)
-      .post('/api/v1/emails/acknowledgement')
+      .post('/api/v1/emails/acknowledgement').set(AUTH)
       .send({ to: 'inquirer@test.invalid', queryId: 'QRY-2026-00042' });
 
     expect(res.body.subject).toContain('[QRY-2026-00042]');
@@ -180,7 +181,7 @@ describe('email HTTP endpoints', () => {
   it('does not put the acknowledgement back in the IPC inbox — no ingestion loop', async () => {
     await emailService.sendEnquiry({ subject: 'Loop check', body: 'a' });
     await request(app)
-      .post('/api/v1/emails/acknowledgement')
+      .post('/api/v1/emails/acknowledgement').set(AUTH)
       .send({ to: 'inquirer@test.invalid', queryId: 'QRY-2026-00001' });
 
     // The IPC mailbox still holds only the enquiry; re-polling it can never
@@ -200,7 +201,7 @@ describe('mailbox HTTP endpoints', () => {
   it('lists messages and flags in-memory persistence', async () => {
     await emailService.sendEnquiry({ subject: 'Listed', body: 'a' });
 
-    const res = await request(app).get('/api/v1/mailbox/messages');
+    const res = await request(app).get('/api/v1/mailbox/messages').set(AUTH);
     expect(res.status).toBe(200);
     expect(res.body.recipient).toBe('front-office@test.invalid');
     expect(res.body.persistence).toMatch(/cleared on backend restart/);
@@ -209,7 +210,7 @@ describe('mailbox HTTP endpoints', () => {
 
   it('accepts an externally-received message', async () => {
     const res = await request(app)
-      .post('/api/v1/mailbox/receive')
+      .post('/api/v1/mailbox/receive').set(AUTH)
       .send({ from: 'someone@example.com', subject: 'Direct', body: 'Arrived outside the app' });
 
     expect(res.status).toBe(201);
@@ -218,18 +219,18 @@ describe('mailbox HTTP endpoints', () => {
   });
 
   it('rejects a received message with no sender', async () => {
-    const res = await request(app).post('/api/v1/mailbox/receive').send({ subject: 'No sender' });
+    const res = await request(app).post('/api/v1/mailbox/receive').set(AUTH).send({ subject: 'No sender' });
     expect(res.status).toBe(400);
   });
 
   it('marks a message ingested and 404s for an unknown id', async () => {
     await emailService.sendEnquiry({ subject: 'To ingest', body: 'a' });
 
-    const ok = await request(app).post('/api/v1/mailbox/messages/MSG-00001/ingested');
+    const ok = await request(app).post('/api/v1/mailbox/messages/MSG-00001/ingested').set(AUTH);
     expect(ok.status).toBe(200);
     expect(ok.body.ingested).toBe(true);
 
-    const missing = await request(app).post('/api/v1/mailbox/messages/MSG-99999/ingested');
+    const missing = await request(app).post('/api/v1/mailbox/messages/MSG-99999/ingested').set(AUTH);
     expect(missing.status).toBe(404);
   });
 
@@ -237,7 +238,7 @@ describe('mailbox HTTP endpoints', () => {
     await emailService.sendEnquiry({ subject: 'Keep', body: 'a' });
     await emailService.sendEnquiry({ subject: 'Doomed', body: 'b' });
 
-    const ok = await request(app).delete('/api/v1/mailbox/messages/MSG-00002');
+    const ok = await request(app).delete('/api/v1/mailbox/messages/MSG-00002').set(AUTH);
     expect(ok.status).toBe(200);
     expect(ok.body.deleted).toBe(true);
     expect(ok.body.message.subject).toBe('Doomed');
@@ -246,7 +247,7 @@ describe('mailbox HTTP endpoints', () => {
     expect(remaining).toHaveLength(1);
     expect(remaining[0].subject).toBe('Keep');
 
-    const missing = await request(app).delete('/api/v1/mailbox/messages/MSG-99999');
+    const missing = await request(app).delete('/api/v1/mailbox/messages/MSG-99999').set(AUTH);
     expect(missing.status).toBe(404);
     // Prove the route was actually matched: the catch-all 404 answers with
     // {error:'Not Found', path}, which would otherwise pass the status check.
@@ -255,7 +256,7 @@ describe('mailbox HTTP endpoints', () => {
 
   it('DELETE /mailbox clears the inbox', async () => {
     await emailService.sendEnquiry({ subject: 'Doomed', body: 'a' });
-    const res = await request(app).delete('/api/v1/mailbox');
+    const res = await request(app).delete('/api/v1/mailbox').set(AUTH);
     expect(res.status).toBe(200);
     expect(res.body.reset).toBe(true);
     expect(await mailbox.list('front-office@test.invalid')).toHaveLength(0);

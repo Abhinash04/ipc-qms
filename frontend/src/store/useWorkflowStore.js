@@ -18,6 +18,7 @@ import { loadAll, replaceAll, persistTransition, isEmpty } from '@/services/db/d
 import { sendResponse, forwardQuery, sendAcknowledgement } from '@/services/api/mailboxService';
 import { fetchGemmaAiSummary, fetchGemmaAiDraft } from '@/services/api/aiService';
 import { assembleDraftEmail } from '@/services/ai/draftComposer';
+import { notify } from '@/services/notify';
 
 const pad = (n) => String(n).padStart(5, '0');
 
@@ -641,23 +642,32 @@ export const useWorkflowStore = create((set, get) => ({
       (m) => m.queryId === queryId && m.emailType === EMAIL_TYPE.INCOMING_QUERY,
     );
 
+    const attachments = query.attachments || [];
+
     const body = [
       `Forwarded by ${actorName(actor)} for assignment.`,
       '',
       `Query: ${queryId}`,
       `Received from: ${query.inquirer?.name || ''} <${query.inquirer?.email || ''}>`,
       '',
+      attachments.length > 0
+        ? `Attachments (${attachments.length}): ${attachments.map((a) => a.filename || a.name).join(', ')}`
+        : null,
+      attachments.length > 0 ? '' : null,
       '---------- Original enquiry ----------',
       `Subject: ${query.subject}`,
       '',
       original?.body || query.description || '',
-    ].join('\n');
+    ]
+      .filter((line) => line !== null)
+      .join('\n');
 
     const sent = await forward({
       queryId,
       subject: query.subject,
       body,
       providerThreadId: original?.providerThreadId || null,
+      attachments,
     });
 
     const timestamp = sent?.sentAt || now();
@@ -673,6 +683,7 @@ export const useWorkflowStore = create((set, get) => ({
       to: sent?.to || [],
       subject: sent?.subject || `Fwd: ${query.subject} [${queryId}]`,
       body: sent?.body || body,
+      attachments: sent?.attachments || attachments,
       timestamp,
       providerMessageId: sent?.providerMessageId || null,
       providerThreadId: sent?.providerThreadId || null,
@@ -772,7 +783,17 @@ export const useWorkflowStore = create((set, get) => ({
     const composed = draft ? assembleDraftEmail({ query: get().getQuery(queryId), draft }) : '';
     const content = composed || draftResponse(get().getQuery(queryId));
     const fromGemma = Boolean(composed) && draft?.fallback !== true;
-    const createdBy = fromGemma ? 'Gemma AI Draft Assistant' : 'AI Draft Assistant';
+    const createdBy = fromGemma ? 'Pravah AI Draft Assistant' : 'AI Draft Assistant';
+
+    if (!fromGemma) {
+      // The assistant was unreachable and the user is being handed a local
+      // template instead. Silently substituting it would let a boilerplate
+      // draft be mistaken for an AI-written one.
+      notify.warning(
+        'AI assistant unavailable',
+        'A standard template was used instead — review the draft carefully before sending.',
+      );
+    }
 
     const state = get();
     const versionNumber = state.getVersions(queryId).length + 1;

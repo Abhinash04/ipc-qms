@@ -1,8 +1,11 @@
-import { useMailboxIngestion } from '@/hooks/useMailboxIngestion';
+import { useMailboxIngestion, notifyIngestResult } from '@/hooks/useMailboxIngestion';
 import { RefreshCw } from 'lucide-react';
 
 export function MailboxIngestButton() {
   const { running, error, lastResult, ingestNow } = useMailboxIngestion();
+
+  // The user asked, so the outcome is reported even when it is "no new mail".
+  const checkNow = async () => notifyIngestResult(await ingestNow());
 
   return (
     <div className="flex items-center gap-3">
@@ -20,7 +23,7 @@ export function MailboxIngestButton() {
       )}
       <button
         type="button"
-        onClick={ingestNow}
+        onClick={checkNow}
         disabled={running}
         className="flex items-center gap-2 rounded-2xl border border-purple-200/80 bg-purple-50/80 px-4 py-2.5 text-[13px] font-bold text-slate-800 hover:bg-purple-100 transition-colors shadow-2xs cursor-pointer disabled:opacity-50"
       >

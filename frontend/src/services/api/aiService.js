@@ -29,7 +29,7 @@ export async function fetchGemmaAiDraft({ subject, body, inquirerName, summaryTe
       return data.draft;
     }
   } catch (error) {
-    console.warn('[AI Service] Failed to fetch Gemma AI draft from backend:', error.message);
+    console.warn('[AI Service] Failed to fetch Pravah AI draft from backend:', error.message);
   }
   return null;
 }

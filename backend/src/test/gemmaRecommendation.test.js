@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import request from 'supertest';
+import { AUTH } from './helpers/auth.js';
 import app from '../app.js';
 import { recommendOfficial } from '../services/ai/gemmaService.js';
 
@@ -25,7 +26,7 @@ describe('Gemma AI Recommendation System Tests', () => {
 
   it('POST /api/v1/ai/recommend endpoint should return Top 3 recommendations', async () => {
     const response = await request(app)
-      .post('/api/v1/ai/recommend')
+      .post('/api/v1/ai/recommend').set(AUTH)
       .send({
         subject: 'Microbiology Sterility Test Query',
         body: 'Please provide guidelines for bacterial endotoxin and sterility limits.',

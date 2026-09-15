@@ -100,8 +100,6 @@ export const MOCK_USERS = [
   },
 ];
 
-export const MOCK_PASSWORD = 'ipc@1234';
-
 export function findUserById(id) {
   return MOCK_USERS.find((user) => user.id === id) || null;
 }

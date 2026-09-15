@@ -13,6 +13,7 @@ import { SECTION } from "@/constants/routeSections";
 import { useRoutePaths } from "@/hooks/useRoutePaths";
 import { useWorkflowAction } from "@/hooks/useWorkflowAction";
 import { ActionError } from "@/components/workflow/ActionError";
+import { notify } from "@/services/notify";
 
 const ACTION_SECTIONS = {
   [WORKFLOW_ACTION.ASSIGN]: SECTION.ASSIGNMENT_DETAIL,
@@ -60,8 +61,20 @@ export function WorkflowActionsCard() {
     setAckError(null);
     setForwardError(null);
     const result = await validateAndForward(queryId, currentUser);
-    if (!result.acknowledged) setAckError(result.acknowledgementError);
-    if (!result.forwarded) setForwardError(result.forwardError);
+    if (!result.acknowledged) {
+      setAckError(result.acknowledgementError);
+      notify.warning(
+        "Acknowledgement email not sent",
+        result.acknowledgementError,
+      );
+    }
+    if (!result.forwarded) {
+      setForwardError(result.forwardError);
+      // Carries the "Missing attachment(s): …" text from the fail-closed
+      // resolver, so the OIC never appears to have received an incomplete
+      // forward without anyone being told.
+      notify.error("Forward to the Officer-in-Charge failed", result.forwardError);
+    }
   };
 
   const retryAcknowledgement = async () => {
@@ -69,6 +82,9 @@ export function WorkflowActionsCard() {
     const result = await acknowledgeInquirer(queryId, currentUser);
     setRetrying(false);
     setAckError(result.acknowledged ? null : result.error);
+    if (!result.acknowledged) {
+      notify.warning("Acknowledgement email still not sent", result.error);
+    }
   };
 
   const retryForward = async () => {
@@ -78,6 +94,7 @@ export function WorkflowActionsCard() {
       setForwardError(null);
     } catch (caught) {
       setForwardError(caught?.message || String(caught));
+      notify.error("Forward to the Officer-in-Charge failed", caught);
     } finally {
       setRetrying(false);
     }

@@ -1,7 +1,7 @@
 # 13. Data Model
 
-Conceptual field lists, PostgreSQL-ready — no ORM or physical schema has been chosen yet.
-These mirror the mock data shapes in `frontend/src/constants/`.
+Conceptual field lists. Server-side collections are Mongoose schemas (`AuditEvent`, `MailboxMessage`); Query Cases and workflow steps have no server-side schema yet and exist only as the Dexie tables in `frontend/src/services/db/db.js`.
+The client shapes are produced by `frontend/src/store/useWorkflowStore.js`.
 
 ## 13.1 Query
 
@@ -69,7 +69,7 @@ AI-produced versions additionally carry generation metadata — see
 
 ## 13.6 Not Yet Finalized
 
-Physical column types, indexes, and foreign-key constraints are deferred until PostgreSQL
+Physical types, indexes and referential constraints for Query Cases are deferred until server-side
 integration begins and the open questions in
 [14-open-questions-and-client-clarifications.md](./14-open-questions-and-client-clarifications.md)
 are resolved.

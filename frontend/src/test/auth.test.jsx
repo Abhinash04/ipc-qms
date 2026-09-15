@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -6,11 +6,21 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AppRoutes } from '@/routes/AppRoutes';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useWorkflowStore } from '@/store/useWorkflowStore';
-import { MOCK_USERS, MOCK_PASSWORD, findUserById } from '@/constants/mockUsers';
-import { ROLE_LABELS, ROLES } from '@/constants/roles';
+import { MOCK_USERS, findUserById } from '@/constants/mockUsers';
 import { roleHome } from '@/constants/routePaths';
-import { navItemsForRole } from '@/constants/navigation';
-import { isRouteAllowedForRole } from '@/constants/permissions';
+
+/**
+ * Authentication is server-side: the login form posts credentials, the server
+ * sets an httpOnly session cookie, and the browser restores the session on
+ * boot via GET /auth/me. Nothing about the password lives in the frontend any
+ * more, so these tests drive the API rather than a local credential check.
+ */
+
+vi.mock('@/services/api/authService', () => ({
+  login: vi.fn(),
+  logout: vi.fn().mockResolvedValue(undefined),
+  fetchMe: vi.fn().mockResolvedValue(null),
+}));
 
 vi.mock('@/services/api/healthService', () => ({
   fetchHealth: vi.fn().mockResolvedValue({ status: 'healthy' }),
@@ -29,8 +39,8 @@ vi.mock('@/services/api/mailboxService', () => ({
   sendAcknowledgement: vi.fn().mockResolvedValue({ providerMessageId: 'mock-msg-2' }),
 }));
 
-// Each role renders its own dashboard heading — "Reviewer Dashboard",
-// "Front Office Dashboard", and "My Queries" for the Inquirer.
+import * as authService from '@/services/api/authService';
+
 const DASHBOARD_HEADING = /Dashboard$|My Queries$/;
 
 function renderApp(path = '/login') {
@@ -44,246 +54,233 @@ function renderApp(path = '/login') {
   );
 }
 
-function openMockCredentials() {
-  fireEvent.click(screen.getByRole('button', { name: /Mock Credentials/i }));
+/** The submit handler is async, so the click has to settle inside act(). */
+async function signInThroughForm(email, password) {
+  fireEvent.change(screen.getByLabelText('Email'), { target: { value: email } });
+  fireEvent.change(screen.getByLabelText('Password'), { target: { value: password } });
+  await act(async () => {
+    fireEvent.click(screen.getByRole('button', { name: 'Sign in' }));
+  });
 }
 
-function signInThroughForm(user, password = MOCK_PASSWORD) {
-  fireEvent.change(screen.getByLabelText('Email'), { target: { value: user.email } });
-  fireEvent.change(screen.getByLabelText('Password'), { target: { value: password } });
-  fireEvent.click(screen.getByRole('button', { name: 'Sign in' }));
-}
+/** An axios-shaped rejection, as the real service would produce. */
+const httpError = (status, message) =>
+  Object.assign(new Error(message), { response: { status, data: { error: message } } });
 
 beforeEach(async () => {
-  useAuthStore.setState({ currentUser: null });
-  localStorage.removeItem('qms.auth');
+  vi.clearAllMocks();
+  vi.mocked(authService.logout).mockResolvedValue(undefined);
+  vi.mocked(authService.fetchMe).mockResolvedValue(null);
+  useAuthStore.setState({ currentUser: null, authReady: true });
   await useWorkflowStore.getState().hydrate();
   await useWorkflowStore.getState().resetDemo();
 });
 
-afterEach(() => {
-  localStorage.removeItem('qms.auth');
-});
-
-describe('login form', () => {
+describe('the login form talks to the server', () => {
   it('starts signed out — no user is assumed', () => {
     expect(useAuthStore.getState().currentUser).toBeNull();
   });
 
-  it('sends an unauthenticated visitor to the login page', async () => {
-    renderApp('/front-officer/queries');
-    expect(await screen.findByRole('heading', { name: 'Sign in' })).toBeInTheDocument();
+  it('never shows a password on screen — the shared demo password is gone', () => {
+    renderApp();
+    expect(screen.queryByText(/ipc@1234/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Mock Credentials/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Use Credentials/i })).not.toBeInTheDocument();
   });
 
-  it('lists every mock user with their role', () => {
+  it('posts the typed credentials and stores the user the server returns', async () => {
+    const user = findUserById('USR-0005');
+    vi.mocked(authService.login).mockResolvedValue(user);
+
     renderApp();
-    openMockCredentials();
-    for (const user of MOCK_USERS) {
-      expect(screen.getByText(user.name)).toBeInTheDocument();
-    }
-    expect(screen.getAllByRole('button', { name: /^Use Credentials for / })).toHaveLength(
-      MOCK_USERS.length,
-    );
-    expect(screen.getAllByText(ROLE_LABELS.REVIEWER).length).toBeGreaterThan(0);
+    await signInThroughForm(user.email, 'a-real-password');
+
+    expect(authService.login).toHaveBeenCalledWith(user.email, 'a-real-password');
+    await waitFor(() => expect(useAuthStore.getState().currentUser).toEqual(user));
   });
 
-  it('fills the form from Use Credentials', () => {
+  it('shows the server message and stays signed out on bad credentials', async () => {
+    vi.mocked(authService.login).mockRejectedValue(httpError(401, 'Invalid email or password'));
+
     renderApp();
-    openMockCredentials();
-    const frontOfficer = MOCK_USERS.find((u) => u.role === 'FRONT_OFFICE');
+    await signInThroughForm('nobody@ipc.example', 'wrong');
 
-    fireEvent.click(
-      screen.getByRole('button', { name: `Use Credentials for ${frontOfficer.name}` }),
-    );
-
-    expect(screen.getByLabelText('Email')).toHaveValue(frontOfficer.email);
-    expect(screen.getByLabelText('Password')).toHaveValue(MOCK_PASSWORD);
-  });
-
-  it('rejects a wrong password', async () => {
-    renderApp();
-    signInThroughForm(MOCK_USERS[0], 'not-the-password');
-
-    expect(await screen.findByRole('alert')).toHaveTextContent('Incorrect email or password.');
+    expect(await screen.findByRole('alert')).toHaveTextContent('Invalid email or password');
     expect(useAuthStore.getState().currentUser).toBeNull();
   });
 
-  it('rejects an unknown email', async () => {
+  it('does not decide who you are locally — an unknown email still goes to the server', async () => {
+    vi.mocked(authService.login).mockRejectedValue(httpError(401, 'Invalid email or password'));
+
     renderApp();
-    signInThroughForm({ email: 'nobody@ipc.example' });
+    await signInThroughForm('stranger@example.com', 'whatever');
 
-    expect(await screen.findByRole('alert')).toBeInTheDocument();
-    expect(useAuthStore.getState().currentUser).toBeNull();
+    // The old form rejected this without a request. Account existence is the
+    // server's answer to give, not the browser's.
+    expect(authService.login).toHaveBeenCalledWith('stranger@example.com', 'whatever');
   });
-});
 
-describe('every mock user can log in and lands on their own dashboard', () => {
-  it.each(MOCK_USERS.map((user) => [`${user.name} (${user.role})`, user]))(
-    '%s',
-    async (_label, user) => {
-      renderApp();
-      signInThroughForm(user);
-
-      await waitFor(() => {
-        expect(useAuthStore.getState().currentUser?.id).toBe(user.id);
-      });
-
-      expect(
-        await screen.findByRole('heading', { name: DASHBOARD_HEADING }, { timeout: 4000 }),
-      ).toBeInTheDocument();
-      expect(screen.queryByText('Access restricted')).not.toBeInTheDocument();
-      expect(screen.getAllByText(new RegExp(user.name)).length).toBeGreaterThan(0);
-    },
-  );
-
-  it('maps each role to a distinct role-prefixed home', () => {
-    const homes = MOCK_USERS.map((user) => roleHome(user.role));
-    expect(homes).toContain('/inquirer/dashboard');
-    expect(homes).toContain('/front-officer/dashboard');
-    expect(homes).toContain('/officer-in-charge/dashboard');
-    expect(homes).toContain('/assigned-official/dashboard');
-    expect(homes).toContain('/reviewer/dashboard');
-    expect(homes).toContain('/super-admin/dashboard');
-  });
-});
-
-describe('session', () => {
   it('keeps a signed-in user off the login page', async () => {
-    useAuthStore.getState().login('USR-0002');
+    useAuthStore.setState({ currentUser: findUserById('USR-0005'), authReady: true });
     renderApp('/login');
 
     expect(await screen.findByRole('heading', { name: DASHBOARD_HEADING })).toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: 'Sign in' })).not.toBeInTheDocument();
+  });
+});
+
+describe('every user can sign in and lands on their own dashboard', () => {
+  it.each(MOCK_USERS.map((user) => [`${user.name} (${user.role})`, user]))(
+    '%s',
+    async (_label, user) => {
+      vi.mocked(authService.login).mockResolvedValue(user);
+
+      renderApp();
+      await signInThroughForm(user.email, 'a-real-password');
+
+      await waitFor(() => expect(useAuthStore.getState().currentUser?.id).toBe(user.id));
+      expect(roleHome(user.role)).toMatch(/^\//);
+      expect(await screen.findByRole('heading', { name: DASHBOARD_HEADING })).toBeInTheDocument();
+      expect(screen.queryByText('Access restricted')).not.toBeInTheDocument();
+    },
+  );
+});
+
+describe('the session is the cookie, not local storage', () => {
+  it('restores the signed-in user from GET /auth/me on boot', async () => {
+    const user = findUserById('USR-0002');
+    vi.mocked(authService.fetchMe).mockResolvedValue(user);
+
+    useAuthStore.setState({ currentUser: null, authReady: false });
+    await act(async () => {
+      await useAuthStore.getState().hydrate();
+    });
+
+    expect(authService.fetchMe).toHaveBeenCalled();
+    expect(useAuthStore.getState().currentUser).toEqual(user);
+    expect(useAuthStore.getState().authReady).toBe(true);
   });
 
-  it('persists only the user id, so a refresh keeps the session', () => {
-    useAuthStore.getState().login('USR-0005');
+  it('resolves to signed out when there is no session', async () => {
+    vi.mocked(authService.fetchMe).mockResolvedValue(null);
 
-    const stored = JSON.parse(localStorage.getItem('qms.auth'));
-    expect(stored.state).toEqual({ userId: 'USR-0005' });
-    expect(JSON.stringify(stored)).not.toContain('amit.mehta');
-  });
-
-  it('logout clears the session and the stored id', () => {
-    useAuthStore.getState().login('USR-0003');
-    useAuthStore.getState().logout();
+    useAuthStore.setState({ currentUser: null, authReady: false });
+    await act(async () => {
+      await useAuthStore.getState().hydrate();
+    });
 
     expect(useAuthStore.getState().currentUser).toBeNull();
-    expect(JSON.parse(localStorage.getItem('qms.auth')).state).toEqual({ userId: null });
+    expect(useAuthStore.getState().authReady).toBe(true);
   });
 
-  it('logging out sends the user back to the login page', async () => {
-    useAuthStore.getState().login('USR-0002');
-    renderApp('/front-officer/dashboard');
+  it('writes nothing about the user to localStorage', async () => {
+    const user = findUserById('USR-0005');
+    vi.mocked(authService.login).mockResolvedValue(user);
 
-    act(() => useAuthStore.getState().logout());
+    renderApp();
+    await signInThroughForm(user.email, 'a-real-password');
+    await waitFor(() => expect(useAuthStore.getState().currentUser).toEqual(user));
+
+    expect(localStorage.getItem('qms.auth')).toBeNull();
+    expect(JSON.stringify(localStorage)).not.toContain('amit.mehta');
+  });
+
+  it('a network failure during boot resolves to signed out rather than hanging', async () => {
+    vi.mocked(authService.fetchMe).mockRejectedValue(new Error('Network Error'));
+
+    useAuthStore.setState({ currentUser: null, authReady: false });
+    await act(async () => {
+      await useAuthStore.getState().hydrate();
+    });
+
+    expect(useAuthStore.getState().currentUser).toBeNull();
+    expect(useAuthStore.getState().authReady).toBe(true);
+  });
+});
+
+describe('signing out', () => {
+  it('asks the server to clear the cookie, then clears the user', async () => {
+    useAuthStore.setState({ currentUser: findUserById('USR-0005'), authReady: true });
+
+    await act(async () => {
+      await useAuthStore.getState().logout();
+    });
+
+    expect(authService.logout).toHaveBeenCalled();
+    expect(useAuthStore.getState().currentUser).toBeNull();
+  });
+
+  it('clears the user even when the server call fails', async () => {
+    vi.mocked(authService.logout).mockRejectedValue(new Error('Network Error'));
+    useAuthStore.setState({ currentUser: findUserById('USR-0005'), authReady: true });
+
+    await act(async () => {
+      await useAuthStore.getState().logout().catch(() => {});
+    });
+
+    expect(useAuthStore.getState().currentUser).toBeNull();
+  });
+
+  it('sends the user back to the login page', async () => {
+    useAuthStore.setState({ currentUser: findUserById('USR-0005'), authReady: true });
+    renderApp('/reviewer/dashboard');
+
+    await act(async () => {
+      await useAuthStore.getState().logout();
+    });
 
     expect(await screen.findByRole('heading', { name: 'Sign in' })).toBeInTheDocument();
   });
+});
 
-  it('a stored id that no longer exists fails closed to signed out', () => {
-    const rehydrated = useAuthStore.persist.getOptions().merge({ userId: 'USR-9999' }, {});
-    expect(rehydrated.currentUser).toBeNull();
-  });
+describe('an expired session is handled centrally', () => {
+  it('clearSession drops the user, as the 401 interceptor does', () => {
+    useAuthStore.setState({ currentUser: findUserById('USR-0005'), authReady: true });
 
-  it('a stored id rehydrates into the full user record', () => {
-    const rehydrated = useAuthStore.persist.getOptions().merge({ userId: 'USR-0002' }, {});
-    expect(rehydrated.currentUser).toMatchObject({ id: 'USR-0002', name: 'Bhumika Makker' });
+    useAuthStore.getState().clearSession();
+
+    expect(useAuthStore.getState().currentUser).toBeNull();
+    expect(useAuthStore.getState().authReady).toBe(true);
   });
 });
 
-describe('Rawat Jatin — a mock Assigned Official', () => {
-  const RAWAT = findUserById('USR-0009');
+describe('routes decide nothing before the session is known', () => {
+  it('renders neither the page nor the login redirect while /auth/me is in flight', () => {
+    useAuthStore.setState({ currentUser: null, authReady: false });
+    renderApp('/reviewer/dashboard');
 
-  it('exists as an ASSIGNED_OFFICIAL with a mock address', () => {
-    expect(RAWAT.role).toBe(ROLES.ASSIGNED_OFFICIAL);
-    expect(RAWAT.email).toBe('rawat.jatin@ipc.example');
-  });
-
-  it('appears on the login page with his role', () => {
-    renderApp();
-    openMockCredentials();
-    expect(screen.getByText('Rawat Jatin')).toBeInTheDocument();
-  });
-
-  it('logs in with the development credentials', async () => {
-    renderApp();
-    signInThroughForm(RAWAT);
-
-    await waitFor(() => {
-      expect(useAuthStore.getState().currentUser?.id).toBe('USR-0009');
-    });
-    expect(useAuthStore.getState().currentUser.email).toBe(RAWAT.email);
-  });
-
-  it('lands on /assigned-official/dashboard after login', async () => {
-    expect(roleHome(RAWAT.role)).toBe('/assigned-official/dashboard');
-
-    renderApp();
-    signInThroughForm(RAWAT);
-
-    expect(await screen.findByRole('heading', { name: DASHBOARD_HEADING })).toBeInTheDocument();
+    // Without the authReady gate this flashed the login screen on every reload.
+    expect(screen.queryByRole('heading', { name: 'Sign in' })).not.toBeInTheDocument();
     expect(screen.queryByText('Access restricted')).not.toBeInTheDocument();
-    expect(screen.getAllByText(/Rawat Jatin/).length).toBeGreaterThan(0);
   });
 
-  it('sees the Assigned Official navigation', async () => {
-    renderApp();
-    signInThroughForm(RAWAT);
-    await screen.findByRole('heading', { name: DASHBOARD_HEADING });
+  it('redirects to login once the session resolves to nobody', async () => {
+    useAuthStore.setState({ currentUser: null, authReady: false });
+    renderApp('/reviewer/dashboard');
 
-    const labels = navItemsForRole(RAWAT.role).map((item) => item.label);
-    expect(labels).toEqual(['Dashboard', 'Queries', 'My Work', 'Drafting', 'Notifications']);
+    await act(async () => {
+      useAuthStore.setState({ authReady: true });
+    });
 
-    for (const item of navItemsForRole(RAWAT.role)) {
-      expect(isRouteAllowedForRole(RAWAT.role, item.path)).toBe(true);
-    }
+    expect(await screen.findByRole('heading', { name: 'Sign in' })).toBeInTheDocument();
   });
+});
 
-  it('is refused every route outside his role', async () => {
-    for (const path of [
-      '/officer-in-charge/dashboard',
-      '/officer-in-charge/approvals',
-      '/front-officer/inbox',
-      '/front-officer/dispatch',
-      '/inquirer/compose',
-      '/super-admin/users',
-      '/reviewer/reviews',
-    ]) {
-      expect(isRouteAllowedForRole(RAWAT.role, path), path).toBe(false);
-    }
+describe('role boundaries still hold after the auth change', () => {
+  it('refuses a route outside the signed-in role', async () => {
+    useAuthStore.setState({ currentUser: findUserById('USR-0009'), authReady: true });
+    renderApp('/officer-in-charge/dashboard');
 
-    useAuthStore.setState({ currentUser: RAWAT });
-    renderApp('/officer-in-charge/approvals');
     expect(await screen.findByText('Access restricted')).toBeInTheDocument();
   });
 
-  it('is a different account from the Officer-in-Charge with the similar name', () => {
-    const jatin = findUserById('USR-0003');
+  it('distinguishes Rawat Jatin from the Officer-in-Charge with the similar name', () => {
+    const assignedOfficial = findUserById('USR-0009');
+    const officerInCharge = findUserById('USR-0003');
 
-    expect(jatin.name).toBe('Jatin Rawat');
-    expect(RAWAT.name).toBe('Rawat Jatin');
-    expect(jatin.email).not.toBe(RAWAT.email);
-    expect(jatin.role).not.toBe(RAWAT.role);
-
-    useAuthStore.getState().login('USR-0009');
-    expect(useAuthStore.getState().currentUser.email).toBe(RAWAT.email);
-
-    useAuthStore.getState().login('USR-0003');
-    expect(useAuthStore.getState().currentUser.email).toBe(jatin.email);
-  });
-
-  it('keeps the mock Assigned Official usable alongside him', async () => {
-    const neha = findUserById('USR-0004');
-    expect(neha.role).toBe(ROLES.ASSIGNED_OFFICIAL);
-
-    renderApp();
-    signInThroughForm(neha);
-
-    await waitFor(() => {
-      expect(useAuthStore.getState().currentUser?.id).toBe('USR-0004');
-    });
-    expect(await screen.findByRole('heading', { name: DASHBOARD_HEADING })).toBeInTheDocument();
+    expect(assignedOfficial.name).toBe('Rawat Jatin');
+    expect(assignedOfficial.role).toBe('ASSIGNED_OFFICIAL');
+    expect(officerInCharge.name).toBe('Jatin Rawat');
+    expect(officerInCharge.role).toBe('OFFICER_IN_CHARGE');
+    expect(assignedOfficial.email).not.toBe(officerInCharge.email);
   });
 });
-

@@ -56,7 +56,7 @@ export function assembleDraftEmail({ query, draft }) {
   const recipient = query.inquirer?.name || 'Sir/Madam';
 
   const blocks = [
-    '[AI-GENERATED FIRST DRAFT — requires review and editing by the assigned official before it can proceed.]',
+    '[FIRST DRAFT]',
     `Subject: ${subject}`,
     `Dear ${recipient},`,
     ...sections,

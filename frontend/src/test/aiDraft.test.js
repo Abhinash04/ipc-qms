@@ -365,7 +365,7 @@ describe('generateAiDraft mints exactly one version', () => {
     const versions = s().getVersions(queryId);
     expect(versions).toHaveLength(1);
     expect(versions[0].version).toBe('v1');
-    expect(versions[0].createdBy).toBe('Gemma AI Draft Assistant');
+    expect(versions[0].createdBy).toBe('Pravah AI Draft Assistant');
     expect(versions[0].content).toContain('The monograph is under revision.');
     expect(versions[0].content).toContain(INQUIRER.name);
   });

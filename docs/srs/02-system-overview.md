@@ -39,10 +39,20 @@ See [03-stakeholders-and-roles.md](./03-stakeholders-and-roles.md) for the full 
 
 ## 2.5 System Boundaries
 
-In scope (this phase): frontend shell, routing, RBAC skeleton, mock data, backend health
-endpoint, and this documentation set.
+In scope and **built**: the frontend shell and role-generated routing, real authentication and
+RBAC, email ingestion/dispatch, AI-assisted summary/assignment/drafting, server-side persistence of
+the mailbox and audit trail, attachments, the workflow state-transition engine with dynamic review
+levels, in-app notifications and toasts, and the administration console.
 
-Out of scope (future phases): real authentication, email ingestion/dispatch, AI model
-integration, PostgreSQL persistence, the workflow state-transition engine, and production
-notifications. See [14-open-questions-and-client-clarifications.md](./14-open-questions-and-client-clarifications.md)
-for what must be confirmed before each of those is built.
+In scope but **not yet built**:
+
+- **Server-side Query Cases** — cases live in the browser's IndexedDB. This blocks case-level
+  authorization, cross-user visibility, and a `/queries` API.
+- **Per-user credentials** — accounts are seeded from source and share one development password.
+- **Transfer and pullback** — implemented in the store but deliberately disabled pending client
+  answers.
+- **Production notifications** (email/SMS out to users) — in-app notifications and toasts exist.
+- **NIC government email** — blocked at Phase 0; see [../NIC_EMAIL_PHASE0.md](../NIC_EMAIL_PHASE0.md).
+
+See [14-open-questions-and-client-clarifications.md](./14-open-questions-and-client-clarifications.md)
+for what still needs client confirmation.
