@@ -37,6 +37,13 @@ export const useAuthStore = create((set) => ({
     return user;
   },
 
+  /** Development only: password-less sign-in as a seeded account. */
+  devLogin: async (email) => {
+    const user = await authService.devLogin(email);
+    set({ currentUser: user, authReady: true });
+    return user;
+  },
+
   logout: async () => {
     try {
       await authService.logout();

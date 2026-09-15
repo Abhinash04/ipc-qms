@@ -8,15 +8,19 @@ import {
   LogIn,
   CheckCircle2,
   Loader2,
+  ChevronDown,
+  Zap,
 } from "lucide-react";
 
 import { roleHome } from "@/constants/routePaths";
 import { useAuthStore } from "@/store/useAuthStore";
+import { MOCK_USERS } from "@/constants/mockUsers";
 import { notify } from "@/services/notify";
 
 export function LoginPage() {
   const currentUser = useAuthStore((state) => state.currentUser);
   const login = useAuthStore((state) => state.login);
+  const devLogin = useAuthStore((state) => state.devLogin);
   const navigate = useNavigate();
 
   const [email, setEmail] = useState("");
@@ -24,6 +28,7 @@ export function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [devOpen, setDevOpen] = useState(false);
 
   if (currentUser) return <Navigate to={roleHome(currentUser.role)} replace />;
 
@@ -43,6 +48,25 @@ export function LoginPage() {
         caught?.response?.data?.error || "Incorrect email or password.";
       setError(message);
       notify.error("Sign-in failed", message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const quickLogin = async (accountEmail) => {
+    if (!accountEmail) return;
+    setDevOpen(false);
+    setLoading(true);
+    setError(null);
+
+    try {
+      const user = await devLogin(accountEmail);
+      notify.success(`Signed in as ${user.name}`);
+      navigate(roleHome(user.role), { replace: true });
+    } catch (caught) {
+      const message =
+        caught?.response?.data?.error || "Dev sign-in failed.";
+      setError(message);
     } finally {
       setLoading(false);
     }
@@ -210,6 +234,73 @@ export function LoginPage() {
               )}
             </button>
           </form>
+
+          {import.meta.env.DEV && (
+            <div className="mt-6 pt-5 border-t border-dashed border-slate-200">
+              <div className="flex items-center justify-center gap-1.5 mb-2.5">
+                <Zap className="w-3.5 h-3.5 text-indigo-400" strokeWidth={2.5} />
+                <span className="text-[12px] font-black uppercase tracking-widest text-slate-400">
+                  Dev quick login
+                </span>
+              </div>
+
+              <div className="relative">
+                {devOpen && (
+                  <div
+                    className="fixed inset-0 z-20"
+                    onClick={() => setDevOpen(false)}
+                  />
+                )}
+
+                <button
+                  type="button"
+                  disabled={loading}
+                  onClick={() => setDevOpen((open) => !open)}
+                  className="w-full flex items-center justify-between gap-3 pl-4 pr-3 py-3.5 rounded-2xl border border-slate-200/90 bg-slate-50/50 hover:bg-white text-[15px] font-bold text-slate-500 outline-none transition-all focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 shadow-2xs cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                  <span>Sign in as…</span>
+                  <ChevronDown
+                    className={`w-5 h-5 text-slate-400 transition-transform ${devOpen ? "rotate-180" : ""}`}
+                    strokeWidth={2.2}
+                  />
+                </button>
+
+                {devOpen && (
+                  <div className="absolute bottom-full left-0 right-0 mb-2 z-30 max-h-72 overflow-y-auto rounded-2xl border border-slate-200/90 bg-white shadow-xl shadow-slate-900/10 p-1.5">
+                    {MOCK_USERS.map((user) => (
+                      <button
+                        key={user.id}
+                        type="button"
+                        onClick={() => quickLogin(user.email)}
+                        className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-indigo-50/80 text-left transition-colors cursor-pointer group"
+                      >
+                        <div className="w-9 h-9 rounded-full bg-linear-to-br from-indigo-500 to-purple-500 text-white text-[12.5px] font-black flex items-center justify-center shrink-0 shadow-sm">
+                          {user.name
+                            .split(" ")
+                            .map((part) => part[0])
+                            .slice(0, 2)
+                            .join("")}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className="text-[14.5px] font-black text-slate-800 truncate group-hover:text-indigo-700">
+                              {user.name}
+                            </span>
+                            <span className="px-2 py-0.5 rounded-full bg-indigo-50 border border-indigo-100 text-[10px] font-black tracking-wide text-indigo-600 uppercase shrink-0">
+                              {user.role.replaceAll("_", " ")}
+                            </span>
+                          </div>
+                          <div className="text-[12.5px] font-semibold text-slate-400 truncate">
+                            {user.email}
+                          </div>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

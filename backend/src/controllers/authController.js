@@ -1,7 +1,8 @@
 import HTTP_STATUS from '../constants/httpStatus.js';
+import env from '../config/env.js';
 import authConfig, { cookieOptions } from '../config/authConfig.js';
 import { signToken } from '../services/auth/tokenService.js';
-import { verifyCredentials, findById, toPublicUser } from '../services/auth/userDirectory.js';
+import { verifyCredentials, findByEmail, findById, toPublicUser } from '../services/auth/userDirectory.js';
 import * as audit from '../services/audit/auditService.js';
 import { AUDIT_ACTIONS, AUDIT_RESULTS } from '../constants/auditActions.js';
 import { ACTOR_TYPES } from '../constants/roles.js';
@@ -83,4 +84,41 @@ function me(req, res) {
   return res.status(HTTP_STATUS.OK).json({ user: toPublicUser(user) });
 }
 
-export { login, logout, me };
+/**
+ * Development-only: sign in as any seeded user without a password.
+ * Answers 404 outside development so the endpoint is indistinguishable from
+ * not existing in production.
+ */
+async function devLogin(req, res, next) {
+  try {
+    if (env.NODE_ENV !== 'development') {
+      return res.status(HTTP_STATUS.NOT_FOUND).json({ error: 'Not found' });
+    }
+
+    const { email } = req.body || {};
+    const user = email ? findByEmail(email) : null;
+
+    if (!user) {
+      return res
+        .status(HTTP_STATUS.UNAUTHORIZED)
+        .json({ error: 'Unknown dev account' });
+    }
+
+    const publicUser = toPublicUser(user);
+
+    await audit.record({
+      action: AUDIT_ACTIONS.LOGIN_SUCCEEDED,
+      actorType: ACTOR_TYPES.HUMAN,
+      actorId: publicUser.id,
+      actorRole: publicUser.role,
+      details: { devLogin: true },
+    });
+
+    res.cookie(authConfig.COOKIE_NAME, signToken(publicUser), cookieOptions());
+    return res.status(HTTP_STATUS.OK).json({ user: publicUser });
+  } catch (error) {
+    return next(error);
+  }
+}
+
+export { login, logout, me, devLogin };

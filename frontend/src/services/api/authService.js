@@ -12,6 +12,12 @@ export async function login(email, password) {
   return data.user;
 }
 
+/** Development only — the backend rejects this outside NODE_ENV=development. */
+export async function devLogin(email) {
+  const { data } = await axiosClient.post('/auth/dev-login', { email });
+  return data.user;
+}
+
 export async function logout() {
   await axiosClient.post('/auth/logout');
 }
