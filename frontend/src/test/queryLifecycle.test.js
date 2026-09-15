@@ -256,3 +256,26 @@ describe('a closed query reads as fully complete', () => {
     ).toBe(true);
   });
 });
+
+describe('a pulled back query updates workflow progress and displays a pullback note', () => {
+  it('resets current stage to target pullback stage and attaches pullback note', async () => {
+    const { queryId } = s().ingestEmail(enquiry());
+    s().verifyQuery(queryId, FRONT_OFFICE);
+    await s().forwardToOic(queryId, FRONT_OFFICE, fakeForward);
+    s().assignQuery(queryId, OFFICIAL.id, OIC);
+    await s().generateAiDraft(queryId, OFFICIAL);
+
+    const ADMIN_USER = findUserById('USR-0008');
+    s().pullBackQuery(
+      queryId,
+      WORKFLOW_STATE.PENDING_ASSIGNMENT,
+      'Incorrect assignment',
+      'Reassigning to appropriate division.',
+      ADMIN_USER,
+    );
+
+    expect(s().getQuery(queryId).workflowState).toBe(WORKFLOW_STATE.PENDING_ASSIGNMENT);
+    expect(currentOf(queryId).key).toBe(STAGE.ASSIGNED);
+    expect(currentOf(queryId).note).toContain('Pulled back from Drafting Response');
+  });
+});

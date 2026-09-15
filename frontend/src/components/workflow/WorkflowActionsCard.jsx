@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { Lock, ArrowRight, Zap } from "lucide-react";
+import { Lock, ArrowRight, Zap, ArrowRightLeft, RotateCcw } from "lucide-react";
 import { useQueryCase } from "@/hooks/useQueryCase";
 import { useWorkflowStore } from "@/store/useWorkflowStore";
 import {
@@ -8,11 +8,14 @@ import {
   CLARIFICATION_REQUIRED_ACTIONS,
 } from "@/constants/workflowRules";
 import { WORKFLOW_STATE } from "@/constants/statusEnums";
+import { ROLES } from "@/constants/roles";
 import { buildPath } from "@/constants/routePaths";
 import { SECTION } from "@/constants/routeSections";
 import { useRoutePaths } from "@/hooks/useRoutePaths";
 import { useWorkflowAction } from "@/hooks/useWorkflowAction";
 import { ActionError } from "@/components/workflow/ActionError";
+import { TransferQueryModal } from "@/components/workflow/TransferQueryModal";
+import { PullbackQueryModal } from "@/components/workflow/PullbackQueryModal";
 import { notify } from "@/services/notify";
 
 const ACTION_SECTIONS = {
@@ -52,6 +55,8 @@ export function WorkflowActionsCard() {
     (state) => state.acknowledgeInquirer,
   );
   const [showClarification, setShowClarification] = useState(null);
+  const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
+  const [isPullbackModalOpen, setIsPullbackModalOpen] = useState(false);
   // The query is registered either way; these only report the emails that failed.
   const [ackError, setAckError] = useState(null);
   const [forwardError, setForwardError] = useState(null);
@@ -106,6 +111,17 @@ export function WorkflowActionsCard() {
     !currentStep?.assignedUserId ||
     currentStep.assignedUserId === currentUser?.id;
 
+  const isCurrentAssignee =
+    query.currentAssigneeId === currentUser?.id ||
+    currentUser?.role === ROLES.SUPER_ADMIN;
+
+  const canTransfer = can(WORKFLOW_ACTION.TRANSFER) && isCurrentAssignee;
+
+  const isAdminRole =
+    currentUser?.role === ROLES.ADMIN || currentUser?.role === ROLES.SUPER_ADMIN;
+
+  const canPullback = isAdminRole || can(WORKFLOW_ACTION.PULLBACK);
+
   const availableLinks = Object.entries(ACTION_SECTIONS)
     .filter(
       ([action, section]) =>
@@ -129,6 +145,8 @@ export function WorkflowActionsCard() {
 
   const isClosed = query.workflowState === WORKFLOW_STATE.CLOSED;
 
+  const clarificationActions = Object.keys(CLARIFICATION_REQUIRED_ACTIONS);
+
   return (
     // No h-full: the card sizes to its actions rather than filling the row.
     <div className="bg-white rounded-3xl border border-slate-200/80 p-5 shadow-sm select-none flex flex-col space-y-4">
@@ -136,11 +154,6 @@ export function WorkflowActionsCard() {
         <h2 className="font-heading text-[22px] font-black text-slate-900 m-0">
           Available actions
         </h2>
-        {/* <p className="text-[14.5px] font-medium text-slate-400 m-0 mt-1">
-          For{" "}
-          <span className="font-bold text-slate-700">{currentUser?.name}</span>{" "}
-          — actions change with the query&apos;s stage.
-        </p> */}
       </div>
 
       <div className="space-y-3">
@@ -191,7 +204,7 @@ export function WorkflowActionsCard() {
           </div>
         )}
 
-        {isClosed && (
+        {isClosed && !canPullback && (
           <p className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-[15px] font-medium text-slate-500 leading-relaxed m-0">
             This query is closed. Its full audit history remains available
             below.
@@ -220,6 +233,28 @@ export function WorkflowActionsCard() {
           </button>
         )}
 
+        {canTransfer && (
+          <button
+            type="button"
+            onClick={() => setIsTransferModalOpen(true)}
+            className="w-full py-3 px-4 rounded-2xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-extrabold text-[16px] border border-indigo-200/80 transition-all cursor-pointer flex items-center justify-center gap-2 shadow-2xs"
+          >
+            <ArrowRightLeft className="h-4 w-4" />
+            <span>Transfer Query</span>
+          </button>
+        )}
+
+        {canPullback && (
+          <button
+            type="button"
+            onClick={() => setIsPullbackModalOpen(true)}
+            className="w-full py-3 px-4 rounded-2xl bg-amber-50 hover:bg-amber-100 text-amber-900 font-extrabold text-[16px] border border-amber-300/80 transition-all cursor-pointer flex items-center justify-center gap-2 shadow-2xs"
+          >
+            <RotateCcw className="h-4 w-4 text-amber-700" />
+            <span>Pullback Query</span>
+          </button>
+        )}
+
         {links.map((link) => (
           <Link
             key={link.path}
@@ -239,15 +274,17 @@ export function WorkflowActionsCard() {
         {!isClosed &&
           !can(WORKFLOW_ACTION.VERIFY) &&
           !can(WORKFLOW_ACTION.FORWARD) &&
+          !canTransfer &&
+          !canPullback &&
           links.length === 0 && (
             <div className="rounded-2xl border border-slate-200/90 bg-slate-50/80 p-4 text-[15px] font-medium text-slate-500 leading-relaxed">
               No actions available to you at this stage.
             </div>
           )}
 
-        <div className="space-y-2 pt-3 border-t border-slate-100">
-          {[WORKFLOW_ACTION.TRANSFER, WORKFLOW_ACTION.PULLBACK].map(
-            (action) => (
+        {clarificationActions.length > 0 && (
+          <div className="space-y-2 pt-3 border-t border-slate-100">
+            {clarificationActions.map((action) => (
               <div key={action}>
                 <button
                   type="button"
@@ -276,10 +313,24 @@ export function WorkflowActionsCard() {
                   </div>
                 )}
               </div>
-            ),
-          )}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
+
+      <TransferQueryModal
+        query={query}
+        isOpen={isTransferModalOpen}
+        onClose={() => setIsTransferModalOpen(false)}
+        currentUser={currentUser}
+      />
+
+      <PullbackQueryModal
+        query={query}
+        isOpen={isPullbackModalOpen}
+        onClose={() => setIsPullbackModalOpen(false)}
+        currentUser={currentUser}
+      />
     </div>
   );
 }

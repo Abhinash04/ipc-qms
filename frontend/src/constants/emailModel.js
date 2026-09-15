@@ -8,6 +8,7 @@ export const EMAIL_TYPE = {
   ACKNOWLEDGEMENT: 'ACKNOWLEDGEMENT',
   FORWARD: 'FORWARD',
   OUTGOING_RESPONSE: 'OUTGOING_RESPONSE',
+  TRANSFER_NOTIFICATION: 'TRANSFER_NOTIFICATION',
 };
 
 export const EMAIL_STATUS = {
@@ -21,6 +22,7 @@ export const EMAIL_TYPE_LABELS = {
   [EMAIL_TYPE.ACKNOWLEDGEMENT]: 'Acknowledgement',
   [EMAIL_TYPE.FORWARD]: 'Forwarded to Officer-in-Charge',
   [EMAIL_TYPE.OUTGOING_RESPONSE]: 'Final response',
+  [EMAIL_TYPE.TRANSFER_NOTIFICATION]: 'Transfer Notification',
 };
 
 export function describeDirection(direction) {

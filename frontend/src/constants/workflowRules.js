@@ -21,26 +21,6 @@ export const WORKFLOW_ACTION = {
 };
 
 export const CLARIFICATION_REQUIRED_ACTIONS = {
-  [WORKFLOW_ACTION.TRANSFER]: {
-    label: 'Transfer query',
-    openQuestions: [
-      'Who can initiate a transfer?',
-      'Who is eligible to receive a transferred query?',
-      'Does the workflow continue from its current step after transfer, or restart?',
-      'Is a transfer reason mandatory?',
-    ],
-  },
-  [WORKFLOW_ACTION.PULLBACK]: {
-    label: 'Pull back query',
-    openQuestions: [
-      'Who can pull back a query?',
-      'From which workflow stages is pullback allowed?',
-      'Where does the query land after pullback?',
-      'Do completed review decisions remain valid after a pullback?',
-      'Is a reason required for pullback?',
-      'Is pullback allowed after final approval?',
-    ],
-  },
   [WORKFLOW_ACTION.DELETE_REVIEW_LEVEL]: {
     label: 'Delete review level',
     openQuestions: ['Who can delete a review level, and under what conditions?'],
@@ -55,6 +35,8 @@ export function deriveBusinessStatus(workflowState) {
   return BUSINESS_STATUS.IN_PROGRESS;
 }
 
+const ALL_WORKFLOW_STATES = Object.values(WORKFLOW_STATE);
+
 const ROLE_ACTIONS = {
   [ROLES.FRONT_OFFICE]: [WORKFLOW_ACTION.VERIFY, WORKFLOW_ACTION.FORWARD, WORKFLOW_ACTION.DISPATCH],
   [ROLES.OFFICER_IN_CHARGE]: [
@@ -68,9 +50,10 @@ const ROLE_ACTIONS = {
     WORKFLOW_ACTION.SAVE_DRAFT,
     WORKFLOW_ACTION.SUBMIT_FOR_REVIEW,
     WORKFLOW_ACTION.ADD_REVIEW_LEVEL,
+    WORKFLOW_ACTION.TRANSFER,
   ],
   [ROLES.REVIEWER]: [WORKFLOW_ACTION.APPROVE_REVIEW, WORKFLOW_ACTION.REQUEST_REVISION],
-  [ROLES.ADMIN]: [],
+  [ROLES.ADMIN]: [WORKFLOW_ACTION.PULLBACK],
   [ROLES.INQUIRER]: [],
   [ROLES.SUPER_ADMIN]: [
     WORKFLOW_ACTION.VERIFY,
@@ -86,6 +69,8 @@ const ROLE_ACTIONS = {
     WORKFLOW_ACTION.FINAL_REJECT,
     WORKFLOW_ACTION.RETURN_FOR_REVISION,
     WORKFLOW_ACTION.DISPATCH,
+    WORKFLOW_ACTION.TRANSFER,
+    WORKFLOW_ACTION.PULLBACK,
   ],
 };
 
@@ -111,6 +96,13 @@ const ACTION_VALID_STATES = {
   [WORKFLOW_ACTION.FINAL_REJECT]: [WORKFLOW_STATE.PENDING_FINAL_APPROVAL],
   [WORKFLOW_ACTION.RETURN_FOR_REVISION]: [WORKFLOW_STATE.PENDING_FINAL_APPROVAL],
   [WORKFLOW_ACTION.DISPATCH]: [WORKFLOW_STATE.READY_FOR_DISPATCH],
+  [WORKFLOW_ACTION.TRANSFER]: [
+    WORKFLOW_STATE.ASSIGNED,
+    WORKFLOW_STATE.DRAFTING,
+    WORKFLOW_STATE.RETURNED_FOR_REVISION,
+    WORKFLOW_STATE.UNDER_REVIEW,
+  ],
+  [WORKFLOW_ACTION.PULLBACK]: ALL_WORKFLOW_STATES,
 };
 
 export function canPerform(role, action, workflowState) {

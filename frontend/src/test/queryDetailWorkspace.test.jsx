@@ -268,8 +268,7 @@ describe('nothing was lost to the restructure', () => {
     renderAs(REVIEWER, `/reviewer/queries/${queryId}`);
 
     expect(screen.getByRole('button', { name: /Review draft/ })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Transfer query/ })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Pull back query/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Delete review level/ })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Approve' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Request changes' })).toBeInTheDocument();
 

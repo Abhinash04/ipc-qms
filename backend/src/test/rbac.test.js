@@ -87,9 +87,17 @@ describe('workflow-action authorization mirrors the frontend table', () => {
 
   it('hard-disables the actions still awaiting client clarification', () => {
     for (const role of Object.values(ROLES)) {
-      expect(roleCanPerform(role, WORKFLOW_ACTION.TRANSFER)).toBe(false);
-      expect(roleCanPerform(role, WORKFLOW_ACTION.PULLBACK)).toBe(false);
+      expect(roleCanPerform(role, WORKFLOW_ACTION.DELETE_REVIEW_LEVEL)).toBe(false);
     }
+  });
+
+  it('permits PULLBACK for Admin and Super Admin only', () => {
+    expect(roleCanPerform(ROLES.ADMIN, WORKFLOW_ACTION.PULLBACK)).toBe(true);
+    expect(roleCanPerform(ROLES.SUPER_ADMIN, WORKFLOW_ACTION.PULLBACK)).toBe(true);
+    expect(roleCanPerform(ROLES.FRONT_OFFICE, WORKFLOW_ACTION.PULLBACK)).toBe(false);
+    expect(roleCanPerform(ROLES.OFFICER_IN_CHARGE, WORKFLOW_ACTION.PULLBACK)).toBe(false);
+    expect(roleCanPerform(ROLES.ASSIGNED_OFFICIAL, WORKFLOW_ACTION.PULLBACK)).toBe(false);
+    expect(roleCanPerform(ROLES.REVIEWER, WORKFLOW_ACTION.PULLBACK)).toBe(false);
   });
 });
 
