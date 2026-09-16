@@ -67,8 +67,10 @@ function renderAs(user, path) {
 }
 
 function tile(label) {
-  const heading = screen.getByRole('heading', { level: 3, name: label });
-  return heading.closest('.bento-card');
+  const labelEl = screen
+    .getAllByText(label)
+    .find((el) => el.matches('[data-slot="stat-label"]'));
+  return labelEl.closest('.bento-card');
 }
 
 /** "N queries" subtext — the headline number is an adjacent node. */

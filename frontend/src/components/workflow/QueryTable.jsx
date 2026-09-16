@@ -109,6 +109,7 @@ export function QueryTable({
 
             <div className="relative w-full sm:w-56 shrink-0">
               <select
+                aria-label="Filter by priority"
                 value={priorityFilter}
                 onChange={(e) => setPriorityFilter(e.target.value)}
                 className="w-full appearance-none rounded-2xl bg-slate-50/70 border border-slate-200/70 pl-10 pr-10 py-3 text-[13.5px] font-bold text-slate-700 cursor-pointer hover:bg-slate-100/60 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors"
@@ -297,12 +298,15 @@ export function QueryTable({
             <button
               type="button"
               disabled
+              aria-label="Previous page"
               className="flex h-8.5 w-8.5 items-center justify-center rounded-xl bg-slate-100/70 text-slate-400 opacity-50 cursor-not-allowed"
             >
               <ChevronLeft className="h-4 w-4" />
             </button>
             <button
               type="button"
+              aria-label="Go to page 1"
+              aria-current="page"
               className="flex h-8.5 w-8.5 items-center justify-center rounded-xl bg-blue-600 text-white font-extrabold text-[13px] shadow-md shadow-blue-500/20"
             >
               1
@@ -310,6 +314,7 @@ export function QueryTable({
             <button
               type="button"
               disabled
+              aria-label="Next page"
               className="flex h-8.5 w-8.5 items-center justify-center rounded-xl bg-slate-100/70 text-slate-400 opacity-50 cursor-not-allowed"
             >
               <ChevronRight className="h-4 w-4" />

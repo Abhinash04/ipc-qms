@@ -89,9 +89,9 @@ export function DashboardQueryList({
               <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-purple-50 text-purple-600 border border-purple-100/60 shadow-2xs mb-3">
                 <Sparkles className="h-7 w-7" strokeWidth={1.8} />
               </div>
-              <h4 className="font-heading text-[16px] font-extrabold text-slate-800 m-0">
+              <h3 className="font-heading text-[16px] font-extrabold text-slate-800 m-0">
                 All Caught Up!
-              </h4>
+              </h3>
               <p className="text-[13px] font-medium text-slate-400 m-0 mt-1 max-w-sm">
                 {emptyText}
               </p>

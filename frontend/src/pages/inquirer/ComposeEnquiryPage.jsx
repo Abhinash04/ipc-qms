@@ -133,6 +133,25 @@ export function ComposeEnquiryPage() {
         purpose="Send an enquiry to the Indian Pharmacopoeia Commission query mailbox."
       />
 
+      {/* Same box shape as the transport banners below, so the form does not
+          jump down when the config resolves and the real banner replaces it. */}
+      {config.isLoading && (
+        <div
+          aria-hidden="true"
+          className="rounded-xl border border-slate-200 bg-slate-50/90 p-4 text-sm shadow-2xs flex items-start gap-3"
+        >
+          <div className="h-5 w-5 rounded-full bg-slate-200 animate-pulse shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <div className="h-4 w-56 max-w-full rounded bg-slate-200 animate-pulse" />
+            <div className="mt-2 space-y-1.5">
+              <div className="h-4 w-full rounded bg-slate-100 animate-pulse" />
+              <div className="h-4 w-full max-w-xl rounded bg-slate-100 animate-pulse" />
+              <div className="h-4 w-3/5 rounded bg-slate-100 animate-pulse sm:hidden" />
+            </div>
+          </div>
+        </div>
+      )}
+
       {config.isError && (
         <div className="rounded-xl border border-red-200 bg-red-50/90 p-4 text-sm text-red-800 shadow-2xs flex items-start gap-3">
           <AlertCircleIcon className="h-5 w-5 text-red-600 shrink-0 mt-0.5" />

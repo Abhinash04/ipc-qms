@@ -14,7 +14,9 @@ import { MOCK_USERS, findUserById, findUserByEmail } from '@/constants/mockUsers
 import { createEmailMessage, EMAIL_DIRECTION, EMAIL_TYPE } from '@/constants/emailModel';
 import { buildSeedState } from '@/constants/mockDomain';
 import { summarise, recommendAssignee, draftResponse } from '@/services/ai/mockAiService';
-import { loadAll, replaceAll, persistTransition, isEmpty } from '@/services/db/db';
+// Dexie/IndexedDB loads on first persistence call, keeping it (and its ~25 kB
+// gzip) out of the entry chunk that the login page downloads.
+const dbModule = () => import('@/services/db/db');
 import { sendResponse, forwardQuery, sendAcknowledgement } from '@/services/api/mailboxService';
 import { fetchGemmaAiSummary, fetchGemmaAiDraft } from '@/services/api/aiService';
 import { assembleDraftEmail } from '@/services/ai/draftComposer';
@@ -230,6 +232,7 @@ async function persistDelta(prev, next, queryId, auditEvent, notification) {
   const prevMessageIds = new Set(prev.emailMessages.map((m) => m.messageId));
   const prevThreadIds = new Set(prev.emailThreads.map((t) => t.threadId));
 
+  const { persistTransition } = await dbModule();
   await persistTransition({
     query: next.queries.find((q) => q.queryId === queryId) || null,
     auditEvent,
@@ -1330,6 +1333,7 @@ export const useWorkflowStore = create((set, get) => ({
   hydrate: async () => {
 if (get().hydrated) return;
 try {
+  const { isEmpty, replaceAll, loadAll } = await dbModule();
   if (await isEmpty()) {
     const seed = buildSeedState();
     await replaceAll(seed);
@@ -1360,6 +1364,7 @@ try {
 const seed = buildSeedState();
 set({ ...seed });
 try {
+  const { replaceAll } = await dbModule();
   await replaceAll(seed);
   set({ persistenceError: null });
 } catch (error) {

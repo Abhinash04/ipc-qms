@@ -3,6 +3,8 @@ export function AshokaEmblem({ className = "w-10 h-14" }) {
     <img
       src="/imageFile1.png"
       alt="State Emblem of India & IPC Logo"
+      width="103"
+      height="199"
       className={`object-contain ${className}`}
     />
   );
@@ -13,6 +15,8 @@ export function IpcInsignia({ className = "h-6 w-auto" }) {
     <img
       src="/imageFile1.png"
       alt="IPC Insignia"
+      width="103"
+      height="199"
       className={`object-contain ${className}`}
     />
   );
@@ -26,6 +30,8 @@ export function IpcLogo({ className = '', variant = 'light', showText = true }) 
       <img
         src="/imageFile1.png"
         alt="IPC Emblem Logo"
+        width="103"
+        height="199"
         className="h-12 w-auto sm:h-14 lg:h-16 object-contain shrink-0"
       />
 

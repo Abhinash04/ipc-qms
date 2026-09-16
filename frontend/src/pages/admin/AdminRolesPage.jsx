@@ -54,11 +54,12 @@ function Matrix({ caption, rows, label }) {
         <table className="w-full min-w-180 border-collapse">
           <thead>
             <tr className="border-b border-slate-200">
-              <th className="px-3 py-2 text-left text-[11px] font-extrabold uppercase tracking-wider text-slate-400">
+              <th scope="col" className="px-3 py-2 text-left text-[11px] font-extrabold uppercase tracking-wider text-slate-400">
                 Capability
               </th>
               {ROLE_ORDER.map((role) => (
                 <th
+                  scope="col"
                   key={role}
                   className="px-3 py-2 text-center text-[11px] font-extrabold uppercase tracking-wider text-slate-500"
                 >

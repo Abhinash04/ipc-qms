@@ -110,12 +110,16 @@ export function Sidebar() {
                 <img
                   src="/anuvadini_new_logo 2.png"
                   alt="Anuvadini Logo"
+                  width="512"
+                  height="288"
                   className="object-contain mix-blend-multiply transition-all filter drop-shadow-xs w-48 sm:w-52 h-16 sm:h-18 pr-2"
                 />
               ) : (
                 <img
                   src="/anuvadini-icon.png"
                   alt="Anuvadini Icon"
+                  width="128"
+                  height="128"
                   className="object-contain mix-blend-multiply transition-all filter drop-shadow-xs h-10 w-10 p-0.5"
                 />
               )}

@@ -58,9 +58,9 @@ export function DashboardActivity({ auditEvents = [] }) {
               <Activity className="h-6.5 w-6.5" strokeWidth={2.2} />
             </div>
             <div>
-              <h3 className="font-heading text-[22px] sm:text-[24px] font-black text-slate-900 m-0 leading-tight tracking-tight">
+              <h2 className="font-heading text-[22px] sm:text-[24px] font-black text-slate-900 m-0 leading-tight tracking-tight">
                 Activity Feed ⚡
-              </h3>
+              </h2>
               <p className="text-[13px] font-medium text-slate-500 m-0 mt-0.5">
                 Real-time workflow audit trail
               </p>
@@ -79,9 +79,9 @@ export function DashboardActivity({ auditEvents = [] }) {
               <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-50 text-blue-600 border border-blue-100/60 shadow-2xs mb-3">
                 <Sparkles className="h-7 w-7" strokeWidth={1.8} />
               </div>
-              <h4 className="font-heading text-[16px] font-extrabold text-slate-800 m-0">
+              <h3 className="font-heading text-[16px] font-extrabold text-slate-800 m-0">
                 No Activity Yet
-              </h4>
+              </h3>
               <p className="text-[13px] font-medium text-slate-400 m-0 mt-1 max-w-xs">
                 Workflow transitions and case updates will appear here
                 automatically as they occur.

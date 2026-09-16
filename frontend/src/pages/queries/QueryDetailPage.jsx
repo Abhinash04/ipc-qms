@@ -269,10 +269,10 @@ export function QueryDetailPage() {
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-slate-50/90 border-b border-slate-200/80 text-[13.5px] font-black text-slate-400 uppercase tracking-wider">
-                <th className="py-2.5 px-4">Event</th>
-                <th className="py-2.5 px-4">Actor</th>
-                <th className="py-2.5 px-4">Details</th>
-                <th className="py-2.5 px-4 text-right">When</th>
+                <th scope="col" className="py-2.5 px-4">Event</th>
+                <th scope="col" className="py-2.5 px-4">Actor</th>
+                <th scope="col" className="py-2.5 px-4">Details</th>
+                <th scope="col" className="py-2.5 px-4 text-right">When</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-[15px]">

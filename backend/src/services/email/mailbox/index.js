@@ -56,11 +56,62 @@ function describe() {
  */
 const supportsDelivery = () => active() !== gmailInbox;
 
-const deliver = async (message) => active().deliver(message);
-const list = async (recipient, options) => active().list(recipient, options);
-const markIngested = async (recipient, id) => active().markIngested(recipient, id);
-const remove = async (recipient, id) => active().remove(recipient, id);
-const reset = async () => active().reset();
+/**
+ * Short-lived cache for Gmail list() only.
+ *
+ * A Gmail list is one upstream search plus one fetch per message, so it is by
+ * far the slowest read in the API. The cache is keyed by recipient AND filter
+ * (never one global entry — different recipients see different mailboxes), it
+ * stores the in-flight promise so concurrent identical requests coalesce into
+ * one upstream call, and every mailbox mutation clears it so a just-ingested
+ * or deleted message can never be served back. The mock and Mongo stores are
+ * local and cheap, and tests depend on their read-after-write behaviour, so
+ * they are never cached.
+ */
+const GMAIL_LIST_TTL_MS = 30_000;
+const gmailListCache = new Map();
+
+const invalidateListCache = () => gmailListCache.clear();
+
+const deliver = async (message) => {
+  invalidateListCache();
+  return active().deliver(message);
+};
+
+const list = async (recipient, options) => {
+  const impl = active();
+  // options.client is the test seam; a caller providing its own client must
+  // hit that client, not a cache shared with production reads.
+  if (impl !== gmailInbox || options?.client) return impl.list(recipient, options);
+
+  const key = `${String(recipient || '').toLowerCase()}|${Boolean(options?.unreadOnly)}|${options?.max ?? ''}`;
+  const hit = gmailListCache.get(key);
+  if (hit && Date.now() - hit.at < GMAIL_LIST_TTL_MS) return hit.promise;
+
+  const promise = impl.list(recipient, options).catch((error) => {
+    // A failed fetch must not be memoised for the rest of the TTL.
+    gmailListCache.delete(key);
+    throw error;
+  });
+  gmailListCache.set(key, { at: Date.now(), promise });
+  return promise;
+};
+
+const markIngested = async (recipient, id) => {
+  invalidateListCache();
+  return active().markIngested(recipient, id);
+};
+
+const remove = async (recipient, id) => {
+  invalidateListCache();
+  return active().remove(recipient, id);
+};
+
+const reset = async () => {
+  invalidateListCache();
+  return active().reset();
+};
+
 const stats = async () => active().stats();
 
 export {

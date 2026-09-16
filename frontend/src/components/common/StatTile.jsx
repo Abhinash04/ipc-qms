@@ -77,9 +77,14 @@ export function StatTile({
 
         {/* Bottom Label, Subtext & Caption */}
         <div>
-          <h3 className="font-heading text-[13px] font-bold text-slate-800 m-0 leading-tight group-hover:text-slate-900 line-clamp-1">
+          {/* A clickable KPI filter, not a document section — a heading here
+              breaks heading order (h1 → h3) on every dashboard. */}
+          <p
+            data-slot="stat-label"
+            className="font-heading text-[13px] font-bold text-slate-800 m-0 leading-tight group-hover:text-slate-900 line-clamp-1"
+          >
             {label}
-          </h3>
+          </p>
 
           {subtextMain && (
             <div

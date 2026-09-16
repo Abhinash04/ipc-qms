@@ -3,6 +3,7 @@ import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
 import cookieParser from 'cookie-parser';
+import compression from 'compression';
 
 import env from './config/env.js';
 import apiRoutes from './routes/index.js';
@@ -16,6 +17,10 @@ app.use(helmet());
 // cookie across the dev origin boundary (5173 → 5000). It requires an explicit
 // origin — a wildcard is rejected by the browser alongside credentials.
 app.use(cors({ origin: env.CLIENT_URL, credentials: true }));
+// Gzip JSON responses when the client advertises Accept-Encoding. The default
+// filter already skips images and anything below 1 kB; attachment streams set
+// their own Content-Type and are handled by the same filter.
+app.use(compression());
 if (env.NODE_ENV !== 'test') {
   app.use(morgan(env.NODE_ENV === 'development' ? 'dev' : 'combined'));
 }

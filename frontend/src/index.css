@@ -1,4 +1,7 @@
-@import url("https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Inter:wght@300;400;500;600;700&family=DM+Serif+Display&display=swap");
+/* Fonts are self-hosted via @fontsource imports in main.jsx — the previous
+   render-blocking fonts.googleapis.com import cost a cross-origin CSS fetch on
+   every page and caused web-font layout shift. DM Serif Display was dropped:
+   no component renders font-serif. */
 @import "tailwindcss";
 
 :root {
@@ -14,7 +17,7 @@
 
 @theme {
   --font-sans: "Inter", "DM Sans", system-ui, "Segoe UI", Roboto, sans-serif;
-  --font-serif: "DM Serif Display", Georgia, serif;
+  --font-serif: Georgia, serif;
   --font-heading: "Outfit", sans-serif;
 
   --radius-md: 0.5rem;

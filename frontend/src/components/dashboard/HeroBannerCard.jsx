@@ -124,10 +124,10 @@ export function HeroBannerCard() {
                   </span>
                 </div>
 
-                <h4 className="text-sm font-black text-slate-900 leading-snug flex items-center justify-center sm:justify-start gap-1.5">
+                <p className="text-sm font-black text-slate-900 leading-snug flex items-center justify-center sm:justify-start gap-1.5 m-0">
                   <span>Digital Query Ingestion</span>
                   <Send className="h-3.5 w-3.5 text-indigo-600 animate-pulse" />
-                </h4>
+                </p>
 
                 <div className="flex flex-wrap justify-center sm:justify-start items-center gap-1.5 pt-0.5">
                   <span className="inline-flex items-center gap-1 text-[10.5px] font-bold text-slate-600 bg-white/90 px-2.5 py-0.5 rounded-full border border-slate-200/80 shadow-2xs">

@@ -135,7 +135,10 @@ export function AuditTable({ events, loading, error, onOpenQuery, emptyTitle = '
   if (loading) {
     return (
       <div className="space-y-2" aria-busy="true" aria-label="Loading audit events">
-        {Array.from({ length: 6 }).map((_, i) => (
+        {/* One header + twelve row-height bars approximates a loaded page, so
+            the pagination footer below barely moves when data arrives. */}
+        <Skeleton className="h-9 w-full rounded-lg" />
+        {Array.from({ length: 12 }).map((_, i) => (
           <Skeleton key={i} className="h-10 w-full rounded-lg" />
         ))}
       </div>
@@ -160,12 +163,14 @@ export function AuditTable({ events, loading, error, onOpenQuery, emptyTitle = '
       <table className="w-full min-w-160 border-collapse">
         <thead>
           <tr className="border-b border-slate-200 text-left text-[11px] font-extrabold uppercase tracking-wider text-slate-400">
-            <th className="w-10 px-3 py-2" />
-            <th className="px-3 py-2">Time</th>
-            <th className="px-3 py-2">Actor</th>
-            <th className="px-3 py-2">Event</th>
-            <th className="px-3 py-2">Query</th>
-            <th className="px-3 py-2">Result</th>
+            <th scope="col" className="w-10 px-3 py-2">
+              <span className="sr-only">Expand row</span>
+            </th>
+            <th scope="col" className="px-3 py-2">Time</th>
+            <th scope="col" className="px-3 py-2">Actor</th>
+            <th scope="col" className="px-3 py-2">Event</th>
+            <th scope="col" className="px-3 py-2">Query</th>
+            <th scope="col" className="px-3 py-2">Result</th>
           </tr>
         </thead>
         <tbody>

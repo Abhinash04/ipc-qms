@@ -74,7 +74,7 @@ export function LoginPage() {
 
   return (
     <div className="h-screen w-screen flex flex-col md:flex-row overflow-hidden bg-white select-none">
-      <div className="hidden md:flex w-full md:w-5/12 lg:w-5/12 h-full bg-linear-to-br from-[#0f172a] via-[#1e1b4b] to-[#312e81] text-white p-8 sm:p-12 lg:p-16 flex-col justify-between items-center text-center relative overflow-hidden shrink-0 shadow-2xl z-10">
+      <aside className="hidden md:flex w-full md:w-5/12 lg:w-5/12 h-full bg-linear-to-br from-[#0f172a] via-[#1e1b4b] to-[#312e81] text-white p-8 sm:p-12 lg:p-16 flex-col justify-between items-center text-center relative overflow-hidden shrink-0 shadow-2xl z-10">
         <div className="pointer-events-none absolute -top-32 -left-32 w-96 h-96 rounded-full bg-indigo-500/15 blur-3xl" />
         <div className="pointer-events-none absolute -bottom-32 -right-32 w-96 h-96 rounded-full bg-purple-500/15 blur-3xl" />
 
@@ -135,9 +135,9 @@ export function LoginPage() {
         <div className="relative z-10 pt-6 border-t border-white/10 text-[13.5px] font-semibold text-slate-400/80 text-center w-full">
           © 2026 Integrated Processing Centre • Indian Pharmacopoeia Commission
         </div>
-      </div>
+      </aside>
 
-      <div className="w-full md:w-7/12 lg:w-7/12 h-full bg-white p-5 sm:p-12 lg:p-16 flex flex-col justify-center items-center overflow-y-auto">
+      <main className="w-full md:w-7/12 lg:w-7/12 h-full bg-white p-5 sm:p-12 lg:p-16 flex flex-col justify-center items-center overflow-y-auto">
         <div className="w-full max-w-120 my-auto space-y-5 sm:space-y-7">
           <div className="text-center">
             <h2 className="font-heading text-4xl sm:text-[52px] font-black text-slate-900 leading-none mb-2 sm:mb-3 tracking-tight text-center">
@@ -302,7 +302,7 @@ export function LoginPage() {
             </div>
           )}
         </div>
-      </div>
+      </main>
     </div>
   );
 }

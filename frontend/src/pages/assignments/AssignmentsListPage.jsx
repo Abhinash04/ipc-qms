@@ -30,10 +30,10 @@ export function AssignmentsListPage() {
           <table className="w-full text-left text-[15px]">
             <thead>
               <tr className="border-b border-white/50 bg-white/40 text-[13px] font-semibold text-slate-500 uppercase tracking-wider">
-                <th className="px-6 py-4">Official Name</th>
-                <th className="px-6 py-4">Email Address</th>
-                <th className="px-6 py-4">Division</th>
-                <th className="px-6 py-4">Areas of Expertise</th>
+                <th scope="col" className="px-6 py-4">Official Name</th>
+                <th scope="col" className="px-6 py-4">Email Address</th>
+                <th scope="col" className="px-6 py-4">Division</th>
+                <th scope="col" className="px-6 py-4">Areas of Expertise</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-white/50">

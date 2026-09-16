@@ -46,7 +46,10 @@ function renderDashboard() {
 
 /** A KPI tile, found by its label. */
 function tile(label) {
-  return screen.getByRole('heading', { level: 3, name: label }).closest('.bento-card');
+  return screen
+    .getAllByText(label)
+    .find((el) => el.matches('[data-slot="stat-label"]'))
+    .closest('.bento-card');
 }
 
 /** The one table below the tiles — its heading carries the selected bucket's label. */

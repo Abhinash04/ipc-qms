@@ -52,7 +52,8 @@ function signIn(user) {
 
 function tile(label) {
   return screen
-    .getByRole("heading", { level: 3, name: label })
+    .getAllByText(label)
+    .find((el) => el.matches('[data-slot="stat-label"]'))
     .closest(".bento-card");
 }
 

@@ -193,9 +193,9 @@ export function Header() {
                   <Bell className="h-4 w-4" />
                 </div>
                 <div>
-                  <h3 className="font-heading text-sm font-black text-slate-900 leading-none">
+                  <h2 className="font-heading text-sm font-black text-slate-900 leading-none">
                     Notifications
-                  </h3>
+                  </h2>
                   <p className="text-[10.5px] font-semibold text-slate-400 mt-0.5">
                     {ROLE_LABELS[currentUser?.role]} Activity
                   </p>
@@ -280,9 +280,9 @@ export function Header() {
                     <Bell className="h-5 w-5" />
                   </div>
                   <div>
-                    <h3 className="font-heading text-sm font-extrabold text-slate-900">
+                    <h2 className="font-heading text-sm font-extrabold text-slate-900">
                       Notification Details
-                    </h3>
+                    </h2>
                     <p className="text-xs text-slate-400">
                       {activeModalNotif.time || "Recent Alert"}
                     </p>
@@ -297,10 +297,10 @@ export function Header() {
               </div>
 
               <div className="space-y-2">
-                <h4 className="text-sm font-bold text-slate-900">
+                <h3 className="text-sm font-bold text-slate-900">
                   {activeModalNotif.title ||
                     `Notification ${activeModalNotif.queryId || ""}`}
-                </h4>
+                </h3>
                 <p className="text-xs leading-relaxed text-slate-600 bg-slate-50 p-3.5 rounded-xl border border-slate-100 font-medium">
                   {activeModalNotif.message || activeModalNotif.text}
                 </p>
