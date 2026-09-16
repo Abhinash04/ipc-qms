@@ -520,6 +520,14 @@ body {
   animation-play-state: paused;
 }
 
+/* WCAG 2.3.3: the marquee autoplays and loops, so it must stop entirely when
+   the user asks the OS for reduced motion. Content stays readable in place. */
+@media (prefers-reduced-motion: reduce) {
+  .animate-marquee-scroll {
+    animation: none;
+  }
+}
+
 .animate-marquee-slow {
   animation-duration: 55s;
 }

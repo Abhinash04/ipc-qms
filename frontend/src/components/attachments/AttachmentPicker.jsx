@@ -4,6 +4,7 @@ import { validateFile, MAX_FILES, formatFileSize } from '@/constants/attachmentP
 // hasBlockingErrors also lives in attachmentPolicy.js (not exported from this
 // file) — react-refresh requires component files to export only components.
 import { cn } from '@/utils/cn';
+import { stableKey } from '@/utils/stableKey';
 
 /**
  * Controlled file picker. `files` is an array of `{ file: File, error: string|null }`
@@ -24,7 +25,7 @@ export function AttachmentPicker({ files, onChange, disabled = false }) {
     onChange(next);
   };
 
-  const remove = (index) => onChange(files.filter((_, i) => i !== index));
+  const remove = (entry) => onChange(files.filter((candidate) => candidate !== entry));
 
   return (
     <div className="space-y-2">
@@ -69,9 +70,9 @@ export function AttachmentPicker({ files, onChange, disabled = false }) {
 
       {files.length > 0 && (
         <ul className="space-y-1.5">
-          {files.map((entry, index) => (
+          {files.map((entry) => (
             <li
-              key={`${entry.file.name}-${index}`}
+              key={stableKey(entry)}
               className={cn(
                 'flex items-center gap-2 rounded-lg border px-3 py-2 text-xs',
                 entry.error
@@ -85,7 +86,7 @@ export function AttachmentPicker({ files, onChange, disabled = false }) {
               {entry.error && <span className="shrink-0 text-[11px] font-bold">{entry.error}</span>}
               <button
                 type="button"
-                onClick={() => remove(index)}
+                onClick={() => remove(entry)}
                 disabled={disabled}
                 aria-label={`Remove ${entry.file.name}`}
                 className="shrink-0 text-slate-400 hover:text-rose-600 disabled:opacity-50"

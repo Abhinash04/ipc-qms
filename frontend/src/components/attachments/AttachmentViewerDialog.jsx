@@ -12,6 +12,53 @@ function previewKind(mimeType) {
   return 'none';
 }
 
+/** One early-returning branch per preview kind. */
+function AttachmentPreview({ kind, url, attachment, textContent, onUnavailable }) {
+  if (kind === 'image') {
+    return (
+      <img
+        src={url}
+        alt={attachment.filename}
+        className="max-h-[70vh] w-full rounded-lg object-contain"
+        onError={onUnavailable}
+      />
+    );
+  }
+  if (kind === 'video') {
+    return <video src={url} controls className="max-h-[70vh] w-full rounded-lg" />;
+  }
+  if (kind === 'audio') {
+    return <audio src={url} controls className="w-full" />;
+  }
+  if (kind === 'pdf') {
+    return (
+      <iframe
+        src={url}
+        title={attachment.filename}
+        className="h-[70vh] w-full rounded-lg border border-slate-200"
+      />
+    );
+  }
+  if (kind === 'text') {
+    return (
+      <pre className="max-h-[70vh] overflow-auto rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs whitespace-pre-wrap">
+        {textContent ?? 'Loading…'}
+      </pre>
+    );
+  }
+  return (
+    <p className="text-sm text-slate-600">
+      Preview not available for this file type.{' '}
+      <a
+        href={attachmentUrl(attachment.attachmentId, { download: true })}
+        className="font-bold text-blue-700 underline"
+      >
+        Download instead
+      </a>
+    </p>
+  );
+}
+
 /** `attachment`: `{ attachmentId, filename, mimeType }`. */
 export function AttachmentViewerDialog({ attachment, onClose }) {
   const [unavailable, setUnavailable] = useState(false);
@@ -58,37 +105,14 @@ export function AttachmentViewerDialog({ attachment, onClose }) {
           <p role="status" className="text-sm text-rose-600">
             This attachment is no longer available.
           </p>
-        ) : kind === 'image' ? (
-          <img
-            src={url}
-            alt={attachment.filename}
-            className="max-h-[70vh] w-full rounded-lg object-contain"
-            onError={() => setUnavailable(true)}
-          />
-        ) : kind === 'video' ? (
-          <video src={url} controls className="max-h-[70vh] w-full rounded-lg" />
-        ) : kind === 'audio' ? (
-          <audio src={url} controls className="w-full" />
-        ) : kind === 'pdf' ? (
-          <iframe
-            src={url}
-            title={attachment.filename}
-            className="h-[70vh] w-full rounded-lg border border-slate-200"
-          />
-        ) : kind === 'text' ? (
-          <pre className="max-h-[70vh] overflow-auto rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs whitespace-pre-wrap">
-            {textContent ?? 'Loading…'}
-          </pre>
         ) : (
-          <p className="text-sm text-slate-600">
-            Preview not available for this file type.{' '}
-            <a
-              href={attachmentUrl(attachment.attachmentId, { download: true })}
-              className="font-bold text-blue-700 underline"
-            >
-              Download instead
-            </a>
-          </p>
+          <AttachmentPreview
+            kind={kind}
+            url={url}
+            attachment={attachment}
+            textContent={textContent}
+            onUnavailable={() => setUnavailable(true)}
+          />
         )}
       </DialogContent>
     </Dialog>

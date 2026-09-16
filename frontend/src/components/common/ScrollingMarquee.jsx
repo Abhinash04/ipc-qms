@@ -108,7 +108,12 @@ const IPC_ANNOUNCEMENTS = [
 export function ScrollingMarquee({ className = "" }) {
   const [selectedAnnouncement, setSelectedAnnouncement] = useState(null);
 
-  const marqueeItems = [...IPC_ANNOUNCEMENTS, ...IPC_ANNOUNCEMENTS];
+  // Two labelled copies of the list make the loop seamless; the copy tag
+  // keeps every rendered item's key unique and stable without an array index.
+  const marqueeItems = [
+    ...IPC_ANNOUNCEMENTS.map((item) => ({ item, key: `${item.id}-a` })),
+    ...IPC_ANNOUNCEMENTS.map((item) => ({ item, key: `${item.id}-b` })),
+  ];
 
   return (
     <div className={`px-3 sm:px-5 lg:px-7 mb-3 select-none ${className}`}>
@@ -124,11 +129,11 @@ export function ScrollingMarquee({ className = "" }) {
               style={{ animationDuration: "130s" }}
               className="animate-marquee-scroll flex items-center gap-6 whitespace-nowrap"
             >
-              {marqueeItems.map((item, idx) => {
+              {marqueeItems.map(({ item, key }) => {
                 const IconComponent = item.icon;
                 return (
                   <div
-                    key={`${item.id}-${idx}`}
+                    key={key}
                     onClick={() => setSelectedAnnouncement(item)}
                     className="flex items-center gap-2.5 px-3 py-1.5 rounded-xl bg-white/80 hover:bg-white border border-slate-200/70 hover:border-indigo-300 shadow-2xs hover:shadow-md transition-all duration-200 cursor-pointer shrink-0 group/item hover:-translate-y-0.5"
                   >

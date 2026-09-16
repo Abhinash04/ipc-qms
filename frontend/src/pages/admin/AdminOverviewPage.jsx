@@ -25,6 +25,7 @@ import { StatusDonut, TrendLine, ProcessingFunnel } from '@/components/admin/cha
 import { Panel, PanelHeader, PANEL_CLASS } from '@/components/admin/Panel';
 import { KpiTile } from '@/components/admin/KpiTile';
 import { actionVisual } from '@/components/admin/actionIcons';
+import { stableKey } from '@/utils/stableKey';
 import { formatTime, relativeTime, humaniseAction } from '@/components/admin/auditFormat';
 import {
   sumBy,
@@ -306,13 +307,13 @@ export function AdminOverviewPage() {
           )}
           {recent.data && recent.data.events.length > 0 && (
             <ol className="m-0 list-none divide-y divide-slate-100 p-0">
-              {recent.data.events.map((event, index) => {
+              {recent.data.events.map((event) => {
                 const { icon: EventIcon, tint } = actionVisual(event.action);
                 const target = event.queryId || event.actorRole || event.actorType;
 
                 return (
                   <li
-                    key={`${event.timestamp}-${index}`}
+                    key={event._id || stableKey(event)}
                     className="flex items-center gap-3 py-2.5 first:pt-0 last:pb-0"
                   >
                     <time

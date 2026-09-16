@@ -3,6 +3,7 @@ import { ChevronRight, AlertTriangle, ShieldOff, CheckCircle2 } from 'lucide-rea
 import { EmptyState } from '@/components/common/EmptyState';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/utils/cn';
+import { stableKey } from '@/utils/stableKey';
 import { formatTime, humaniseAction } from './auditFormat';
 
 /**
@@ -35,6 +36,51 @@ function ResultChip({ result }) {
       <Icon className="h-3 w-3" aria-hidden="true" />
       {result || 'success'}
     </span>
+  );
+}
+
+/** The expandable second row: error, ids and metadata for one event. */
+function DetailRow({ event }) {
+  return (
+    <tr className="border-b border-slate-100 bg-slate-50/60">
+      <td />
+      <td colSpan={5} className="px-3 pb-3 pt-0">
+        <dl className="grid grid-cols-1 gap-x-6 gap-y-1 text-[12px] sm:grid-cols-2">
+          {event.error && (
+            <div className="sm:col-span-2">
+              <dt className="inline font-bold text-rose-700">Error: </dt>
+              <dd className="inline text-rose-700">{event.error}</dd>
+            </div>
+          )}
+          {event.messageId && (
+            <div>
+              <dt className="inline font-bold text-slate-500">Message: </dt>
+              <dd className="inline font-mono text-slate-700">{event.messageId}</dd>
+            </div>
+          )}
+          {event.attachmentId && (
+            <div>
+              <dt className="inline font-bold text-slate-500">Attachment: </dt>
+              <dd className="inline font-mono text-slate-700">{event.attachmentId}</dd>
+            </div>
+          )}
+          {event.aiMetadata &&
+            Object.entries(event.aiMetadata).map(([key, value]) => (
+              <div key={key}>
+                <dt className="inline font-bold text-slate-500">{key}: </dt>
+                <dd className="inline text-slate-700">{String(value)}</dd>
+              </div>
+            ))}
+          {event.details &&
+            Object.entries(event.details).map(([key, value]) => (
+              <div key={key}>
+                <dt className="inline font-bold text-slate-500">{key}: </dt>
+                <dd className="inline break-all text-slate-700">{String(value)}</dd>
+              </div>
+            ))}
+        </dl>
+      </td>
+    </tr>
   );
 }
 
@@ -86,47 +132,7 @@ function Row({ event, onOpenQuery }) {
         </td>
       </tr>
 
-      {open && hasDetail && (
-        <tr className="border-b border-slate-100 bg-slate-50/60">
-          <td />
-          <td colSpan={5} className="px-3 pb-3 pt-0">
-            <dl className="grid grid-cols-1 gap-x-6 gap-y-1 text-[12px] sm:grid-cols-2">
-              {event.error && (
-                <div className="sm:col-span-2">
-                  <dt className="inline font-bold text-rose-700">Error: </dt>
-                  <dd className="inline text-rose-700">{event.error}</dd>
-                </div>
-              )}
-              {event.messageId && (
-                <div>
-                  <dt className="inline font-bold text-slate-500">Message: </dt>
-                  <dd className="inline font-mono text-slate-700">{event.messageId}</dd>
-                </div>
-              )}
-              {event.attachmentId && (
-                <div>
-                  <dt className="inline font-bold text-slate-500">Attachment: </dt>
-                  <dd className="inline font-mono text-slate-700">{event.attachmentId}</dd>
-                </div>
-              )}
-              {event.aiMetadata &&
-                Object.entries(event.aiMetadata).map(([key, value]) => (
-                  <div key={key}>
-                    <dt className="inline font-bold text-slate-500">{key}: </dt>
-                    <dd className="inline text-slate-700">{String(value)}</dd>
-                  </div>
-                ))}
-              {event.details &&
-                Object.entries(event.details).map(([key, value]) => (
-                  <div key={key}>
-                    <dt className="inline font-bold text-slate-500">{key}: </dt>
-                    <dd className="inline break-all text-slate-700">{String(value)}</dd>
-                  </div>
-                ))}
-            </dl>
-          </td>
-        </tr>
-      )}
+      {open && hasDetail && <DetailRow event={event} />}
     </>
   );
 }
@@ -174,8 +180,10 @@ export function AuditTable({ events, loading, error, onOpenQuery, emptyTitle = '
           </tr>
         </thead>
         <tbody>
-          {events.map((event, index) => (
-            <Row key={`${event.timestamp}-${event.action}-${index}`} event={event} onOpenQuery={onOpenQuery} />
+          {events.map((event) => (
+            // Persisted events carry Mongo's _id; buffered fallback events do
+            // not, so those get a key tied to the object itself.
+            <Row key={event._id || stableKey(event)} event={event} onOpenQuery={onOpenQuery} />
           ))}
         </tbody>
       </table>

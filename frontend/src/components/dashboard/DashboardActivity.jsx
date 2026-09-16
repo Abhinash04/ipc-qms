@@ -6,6 +6,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { AUDIT_EVENT, AUDIT_EVENT_LABELS } from "@/constants/statusEnums";
+import { stableKey } from "@/utils/stableKey";
 
 function relativeTime(iso) {
   if (!iso) return "Recently";
@@ -95,7 +96,7 @@ export function DashboardActivity({ auditEvents = [] }) {
 
               return (
                 <div
-                  key={event.auditId || i}
+                  key={event.auditId || stableKey(event)}
                   className="relative flex items-start gap-3.5 group"
                 >
                   {i < activity.length - 1 && (

@@ -13,6 +13,7 @@ import { useWorkflowStore } from "@/store/useWorkflowStore";
 import { ROLE_LABELS } from "@/constants/roles";
 import { buildPath } from "@/constants/routePaths";
 import { useRoutePaths } from "@/hooks/useRoutePaths";
+import { stableKey } from "@/utils/stableKey";
 
 export function NotificationsPage() {
   const paths = useRoutePaths();
@@ -108,7 +109,7 @@ export function NotificationsPage() {
 
             return (
               <div
-                key={item.notificationId || index}
+                key={item.notificationId || stableKey(item)}
                 className="relative flex items-center gap-4 group"
               >
                 {index < displayList.length - 1 && (

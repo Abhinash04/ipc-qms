@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { PaperclipIcon, DownloadIcon, EyeIcon } from 'lucide-react';
 import { EmptyState } from '@/components/common/EmptyState';
+import { stableKey } from '@/utils/stableKey';
 import { attachmentUrl } from '@/services/api/attachmentService';
 import { formatFileSize } from '@/constants/attachmentPolicy';
 import { AttachmentViewerDialog } from './AttachmentViewerDialog';
@@ -40,11 +41,11 @@ export function AttachmentList({ attachments = [] }) {
   return (
     <>
       <ul className="space-y-2">
-        {real.map((raw, index) => {
+        {real.map((raw) => {
           const att = normalise(raw);
           return (
             <li
-              key={att.attachmentId || `${att.filename}-${index}`}
+              key={att.attachmentId || stableKey(raw)}
               className="flex flex-wrap items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold"
             >
               <PaperclipIcon className="h-4 w-4 text-slate-400 shrink-0" aria-hidden="true" />

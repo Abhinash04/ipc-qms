@@ -17,6 +17,7 @@ import { SECTION } from "@/constants/routeSections";
 import { useAuthStore } from "@/store/useAuthStore";
 import { useWorkflowStore } from "@/store/useWorkflowStore";
 import { ROLE_LABELS } from "@/constants/roles";
+import { stableKey } from "@/utils/stableKey";
 import { IpcLogo } from "@/components/common/IpcLogo";
 
 function initials(name) {
@@ -228,9 +229,9 @@ export function Header() {
                   </p>
                 </div>
               ) : (
-                userNotifications.map((notif, index) => (
+                userNotifications.map((notif) => (
                   <div
-                    key={notif.id || index}
+                    key={notif.notificationId || notif.id || stableKey(notif)}
                     onClick={() => handleNotificationClick(notif)}
                     className="group relative flex items-start gap-3 p-3 rounded-xl border border-slate-100/90 hover:border-indigo-300 bg-slate-50/70 hover:bg-indigo-50/40 transition-all duration-200 cursor-pointer shadow-2xs hover:shadow-xs"
                   >
