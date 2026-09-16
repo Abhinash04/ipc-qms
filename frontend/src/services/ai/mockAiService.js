@@ -154,8 +154,11 @@ export function recommendAssignee(query, users = MOCK_USERS, openQueries = []) {
   };
 }
 
-export function recommendTopOfficials(query, users = MOCK_USERS, openQueries = []) {
-  const eligible = users.filter((user) => user.role === ROLES.ASSIGNED_OFFICIAL);
+export function recommendTopOfficials(query, users = MOCK_USERS, openQueries = [], excludeUserId = null) {
+  const excludeId = excludeUserId || query?.currentAssigneeId;
+  const eligible = users.filter(
+    (user) => user.role === ROLES.ASSIGNED_OFFICIAL && user.id !== excludeId,
+  );
   if (eligible.length === 0) return [];
 
   const text = textOf(query);
@@ -170,24 +173,23 @@ export function recommendTopOfficials(query, users = MOCK_USERS, openQueries = [
       const expertise = expertiseMatch(user, text);
       const division = findDivisionById(user.divisionId);
       const load = workload(user.id);
-      const plural = load === 1 ? 'query' : 'queries';
 
       let matchPercent;
       if (expertise.score > 0) {
-        matchPercent = Math.min(98, 70 + (expertise.score - 1) * 12 + (divisionMatch ? 10 : 0));
+        matchPercent = Math.min(98, 72 + (expertise.score - 1) * 10 + (divisionMatch ? 10 : 0));
       } else if (divisionMatch) {
-        matchPercent = 65;
+        matchPercent = 78;
       } else {
-        matchPercent = Math.max(25, 55 - idx * 12);
+        matchPercent = Math.max(45, 68 - idx * 8);
       }
 
       let reason;
       if (expertise.score > 0) {
-        reason = `${user.name} specializes in ${expertise.matched.join(', ')} (${division?.name || 'Technical Division'}), matching this enquiry. Holds ${load} open ${plural}.`;
+        reason = `Expertise matches the query subject (${expertise.matched.join(', ')}).`;
       } else if (divisionMatch) {
-        reason = `${division?.name || 'Their division'} handles topics like ${topics.slice(0, 2).join(' & ')}. Holds ${load} open ${plural}.`;
+        reason = `Belongs to ${division?.name || 'relevant division'} which handles this category.`;
       } else {
-        reason = `Suggested based on division capacity (${division?.name || 'Technical'}) and workload (${load} open ${plural}).`;
+        reason = `Suggested based on division capacity and lower workload (${load} open).`;
       }
 
       return {
@@ -204,7 +206,7 @@ export function recommendTopOfficials(query, users = MOCK_USERS, openQueries = [
     })
     .sort((a, b) => b.matchPercent - a.matchPercent || a.userId.localeCompare(b.userId));
 
-  return scored.slice(0, 3).map((rec, idx) => ({
+  return scored.slice(0, 4).map((rec, idx) => ({
     ...rec,
     rank: idx + 1,
   }));

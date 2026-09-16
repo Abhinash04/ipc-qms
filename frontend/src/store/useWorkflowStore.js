@@ -1311,24 +1311,161 @@ export const useWorkflowStore = create((set, get) => ({
     return { messageId: message.messageId, dispatched: true };
   },
 
-  transferQuery: (queryId, newAssigneeId, actor) => {
-    const assignee = findUserById(newAssigneeId);
+  transferQuery: (queryId, newAssigneeId, reason, actor) => {
+    const query = assertCan(get(), WORKFLOW_ACTION.TRANSFER, queryId, actor);
+
+    if (query.currentAssigneeId && actor?.id && query.currentAssigneeId !== actor.id && actor.role !== ROLES.SUPER_ADMIN) {
+      const currentOfficial = findUserById(query.currentAssigneeId);
+      throw new Error(
+        `Only the currently assigned official (${currentOfficial?.name || query.currentAssigneeId}) can transfer this query.`
+      );
+    }
+
+    if (!newAssigneeId) {
+      throw new Error('A colleague/official must be selected for transfer.');
+    }
+
+    if (newAssigneeId === query.currentAssigneeId) {
+      throw new Error('Cannot transfer a query to the currently assigned official.');
+    }
+
+    const trimmedReason = String(reason || '').trim();
+    if (!trimmedReason) {
+      throw new Error('A reason for transfer is required.');
+    }
+
+    const prevAssignee = findUserById(query.currentAssigneeId);
+    const newAssignee = findUserById(newAssigneeId);
+    const prevName = prevAssignee?.name || query.currentAssigneeId || 'Unassigned';
+    const newName = newAssignee?.name || newAssigneeId;
+    const actorLabelStr = actorName(actor);
+
+    const messageMint = mintId(get().counters, 'MSG');
+    const timestamp = now();
+
+    const transferMessage = createEmailMessage({
+      messageId: messageMint.id,
+      threadId: query.threadId,
+      queryId,
+      direction: EMAIL_DIRECTION.OUTBOUND,
+      emailType: EMAIL_TYPE.TRANSFER_NOTIFICATION,
+      from: actorLabelStr,
+      to: [newAssignee?.email || `${newAssigneeId}@ipc.example`],
+      subject: `Query ${queryId} Transferred: ${query.subject}`,
+      body: `Query ${queryId} ("${query.subject}") has been transferred to you by ${actorLabelStr}.\n\nPrevious Assignee: ${prevName}\nTransfer Reason: ${trimmedReason}\nDate & Time: ${new Date(timestamp).toLocaleString()}`,
+      timestamp,
+    });
+
+    const auditDetails = `Case ID: ${query.queryId} | Transferred From: ${prevName} | Transferred To: ${newName} | Transferred By: ${actorLabelStr} | Reason: ${trimmedReason}`;
+
     get().applyTransition({
       queryId,
       actor,
       event: AUDIT_EVENT.QUERY_TRANSFERRED,
       patch: { currentAssigneeId: newAssigneeId },
-      details: `Query transferred to ${assignee?.name || newAssigneeId}.`,
+      details: auditDetails,
+      notify: {
+        recipientRole: 'ASSIGNED_OFFICIAL',
+        message: `${queryId} (${query.subject}) was transferred to ${newName} by ${actorLabelStr}. Reason: ${trimmedReason}`,
+      },
+      mutate: (base) => ({
+        counters: { ...base.counters, ...messageMint.bump },
+        emailMessages: [...base.emailMessages, transferMessage],
+      }),
     });
+
+    return { queryId, transferredTo: newName, success: true };
   },
 
-  pullBackQuery: (queryId, actor, reason) =>
+  pullBackQuery: (queryId, targetStage, reason, remarks = '', actor) => {
+    if (actor?.role !== ROLES.ADMIN && actor?.role !== ROLES.SUPER_ADMIN) {
+      throw new Error('You do not have permission to pull back this query.');
+    }
+
+    const query = assertCan(get(), WORKFLOW_ACTION.PULLBACK, queryId, actor);
+
+    if (!targetStage) {
+      throw new Error('A target stage must be selected for pullback.');
+    }
+
+    if (targetStage === query.workflowState) {
+      throw new Error('Cannot pull back a query to its current workflow stage.');
+    }
+
+    const trimmedReason = String(reason || '').trim();
+    if (!trimmedReason) {
+      throw new Error('A reason for pullback is required.');
+    }
+
+    const trimmedRemarks = String(remarks || '').trim();
+    const prevStage = query.workflowState;
+    const actorLabelStr = actorName(actor);
+    const prevAssignee = findUserById(query.currentAssigneeId);
+    const timestamp = now();
+
+    const PRE_ASSIGNMENT_STAGES = [
+      WORKFLOW_STATE.RECEIVED,
+      WORKFLOW_STATE.FRONT_OFFICE_VERIFICATION,
+      WORKFLOW_STATE.PENDING_ASSIGNMENT,
+    ];
+
+    const isPreAssignment = PRE_ASSIGNMENT_STAGES.includes(targetStage);
+    const newAssigneeId = isPreAssignment ? null : query.currentAssigneeId;
+
+    const pullbackRecord = {
+      fromStage: prevStage,
+      toStage: targetStage,
+      pulledBackBy: actor?.id || 'ADMIN',
+      pulledBackByName: actorLabelStr,
+      reason: trimmedReason,
+      remarks: trimmedRemarks,
+      previousAssignee: prevAssignee?.name || query.currentAssigneeId || 'Unassigned',
+      newAssignee: isPreAssignment ? 'Unassigned' : (prevAssignee?.name || query.currentAssigneeId || 'Unassigned'),
+      pulledBackAt: timestamp,
+    };
+
+    const auditDetails = `From: ${prevStage} | Pulled Back To: ${targetStage} | Pulled Back By: ${actorLabelStr} | Reason: ${trimmedReason}${trimmedRemarks ? ` | Remarks: ${trimmedRemarks}` : ''}`;
+
+    let recipientRole = 'OFFICER_IN_CHARGE';
+    if (targetStage === WORKFLOW_STATE.RECEIVED || targetStage === WORKFLOW_STATE.FRONT_OFFICE_VERIFICATION) {
+      recipientRole = 'FRONT_OFFICE';
+    } else if (targetStage === WORKFLOW_STATE.ASSIGNED || targetStage === WORKFLOW_STATE.DRAFTING || targetStage === WORKFLOW_STATE.RETURNED_FOR_REVISION) {
+      recipientRole = 'ASSIGNED_OFFICIAL';
+    } else if (targetStage === WORKFLOW_STATE.UNDER_REVIEW) {
+      recipientRole = 'REVIEWER';
+    }
+
     get().applyTransition({
       queryId,
       actor,
-      event: AUDIT_EVENT.QUERY_PULLED_BACK,
-      details: reason ? `Query pulled back: ${reason}` : 'Query pulled back.',
-    }),
+      event: AUDIT_EVENT.QUERY_PULLEDBACK,
+      patch: {
+        workflowState: targetStage,
+        currentAssigneeId: newAssigneeId,
+      },
+      details: auditDetails,
+      notify: {
+        recipientRole,
+        message: `Query ${queryId} was pulled back from ${prevStage} to ${targetStage} by ${actorLabelStr}. Reason: ${trimmedReason}`,
+      },
+      mutate: (base) => {
+        const existingQuery = base.queries.find((q) => q.queryId === queryId);
+        const existingHistory = existingQuery?.pullbackHistory || [];
+        return {
+          queries: base.queries.map((q) =>
+            q.queryId === queryId
+              ? {
+                  ...q,
+                  pullbackHistory: [...existingHistory, pullbackRecord],
+                }
+              : q
+          ),
+        };
+      },
+    });
+
+    return { queryId, prevStage, targetStage, success: true };
+  },
 
   hydrate: async () => {
 if (get().hydrated) return;

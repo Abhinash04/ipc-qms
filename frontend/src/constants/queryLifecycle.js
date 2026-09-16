@@ -1,6 +1,7 @@
 import { AUDIT_EVENT, WORKFLOW_STATE } from './statusEnums';
 import { EMAIL_TYPE } from './emailModel';
 import { findUserById } from './mockUsers';
+import { STAGE_LABELS } from './pullbackRules';
 
 export const LEVEL_NAMES = ['Reviewer I', 'Reviewer II', 'Reviewer III'];
 
@@ -40,7 +41,6 @@ export function buildLifecycle({
 } = {}) {
   if (!query) return [];
 
-  const seen = new Set(audit.map((a) => a.event));
   const at = (event) => audit.find((a) => a.event === event)?.at || null;
   const emailAt = (emailType) =>
     messages.find((m) => m.emailType === emailType)?.timestamp || null;
@@ -50,49 +50,53 @@ export function buildLifecycle({
   const wasReturned = query.workflowState === WORKFLOW_STATE.RETURNED_FOR_REVISION;
   const latestReturn = [...reviews].reverse().find((r) => r.decision === 'CHANGES_REQUESTED');
 
+  const latestPullback = query.pullbackHistory?.length
+    ? query.pullbackHistory[query.pullbackHistory.length - 1]
+    : null;
+
   const draftLabel = versions.length
     ? `Response drafted (v${versions.length})`
     : 'Response drafted';
 
-  const returnNote =
+  let returnNote =
     wasReturned && latestReturn
       ? `Returned for revision — ${findUserById(latestReturn.reviewerId)?.name || 'a reviewer'} requested changes`
       : null;
+
+  if (latestPullback) {
+    const fromStageName = STAGE_LABELS[latestPullback.fromStage] || latestPullback.fromStage;
+    returnNote = `↩ Pulled back from ${fromStageName} by ${latestPullback.pulledBackByName} (${latestPullback.reason})`;
+  }
 
   const raw = [
     {
       key: STAGE.SUBMITTED,
       label: 'Enquiry submitted',
       actor: query.inquirer?.name || null,
-      complete: true,
       at: at(AUDIT_EVENT.QUERY_RECEIVED) || query.createdAt,
     },
     {
       key: STAGE.VERIFIED,
       label: 'Verified & acknowledged',
       actor: 'Front Office',
-      complete: seen.has(AUDIT_EVENT.QUERY_REGISTERED),
       at: at(AUDIT_EVENT.QUERY_REGISTERED) || emailAt(EMAIL_TYPE.ACKNOWLEDGEMENT),
     },
     {
       key: STAGE.FORWARDED,
       label: 'Forwarded to Officer-in-Charge',
       actor: 'Front Office',
-      complete: seen.has(AUDIT_EVENT.QUERY_FORWARDED),
       at: at(AUDIT_EVENT.QUERY_FORWARDED),
     },
     {
       key: STAGE.ASSIGNED,
       label: 'Assigned to an official',
       actor: findUserById(query.currentAssigneeId)?.name || null,
-      complete: seen.has(AUDIT_EVENT.QUERY_ASSIGNED),
       at: at(AUDIT_EVENT.QUERY_ASSIGNED),
     },
     {
       key: STAGE.DRAFTED,
       label: draftLabel,
       actor: findUserById(query.currentAssigneeId)?.name || null,
-      complete: versions.length > 0 && !DRAFTING_STATES.includes(query.workflowState),
       at: at(AUDIT_EVENT.DRAFT_GENERATED),
       note: returnNote,
     },
@@ -103,7 +107,6 @@ export function buildLifecycle({
       key: `${STAGE.REVIEW}-0`,
       label: 'Review',
       actor: null,
-      complete: false,
     });
   } else {
     reviewSteps.forEach((step, index) => {
@@ -111,7 +114,6 @@ export function buildLifecycle({
         key: `${STAGE.REVIEW}-${step.stepId}`,
         label: reviewLevelName(index),
         actor: findUserById(step.assignedUserId)?.name || null,
-        complete: step.status === 'COMPLETED',
         at: step.completedAt,
       });
     });
@@ -122,36 +124,64 @@ export function buildLifecycle({
       key: STAGE.FINAL_APPROVAL,
       label: 'Final approval',
       actor: findUserById(finalStep?.assignedUserId)?.name || 'Officer-in-Charge',
-      complete: seen.has(AUDIT_EVENT.FINAL_APPROVAL_GRANTED),
       at: at(AUDIT_EVENT.FINAL_APPROVAL_GRANTED),
     },
     {
       key: STAGE.DISPATCHED,
       label: 'Response dispatched',
       actor: 'Front Office',
-      complete: seen.has(AUDIT_EVENT.RESPONSE_DISPATCHED),
       at: at(AUDIT_EVENT.RESPONSE_DISPATCHED),
     },
     {
       key: STAGE.DELIVERED,
       label: 'Inquirer received response',
       actor: query.inquirer?.name || null,
-      complete: Boolean(emailAt(EMAIL_TYPE.OUTGOING_RESPONSE)),
       at: emailAt(EMAIL_TYPE.OUTGOING_RESPONSE),
     },
   );
 
-  const currentIndex = raw.findIndex((stage) => !stage.complete);
+  let targetKey = STAGE.VERIFIED;
+  const state = query.workflowState;
+
+  if (state === WORKFLOW_STATE.RECEIVED) {
+    targetKey = STAGE.VERIFIED;
+  } else if (state === WORKFLOW_STATE.FRONT_OFFICE_VERIFICATION) {
+    targetKey = STAGE.FORWARDED;
+  } else if (state === WORKFLOW_STATE.PENDING_ASSIGNMENT) {
+    targetKey = STAGE.ASSIGNED;
+  } else if (state === WORKFLOW_STATE.ASSIGNED || state === WORKFLOW_STATE.DRAFTING || state === WORKFLOW_STATE.RETURNED_FOR_REVISION) {
+    targetKey = STAGE.DRAFTED;
+  } else if (state === WORKFLOW_STATE.UNDER_REVIEW) {
+    const activeReview = reviewSteps.find((s) => s.status === 'IN_PROGRESS' || s.status === 'PENDING');
+    targetKey = activeReview ? `${STAGE.REVIEW}-${activeReview.stepId}` : `${STAGE.REVIEW}-0`;
+  } else if (state === WORKFLOW_STATE.PENDING_FINAL_APPROVAL) {
+    targetKey = STAGE.FINAL_APPROVAL;
+  } else if (state === WORKFLOW_STATE.READY_FOR_DISPATCH || state === WORKFLOW_STATE.DISPATCHED) {
+    targetKey = STAGE.DISPATCHED;
+  } else if (state === WORKFLOW_STATE.CLOSED) {
+    targetKey = STAGE.DELIVERED;
+  }
+
+  let currentIndex = raw.findIndex((s) => s.key === targetKey);
+  if (currentIndex === -1) {
+    currentIndex = 0;
+  }
+
+  if (state === WORKFLOW_STATE.CLOSED && Boolean(emailAt(EMAIL_TYPE.OUTGOING_RESPONSE))) {
+    currentIndex = raw.length;
+  }
 
   return raw.map((stage, index) => {
-    const { complete, ...rest } = stage;
+    const isComplete = index < currentIndex;
+    const isCurrent = index === currentIndex;
     return {
-      ...rest,
-      status: complete
+      ...stage,
+      status: isComplete
         ? STAGE_STATUS.COMPLETE
-        : index === currentIndex
+        : isCurrent
           ? STAGE_STATUS.CURRENT
           : STAGE_STATUS.PENDING,
+      note: isCurrent ? (stage.note || returnNote) : undefined,
     };
   });
 }
