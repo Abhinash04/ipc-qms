@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -29,18 +29,16 @@ export function PullbackQueryModal({ query, isOpen, onClose, currentUser }) {
 
   const validStages = getValidPullbackStages(query, auditEvents);
 
-  useEffect(() => {
-    if (isOpen && validStages.length > 0 && !selectedStage) {
-      setSelectedStage(validStages[0]);
-    }
-  }, [isOpen, validStages]);
+  // Derived during render rather than synced by an effect: until the user
+  // picks a stage, the first valid one stands in.
+  const stage = selectedStage || validStages[0] || '';
 
   if (!query) return null;
 
   const handleNextOrConfirm = () => {
     setErrorMessage(null);
 
-    if (!selectedStage) {
+    if (!stage) {
       setErrorMessage('Please select a valid previous workflow stage to pull back to.');
       return;
     }
@@ -62,10 +60,10 @@ export function PullbackQueryModal({ query, isOpen, onClose, currentUser }) {
 
     setIsSubmitting(true);
     try {
-      pullBackQuery(query.queryId, selectedStage, selectedReason, customRemarks, currentUser);
+      pullBackQuery(query.queryId, stage, selectedReason, customRemarks, currentUser);
       notify.success(
         'Query Pulled Back Successfully',
-        `Query ${query.queryId} has been pulled back to ${STAGE_LABELS[selectedStage] || selectedStage}.`,
+        `Query ${query.queryId} has been pulled back to ${STAGE_LABELS[stage] || stage}.`,
       );
       handleClose();
     } catch (err) {
@@ -76,7 +74,7 @@ export function PullbackQueryModal({ query, isOpen, onClose, currentUser }) {
   };
 
   const handleClose = () => {
-    setSelectedStage(validStages[0] || '');
+    setSelectedStage('');
     setSelectedReason(PREDEFINED_PULLBACK_REASONS[0]);
     setCustomRemarks('');
     setIsConfirmStep(false);
@@ -128,7 +126,10 @@ export function PullbackQueryModal({ query, isOpen, onClose, currentUser }) {
 
             {/* Select Destination Stage */}
             <div className="space-y-2">
-              <label className="text-sm font-black uppercase tracking-wider text-slate-700 block m-0">
+              <label
+                htmlFor="pullback-target-stage"
+                className="text-sm font-black uppercase tracking-wider text-slate-700 block m-0"
+              >
                 Pull Back To <span className="text-rose-500">*</span>
               </label>
 
@@ -138,9 +139,10 @@ export function PullbackQueryModal({ query, isOpen, onClose, currentUser }) {
                 </div>
               ) : (
                 <select
-                  value={selectedStage}
+                  id="pullback-target-stage"
+                  value={stage}
                   onChange={(e) => setSelectedStage(e.target.value)}
-                  className="w-full py-2.5 px-3.5 text-sm font-bold text-slate-800 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 transition-all cursor-pointer"
+                  className="w-full py-2.5 px-3.5 text-sm font-bold text-slate-800 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 transition-colors cursor-pointer"
                 >
                   {validStages.map((stg) => (
                     <option key={stg} value={stg}>
@@ -153,14 +155,18 @@ export function PullbackQueryModal({ query, isOpen, onClose, currentUser }) {
 
             {/* Reason for Pullback */}
             <div className="space-y-2">
-              <label className="text-sm font-black uppercase tracking-wider text-slate-700 block">
+              <label
+                htmlFor="pullback-reason"
+                className="text-sm font-black uppercase tracking-wider text-slate-700 block"
+              >
                 Reason for Pullback <span className="text-rose-500">*</span>
               </label>
 
               <select
+                id="pullback-reason"
                 value={selectedReason}
                 onChange={(e) => setSelectedReason(e.target.value)}
-                className="w-full py-2.5 px-3.5 text-sm font-bold text-slate-800 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 transition-all cursor-pointer"
+                className="w-full py-2.5 px-3.5 text-sm font-bold text-slate-800 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 transition-colors cursor-pointer"
               >
                 {PREDEFINED_PULLBACK_REASONS.map((r) => (
                   <option key={r} value={r}>
@@ -178,7 +184,7 @@ export function PullbackQueryModal({ query, isOpen, onClose, currentUser }) {
                 value={customRemarks}
                 onChange={(e) => setCustomRemarks(e.target.value)}
                 rows={2}
-                className="w-full p-3.5 text-sm font-medium bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 transition-all resize-none"
+                className="w-full p-3.5 text-sm font-medium bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 transition-colors resize-none"
               />
             </div>
           </div>
@@ -210,7 +216,7 @@ export function PullbackQueryModal({ query, isOpen, onClose, currentUser }) {
                     Pull Back To:
                   </span>
                   <span className="font-extrabold text-amber-700">
-                    {STAGE_LABELS[selectedStage] || selectedStage}
+                    {STAGE_LABELS[stage] || stage}
                   </span>
                 </div>
                 <div className="flex justify-between py-1">
@@ -250,7 +256,7 @@ export function PullbackQueryModal({ query, isOpen, onClose, currentUser }) {
                 type="button"
                 onClick={() => setIsConfirmStep(false)}
                 disabled={isSubmitting}
-                className="px-4 py-2.5 rounded-xl text-sm font-bold text-slate-600 hover:bg-slate-100 transition-all cursor-pointer disabled:opacity-50"
+                className="px-4 py-2.5 rounded-xl text-sm font-bold text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer disabled:opacity-50"
               >
                 Back
               </button>
@@ -258,7 +264,7 @@ export function PullbackQueryModal({ query, isOpen, onClose, currentUser }) {
                 type="button"
                 onClick={handleNextOrConfirm}
                 disabled={isSubmitting}
-                className="px-5 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-black text-sm shadow-md shadow-amber-500/20 transition-all cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+                className="px-5 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-black text-sm shadow-md shadow-amber-500/20 transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
               >
                 {isSubmitting ? (
                   <>
@@ -275,15 +281,15 @@ export function PullbackQueryModal({ query, isOpen, onClose, currentUser }) {
               <button
                 type="button"
                 onClick={handleClose}
-                className="px-4 py-2.5 rounded-xl text-sm font-bold text-slate-600 hover:bg-slate-100 transition-all cursor-pointer"
+                className="px-4 py-2.5 rounded-xl text-sm font-bold text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
               >
                 Cancel
               </button>
               <button
                 type="button"
                 onClick={handleNextOrConfirm}
-                disabled={!selectedStage || validStages.length === 0}
-                className="px-5 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-black text-sm shadow-md shadow-amber-500/20 transition-all cursor-pointer disabled:opacity-50"
+                disabled={!stage || validStages.length === 0}
+                className="px-5 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-black text-sm shadow-md shadow-amber-500/20 transition-colors cursor-pointer disabled:opacity-50"
               >
                 Continue to Pullback
               </button>

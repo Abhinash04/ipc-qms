@@ -159,7 +159,7 @@ export function DashboardResolutionRate({ visibleAudit, closedQueryIds }) {
                       {rate && (
                         <div
                           className={cn(
-                            "h-full rounded-full transition-all duration-500",
+                            "h-full rounded-full transition-[width] duration-500",
                             bar,
                           )}
                           style={{ width: `${rate.percent}%` }}

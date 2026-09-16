@@ -109,12 +109,16 @@ const TONE_STYLES = {
 
 const styleFor = (key) => TONE_STYLES[TONES[key]] || TONE_STYLES.slate;
 
+/** Stable empty defaults: one shared reference, so memo and dep arrays hold. */
+const NO_WORKFLOW_STEPS = [];
+const NO_REVIEWS = [];
+
 export function BucketDashboard({
   role,
   currentUser,
   queries,
-  workflowSteps = [],
-  reviews = [],
+  workflowSteps = NO_WORKFLOW_STEPS,
+  reviews = NO_REVIEWS,
   title,
   purpose,
   actions,

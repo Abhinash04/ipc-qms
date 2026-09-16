@@ -167,7 +167,7 @@ export function LoginPage() {
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="you@ipc.example"
                   required
-                  className="w-full pl-11 sm:pl-13 pr-4 py-3.5 sm:py-4.5 rounded-2xl border border-slate-200/90 bg-slate-50/50 hover:bg-white focus:bg-white text-base sm:text-[18px] font-bold text-slate-900 placeholder-slate-400 outline-none transition-all focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 shadow-2xs"
+                  className="w-full pl-11 sm:pl-13 pr-4 py-3.5 sm:py-4.5 rounded-2xl border border-slate-200/90 bg-slate-50/50 hover:bg-white focus:bg-white text-base sm:text-[18px] font-bold text-slate-900 placeholder-slate-400 outline-none transition-colors focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 shadow-2xs"
                 />
               </div>
             </div>
@@ -190,7 +190,7 @@ export function LoginPage() {
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
                   required
-                  className="w-full pl-11 sm:pl-13 pr-12 py-3.5 sm:py-4.5 rounded-2xl border border-slate-200/90 bg-slate-50/50 hover:bg-white focus:bg-white text-base sm:text-[18px] font-bold text-slate-900 placeholder-slate-400 outline-none transition-all focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 shadow-2xs"
+                  className="w-full pl-11 sm:pl-13 pr-12 py-3.5 sm:py-4.5 rounded-2xl border border-slate-200/90 bg-slate-50/50 hover:bg-white focus:bg-white text-base sm:text-[18px] font-bold text-slate-900 placeholder-slate-400 outline-none transition-colors focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 shadow-2xs"
                 />
                 <button
                   type="button"
@@ -219,7 +219,7 @@ export function LoginPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-3.5 sm:py-4.5 px-8 rounded-2xl bg-linear-to-r from-[#4f46e5] via-ring to-[#8b5cf6] text-white font-black text-base sm:text-[17px] shadow-xl shadow-indigo-500/30 hover:opacity-95 active:scale-[0.99] transition-all cursor-pointer flex items-center justify-center gap-3 mt-4 sm:mt-5 disabled:opacity-70 disabled:cursor-not-allowed"
+              className="w-full py-3.5 sm:py-4.5 px-8 rounded-2xl bg-linear-to-r from-[#4f46e5] via-ring to-[#8b5cf6] text-white font-black text-base sm:text-[17px] shadow-xl shadow-indigo-500/30 hover:opacity-95 active:scale-[0.99] transition-[opacity,transform] cursor-pointer flex items-center justify-center gap-3 mt-4 sm:mt-5 disabled:opacity-70 disabled:cursor-not-allowed"
             >
               {loading ? (
                 <>
@@ -246,8 +246,10 @@ export function LoginPage() {
 
               <div className="relative">
                 {devOpen && (
-                  <div
-                    className="fixed inset-0 z-20"
+                  <button
+                    type="button"
+                    aria-label="Close dev quick login menu"
+                    className="fixed inset-0 z-20 cursor-default"
                     onClick={() => setDevOpen(false)}
                   />
                 )}
@@ -256,7 +258,7 @@ export function LoginPage() {
                   type="button"
                   disabled={loading}
                   onClick={() => setDevOpen((open) => !open)}
-                  className="w-full flex items-center justify-between gap-3 pl-4 pr-3 py-3.5 rounded-2xl border border-slate-200/90 bg-slate-50/50 hover:bg-white text-[15px] font-bold text-slate-500 outline-none transition-all focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 shadow-2xs cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+                  className="w-full flex items-center justify-between gap-3 pl-4 pr-3 py-3.5 rounded-2xl border border-slate-200/90 bg-slate-50/50 hover:bg-white text-[15px] font-bold text-slate-500 outline-none transition-colors focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 shadow-2xs cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
                 >
                   <span>Sign in as…</span>
                   <ChevronDown

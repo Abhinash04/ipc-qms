@@ -5,9 +5,9 @@ import { sectionPath } from './routePaths';
 const navSections = SECTION_ORDER.filter((section) => SECTIONS[section].nav);
 
 export function navItemsForRole(role) {
-  const granted = sectionsForRole(role);
+  const granted = new Set(sectionsForRole(role));
   return navSections
-    .filter((section) => granted.includes(section))
+    .filter((section) => granted.has(section))
     .map((section) => ({
       section,
       label: SECTIONS[section].label,

@@ -132,10 +132,11 @@ export function ScrollingMarquee({ className = "" }) {
               {marqueeItems.map(({ item, key }) => {
                 const IconComponent = item.icon;
                 return (
-                  <div
+                  <button
+                    type="button"
                     key={key}
                     onClick={() => setSelectedAnnouncement(item)}
-                    className="flex items-center gap-2.5 px-3 py-1.5 rounded-xl bg-white/80 hover:bg-white border border-slate-200/70 hover:border-indigo-300 shadow-2xs hover:shadow-md transition-all duration-200 cursor-pointer shrink-0 group/item hover:-translate-y-0.5"
+                    className="flex items-center gap-2.5 px-3 py-1.5 text-left rounded-xl bg-white/80 hover:bg-white border border-slate-200/70 hover:border-indigo-300 shadow-2xs hover:shadow-md transition-[background-color,border-color,box-shadow,transform] duration-200 cursor-pointer shrink-0 group/item hover:-translate-y-0.5"
                   >
                     <span className="flex items-center justify-center h-6 w-6 rounded-lg bg-indigo-50 text-indigo-600 border border-indigo-100 group-hover/item:scale-110 transition-transform">
                       <IconComponent className="h-3.5 w-3.5" />
@@ -164,7 +165,7 @@ export function ScrollingMarquee({ className = "" }) {
                     <span className="text-[10px] font-semibold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200/80 ml-1">
                       {item.refCode}
                     </span>
-                  </div>
+                  </button>
                 );
               })}
             </div>
@@ -210,6 +211,8 @@ export function ScrollingMarquee({ className = "" }) {
               </div>
 
               <button
+                type="button"
+                aria-label="Close announcement details"
                 onClick={() => setSelectedAnnouncement(null)}
                 className="rounded-full p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition-colors cursor-pointer"
               >
@@ -258,7 +261,7 @@ export function ScrollingMarquee({ className = "" }) {
               </button>
               <button
                 onClick={() => setSelectedAnnouncement(null)}
-                className="flex items-center gap-1.5 px-4 py-2 text-xs font-extrabold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-xs transition-all cursor-pointer"
+                className="flex items-center gap-1.5 px-4 py-2 text-xs font-extrabold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-xs transition-colors cursor-pointer"
               >
                 <CheckCircle2 className="h-3.5 w-3.5" /> Acknowledge Bulletin
               </button>

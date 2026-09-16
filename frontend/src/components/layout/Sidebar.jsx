@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
-import { motion } from "framer-motion";
+import { m } from "framer-motion";
 import { ChevronLeft, ChevronRight, LogOut } from "lucide-react";
 
 import { navItemsForRole } from "@/constants/navigation";
@@ -64,15 +64,13 @@ export function Sidebar() {
   ).length;
 
   const toggle = () => {
-    setCollapsed((prev) => {
-      const next = !prev;
-      try {
-        localStorage.setItem(STORAGE_KEY, String(next));
-      } catch {
-        // ignore storage error
-      }
-      return next;
-    });
+    const next = !collapsed;
+    setCollapsed(next);
+    try {
+      localStorage.setItem(STORAGE_KEY, String(next));
+    } catch {
+      // ignore storage error
+    }
   };
 
   const handleLogout = () => {
@@ -85,7 +83,7 @@ export function Sidebar() {
 
   return (
     <TooltipProvider delayDuration={150}>
-      <motion.aside
+      <m.aside
         initial={false}
         animate={{ width: open ? WIDTH_OPEN : WIDTH_CLOSED }}
         transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
@@ -99,7 +97,7 @@ export function Sidebar() {
 
           <div
             className={cn(
-              "relative z-10 flex shrink-0 items-center py-3.5 transition-all border-b border-white/30",
+              "relative z-10 flex shrink-0 items-center py-3.5 transition-[padding] border-b border-white/30",
               open
                 ? "px-4 justify-between"
                 : "flex-col justify-center gap-2.5 px-2 pb-3",
@@ -112,7 +110,7 @@ export function Sidebar() {
                   alt="Anuvadini Logo"
                   width="512"
                   height="288"
-                  className="object-contain mix-blend-multiply transition-all filter drop-shadow-xs w-48 sm:w-52 h-16 sm:h-18 pr-2"
+                  className="object-contain mix-blend-multiply filter drop-shadow-xs w-48 sm:w-52 h-16 sm:h-18 pr-2"
                 />
               ) : (
                 <img
@@ -120,7 +118,7 @@ export function Sidebar() {
                   alt="Anuvadini Icon"
                   width="128"
                   height="128"
-                  className="object-contain mix-blend-multiply transition-all filter drop-shadow-xs h-10 w-10 p-0.5"
+                  className="object-contain mix-blend-multiply filter drop-shadow-xs h-10 w-10 p-0.5"
                 />
               )}
             </div>
@@ -131,7 +129,7 @@ export function Sidebar() {
               title={open ? "Collapse sidebar" : "Expand sidebar"}
               aria-label={open ? "Collapse sidebar" : "Expand sidebar"}
               className={cn(
-                "flex items-center justify-center text-slate-900 shadow-2xs border border-white/50 transition-all cursor-pointer shrink-0 hover:bg-white/50",
+                "flex items-center justify-center text-slate-900 shadow-2xs border border-white/50 transition-colors cursor-pointer shrink-0 hover:bg-white/50",
                 open
                   ? "h-7.5 w-7.5 rounded-xl bg-white/35"
                   : "h-8.5 w-8.5 rounded-full bg-white/35",
@@ -172,7 +170,7 @@ export function Sidebar() {
             >
               <div
                 className={cn(
-                  "flex items-center gap-2.5 rounded-2xl bg-white/50 border border-white/70 shadow-2xs transition-all",
+                  "flex items-center gap-2.5 rounded-2xl bg-white/50 border border-white/70 shadow-2xs transition-[padding,background-color,border-color]",
                   open
                     ? "w-full px-3 py-2"
                     : "h-10 w-10 justify-center p-0 rounded-full",
@@ -225,7 +223,7 @@ export function Sidebar() {
                 // tree until hover. Naming it explicitly covers both states.
                 aria-label="Sign out session"
                 className={cn(
-                  "flex items-center justify-center font-black transition-all duration-200 cursor-pointer border",
+                  "flex items-center justify-center font-black transition-colors duration-200 cursor-pointer border",
                   "bg-white/40 hover:bg-rose-600 text-slate-900 hover:text-white border-white/60 hover:border-rose-600 active:scale-[0.98]",
                   open
                     ? "w-full py-2.5 px-3 rounded-2xl gap-2 text-xs shadow-2xs"
@@ -238,7 +236,7 @@ export function Sidebar() {
             </RailTooltip>
           </div>
         </div>
-      </motion.aside>
+      </m.aside>
     </TooltipProvider>
   );
 }
@@ -255,7 +253,7 @@ function NavItem({ item, open, notifCount }) {
         aria-label={label}
         className={({ isActive }) =>
           cn(
-            "group relative flex items-center transition-all duration-200",
+            "group relative flex items-center transition-[padding,background-color,border-color] duration-200",
             FOCUS_RING,
             open
               ? "gap-3 px-3.5 py-3 rounded-2xl text-xs"

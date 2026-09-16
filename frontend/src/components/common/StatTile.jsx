@@ -1,4 +1,5 @@
 import { cn } from "@/utils/cn";
+import { activateOnKey } from "@/utils/a11y";
 
 export function StatTile({
   label,
@@ -20,10 +21,12 @@ export function StatTile({
   return (
     <div
       onClick={onClick}
+      onKeyDown={activateOnKey(onClick)}
       role={onClick ? "button" : undefined}
+      tabIndex={onClick ? 0 : undefined}
       aria-pressed={onClick ? selected : undefined}
       className={cn(
-        "bento-card group relative select-none overflow-hidden rounded-2xl p-3.5 sm:p-4 transition-all duration-200 flex flex-col justify-between h-full border shadow-[0_2px_8px_rgba(0,0,0,0.03)]",
+        "bento-card group relative select-none overflow-hidden rounded-2xl p-3.5 sm:p-4 transition-[background-color,border-color,box-shadow,transform] duration-200 flex flex-col justify-between h-full border shadow-[0_2px_8px_rgba(0,0,0,0.03)]",
         onClick &&
           "cursor-pointer hover:-translate-y-0.5 hover:shadow-[0_6px_18px_rgba(0,0,0,0.06)] active:scale-[0.99]",
         selected &&

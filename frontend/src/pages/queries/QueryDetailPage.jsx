@@ -1,6 +1,4 @@
-import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ShieldCheck } from 'lucide-react';
 import { Breadcrumb } from '@/components/common/Breadcrumb';
 import { EmptyState } from '@/components/common/EmptyState';
 import { AttachmentList } from '@/components/attachments/AttachmentList';
@@ -9,6 +7,7 @@ import { QueryLifecycleTimeline } from '@/components/workflow/QueryLifecycleTime
 import { WorkflowActionsCard } from '@/components/workflow/WorkflowActionsCard';
 import { ReviewDecisionCard } from '@/components/workflow/ReviewDecisionCard';
 import { CaseOfficialsCard } from '@/components/workflow/CaseOfficialsCard';
+import { AuditHistoryCard } from '@/components/workflow/AuditHistoryCard';
 import { EmailThread } from '@/components/email/EmailThread';
 import { AiSummaryCard } from '@/components/ai/AiSummaryCard';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
@@ -21,9 +20,6 @@ import { ROLES } from '@/constants/roles';
 import { isQueryOwnedBy } from '@/utils/queryOwnership';
 import { buildLifecycle } from '@/constants/queryLifecycle';
 import { findUserById } from '@/constants/mockUsers';
-
-/** How many audit rows show before the reader asks for the rest. */
-const AUDIT_PREVIEW = 8;
 
 /**
  * Compact metadata for the sticky panel. CaseSummaryBar carries some of this
@@ -73,22 +69,146 @@ function InfoRow({ label, value }) {
   );
 }
 
+/** The drafted response, or why there isn't one yet. */
+function DraftTabContent({ versions, latestVersion }) {
+  if (versions.length === 0) {
+    return (
+      <EmptyState
+        title="No draft yet"
+        description="The assigned official has not started drafting a response."
+      />
+    );
+  }
+
+  return (
+    <>
+      <p className="mb-3 text-xs text-muted-foreground">
+        Versions: {versions.map((v) => v.version).join(' → ')} — showing{' '}
+        <span className="font-medium text-foreground">{latestVersion.version}</span> (
+        {latestVersion.label})
+      </p>
+      <pre className="max-h-96 overflow-y-auto rounded-2xl border border-slate-200/90 bg-slate-50 p-4 font-sans text-sm whitespace-pre-wrap text-slate-800">
+        {latestVersion.content}
+      </pre>
+    </>
+  );
+}
+
+/** Draft / info / attachments. Inquirers do not see the internal draft. */
+function CaseWorkspaceTabs({ query, versions, latestVersion, isInquirer }) {
+  return (
+    <div className="bg-white rounded-3xl border border-slate-200/80 overflow-hidden shadow-sm p-5">
+      <Tabs defaultValue={isInquirer ? 'info' : 'draft'}>
+        <div className="border-b border-slate-100 pb-3">
+          <TabsList variant="line">
+            {!isInquirer && <TabsTrigger value="draft">Response Draft</TabsTrigger>}
+            <TabsTrigger value="info">Query Info</TabsTrigger>
+            <TabsTrigger value="attachments">Attachments</TabsTrigger>
+          </TabsList>
+        </div>
+
+        {!isInquirer && (
+          <TabsContent value="draft" className="mt-0 pt-5">
+            <DraftTabContent versions={versions} latestVersion={latestVersion} />
+          </TabsContent>
+        )}
+
+        <TabsContent value="info" className="mt-0 pt-5 space-y-1">
+          <InfoRow label="Inquirer" value={query.inquirer.name} />
+          <InfoRow label="Source" value={query.source} />
+          <InfoRow label="Category" value={query.category} />
+          <InfoRow label="Created" value={new Date(query.createdAt).toLocaleDateString()} />
+          <p className="mt-3 text-sm text-slate-600">{query.description}</p>
+        </TabsContent>
+
+        <TabsContent value="attachments" className="mt-0 pt-5">
+          <AttachmentList attachments={query.attachments} />
+        </TabsContent>
+      </Tabs>
+    </div>
+  );
+}
+
+/** AI summary, the officials on the case, and who to assign it to. */
+function CaseInsightPanels({ query, steps, audit, canAssign, currentUser, assignQuery }) {
+  return (
+    <>
+      <div className="bg-white rounded-3xl border border-slate-200/80 p-5 shadow-sm">
+        <AiSummaryCard
+          variant="embedded"
+          summary={query.aiSummary}
+          query={query}
+          onSummaryUpdated={(newSummary) => {
+            useWorkflowStore.getState().applyTransition({
+              queryId: query.queryId,
+              actor: null,
+              actorLabel: 'AI Summary Assistant',
+              patch: { aiSummary: newSummary },
+              details: newSummary.text,
+            });
+          }}
+        />
+      </div>
+
+      <CaseOfficialsCard query={query} steps={steps} audit={audit} />
+
+      {/* Suggestions for whom to assign are only useful while the
+          assignment is still open; after that Officials is the answer. */}
+      {canAssign && (
+        <div className="bg-white rounded-3xl border border-slate-200/80 p-5 shadow-sm">
+          <AiRecommendationCard
+            variant="embedded"
+            query={query}
+            currentAssigneeId={query.currentAssigneeId}
+            onAssign={(officialId) => assignQuery(query.queryId, officialId, currentUser)}
+          />
+        </div>
+      )}
+    </>
+  );
+}
+
+const STAGE_LINKS = [
+  ['ASSIGNMENTS', 'Assignments'],
+  ['DRAFTING', 'Drafting'],
+  ['REVIEWS', 'Reviews'],
+  ['APPROVALS', 'Approvals'],
+  ['DISPATCH', 'Dispatch'],
+];
+
+function StageLinksFooter({ paths }) {
+  return (
+    <p className="mt-4 text-xs text-muted-foreground">
+      Stage-specific actions also live on their dedicated pages —{' '}
+      {STAGE_LINKS.map(([key, label], index) => (
+        <span key={key}>
+          <Link to={paths[key] || '#'} className="text-ring hover:underline">
+            {label}
+          </Link>
+          {index < STAGE_LINKS.length - 1 ? ', ' : '.'}
+        </span>
+      ))}
+    </p>
+  );
+}
+
 export function QueryDetailPage() {
   const paths = useRoutePaths();
-  const { queryId, query, currentUser, can, steps, versions, latestVersion, reviews, audit, messages } =
-    useQueryCase();
+  const {
+    queryId,
+    query,
+    currentUser,
+    can,
+    steps,
+    versions,
+    latestVersion,
+    reviews,
+    audit,
+    messages,
+  } = useQueryCase();
   const canAssign = can(WORKFLOW_ACTION.ASSIGN);
   const assignQuery = useWorkflowStore((state) => state.assignQuery);
   const isInquirer = currentUser?.role === ROLES.INQUIRER;
-  const [showAllAudit, setShowAllAudit] = useState(false);
-
-  // useQueryCase sorts ascending, so the newest event would otherwise be
-  // buried at the bottom of an unbounded table.
-  const newestFirstAudit = [...audit].reverse();
-  const visibleAudit = showAllAudit
-    ? newestFirstAudit
-    : newestFirstAudit.slice(0, AUDIT_PREVIEW);
-  const stages = buildLifecycle({ query, steps, versions, reviews, audit, messages });
 
   if (!query || (isInquirer && !isQueryOwnedBy(query, currentUser))) {
     return (
@@ -99,19 +219,19 @@ export function QueryDetailPage() {
     );
   }
 
+  const stages = buildLifecycle({ query, steps, versions, reviews, audit, messages });
+
+  const breadcrumbItems = isInquirer
+    ? [{ label: 'Dashboard', path: paths.DASHBOARD }, { label: query.queryId }]
+    : [
+        { label: 'Dashboard', path: paths.DASHBOARD },
+        { label: 'Queries', path: paths.QUERIES },
+        { label: query.queryId },
+      ];
+
   return (
     <div>
-      <Breadcrumb
-        items={
-          isInquirer
-            ? [{ label: 'Dashboard', path: paths.DASHBOARD }, { label: query.queryId }]
-            : [
-                { label: 'Dashboard', path: paths.DASHBOARD },
-                { label: 'Queries', path: paths.QUERIES },
-                { label: query.queryId },
-              ]
-        }
-      />
+      <Breadcrumb items={breadcrumbItems} />
 
       <CaseSummaryBar query={query} />
 
@@ -134,90 +254,24 @@ export function QueryDetailPage() {
       >
         <div className="min-w-0 space-y-5">
           {!isInquirer && (
-            <>
-              <div className="bg-white rounded-3xl border border-slate-200/80 p-5 shadow-sm">
-                <AiSummaryCard
-                  variant="embedded"
-                  summary={query.aiSummary}
-                  query={query}
-                  onSummaryUpdated={(newSummary) => {
-                    useWorkflowStore.getState().applyTransition({
-                      queryId: query.queryId,
-                      actor: null,
-                      actorLabel: 'AI Summary Assistant',
-                      patch: { aiSummary: newSummary },
-                      details: newSummary.text,
-                    });
-                  }}
-                />
-              </div>
-
-              <CaseOfficialsCard query={query} steps={steps} audit={audit} />
-
-              {/* Suggestions for whom to assign are only useful while the
-                  assignment is still open; after that Officials is the answer. */}
-              {canAssign && (
-                <div className="bg-white rounded-3xl border border-slate-200/80 p-5 shadow-sm">
-                  <AiRecommendationCard
-                    variant="embedded"
-                    query={query}
-                    currentAssigneeId={query.currentAssigneeId}
-                    onAssign={(officialId) =>
-                      assignQuery(query.queryId, officialId, currentUser)
-                    }
-                  />
-                </div>
-              )}
-            </>
+            <CaseInsightPanels
+              query={query}
+              steps={steps}
+              audit={audit}
+              canAssign={canAssign}
+              currentUser={currentUser}
+              assignQuery={assignQuery}
+            />
           )}
 
           <EmailThread messages={messages} />
 
-          <div className="bg-white rounded-3xl border border-slate-200/80 overflow-hidden shadow-sm p-5">
-          <Tabs defaultValue={isInquirer ? 'info' : 'draft'}>
-            <div className="border-b border-slate-100 pb-3">
-              <TabsList variant="line">
-                {!isInquirer && <TabsTrigger value="draft">Response Draft</TabsTrigger>}
-                <TabsTrigger value="info">Query Info</TabsTrigger>
-                <TabsTrigger value="attachments">Attachments</TabsTrigger>
-              </TabsList>
-            </div>
-
-            {!isInquirer && (
-              <TabsContent value="draft" className="mt-0 pt-5">
-                {versions.length === 0 ? (
-                  <EmptyState
-                    title="No draft yet"
-                    description="The assigned official has not started drafting a response."
-                  />
-                ) : (
-                  <>
-                    <p className="mb-3 text-xs text-muted-foreground">
-                      Versions: {versions.map((v) => v.version).join(' → ')} — showing{' '}
-                      <span className="font-medium text-foreground">{latestVersion.version}</span> (
-                      {latestVersion.label})
-                    </p>
-                    <pre className="max-h-96 overflow-y-auto rounded-2xl border border-slate-200/90 bg-slate-50 p-4 font-sans text-sm whitespace-pre-wrap text-slate-800">
-                      {latestVersion.content}
-                    </pre>
-                  </>
-                )}
-              </TabsContent>
-            )}
-
-            <TabsContent value="info" className="mt-0 pt-5 space-y-1">
-              <InfoRow label="Inquirer" value={query.inquirer.name} />
-              <InfoRow label="Source" value={query.source} />
-              <InfoRow label="Category" value={query.category} />
-              <InfoRow label="Created" value={new Date(query.createdAt).toLocaleDateString()} />
-              <p className="mt-3 text-sm text-slate-600">{query.description}</p>
-            </TabsContent>
-
-            <TabsContent value="attachments" className="mt-0 pt-5">
-              <AttachmentList attachments={query.attachments} />
-            </TabsContent>
-          </Tabs>
-          </div>
+          <CaseWorkspaceTabs
+            query={query}
+            versions={versions}
+            latestVersion={latestVersion}
+            isInquirer={isInquirer}
+          />
         </div>
 
         {!isInquirer && (
@@ -231,131 +285,9 @@ export function QueryDetailPage() {
         )}
       </div>
 
-      {/* Audit History Card */}
-      {!isInquirer && (
-      <div className="bg-white rounded-3xl border border-slate-200/80 p-5 shadow-sm overflow-hidden select-none">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-3 mb-3">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-indigo-50 text-indigo-600 border border-indigo-100/80 flex items-center justify-center shadow-2xs">
-              <ShieldCheck className="h-4 w-4" strokeWidth={2.2} />
-            </div>
-            <div>
-              <h2 className="font-heading text-[19px] font-black text-slate-900 m-0 leading-tight">
-                Audit history
-              </h2>
-              <p className="text-[12.5px] font-medium text-slate-400 m-0">
-                Append-only trail, newest first.
-              </p>
-            </div>
-          </div>
+      {!isInquirer && <AuditHistoryCard audit={audit} />}
 
-          <div className="flex items-center gap-2">
-            {audit.length > AUDIT_PREVIEW && (
-              <button
-                type="button"
-                onClick={() => setShowAllAudit((shown) => !shown)}
-                className="text-[12px] font-bold text-slate-500 hover:text-indigo-700 bg-white hover:bg-indigo-50 px-3 py-1.5 rounded-xl border border-slate-200/80 transition-colors cursor-pointer"
-              >
-                {showAllAudit ? 'Show recent only' : `Show all ${audit.length} events`}
-              </button>
-            )}
-            <span className="text-[12.5px] font-black text-indigo-700 bg-indigo-50 px-3 py-1 rounded-full border border-indigo-200/80 shadow-2xs">
-              {audit.length} Total Events
-            </span>
-          </div>
-        </div>
-
-        <div className="overflow-x-auto rounded-2xl border border-slate-200/70">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="bg-slate-50/90 border-b border-slate-200/80 text-[13.5px] font-black text-slate-400 uppercase tracking-wider">
-                <th scope="col" className="py-2.5 px-4">Event</th>
-                <th scope="col" className="py-2.5 px-4">Actor</th>
-                <th scope="col" className="py-2.5 px-4">Details</th>
-                <th scope="col" className="py-2.5 px-4 text-right">When</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 text-[15px]">
-              {visibleAudit.map((entry) => {
-                const rawEvent = String(entry.event || entry.action || '').toUpperCase();
-                const eventText = rawEvent.replace(/_/g, ' ') || '—';
-                const isAi = entry.actor?.toLowerCase().includes('ai') || entry.actor?.toLowerCase().includes('assistant');
-                const isSystem = entry.actor?.toLowerCase() === 'system';
-                const isRejected = rawEvent.includes('REJECT');
-
-                let badgeColor = "bg-blue-50 text-blue-700 border-blue-200";
-                if (isRejected) badgeColor = "bg-rose-50 text-rose-700 border-rose-200";
-                else if (rawEvent.includes('CLOSED') || rawEvent.includes('REGISTERED')) badgeColor = "bg-emerald-50 text-emerald-700 border-emerald-200";
-                else if (rawEvent.includes('AI') || rawEvent.includes('DRAFT')) badgeColor = "bg-purple-50 text-purple-700 border-purple-200";
-                else if (rawEvent.includes('FORWARD') || rawEvent.includes('ASSIGN')) badgeColor = "bg-amber-50 text-amber-800 border-amber-200";
-
-                return (
-                  <tr key={entry.auditId} className="hover:bg-slate-50/60 transition-colors">
-                    {/* Event Badge */}
-                    <td className="py-2 px-4 align-top whitespace-nowrap">
-                      <span className={`inline-flex items-center text-[13px] font-black px-3 py-1 rounded-full border shadow-2xs ${badgeColor}`}>
-                        {eventText}
-                      </span>
-                    </td>
-
-                    {/* Actor Pill */}
-                    <td className="py-2 px-4 align-top whitespace-nowrap">
-                      <span className={`inline-flex items-center gap-1.5 text-[14px] font-bold px-2.5 py-1 rounded-xl border ${isAi
-                          ? 'bg-purple-50 text-purple-800 border-purple-200'
-                          : isSystem
-                            ? 'bg-slate-100 text-slate-700 border-slate-200'
-                            : 'bg-indigo-50 text-indigo-800 border-indigo-200'
-                        }`}>
-                        {isAi ? '🤖 ' : isSystem ? '⚙️ ' : '👤 '}
-                        {entry.actor}
-                      </span>
-                    </td>
-
-                    {/* Details */}
-                    <td className="py-2 px-4 align-top font-medium text-slate-700 max-w-md leading-relaxed">
-                      {entry.details || '—'}
-                    </td>
-
-                    {/* Timestamp */}
-                    <td className="py-2 px-4 align-top text-right whitespace-nowrap font-semibold text-slate-400 text-[14px]">
-                      {new Date(entry.at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
-                      <span className="mx-1">•</span>
-                      {new Date(entry.at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </div>
-      )}
-
-      {!isInquirer && (
-      <p className="mt-4 text-xs text-muted-foreground">
-        Stage-specific actions also live on their dedicated pages —{' '}
-        <Link to={paths.ASSIGNMENTS || '#'} className="text-ring hover:underline">
-          Assignments
-        </Link>
-        ,{' '}
-        <Link to={paths.DRAFTING || '#'} className="text-ring hover:underline">
-          Drafting
-        </Link>
-        ,{' '}
-        <Link to={paths.REVIEWS || '#'} className="text-ring hover:underline">
-          Reviews
-        </Link>
-        ,{' '}
-        <Link to={paths.APPROVALS || '#'} className="text-ring hover:underline">
-          Approvals
-        </Link>
-        ,{' '}
-        <Link to={paths.DISPATCH || '#'} className="text-ring hover:underline">
-          Dispatch
-        </Link>
-        .
-      </p>
-      )}
+      {!isInquirer && <StageLinksFooter paths={paths} />}
     </div>
   );
 }

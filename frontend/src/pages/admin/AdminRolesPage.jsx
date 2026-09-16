@@ -28,6 +28,11 @@ const ROLE_ORDER = [
   ROLES.INQUIRER,
 ];
 
+/** Section grants are static tables, so index them once instead of per matrix cell. */
+const SECTIONS_BY_ROLE = new Map(
+  ROLE_ORDER.map((role) => [role, new Set(sectionsForRole(role))]),
+);
+
 /** A role may perform an action if it can in ANY state — the state machine narrows it further. */
 const roleHasAction = (role, action) =>
   Object.values(WORKFLOW_STATE).some((state) => canPerform(role, action, state));
@@ -90,7 +95,7 @@ export function AdminRolesPage() {
   const sectionRows = SECTION_ORDER.filter((section) => SECTIONS[section].label).map((section) => ({
     key: section,
     label: SECTIONS[section].label,
-    granted: (role) => sectionsForRole(role).includes(section),
+    granted: (role) => SECTIONS_BY_ROLE.get(role)?.has(section) ?? false,
   }));
 
   const actionRows = Object.values(WORKFLOW_ACTION).map((action) => ({

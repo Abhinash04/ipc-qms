@@ -1,26 +1,22 @@
 import { useState } from 'react';
-import { PlusIcon, Trash2Icon } from 'lucide-react';
+import { Trash2Icon } from 'lucide-react';
 import { Breadcrumb } from '@/components/common/Breadcrumb';
 import { EmptyState } from '@/components/common/EmptyState';
 import { CaseSummaryBar } from '@/components/workflow/CaseSummaryBar';
 import { QueryLifecycleTimeline } from '@/components/workflow/QueryLifecycleTimeline';
 import { buildLifecycle } from '@/constants/queryLifecycle';
 import { Card, CardBody, CardHeader } from '@/components/ui/card';
-import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { ReviewDecisionCard } from '@/components/workflow/ReviewDecisionCard';
 import { Badge } from '@/components/ui/badge';
-import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select';
 import { useQueryCase } from '@/hooks/useQueryCase';
 import { useWorkflowStore } from '@/store/useWorkflowStore';
 import { WORKFLOW_ACTION } from '@/constants/workflowRules';
-import { MOCK_USERS, findUserById } from '@/constants/mockUsers';
-import { ROLES } from '@/constants/roles';
+import { findUserById } from '@/constants/mockUsers';
 import { useRoutePaths } from '@/hooks/useRoutePaths';
 import { useWorkflowAction } from '@/hooks/useWorkflowAction';
 import { ActionError } from '@/components/workflow/ActionError';
-
-const ELIGIBLE_REVIEWERS = MOCK_USERS.filter((u) => u.role === ROLES.REVIEWER);
+import { AddReviewLevelField } from '@/components/workflow/AddReviewLevelField';
 
 export function ReviewDetailPage() {
   const paths = useRoutePaths();
@@ -173,34 +169,15 @@ export function ReviewDetailPage() {
               {deleteError && <p className="text-xs text-destructive">{deleteError}</p>}
 
               {can(WORKFLOW_ACTION.ADD_REVIEW_LEVEL) && (
-                <div className="space-y-1.5 border-t border-border pt-3">
-                  <Label htmlFor="new-reviewer">Add a review level</Label>
-                  <div className="flex gap-2">
-                    <Select id="new-reviewer" value={newReviewer} onValueChange={setNewReviewer}>
-                      <SelectTrigger className="flex-1">
-                        <SelectValue placeholder="Select reviewer" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {ELIGIBLE_REVIEWERS.map((user) => (
-                          <SelectItem key={user.id} value={user.id}>
-                            {user.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <Button
-                      variant="secondary"
-                      disabled={!newReviewer}
-                      onClick={() => {
-                        run(() => addReviewLevel(queryId, newReviewer, currentUser));
-                        setNewReviewer('');
-                      }}
-                    >
-                      <PlusIcon className="h-4 w-4" aria-hidden="true" />
-                      Add
-                    </Button>
-                  </div>
-                </div>
+                <AddReviewLevelField
+                  label={"Add a review level"}
+                  value={newReviewer}
+                  onChange={setNewReviewer}
+                  onAdd={() => {
+                    run(() => addReviewLevel(queryId, newReviewer, currentUser));
+                    setNewReviewer('');
+                  }}
+                />
               )}
 
               <p className="text-xs text-muted-foreground">

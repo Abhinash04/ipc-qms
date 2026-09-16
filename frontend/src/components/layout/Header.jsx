@@ -18,6 +18,7 @@ import { useAuthStore } from "@/store/useAuthStore";
 import { useWorkflowStore } from "@/store/useWorkflowStore";
 import { ROLE_LABELS } from "@/constants/roles";
 import { stableKey } from "@/utils/stableKey";
+import { activateOnKey } from "@/utils/a11y";
 import { IpcLogo } from "@/components/common/IpcLogo";
 
 function initials(name) {
@@ -136,7 +137,7 @@ export function Header() {
             <button
               ref={bellRef}
               onClick={() => setIsNotifOpen((prev) => !prev)}
-              className="glass-control relative flex items-center justify-center h-9 w-9 rounded-full text-slate-600 hover:text-indigo-600 transition-all hover:-translate-y-0.5 focus:outline-none cursor-pointer"
+              className="glass-control relative flex items-center justify-center h-9 w-9 rounded-full text-slate-600 hover:text-indigo-600 transition-[color,transform] hover:-translate-y-0.5 focus:outline-none cursor-pointer"
               title={`Notifications (${notifCount} new)`}
               aria-label={`Notifications (${notifCount} unread)`}
             >
@@ -151,7 +152,7 @@ export function Header() {
 
           <button
             onClick={resetDemo}
-            className="glass-control flex h-auto items-center gap-2 rounded-full px-3.5 py-1.5 text-[12.5px] font-bold text-slate-600 transition-all hover:-translate-y-0.5 hover:text-rose-600 focus:outline-none cursor-pointer"
+            className="glass-control flex h-auto items-center gap-2 rounded-full px-3.5 py-1.5 text-[12.5px] font-bold text-slate-600 transition-[color,transform] hover:-translate-y-0.5 hover:text-rose-600 focus:outline-none cursor-pointer"
             title="Reset database to initial state"
           >
             <RotateCcwIcon className="h-4 w-4" />
@@ -185,7 +186,7 @@ export function Header() {
               right: `${popoverPos.right}px`,
               zIndex: 999999,
             }}
-            className="w-84 sm:w-96 max-w-[calc(100vw-32px)] rounded-2xl border border-slate-200/90 bg-white/98 p-4.5 shadow-[0_25px_80px_rgba(15,23,42,0.35)] backdrop-blur-3xl transition-all animate-in fade-in zoom-in-95 duration-150 select-none"
+            className="w-84 sm:w-96 max-w-[calc(100vw-32px)] rounded-2xl border border-slate-200/90 bg-white/98 p-4.5 shadow-[0_25px_80px_rgba(15,23,42,0.35)] backdrop-blur-3xl animate-in fade-in zoom-in-95 duration-150 select-none"
           >
             {/* Popover Header */}
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
@@ -232,8 +233,11 @@ export function Header() {
                 userNotifications.map((notif) => (
                   <div
                     key={notif.notificationId || notif.id || stableKey(notif)}
+                    role="button"
+                    tabIndex={0}
                     onClick={() => handleNotificationClick(notif)}
-                    className="group relative flex items-start gap-3 p-3 rounded-xl border border-slate-100/90 hover:border-indigo-300 bg-slate-50/70 hover:bg-indigo-50/40 transition-all duration-200 cursor-pointer shadow-2xs hover:shadow-xs"
+                    onKeyDown={activateOnKey(() => handleNotificationClick(notif))}
+                    className="group relative flex w-full items-start gap-3 p-3 text-left rounded-xl border border-slate-100/90 hover:border-indigo-300 bg-slate-50/70 hover:bg-indigo-50/40 transition-[background-color,border-color,box-shadow] duration-200 cursor-pointer shadow-2xs hover:shadow-xs"
                   >
                     <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-indigo-100/80 text-indigo-600 mt-0.5 group-hover:scale-105 transition-transform">
                       <CheckCircle2 className="h-4 w-4" />
@@ -290,6 +294,8 @@ export function Header() {
                   </div>
                 </div>
                 <button
+                  type="button"
+                  aria-label="Close notification details"
                   onClick={() => setActiveModalNotif(null)}
                   className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition-colors cursor-pointer"
                 >

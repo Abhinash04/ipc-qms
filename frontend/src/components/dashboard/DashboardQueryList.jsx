@@ -126,7 +126,7 @@ export function DashboardQueryList({
                 <Link
                   key={query.queryId}
                   to={getQueryDetailPath(query.queryId)}
-                  className="group relative flex flex-col md:grid md:grid-cols-[140px_1fr_180px_120px] md:items-center gap-3 bg-white rounded-2xl border border-slate-200/70 p-3.5 shadow-2xs hover:shadow-md hover:border-purple-300 transition-all duration-200 cursor-pointer overflow-hidden"
+                  className="group relative flex flex-col md:grid md:grid-cols-[140px_1fr_180px_120px] md:items-center gap-3 bg-white rounded-2xl border border-slate-200/70 p-3.5 shadow-2xs hover:shadow-md hover:border-purple-300 transition-[border-color,box-shadow] duration-200 cursor-pointer overflow-hidden"
                 >
                   <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-linear-to-b from-purple-500 to-indigo-600 rounded-l-2xl" />
                   

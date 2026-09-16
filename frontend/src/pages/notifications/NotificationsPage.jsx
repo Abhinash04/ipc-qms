@@ -125,7 +125,7 @@ export function NotificationsPage() {
                   className={`relative z-10 h-2.5 w-2.5 shrink-0 rounded-full ${config.dotBg} ring-4 ring-white`}
                 />
 
-                <div className="flex-1 bg-white rounded-2xl border border-slate-200/80 p-4 shadow-2xs hover:shadow-md hover:border-purple-200 transition-all flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <div className="flex-1 bg-white rounded-2xl border border-slate-200/80 p-4 shadow-2xs hover:shadow-md hover:border-purple-200 transition-[border-color,box-shadow] flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                   <div>
                     <p className="font-extrabold text-slate-900 text-[14.5px] leading-snug m-0">
                       {item.message}

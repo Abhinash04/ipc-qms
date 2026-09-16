@@ -353,7 +353,8 @@ export function bucketRecords(queries, role, bucketKey, ctx) {
 
 export function anyBucket(role, keys, ctx) {
   const config = configForRole(role);
-  const buckets = config.buckets.filter((b) => keys.includes(b.key));
+  const wanted = new Set(keys);
+  const buckets = config.buckets.filter((b) => wanted.has(b.key));
   return (query) =>
     config.scope(query, ctx) &&
     buckets.some((bucket) => bucket.predicate(query, ctx));

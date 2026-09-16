@@ -10,6 +10,113 @@ import {
 } from "@/constants/emailModel";
 import { cn } from "@/utils/cn";
 
+const FILTER_TABS = [
+  {
+    key: "ALL",
+    label: "All Emails",
+    activeClass: "bg-white text-slate-800 shadow-sm",
+  },
+  {
+    key: EMAIL_DIRECTION.INBOUND,
+    label: "Received Only",
+    activeClass: "bg-white text-slate-800 shadow-sm",
+  },
+  {
+    key: EMAIL_DIRECTION.OUTBOUND,
+    label: "Sent Only",
+    activeClass: "bg-white text-blue-600 shadow-sm",
+  },
+];
+
+/** Direction filter for the thread. */
+function ThreadFilterTabs({ filter, onChange }) {
+  return (
+    <div className="flex bg-slate-100/80 p-1 rounded-xl shrink-0">
+      {FILTER_TABS.map(({ key, label, activeClass }) => (
+        <button
+          key={key}
+          type="button"
+          onClick={() => onChange(key)}
+          className={cn(
+            "px-3 py-1.5 text-[12px] font-bold rounded-lg transition-colors cursor-pointer",
+            filter === key
+              ? activeClass
+              : "text-slate-500 hover:text-slate-700",
+          )}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function ThreadHeader({ count, filter, onFilterChange }) {
+  return (
+    <div className="border-b border-slate-100 pb-3 mb-4 flex flex-wrap items-start justify-between gap-3">
+      <div>
+        <h2 className="font-heading text-[19px] font-black text-slate-900 m-0">
+          Email thread
+        </h2>
+        <p className="mt-0.5 text-[13px] font-medium text-slate-400">
+          {count} {count === 1 ? "message" : "messages"} exchanged with the
+          inquirer.
+        </p>
+      </div>
+
+      <ThreadFilterTabs filter={filter} onChange={onFilterChange} />
+    </div>
+  );
+}
+
+/** Why the thread is empty depends on whether a filter is narrowing it. */
+function ThreadEmptyState({ filter }) {
+  if (filter === "ALL") {
+    return (
+      <EmptyState
+        icon={MailIcon}
+        title="No email on this case"
+        description="A query normally starts from an email, so this is unexpected."
+      />
+    );
+  }
+
+  const kind = filter === EMAIL_DIRECTION.INBOUND ? "received" : "sent";
+  return (
+    <EmptyState
+      icon={MailIcon}
+      title="No emails found"
+      description={`There are no ${kind} emails in this thread.`}
+    />
+  );
+}
+
+function ShowPreviousButton({ count, onClick }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="w-full rounded-2xl border border-slate-200/70 bg-slate-50 hover:bg-slate-100 py-2 text-[12.5px] font-bold text-slate-500 transition-colors cursor-pointer"
+    >
+      Show {count} previous {count === 1 ? "message" : "messages"}
+    </button>
+  );
+}
+
+/** An older message, shown as a one-liner until the reader opens it. */
+function PreviousMessage({ message, isFilteredView, isExpanded, onToggle }) {
+  if (!isExpanded) {
+    return <CollapsedMessage message={message} onExpand={onToggle} />;
+  }
+  return (
+    <ThreadMessage
+      message={message}
+      isFilteredView={isFilteredView}
+      onCollapse={onToggle}
+    />
+  );
+}
+
 export function EmailThread({ messages = [] }) {
   const [filter, setFilter] = useState("ALL");
   // Which earlier messages the reader has opened, plus whether the older block
@@ -27,6 +134,7 @@ export function EmailThread({ messages = [] }) {
   const latest = filteredMessages[filteredMessages.length - 1] || null;
   const previous = filteredMessages.slice(0, -1);
   const visiblePrevious = showPrevious ? previous : [];
+  const isFilteredView = filter !== "ALL";
 
   const toggle = (messageId) =>
     setExpanded((current) => {
@@ -38,107 +146,40 @@ export function EmailThread({ messages = [] }) {
 
   return (
     <div className="bg-white rounded-3xl border border-slate-200/80 p-5 shadow-sm">
-      <div className="border-b border-slate-100 pb-3 mb-4 flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h2 className="font-heading text-[19px] font-black text-slate-900 m-0">
-            Email thread
-          </h2>
-          <p className="mt-0.5 text-[13px] font-medium text-slate-400">
-            {filteredMessages.length}{" "}
-            {filteredMessages.length === 1 ? "message" : "messages"} exchanged
-            with the inquirer.
-          </p>
-        </div>
-
-        <div className="flex bg-slate-100/80 p-1 rounded-xl shrink-0">
-          <button
-            type="button"
-            onClick={() => setFilter("ALL")}
-            className={cn(
-              "px-3 py-1.5 text-[12px] font-bold rounded-lg transition-all cursor-pointer",
-              filter === "ALL"
-                ? "bg-white text-slate-800 shadow-sm"
-                : "text-slate-500 hover:text-slate-700",
-            )}
-          >
-            All Emails
-          </button>
-          <button
-            type="button"
-            onClick={() => setFilter(EMAIL_DIRECTION.INBOUND)}
-            className={cn(
-              "px-3 py-1.5 text-[12px] font-bold rounded-lg transition-all cursor-pointer",
-              filter === EMAIL_DIRECTION.INBOUND
-                ? "bg-white text-slate-800 shadow-sm"
-                : "text-slate-500 hover:text-slate-700",
-            )}
-          >
-            Received Only
-          </button>
-          <button
-            type="button"
-            onClick={() => setFilter(EMAIL_DIRECTION.OUTBOUND)}
-            className={cn(
-              "px-3 py-1.5 text-[12px] font-bold rounded-lg transition-all cursor-pointer",
-              filter === EMAIL_DIRECTION.OUTBOUND
-                ? "bg-white text-blue-600 shadow-sm"
-                : "text-slate-500 hover:text-slate-700",
-            )}
-          >
-            Sent Only
-          </button>
-        </div>
-      </div>
+      <ThreadHeader
+        count={filteredMessages.length}
+        filter={filter}
+        onFilterChange={setFilter}
+      />
 
       <div className="space-y-3">
         {filteredMessages.length === 0 ? (
-          <EmptyState
-            icon={MailIcon}
-            title={
-              filter === "ALL" ? "No email on this case" : "No emails found"
-            }
-            description={
-              filter === "ALL"
-                ? "A query normally starts from an email, so this is unexpected."
-                : `There are no ${filter === EMAIL_DIRECTION.INBOUND ? "received" : "sent"} emails in this thread.`
-            }
-          />
+          <ThreadEmptyState filter={filter} />
         ) : (
           <>
             {previous.length > 0 && !showPrevious && (
-              <button
-                type="button"
+              <ShowPreviousButton
+                count={previous.length}
                 onClick={() => setShowPrevious(true)}
-                className="w-full rounded-2xl border border-slate-200/70 bg-slate-50 hover:bg-slate-100 py-2 text-[12.5px] font-bold text-slate-500 transition-all cursor-pointer"
-              >
-                Show {previous.length} previous{" "}
-                {previous.length === 1 ? "message" : "messages"}
-              </button>
+              />
             )}
 
-            {visiblePrevious.map((message) =>
-              expanded.has(message.messageId) ? (
-                <ThreadMessage
-                  key={message.messageId}
-                  message={message}
-                  isFilteredView={filter !== "ALL"}
-                  onCollapse={() => toggle(message.messageId)}
-                />
-              ) : (
-                <CollapsedMessage
-                  key={message.messageId}
-                  message={message}
-                  onExpand={() => toggle(message.messageId)}
-                />
-              ),
-            )}
+            {visiblePrevious.map((message) => (
+              <PreviousMessage
+                key={message.messageId}
+                message={message}
+                isFilteredView={isFilteredView}
+                isExpanded={expanded.has(message.messageId)}
+                onToggle={() => toggle(message.messageId)}
+              />
+            ))}
 
             {/* The newest message is what the reader almost always wants. */}
             {latest && (
               <ThreadMessage
                 key={latest.messageId}
                 message={latest}
-                isFilteredView={filter !== "ALL"}
+                isFilteredView={isFilteredView}
               />
             )}
           </>
@@ -163,7 +204,7 @@ function CollapsedMessage({ message, onExpand }) {
       type="button"
       onClick={onExpand}
       aria-expanded={false}
-      className="w-full flex items-center gap-3 rounded-2xl border border-slate-200/70 bg-white hover:bg-slate-50 hover:border-slate-300 px-4 py-2.5 text-left transition-all cursor-pointer"
+      className="w-full flex items-center gap-3 rounded-2xl border border-slate-200/70 bg-white hover:bg-slate-50 hover:border-slate-300 px-4 py-2.5 text-left transition-colors cursor-pointer"
     >
       <span
         className={cn(
@@ -259,7 +300,9 @@ function ThreadMessage({ message, isFilteredView, onCollapse }) {
             </span>
           </div>
           <div className="flex gap-2 items-start">
-            <span className="font-extrabold shrink-0 w-8 text-slate-400">To</span>
+            <span className="font-extrabold shrink-0 w-8 text-slate-400">
+              To
+            </span>
             <span className="break-all font-semibold text-slate-600">
               {message.to.join(", ")}
             </span>

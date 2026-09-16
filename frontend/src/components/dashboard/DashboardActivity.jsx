@@ -109,7 +109,7 @@ export function DashboardActivity({ auditEvents = [] }) {
                     <EventIcon className="h-4.5 w-4.5" strokeWidth={2} />
                   </div>
 
-                  <div className="flex-1 bg-slate-50/60 rounded-2xl border border-slate-100 p-3 shadow-2xs hover:shadow-xs hover:border-blue-200 transition-all">
+                  <div className="flex-1 bg-slate-50/60 rounded-2xl border border-slate-100 p-3 shadow-2xs hover:shadow-xs hover:border-blue-200 transition-[border-color,box-shadow]">
                     <div className="flex items-center justify-between gap-2">
                       <span className="font-heading text-[12.5px] font-black text-purple-700">
                         {event.queryId}

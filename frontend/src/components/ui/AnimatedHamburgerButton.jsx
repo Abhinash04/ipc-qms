@@ -1,4 +1,4 @@
-import { MotionConfig, motion } from "framer-motion";
+import { MotionConfig, m } from "framer-motion";
 
 export const AnimatedHamburgerButton = ({ active, setActive, size = "sm", className = "" }) => {
   const isLg = size === "lg";
@@ -9,7 +9,7 @@ export const AnimatedHamburgerButton = ({ active, setActive, size = "sm", classN
         ease: "easeInOut",
       }}
     >
-      <motion.button
+      <m.button
         initial={false}
         animate={active ? "open" : "closed"}
         onClick={() => setActive((pv) => !pv)}
@@ -19,17 +19,17 @@ export const AnimatedHamburgerButton = ({ active, setActive, size = "sm", classN
           isLg ? "h-20 w-20" : "h-10 w-10"
         } ${className}`}
       >
-        <motion.span
+        <m.span
           variants={isLg ? VARIANTS_LG.top : VARIANTS_SM.top}
           className={`absolute bg-ink dark:bg-on-dark ${isLg ? "h-1 w-10" : "h-0.5 w-5"}`}
           style={{ y: "-50%", left: "50%", x: "-50%", top: "35%" }}
         />
-        <motion.span
+        <m.span
           variants={isLg ? VARIANTS_LG.middle : VARIANTS_SM.middle}
           className={`absolute bg-ink dark:bg-on-dark ${isLg ? "h-1 w-10" : "h-0.5 w-5"}`}
           style={{ left: "50%", x: "-50%", top: "50%", y: "-50%" }}
         />
-        <motion.span
+        <m.span
           variants={isLg ? VARIANTS_LG.bottom : VARIANTS_SM.bottom}
           className={`absolute bg-ink dark:bg-on-dark ${isLg ? "h-1 w-5" : "h-0.5 w-2.5"}`}
           style={{
@@ -39,7 +39,7 @@ export const AnimatedHamburgerButton = ({ active, setActive, size = "sm", classN
             left: isLg ? "calc(50% + 10px)" : "calc(50% + 5px)",
           }}
         />
-      </motion.button>
+      </m.button>
     </MotionConfig>
   );
 };

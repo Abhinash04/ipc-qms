@@ -1,4 +1,4 @@
-import { motion } from "framer-motion";
+import { m } from "framer-motion";
 import {
   ShieldCheck,
   Sparkles,
@@ -14,7 +14,7 @@ import {
 export function HeroBannerCard() {
   return (
     <div className="relative overflow-hidden rounded-3xl sm:rounded-[30px] border border-white/90 bg-linear-to-r from-white/95 via-slate-50/90 to-blue-50/85 p-5 sm:p-7 shadow-[0_12px_36px_rgba(37,99,235,0.08)] backdrop-blur-xl mb-6 group">
-      <motion.div
+      <m.div
         animate={{
           scale: [1, 1.2, 1],
           opacity: [0.3, 0.5, 0.3],
@@ -22,7 +22,7 @@ export function HeroBannerCard() {
         transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }}
         className="pointer-events-none absolute -right-16 -top-16 h-72 w-72 rounded-full bg-indigo-500/20 blur-3xl"
       />
-      <motion.div
+      <m.div
         animate={{
           scale: [1.2, 1, 1.2],
           opacity: [0.2, 0.4, 0.2],
@@ -68,14 +68,14 @@ export function HeroBannerCard() {
 
         <div className="shrink-0 pt-3 lg:pt-0 self-center lg:self-auto w-full lg:w-auto">
           <div className="relative flex flex-col sm:flex-row items-center justify-center p-5 sm:p-7 rounded-3xl sm:rounded-4xl bg-linear-to-br from-white/80 via-blue-50/70 to-indigo-50/80 border border-white/90 shadow-xl backdrop-blur-2xl">
-            <motion.div
+            <m.div
               animate={{ rotate: 360 }}
               transition={{ duration: 15, repeat: Infinity, ease: "linear" }}
               className="pointer-events-none absolute -inset-1 rounded-[34px] bg-linear-to-r from-blue-500/20 via-indigo-500/30 to-purple-500/20 blur-md"
             />
 
             <div className="relative z-10 flex items-center gap-5">
-              <motion.div
+              <m.div
                 animate={{ y: [0, -8, 0] }}
                 transition={{
                   duration: 3.5,
@@ -90,7 +90,7 @@ export function HeroBannerCard() {
                 />
 
                 {/* Pulsing Signal Rays around Envelope */}
-                <motion.span
+                <m.span
                   animate={{ scale: [1, 1.4, 1], opacity: [0.8, 0, 0.8] }}
                   transition={{
                     duration: 2,
@@ -100,7 +100,7 @@ export function HeroBannerCard() {
                   className="absolute inset-0 rounded-3xl border-2 border-cyan-400"
                 />
 
-                <motion.div
+                <m.div
                   animate={{ scale: [0.9, 1.1, 0.9] }}
                   transition={{
                     duration: 2.5,
@@ -110,8 +110,8 @@ export function HeroBannerCard() {
                   className="absolute -top-2.5 -right-2.5 flex h-7 w-7 items-center justify-center rounded-full bg-emerald-500 text-white shadow-md border-2 border-white"
                 >
                   <CheckCircle className="h-4 w-4" strokeWidth={2.8} />
-                </motion.div>
-              </motion.div>
+                </m.div>
+              </m.div>
 
               <div className="space-y-1.5 min-w-0 flex-1 text-center sm:text-left mt-3 sm:mt-0">
                 <div className="flex items-center justify-center sm:justify-start gap-2">

@@ -121,7 +121,7 @@ export function AiSummaryCard({ summary: initialSummary, query, onSummaryUpdated
         <div className="flex items-center gap-2">
           <button
             type="button"
-            className="inline-flex items-center gap-1.5 text-[12px] font-bold text-slate-500 hover:text-purple-700 bg-white hover:bg-purple-50 px-3 py-1.5 rounded-xl border border-slate-200/80 transition-all cursor-pointer disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 text-[12px] font-bold text-slate-500 hover:text-purple-700 bg-white hover:bg-purple-50 px-3 py-1.5 rounded-xl border border-slate-200/80 transition-colors cursor-pointer disabled:opacity-50"
             onClick={handleGenerateAiSummary}
             disabled={loading}
           >

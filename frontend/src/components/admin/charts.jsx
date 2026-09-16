@@ -41,11 +41,12 @@ export function StatusDonut({ data, title, emptyText = 'No data yet' }) {
 
   // Cumulative start angle per slice, computed up front rather than mutated
   // during the render pass.
-  const starts = data.reduce((acc) => {
-    const previous = acc.length ? acc[acc.length - 1] : 0;
-    const previousFraction = acc.length ? data[acc.length - 1].value / total : 0;
-    return [...acc, previous + previousFraction * circumference];
-  }, []);
+  const starts = [];
+  let runningLength = 0;
+  for (const slice of data) {
+    starts.push(runningLength);
+    runningLength += (slice.value / total) * circumference;
+  }
 
   return (
     <figure className="m-0">

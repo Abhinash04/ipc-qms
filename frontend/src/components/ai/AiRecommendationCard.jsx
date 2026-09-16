@@ -78,7 +78,7 @@ export function AiRecommendationCard({ query, onAssign, currentAssigneeId, varia
 
         <button
           type="button"
-          className="inline-flex items-center gap-1.5 text-[12px] font-bold text-slate-500 hover:text-purple-700 bg-white hover:bg-purple-50 px-3 py-1.5 rounded-xl border border-slate-200/80 transition-all cursor-pointer disabled:opacity-50"
+          className="inline-flex items-center gap-1.5 text-[12px] font-bold text-slate-500 hover:text-purple-700 bg-white hover:bg-purple-50 px-3 py-1.5 rounded-xl border border-slate-200/80 transition-colors cursor-pointer disabled:opacity-50"
           onClick={reanalyse}
           disabled={loading}
         >
@@ -105,7 +105,7 @@ export function AiRecommendationCard({ query, onAssign, currentAssigneeId, varia
               return (
                 <div
                   key={rec.userId}
-                  className={`rounded-2xl border p-4 transition-all shadow-2xs ${
+                  className={`rounded-2xl border p-4 transition-[background-color,border-color,box-shadow] shadow-2xs ${
                     isAssigned
                       ? 'border-emerald-300 bg-emerald-50/60'
                       : isRank1
@@ -130,7 +130,7 @@ export function AiRecommendationCard({ query, onAssign, currentAssigneeId, varia
                         type="button"
                         onClick={() => onAssign(rec.userId)} 
                         disabled={isAssigned}
-                        className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[12px] font-bold transition-all cursor-pointer disabled:opacity-70 disabled:cursor-not-allowed ${
+                        className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[12px] font-bold transition-colors cursor-pointer disabled:opacity-70 disabled:cursor-not-allowed ${
                           isAssigned
                             ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
                             : isRank1

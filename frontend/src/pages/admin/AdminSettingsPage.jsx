@@ -18,17 +18,22 @@ import { useRoutePaths } from '@/hooks/useRoutePaths';
  * that writes nowhere would be worse than showing the truth.
  */
 
-function Row({ label, value, tone = 'neutral', hint }) {
-  const toneClass =
-    tone === 'warn' ? 'text-amber-800' : tone === 'good' ? 'text-emerald-800' : 'text-slate-800';
+function toneClassFor(tone) {
+  if (tone === 'warn') return 'text-amber-800';
+  if (tone === 'good') return 'text-emerald-800';
+  return 'text-slate-800';
+}
 
+function Row({ label, value, tone = 'neutral', hint }) {
   return (
     <div className="flex items-start justify-between gap-4 border-b border-slate-100 py-2.5 last:border-b-0">
       <div className="min-w-0">
         <p className="m-0 text-[13px] font-bold text-slate-700">{label}</p>
         {hint && <p className="m-0 mt-0.5 text-[11.5px] text-slate-400">{hint}</p>}
       </div>
-      <p className={`m-0 shrink-0 text-right text-[13px] font-black ${toneClass}`}>{value}</p>
+      <p className={`m-0 shrink-0 text-right text-[13px] font-black ${toneClassFor(tone)}`}>
+        {value}
+      </p>
     </div>
   );
 }
@@ -45,14 +50,120 @@ function Panel({ title, icon: Icon, children }) {
   );
 }
 
+function ServicePanel({ health }) {
+  return (
+    <Panel title="Service" icon={CheckCircle2}>
+      <Row
+        label="API status"
+        value={health?.status || 'unreachable'}
+        tone={health ? 'good' : 'warn'}
+      />
+      <Row label="Service" value={health?.service || '—'} />
+    </Panel>
+  );
+}
+
+function AuditPanel({ audit }) {
+  const failures = audit?.byResult?.failure ?? 0;
+  const denied = audit?.byResult?.denied ?? 0;
+
+  return (
+    <Panel title="Audit trail" icon={ShieldCheck}>
+      <Row
+        label="Storage"
+        value={audit?.backend || 'unknown'}
+        tone={audit?.durable ? 'good' : 'warn'}
+        hint={
+          audit?.durable ? 'Persisted to MongoDB' : 'In-memory — records are lost on restart'
+        }
+      />
+      <Row label="Events recorded" value={audit?.total ?? 0} />
+      <Row label="Failures" value={failures} tone={failures ? 'warn' : 'neutral'} />
+      <Row label="Denied requests" value={denied} tone={denied ? 'warn' : 'neutral'} />
+    </Panel>
+  );
+}
+
+function EmailPanel({ config }) {
+  const isRealTransport = config?.transport === 'gmail';
+
+  return (
+    <Panel title="Email" icon={CheckCircle2}>
+      <Row
+        label="Transport"
+        value={config?.transport || '—'}
+        tone={isRealTransport ? 'warn' : 'neutral'}
+        hint={isRealTransport ? 'Real mail leaves this machine' : 'Nothing leaves this machine'}
+      />
+      <Row label="Query recipient" value={config?.ipcQueryEmail || '—'} />
+      {(config?.participants || []).map((participant) => (
+        <Row
+          key={participant.role}
+          label={participant.name}
+          value={participant.canSendReal ? 'can send' : 'mock only'}
+          tone={participant.canSendReal ? 'good' : 'neutral'}
+          hint={participant.email}
+        />
+      ))}
+    </Panel>
+  );
+}
+
+const KNOWN_LIMITATIONS = [
+  {
+    label: 'Case authorization',
+    value: 'role-level only',
+    hint: 'Any signed-in user can read any attachment by id — Query Case ownership is not yet server-side',
+  },
+  {
+    label: 'Query case storage',
+    value: 'browser',
+    hint: "Cases live in each browser's IndexedDB, so case counts are per-device",
+  },
+  {
+    label: 'Session revocation',
+    value: 'not supported',
+    hint: 'Logout clears the cookie; a copied token remains valid until it expires',
+  },
+];
+
+function LimitationsPanel() {
+  return (
+    <Panel title="Known limitations" icon={AlertTriangle}>
+      {KNOWN_LIMITATIONS.map((limitation) => (
+        <Row
+          key={limitation.label}
+          label={limitation.label}
+          value={limitation.value}
+          tone="warn"
+          hint={limitation.hint}
+        />
+      ))}
+    </Panel>
+  );
+}
+
+function SettingsSkeleton() {
+  return (
+    <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+      {Array.from({ length: 4 }).map((_, i) => (
+        <Skeleton key={i} className="h-44 w-full rounded-3xl" />
+      ))}
+    </div>
+  );
+}
+
 export function AdminSettingsPage() {
   const paths = useRoutePaths();
 
   const health = useQuery({ queryKey: ['health'], queryFn: fetchHealth, retry: false });
   const config = useQuery({ queryKey: ['emailConfig'], queryFn: fetchEmailConfig, retry: false });
-  const summary = useQuery({ queryKey: ['audit', 'summary'], queryFn: () => fetchAuditSummary(), retry: false });
+  const summary = useQuery({
+    queryKey: ['audit', 'summary'],
+    queryFn: () => fetchAuditSummary(),
+    retry: false,
+  });
 
-  const audit = summary.data?.overall;
   const loading = health.isLoading || config.isLoading || summary.isLoading;
 
   return (
@@ -76,69 +187,13 @@ export function AdminSettingsPage() {
       />
 
       {loading ? (
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <Skeleton key={i} className="h-44 w-full rounded-3xl" />
-          ))}
-        </div>
+        <SettingsSkeleton />
       ) : (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-          <Panel title="Service" icon={CheckCircle2}>
-            <Row label="API status" value={health.data?.status || 'unreachable'} tone={health.data ? 'good' : 'warn'} />
-            <Row label="Service" value={health.data?.service || '—'} />
-          </Panel>
-
-          <Panel title="Audit trail" icon={ShieldCheck}>
-            <Row
-              label="Storage"
-              value={audit?.backend || 'unknown'}
-              tone={audit?.durable ? 'good' : 'warn'}
-              hint={audit?.durable ? 'Persisted to MongoDB' : 'In-memory — records are lost on restart'}
-            />
-            <Row label="Events recorded" value={audit?.total ?? 0} />
-            <Row label="Failures" value={audit?.byResult?.failure ?? 0} tone={audit?.byResult?.failure ? 'warn' : 'neutral'} />
-            <Row label="Denied requests" value={audit?.byResult?.denied ?? 0} tone={audit?.byResult?.denied ? 'warn' : 'neutral'} />
-          </Panel>
-
-          <Panel title="Email" icon={CheckCircle2}>
-            <Row
-              label="Transport"
-              value={config.data?.transport || '—'}
-              tone={config.data?.transport === 'gmail' ? 'warn' : 'neutral'}
-              hint={config.data?.transport === 'gmail' ? 'Real mail leaves this machine' : 'Nothing leaves this machine'}
-            />
-            <Row label="Query recipient" value={config.data?.ipcQueryEmail || '—'} />
-            {(config.data?.participants || []).map((participant) => (
-              <Row
-                key={participant.role}
-                label={participant.name}
-                value={participant.canSendReal ? 'can send' : 'mock only'}
-                tone={participant.canSendReal ? 'good' : 'neutral'}
-                hint={participant.email}
-              />
-            ))}
-          </Panel>
-
-          <Panel title="Known limitations" icon={AlertTriangle}>
-            <Row
-              label="Case authorization"
-              value="role-level only"
-              tone="warn"
-              hint="Any signed-in user can read any attachment by id — Query Case ownership is not yet server-side"
-            />
-            <Row
-              label="Query case storage"
-              value="browser"
-              tone="warn"
-              hint="Cases live in each browser's IndexedDB, so case counts are per-device"
-            />
-            <Row
-              label="Session revocation"
-              value="not supported"
-              tone="warn"
-              hint="Logout clears the cookie; a copied token remains valid until it expires"
-            />
-          </Panel>
+          <ServicePanel health={health.data} />
+          <AuditPanel audit={summary.data?.overall} />
+          <EmailPanel config={config.data} />
+          <LimitationsPanel />
         </div>
       )}
     </div>
