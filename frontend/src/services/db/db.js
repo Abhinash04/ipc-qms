@@ -1,4 +1,5 @@
 import Dexie from 'dexie';
+import { SEED_VERSION } from '@/constants/mockDomain';
 
 export const db = new Dexie('qms');
 
@@ -18,6 +19,12 @@ db.version(2).stores({
 });
 
 export const COUNTER_KEY = 'counters';
+export const SEED_VERSION_KEY = 'seedVersion';
+
+/** null for a database written before versioning, which counts as stale. */
+export async function readSeedVersion() {
+  return (await db.meta.get(SEED_VERSION_KEY))?.value ?? null;
+}
 
 const ALL_TABLES = () => [
   db.queries,
@@ -68,6 +75,7 @@ export async function replaceAll(state) {
       db.emailMessages.bulkAdd(state.emailMessages || []),
       db.emailThreads.bulkAdd(state.emailThreads || []),
       db.meta.put({ key: COUNTER_KEY, value: state.counters }),
+      db.meta.put({ key: SEED_VERSION_KEY, value: SEED_VERSION }),
     ]);
   });
 }
