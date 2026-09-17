@@ -8,6 +8,7 @@ import attachmentRoutes from './attachmentRoutes.js';
 import nicRoutes from './nicRoutes.js';
 import auditRoutes from './auditRoutes.js';
 import pullbackRoutes from './pullbackRoutes.js';
+import queryRoutes from './queryRoutes.js';
 
 const router = express.Router();
 
@@ -23,6 +24,7 @@ router.use(attachmentRoutes);
 router.use(nicRoutes);
 router.use(auditRoutes);
 router.use(pullbackRoutes);
+router.use(queryRoutes);
 
 export default router;
 

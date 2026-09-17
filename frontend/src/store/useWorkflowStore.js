@@ -12,7 +12,7 @@ import { deriveBusinessStatus, canPerform, WORKFLOW_ACTION } from '@/constants/w
 import { ROLES, ROLE_LABELS } from '@/constants/roles';
 import { MOCK_USERS, findUserById, findUserByEmail } from '@/constants/mockUsers';
 import { createEmailMessage, EMAIL_DIRECTION, EMAIL_TYPE } from '@/constants/emailModel';
-import { buildSeedState, SEED_VERSION } from '@/constants/mockDomain';
+import { buildSeedState } from '@/constants/mockDomain';
 import { summarise, recommendAssignee, draftResponse } from '@/services/ai/mockAiService';
 // Dexie/IndexedDB loads on first persistence call, keeping it (and its ~25 kB
 // gzip) out of the entry chunk that the login page downloads.
@@ -1470,12 +1470,8 @@ export const useWorkflowStore = create((set, get) => ({
   hydrate: async () => {
 if (get().hydrated) return;
 try {
-  const { isEmpty, replaceAll, loadAll, readSeedVersion } = await dbModule();
-  // A database written by an older seed is re-seeded rather than served: it
-  // holds cases that no longer exist, which surfaces as dashboard counts that
-  // match nothing in the app.
-  const stale = (await readSeedVersion()) !== SEED_VERSION;
-  if (stale || (await isEmpty())) {
+  const { isEmpty, replaceAll, loadAll } = await dbModule();
+  if (await isEmpty()) {
     const seed = buildSeedState();
     await replaceAll(seed);
     set({ ...seed, hydrated: true, persistenceError: null });

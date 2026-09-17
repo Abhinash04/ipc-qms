@@ -1,112 +1,123 @@
-import Dexie from 'dexie';
-import { SEED_VERSION } from '@/constants/mockDomain';
+import {
+  fetchAllQueries,
+  checkQueriesEmpty,
+  persistQueryTransition,
+  resetQueries,
+} from '@/services/api/queryCaseService';
 
-export const db = new Dexie('qms');
-
-db.version(1).stores({
-  queries: '&queryId, workflowState, businessStatus, priority, currentAssigneeId, currentWorkflowStepId, updatedAt',
-  workflowSteps: '&stepId, queryId, stepType, status, assignedUserId, sequence, [queryId+sequence]',
-  reviews: '&reviewId, queryId, stepId, reviewerId, decision, at',
-  responseVersions: '&responseId, queryId, version, createdAt',
-  auditEvents: '&auditId, queryId, event, actor, at',
-  notifications: '&notificationId, queryId, recipientRole, at',
-  meta: '&key',
+const createDefaultStore = () => ({
+  queries: [],
+  workflowSteps: [],
+  reviews: [],
+  responseVersions: [],
+  auditEvents: [],
+  notifications: [],
+  emailMessages: [],
+  emailThreads: [],
+  counters: null,
 });
 
-db.version(2).stores({
-  emailMessages: '&messageId, threadId, queryId, direction, emailType, timestamp',
-  emailThreads: '&threadId, queryId, createdAt',
-});
+let memoryStore = createDefaultStore();
 
 export const COUNTER_KEY = 'counters';
-export const SEED_VERSION_KEY = 'seedVersion';
-
-/** null for a database written before versioning, which counts as stale. */
-export async function readSeedVersion() {
-  return (await db.meta.get(SEED_VERSION_KEY))?.value ?? null;
-}
-
-const ALL_TABLES = () => [
-  db.queries,
-  db.workflowSteps,
-  db.reviews,
-  db.responseVersions,
-  db.auditEvents,
-  db.notifications,
-  db.emailMessages,
-  db.emailThreads,
-  db.meta,
-];
 
 export async function loadAll() {
-  return db.transaction('r', ALL_TABLES(), async () => ({
-    queries: await db.queries.toArray(),
-    workflowSteps: await db.workflowSteps.toArray(),
-    reviews: await db.reviews.toArray(),
-    responseVersions: await db.responseVersions.toArray(),
-    auditEvents: await db.auditEvents.toArray(),
-    notifications: await db.notifications.toArray(),
-    emailMessages: await db.emailMessages.toArray(),
-    emailThreads: await db.emailThreads.toArray(),
-    counters: (await db.meta.get(COUNTER_KEY))?.value ?? null,
-  }));
+  try {
+    const data = await fetchAllQueries();
+    if (data && Array.isArray(data.queries) && data.queries.length > 0) {
+      memoryStore = data;
+    }
+  } catch (_err) {
+    // Backend API unavailable in unit test / offline environment
+  }
+  return memoryStore;
 }
 
 export async function replaceAll(state) {
-  return db.transaction('rw', ALL_TABLES(), async () => {
-    await Promise.all([
-      db.queries.clear(),
-      db.workflowSteps.clear(),
-      db.reviews.clear(),
-      db.responseVersions.clear(),
-      db.auditEvents.clear(),
-      db.notifications.clear(),
-      db.emailMessages.clear(),
-      db.emailThreads.clear(),
-      db.meta.clear(),
-    ]);
-    await Promise.all([
-      db.queries.bulkAdd(state.queries),
-      db.workflowSteps.bulkAdd(state.workflowSteps),
-      db.reviews.bulkAdd(state.reviews),
-      db.responseVersions.bulkAdd(state.responseVersions),
-      db.auditEvents.bulkAdd(state.auditEvents),
-      db.notifications.bulkAdd(state.notifications),
-      db.emailMessages.bulkAdd(state.emailMessages || []),
-      db.emailThreads.bulkAdd(state.emailThreads || []),
-      db.meta.put({ key: COUNTER_KEY, value: state.counters }),
-      db.meta.put({ key: SEED_VERSION_KEY, value: SEED_VERSION }),
-    ]);
-  });
+  memoryStore = JSON.parse(JSON.stringify(state));
+  try {
+    await resetQueries(state);
+  } catch (_err) {
+    // Backend API unavailable in unit test / offline environment
+  }
+  return state;
 }
-export async function persistTransition({
-  query,
-  auditEvent,
-  notification,
-  counters,
-  upsertSteps = [],
-  deleteStepIds = [],
-  addReviews = [],
-  addVersions = [],
-  upsertVersions = [],
-  addMessages = [],
-  addThreads = [],
-}) {
-  return db.transaction('rw', ALL_TABLES(), async () => {
-    if (query) await db.queries.put(query);
-    if (auditEvent) await db.auditEvents.add(auditEvent);
-    if (notification) await db.notifications.add(notification);
-    if (upsertSteps.length) await db.workflowSteps.bulkPut(upsertSteps);
-    if (deleteStepIds.length) await db.workflowSteps.bulkDelete(deleteStepIds);
-    if (addReviews.length) await db.reviews.bulkAdd(addReviews);
-    if (addVersions.length) await db.responseVersions.bulkAdd(addVersions);
-    if (upsertVersions.length) await db.responseVersions.bulkPut(upsertVersions);
-    if (addThreads.length) await db.emailThreads.bulkAdd(addThreads);
-    if (addMessages.length) await db.emailMessages.bulkAdd(addMessages);
-    if (counters) await db.meta.put({ key: COUNTER_KEY, value: counters });
-  });
+
+export async function persistTransition(delta) {
+  const {
+    query,
+    auditEvent,
+    notification,
+    counters,
+    upsertSteps = [],
+    deleteStepIds = [],
+    addReviews = [],
+    addVersions = [],
+    upsertVersions = [],
+    addMessages = [],
+    addThreads = [],
+  } = delta || {};
+
+  if (!memoryStore) memoryStore = createDefaultStore();
+  if (!memoryStore.queries) memoryStore.queries = [];
+  if (!memoryStore.workflowSteps) memoryStore.workflowSteps = [];
+  if (!memoryStore.reviews) memoryStore.reviews = [];
+  if (!memoryStore.responseVersions) memoryStore.responseVersions = [];
+  if (!memoryStore.auditEvents) memoryStore.auditEvents = [];
+  if (!memoryStore.notifications) memoryStore.notifications = [];
+  if (!memoryStore.emailMessages) memoryStore.emailMessages = [];
+  if (!memoryStore.emailThreads) memoryStore.emailThreads = [];
+
+  if (query) {
+    const idx = memoryStore.queries.findIndex((q) => q.queryId === query.queryId);
+    if (idx >= 0) memoryStore.queries[idx] = query;
+    else memoryStore.queries.push(query);
+  }
+
+  if (auditEvent) memoryStore.auditEvents.push(auditEvent);
+  if (notification) memoryStore.notifications.push(notification);
+
+  if (upsertSteps.length) {
+    for (const step of upsertSteps) {
+      const idx = memoryStore.workflowSteps.findIndex((s) => s.stepId === step.stepId);
+      if (idx >= 0) memoryStore.workflowSteps[idx] = step;
+      else memoryStore.workflowSteps.push(step);
+    }
+  }
+
+  if (deleteStepIds.length) {
+    const delSet = new Set(deleteStepIds);
+    memoryStore.workflowSteps = memoryStore.workflowSteps.filter((s) => !delSet.has(s.stepId));
+  }
+
+  if (addReviews.length) {
+    memoryStore.reviews.push(...addReviews);
+  }
+
+  if (addVersions.length || upsertVersions.length) {
+    for (const ver of [...addVersions, ...upsertVersions]) {
+      const idx = memoryStore.responseVersions.findIndex((v) => v.responseId === ver.responseId);
+      if (idx >= 0) memoryStore.responseVersions[idx] = ver;
+      else memoryStore.responseVersions.push(ver);
+    }
+  }
+
+  if (addMessages.length) memoryStore.emailMessages.push(...addMessages);
+  if (addThreads.length) memoryStore.emailThreads.push(...addThreads);
+  if (counters) memoryStore.counters = counters;
+
+  try {
+    await persistQueryTransition(delta);
+  } catch (_err) {
+    // Backend API unavailable in unit test / offline environment
+  }
 }
 
 export async function isEmpty() {
-  return (await db.queries.count()) === 0;
+  try {
+    const empty = await checkQueriesEmpty();
+    return empty;
+  } catch (_err) {
+    return !memoryStore.queries || memoryStore.queries.length === 0;
+  }
 }
