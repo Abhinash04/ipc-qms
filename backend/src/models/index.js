@@ -1,4 +1,5 @@
 export { AuditEvent } from './AuditEvent.js';
+export { WorkflowAuditEvent } from './WorkflowAuditEvent.js';
 export { MailboxMessage, Counter } from './MailboxMessage.js';
 export { User } from './User.js';
 export { QueryCase } from './QueryCase.js';

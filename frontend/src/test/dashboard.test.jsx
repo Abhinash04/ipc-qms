@@ -75,8 +75,8 @@ function visibleQueryIds() {
  * combined textContent would run the two together ("2" + "2 queries").
  */
 function tileCount(label) {
-  const subtext = within(tile(label)).getByText(/^\d+ quer(?:y|ies)$/);
-  return Number(subtext.textContent.match(/^\d+/)[0]);
+  const el = tile(label).querySelector('[data-slot="stat-value"]');
+  return Number(el.textContent.trim());
 }
 
 /** Put a query directly into the store in a chosen state. */

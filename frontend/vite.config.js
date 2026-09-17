@@ -12,7 +12,7 @@ const PRELOAD_FONTS = [
   /inter-latin-600-normal/,
   /inter-latin-700-normal/,
   /outfit-latin-700-normal/,
-  /outfit-latin-800-normal/,
+  /outfit-latin-900-normal/,
 ]
 
 function preloadKeyFonts() {

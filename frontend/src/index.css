@@ -90,14 +90,129 @@
   --color-status-orange-bg: #fff7ed;
   --color-status-orange-line: #fed7aa;
   --color-status-orange-fg: #ea580c;
+
+  /* KPI tone ramps — one definition per hue, shared by the dashboard tiles and
+     the admin console so a colour is not re-invented per surface.
+
+     Six roles per tone:
+       tint      card surface (the top stop of the card gradient)
+       line      card border
+       figure    the headline number; must clear 4.5:1 against `tint`
+       ink       supporting text
+       chip      icon badge gradient, from
+       chip-to   icon badge gradient, to */
+  --color-tone-track: rgba(15, 23, 42, 0.1);
+  /* slate-500 fails on every light stop (3.3-3.9:1); slate-600 clears 5.3:1. */
+  --color-tone-caption: #475569;
+
+  --color-tone-blue-tint: #dbeafe;
+  --color-tone-blue-line: #93c5fd;
+  --color-tone-blue-figure: #1d4ed8;
+  --color-tone-blue-ink: #1d4ed8;
+  --color-tone-blue-chip: #2563eb;
+  --color-tone-blue-chip-to: #4f46e5;
+  --color-tone-blue-surface: #dbeafe;
+  --color-tone-blue-surface-to: #c3dafe;
+
+  /* figure was #d97706 (amber-600) — 3.1:1 on the tint, below the 4.5:1 floor */
+  --color-tone-amber-tint: #fef3c7;
+  --color-tone-amber-line: #fcd34d;
+  --color-tone-amber-figure: #b45309;
+  --color-tone-amber-ink: #92400e;
+  --color-tone-amber-chip: #f59e0b;
+  --color-tone-amber-chip-to: #f97316;
+  --color-tone-amber-surface: #fef3c7;
+  --color-tone-amber-surface-to: #fde8a8;
+
+  /* figure was #0284c7 (sky-600) — 3.4:1 on the tint */
+  --color-tone-sky-tint: #e0f2fe;
+  --color-tone-sky-line: #7dd3fc;
+  --color-tone-sky-figure: #0369a1;
+  --color-tone-sky-ink: #075985;
+  --color-tone-sky-chip: #0ea5e9;
+  --color-tone-sky-chip-to: #3b82f6;
+  --color-tone-sky-surface: #e0f2fe;
+  --color-tone-sky-surface-to: #c7e8fd;
+
+  --color-tone-purple-tint: #f3e8ff;
+  --color-tone-purple-line: #d8b4fe;
+  --color-tone-purple-figure: #7e22ce;
+  --color-tone-purple-ink: #6b21a8;
+  --color-tone-purple-chip: #9333ea;
+  --color-tone-purple-chip-to: #4f46e5;
+  --color-tone-purple-surface: #f3e8ff;
+  --color-tone-purple-surface-to: #e6d4fe;
+
+  /* line was #fca5a5 — red-300 sitting in a rose ramp */
+  --color-tone-rose-tint: #ffe4e6;
+  --color-tone-rose-line: #fda4af;
+  --color-tone-rose-figure: #be123c;
+  --color-tone-rose-ink: #9f1239;
+  --color-tone-rose-chip: #f43f5e;
+  --color-tone-rose-chip-to: #dc2626;
+  --color-tone-rose-surface: #ffe4e6;
+  --color-tone-rose-surface-to: #fecdd3;
+
+  --color-tone-emerald-tint: #d1fae5;
+  --color-tone-emerald-line: #6ee7b7;
+  --color-tone-emerald-figure: #047857;
+  --color-tone-emerald-ink: #065f46;
+  --color-tone-emerald-chip: #10b981;
+  --color-tone-emerald-chip-to: #0d9488;
+  --color-tone-emerald-surface: #d1fae5;
+  --color-tone-emerald-surface-to: #b4f2d2;
+
+  --color-tone-slate-tint: #f1f5f9;
+  --color-tone-slate-line: #cbd5e1;
+  --color-tone-slate-figure: #334155;
+  --color-tone-slate-ink: #334155;
+  --color-tone-slate-chip: #475569;
+  --color-tone-slate-chip-to: #1e293b;
+  --color-tone-slate-surface: #f1f5f9;
+  --color-tone-slate-surface-to: #e2e8f0;
 }
 
+/* One engraved surface across the whole app — the same certificate line work
+   the KPI cards carry, stepped down so the card stays the most worked surface
+   and the page the least:
+
+     card   7px pitch @ 0.55 alpha   (dashboardTones.js)
+     panel  9px pitch @ 0.34 alpha   (.engraved-panel below)
+     page  13px pitch @ 0.22 alpha   (here)
+
+   Tune the alpha to dial the whole system up or down at once. */
 body {
   margin: 0;
   color: var(--color-text);
-  background: linear-gradient(to top, #fff1eb 0%, #ace0f9 100%);
+  background-color: #ace0f9;
+  background-image:
+    repeating-linear-gradient(
+      -38deg,
+      rgba(255, 255, 255, 0.22) 0 1px,
+      rgba(255, 255, 255, 0) 1px 13px
+    ),
+    linear-gradient(to top, #fff1eb 0%, #ace0f9 100%);
   font-family: var(--font-sans);
   min-height: 100vh;
+}
+
+/* The sidebar and any other large light panel that should read as the same
+   stock as the page. Carries its own base gradient so it can be applied on its
+   own, replacing a bg-[linear-gradient(...)] utility. */
+.engraved-panel {
+  background-image:
+    repeating-radial-gradient(
+      circle at 104% -4%,
+      rgba(255, 255, 255, 0) 0 58px,
+      rgba(255, 255, 255, 0.5) 58px 59px,
+      rgba(255, 255, 255, 0) 59px 70px
+    ),
+    repeating-linear-gradient(
+      -38deg,
+      rgba(255, 255, 255, 0.34) 0 1px,
+      rgba(255, 255, 255, 0) 1px 9px
+    ),
+    linear-gradient(to top, #accbee 0%, #e7f0fd 100%);
 }
 
 ::-webkit-scrollbar {

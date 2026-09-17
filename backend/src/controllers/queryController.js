@@ -7,7 +7,7 @@ import {
   Notification,
   EmailMessage,
   EmailThread,
-  AuditEvent,
+  WorkflowAuditEvent,
   Counter,
 } from '../models/index.js';
 
@@ -36,7 +36,7 @@ async function loadAllQueries(req, res, next) {
       WorkflowStep.find({}).lean(),
       Review.find({}).lean(),
       ResponseVersion.find({}).lean(),
-      AuditEvent.find({}).lean(),
+      WorkflowAuditEvent.find({}).lean(),
       Notification.find({}).lean(),
       EmailMessage.find({}).lean(),
       EmailThread.find({}).lean(),
@@ -98,16 +98,23 @@ async function persistTransition(req, res, next) {
       );
     }
 
-    if (auditEvent && auditEvent.event) {
-      const eventRecord = {
-        action: auditEvent.event,
-        timestamp: auditEvent.at || new Date().toISOString(),
-        queryId: auditEvent.queryId || null,
-        actorType: 'USER',
-        actorRole: auditEvent.actor || null,
-        details: auditEvent.details || null,
-      };
-      ops.push(AuditEvent.create(eventRecord).catch(() => {}));
+    if (auditEvent && auditEvent.auditId && auditEvent.event) {
+      ops.push(
+        WorkflowAuditEvent.findOneAndUpdate(
+          { auditId: auditEvent.auditId },
+          {
+            $set: {
+              auditId: auditEvent.auditId,
+              queryId: auditEvent.queryId || null,
+              event: auditEvent.event,
+              actor: auditEvent.actor || null,
+              at: auditEvent.at || new Date().toISOString(),
+              details: auditEvent.details || null,
+            },
+          },
+          { upsert: true },
+        ),
+      );
     }
 
     if (notification && notification.notificationId) {
@@ -212,6 +219,7 @@ async function resetQueryState(req, res, next) {
       Review.deleteMany({}),
       ResponseVersion.deleteMany({}),
       Notification.deleteMany({}),
+      WorkflowAuditEvent.deleteMany({}),
       EmailMessage.deleteMany({}),
       EmailThread.deleteMany({}),
       Counter.deleteOne({ key: COUNTER_KEY }),
@@ -224,6 +232,7 @@ async function resetQueryState(req, res, next) {
         seed.reviews?.length ? Review.insertMany(seed.reviews) : null,
         seed.responseVersions?.length ? ResponseVersion.insertMany(seed.responseVersions) : null,
         seed.notifications?.length ? Notification.insertMany(seed.notifications) : null,
+        seed.auditEvents?.length ? WorkflowAuditEvent.insertMany(seed.auditEvents) : null,
         seed.emailMessages?.length ? EmailMessage.insertMany(seed.emailMessages) : null,
         seed.emailThreads?.length ? EmailThread.insertMany(seed.emailThreads) : null,
         seed.counters ? Counter.create({ key: COUNTER_KEY, value: seed.counters }) : null,

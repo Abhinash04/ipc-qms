@@ -10,108 +10,24 @@ import {
   visibleQueries,
 } from "@/constants/queryBuckets";
 import { getTimeBasedGreeting } from "@/utils/greeting";
+import { styleFor } from "@/components/dashboard/dashboardTones";
+import { caseTrend, volumeByDay } from "@/components/admin/adminStats";
 import { cn } from "@/utils/cn";
-
-const TONES = {
-  total: "blue",
-  open: "amber",
-  incoming: "blue",
-  assigned: "blue",
-  inProgress: "sky",
-  pendingAssignment: "amber",
-  awaitingAssignment: "amber",
-  awaitingFinalApproval: "purple",
-  awaitingReview: "amber",
-  drafting: "amber",
-  awaitingDispatch: "purple",
-  submitted: "purple",
-  returned: "rose",
-  returnedByMe: "rose",
-  closed: "emerald",
-  dispatched: "emerald",
-  approved: "emerald",
-  approvedByMe: "emerald",
-  completed: "emerald",
-};
-
-const TONE_STYLES = {
-  blue: {
-    cardBg: "linear-gradient(180deg, #dbeafe 0%, #ffffff 100%)",
-    cardBorder: "#93c5fd",
-    numColor: "#1d4ed8",
-    subtextColor: "text-blue-700",
-    badgeBg: "bg-blue-100 text-blue-800 border-blue-300",
-    iconBg:
-      "bg-gradient-to-tr from-blue-600 to-indigo-600 text-white shadow-blue-500/25",
-    accentColor: "blue",
-  },
-  amber: {
-    cardBg: "linear-gradient(180deg, #fef3c7 0%, #ffffff 100%)",
-    cardBorder: "#fde68a",
-    numColor: "#d97706",
-    subtextColor: "text-amber-700",
-    badgeBg: "bg-amber-100 text-amber-800 border-amber-300",
-    iconBg:
-      "bg-gradient-to-tr from-amber-500 to-orange-500 text-white shadow-amber-500/25",
-    accentColor: "amber",
-  },
-  sky: {
-    cardBg: "linear-gradient(180deg, #e0f2fe 0%, #ffffff 100%)",
-    cardBorder: "#7dd3fc",
-    numColor: "#0284c7",
-    subtextColor: "text-sky-700",
-    badgeBg: "bg-sky-100 text-sky-800 border-sky-300",
-    iconBg:
-      "bg-gradient-to-tr from-sky-500 to-blue-500 text-white shadow-sky-500/25",
-    accentColor: "sky",
-  },
-  purple: {
-    cardBg: "linear-gradient(180deg, #f3e8ff 0%, #ffffff 100%)",
-    cardBorder: "#d8b4fe",
-    numColor: "#9333ea",
-    subtextColor: "text-purple-700",
-    badgeBg: "bg-purple-100 text-purple-800 border-purple-300",
-    iconBg:
-      "bg-gradient-to-tr from-purple-600 to-indigo-600 text-white shadow-purple-500/25",
-    accentColor: "purple",
-  },
-  rose: {
-    cardBg: "linear-gradient(180deg, #ffe4e6 0%, #ffffff 100%)",
-    cardBorder: "#fca5a5",
-    numColor: "#e11d48",
-    subtextColor: "text-rose-700",
-    badgeBg: "bg-rose-100 text-rose-800 border-rose-300",
-    iconBg:
-      "bg-gradient-to-tr from-rose-500 to-red-600 text-white shadow-rose-500/25",
-    accentColor: "rose",
-  },
-  emerald: {
-    cardBg: "linear-gradient(180deg, #d1fae5 0%, #ffffff 100%)",
-    cardBorder: "#6ee7b7",
-    numColor: "#059669",
-    subtextColor: "text-emerald-700",
-    badgeBg: "bg-emerald-100 text-emerald-800 border-emerald-300",
-    iconBg:
-      "bg-gradient-to-tr from-emerald-500 to-teal-600 text-white shadow-emerald-500/25",
-    accentColor: "emerald",
-  },
-  slate: {
-    cardBg: "linear-gradient(180deg, #f1f5f9 0%, #ffffff 100%)",
-    cardBorder: "#cbd5e1",
-    numColor: "#334155",
-    subtextColor: "text-slate-700",
-    badgeBg: "bg-slate-100 text-slate-800 border-slate-300",
-    iconBg:
-      "bg-gradient-to-tr from-slate-600 to-slate-800 text-white shadow-slate-500/25",
-    accentColor: "slate",
-  },
-};
-
-const styleFor = (key) => TONE_STYLES[TONES[key]] || TONE_STYLES.slate;
 
 /** Stable empty defaults: one shared reference, so memo and dep arrays hold. */
 const NO_WORKFLOW_STEPS = [];
 const NO_REVIEWS = [];
+const NO_RECORDS = [];
+
+/**
+ * What the trend actually measures.
+ *
+ * A bucket is a filter over a query's CURRENT state, so "this bucket grew by 3"
+ * is not derivable — nothing here holds the history. What is derivable, and
+ * what caseTrend computes, is how many of the cases sitting in the bucket right
+ * now arrived in the last seven days against the seven before it.
+ */
+const TREND_LABEL = "arrivals, 7d vs prior 7d";
 
 export function BucketDashboard({
   role,
@@ -146,6 +62,26 @@ export function BucketDashboard({
     return map;
   }, [buckets, visible, ctx]);
 
+  const tileMetrics = useMemo(() => {
+    const total = visible.length;
+    const out = {};
+    for (const bucket of buckets) {
+      const records = recordsByKey[bucket.key] || NO_RECORDS;
+      const series = volumeByDay(records);
+      const { current, previous, delta } = caseTrend(records);
+      out[bucket.key] = {
+        // An aggregate bucket is always 100% of itself — a full bar says nothing.
+        share: bucket.aggregate || total === 0 ? null : records.length / total,
+        shareTotal: total,
+        // A flat line and a "No change" chip both assert a measurement that did
+        // not happen. Absent is the honest state.
+        series: series.some((d) => d.value > 0) ? series : null,
+        delta: current || previous ? delta : null,
+      };
+    }
+    return out;
+  }, [buckets, recordsByKey, visible.length]);
+
   const selected =
     buckets.find((b) => b.key === selectedKey) || buckets[0] || null;
   const rows = selected ? recordsByKey[selected.key] || [] : [];
@@ -179,6 +115,7 @@ export function BucketDashboard({
         {buckets.map((bucket) => {
           const count = recordsByKey[bucket.key]?.length ?? 0;
           const tone = styleFor(bucket.key);
+          const metrics = tileMetrics[bucket.key];
 
           return (
             <StatTile
@@ -189,7 +126,13 @@ export function BucketDashboard({
               icon={bucket.icon}
               selected={selected?.key === bucket.key}
               onClick={() => setSelectedKey(bucket.key)}
-              subtextMain={`${count} ${count === 1 ? "query" : "queries"}`}
+              delta={metrics?.delta}
+              higherIsWorse={bucket.higherIsWorse}
+              neutralTrend={Boolean(bucket.aggregate)}
+              comparisonLabel={TREND_LABEL}
+              share={metrics?.share}
+              shareTotal={metrics?.shareTotal}
+              series={metrics?.series}
               {...tone}
             />
           );

@@ -140,6 +140,7 @@ export const ROLE_BUCKETS = {
       totalBucket("Every query within your permitted scope"),
       {
         key: "incoming",
+        higherIsWorse: true,
         label: "New / Incoming",
         caption: "Awaiting your verification",
         icon: Inbox,
@@ -150,6 +151,7 @@ export const ROLE_BUCKETS = {
       },
       {
         key: "pendingAssignment",
+        higherIsWorse: true,
         label: "Pending Assignment",
         caption: "Forwarded, awaiting the OIC",
         icon: UserCheck,
@@ -179,6 +181,7 @@ export const ROLE_BUCKETS = {
       totalBucket("Every query within your permitted scope"),
       {
         key: "awaitingAssignment",
+        higherIsWorse: true,
         label: "Awaiting Assignment",
         caption: "Needs an official",
         icon: UserCheck,
@@ -197,6 +200,7 @@ export const ROLE_BUCKETS = {
       },
       {
         key: "awaitingFinalApproval",
+        higherIsWorse: true,
         label: "Awaiting Final Approval",
         caption: "Your decision needed",
         icon: ClipboardCheck,
@@ -211,6 +215,7 @@ export const ROLE_BUCKETS = {
       },
       {
         key: "returned",
+        higherIsWorse: true,
         label: "Returned",
         caption: "Sent back for revision",
         icon: XCircle,
@@ -251,6 +256,7 @@ export const ROLE_BUCKETS = {
       },
       {
         key: "returned",
+        higherIsWorse: true,
         label: "Returned for Revision",
         caption: "Changes requested",
         icon: XCircle,
@@ -273,6 +279,7 @@ export const ROLE_BUCKETS = {
       totalBucket("Every case you review"),
       {
         key: "awaitingReview",
+        higherIsWorse: true,
         label: "Awaiting My Review",
         caption: "Your review queue",
         icon: ClipboardCheck,
@@ -288,6 +295,7 @@ export const ROLE_BUCKETS = {
       },
       {
         key: "returnedByMe",
+        higherIsWorse: true,
         label: "Returned by me",
         caption: "You sent these back",
         icon: XCircle,

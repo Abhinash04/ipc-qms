@@ -1,7 +1,8 @@
 import { Link } from 'react-router-dom';
-import { ChevronRight, TrendingUp, TrendingDown, Minus } from 'lucide-react';
+import { ChevronRight } from 'lucide-react';
 
 import { cn } from '@/utils/cn';
+import { DIRECTION_ICON, trendTone } from '@/components/common/trendTone';
 
 const nf = new Intl.NumberFormat();
 
@@ -19,18 +20,6 @@ const nf = new Intl.NumberFormat();
  * means and colours the change accordingly.
  */
 
-const DIRECTION_ICON = {
-  up: TrendingUp,
-  down: TrendingDown,
-  flat: Minus,
-};
-
-function trendTone(direction, higherIsWorse) {
-  if (direction === 'flat') return 'text-slate-400';
-  const good = higherIsWorse ? direction === 'down' : direction === 'up';
-  return good ? 'text-emerald-600' : 'text-rose-600';
-}
-
 export function KpiTile({
   label,
   value,
@@ -43,7 +32,7 @@ export function KpiTile({
   border = 'border-slate-200/80',
   higherIsWorse = false,
 }) {
-  const TrendIcon = DIRECTION_ICON[delta?.direction] || Minus;
+  const TrendIcon = DIRECTION_ICON[delta?.direction] || DIRECTION_ICON.flat;
   const showComparison = delta && delta.direction !== 'flat';
 
   const body = (

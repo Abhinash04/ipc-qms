@@ -89,7 +89,7 @@ export function Sidebar() {
         transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
         className="hidden lg:flex relative z-20 h-screen shrink-0 flex-col overflow-hidden p-3 select-none"
       >
-        <div className="relative flex h-full w-full flex-col overflow-hidden rounded-[28px] border border-white/80 bg-[linear-gradient(to_top,#accbee_0%,#e7f0fd_100%)] text-slate-900 shadow-[0_16px_40px_rgba(172,203,238,0.3)] backdrop-blur-2xl">
+        <div className="relative flex h-full w-full flex-col overflow-hidden rounded-[28px] border border-white/80 engraved-panel text-slate-900 shadow-[0_16px_40px_rgba(172,203,238,0.3)] backdrop-blur-2xl">
           <div className="pointer-events-none absolute inset-0 z-0 opacity-40">
             <div className="absolute -left-12 -top-12 h-52 w-52 rounded-full bg-white/30 blur-3xl" />
             <div className="absolute -right-12 top-1/2 h-56 w-56 rounded-full bg-rose-300/30 blur-3xl" />

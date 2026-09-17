@@ -1,11 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import {
-  render,
-  screen,
-  fireEvent,
-  waitFor,
-  within,
-} from "@testing-library/react";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
@@ -58,8 +52,8 @@ function tile(label) {
 }
 
 function tileCount(label) {
-  const el = within(tile(label)).getByText(/^\d+ quer(?:y|ies)$/);
-  return Number(el.textContent.match(/^\d+/)[0]);
+  const el = tile(label).querySelector('[data-slot="stat-value"]');
+  return Number(el.textContent.trim());
 }
 
 async function raiseThroughPortal(subject = SUBJECT) {

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { render, screen, fireEvent, within } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
@@ -73,10 +73,10 @@ function tile(label) {
   return labelEl.closest('.bento-card');
 }
 
-/** "N queries" subtext — the headline number is an adjacent node. */
+/** The headline figure the tile actually shows. */
 function tileCount(label) {
-  const el = within(tile(label)).getByText(/^\d+ quer(?:y|ies)$/);
-  return Number(el.textContent.match(/^\d+/)[0]);
+  const el = tile(label).querySelector('[data-slot="stat-value"]');
+  return Number(el.textContent.trim());
 }
 
 let queryId;

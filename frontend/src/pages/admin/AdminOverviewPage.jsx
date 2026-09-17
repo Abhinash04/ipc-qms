@@ -189,9 +189,9 @@ function buildKpiTiles({ today, yesterday, hasComparison, paths }) {
       icon: Activity,
       to: paths[SECTION.ADMIN_ACTIVITY],
       delta: deltaFor(today?.total ?? 0, yesterday?.total ?? 0),
-      tint: 'bg-blue-100 text-blue-700',
+      tint: 'bg-tone-blue-tint text-tone-blue-figure',
       surface: 'bg-blue-50/50',
-      border: 'border-blue-200/70',
+      border: 'border-tone-blue-line',
     },
     {
       label: 'Email actions today',
@@ -202,9 +202,9 @@ function buildKpiTiles({ today, yesterday, hasComparison, paths }) {
         sumBy(today?.byAction, isEmailAction),
         sumBy(yesterday?.byAction, isEmailAction),
       ),
-      tint: 'bg-emerald-100 text-emerald-700',
+      tint: 'bg-tone-emerald-tint text-tone-emerald-figure',
       surface: 'bg-emerald-50/50',
-      border: 'border-emerald-200/70',
+      border: 'border-tone-emerald-line',
     },
     {
       label: 'AI generations today',
@@ -215,9 +215,9 @@ function buildKpiTiles({ today, yesterday, hasComparison, paths }) {
         sumBy(today?.byAction, isAiAction),
         sumBy(yesterday?.byAction, isAiAction),
       ),
-      tint: 'bg-violet-100 text-violet-700',
+      tint: 'bg-tone-purple-tint text-tone-purple-figure',
       surface: 'bg-violet-50/50',
-      border: 'border-violet-200/70',
+      border: 'border-tone-purple-line',
     },
     {
       label: 'Failures & denials today',
@@ -227,9 +227,9 @@ function buildKpiTiles({ today, yesterday, hasComparison, paths }) {
         paths[SECTION.ADMIN_ACTIVITY] &&
         `${paths[SECTION.ADMIN_ACTIVITY]}?result=failure`,
       delta: deltaFor(failuresOf(today), failuresOf(yesterday)),
-      tint: 'bg-rose-100 text-rose-700',
+      tint: 'bg-tone-rose-tint text-tone-rose-figure',
       surface: 'bg-rose-50/50',
-      border: 'border-rose-200/70',
+      border: 'border-tone-rose-line',
       // The one metric where a rise is bad news, so the trend must not be green.
       higherIsWorse: true,
     },

@@ -19,6 +19,25 @@ vi.mock('@/services/api/aiService', () => ({
   fetchGemmaAiDraft: async () => null,
 }));
 
+/**
+ * Query cases are persisted through a real HTTP API. Left unmocked the suite
+ * talks to whatever backend happens to be running on localhost — and because
+ * many suites call resetDemo() in beforeEach, that means POSTing to
+ * /queries/reset, which deleteMany()s every collection in the developer's
+ * database. Rejecting here puts db.js on the in-memory fallback every one of
+ * its callers already handles, which is the behaviour these tests were written
+ * against.
+ */
+vi.mock('@/services/api/queryCaseService', () => {
+  const offline = () => Promise.reject(new Error('query API disabled in tests'));
+  return {
+    fetchAllQueries: offline,
+    checkQueriesEmpty: offline,
+    persistQueryTransition: offline,
+    resetQueries: offline,
+  };
+});
+
 let consoleError;
 let consoleWarn;
 const captured = [];
