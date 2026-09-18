@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { ShieldCheck } from 'lucide-react';
 
+import { stableKey } from '@/utils/stableKey';
+
 /** How many audit rows show before the reader asks for the rest. */
 const AUDIT_PREVIEW = 8;
 
@@ -43,6 +45,25 @@ function describeActor(actor) {
   };
 }
 
+/**
+ * `details` is a sentence from the client and a structured object from the
+ * server's own writes — intake, denials, transport failures all record fields
+ * rather than prose. Rendering the object directly throws "Objects are not
+ * valid as a React child", so the object form is flattened to `key: value`
+ * pairs rather than dropped: it is usually the more informative of the two.
+ */
+function describeDetails(details) {
+  if (!details) return '—';
+  if (typeof details === 'string') return details;
+  if (typeof details !== 'object') return String(details);
+
+  const pairs = Object.entries(details)
+    .filter(([, value]) => value !== null && value !== undefined && value !== '')
+    .map(([key, value]) => `${key}: ${typeof value === 'object' ? JSON.stringify(value) : value}`);
+
+  return pairs.length ? pairs.join(' · ') : '—';
+}
+
 function AuditRow({ entry }) {
   const rawEvent = String(entry.event || entry.action || '').toUpperCase();
   const eventText = rawEvent.replace(/_/g, ' ') || '—';
@@ -69,7 +90,7 @@ function AuditRow({ entry }) {
       </td>
 
       <td className="py-2 px-4 align-top font-medium text-slate-700 max-w-md leading-relaxed">
-        {entry.details || '—'}
+        {describeDetails(entry.details)}
       </td>
 
       <td className="py-2 px-4 align-top text-right whitespace-nowrap font-semibold text-slate-400 text-[14px]">
@@ -153,8 +174,13 @@ export function AuditHistoryCard({ audit }) {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 text-[15px]">
+            {/* `auditId` is the stable id and the server now always returns one
+                (falling back to the document id for events it wrote itself).
+                `stableKey` is the house fallback the other audit lists already
+                use — see DashboardActivity.jsx — and covers a row that predates
+                that change. */}
             {visible.map((entry) => (
-              <AuditRow key={entry.auditId} entry={entry} />
+              <AuditRow key={entry.auditId || stableKey(entry)} entry={entry} />
             ))}
           </tbody>
         </table>
