@@ -1,22 +1,8 @@
 import { createHash } from 'crypto';
-import { IDENTITY_ROLES, identityForRole, allIdentities } from '../../../config/identities.js';
+import { IDENTITY_ROLES, identityForRole } from '../../../config/identities.js';
 import { getGmailClient } from '../transports/gmailTransport.js';
 import * as attachmentStore from '../../attachments/attachmentStore.js';
 import { validateFile } from '../../attachments/attachmentPolicy.js';
-
-/**
- * Roles whose mail may start a Query Case. Only the inquirer writes in; mail
- * from IPC staff is correspondence about a case that already exists.
- */
-const ENQUIRY_SENDER_ROLES = [IDENTITY_ROLES.INQUIRER];
-
-/** Addresses allowed to open a case, from the identity directory. */
-export function enquirySenders() {
-  return allIdentities()
-    .filter((identity) => ENQUIRY_SENDER_ROLES.includes(identity.role))
-    .map((identity) => identity.email.toLowerCase())
-    .filter(Boolean);
-}
 
 /** The address enquiries must be addressed to — the Front Officer's own. */
 export function enquiryRecipient() {
@@ -26,21 +12,23 @@ export function enquiryRecipient() {
 /**
  * What we ask Gmail for.
  *
- * Constrained to a known inquirer AND the Front Officer's own address. This is
- * a real personal inbox: an unqualified `is:unread` search would turn her
- * private mail — a friend's message, a receipt — into Query Cases. Both sides
- * come from the identity directory, so neither address is hard-coded here.
+ * Constrained to the Front Officer's own address, and to that alone. There is
+ * deliberately no sender filter: an enquiry can arrive from anyone, so the
+ * inbox is an N:1 intake — many external inquirers, one Front Office mailbox.
+ *
+ * This used to also carry `from:(<the one configured inquirer>)`, on the
+ * reasoning that an unqualified search over a real personal inbox would turn a
+ * friend's message or a receipt into a Query Case. That reasoning was sound
+ * while arriving mail registered itself. It no longer applies: nothing here
+ * creates a case. A message only *appears* for the Front Officer to accept or
+ * reject, and a human decides. Filtering by sender would instead mean an
+ * enquiry from an unknown member of the public was silently discarded before
+ * anyone saw it — the worse of the two failures.
  */
 export function inboxQuery({ unreadOnly = true } = {}) {
-  const senders = enquirySenders();
   const recipient = enquiryRecipient();
 
-  return [
-    'in:inbox',
-    unreadOnly ? 'is:unread' : null,
-    senders.length ? `from:(${senders.join(' OR ')})` : null,
-    recipient ? `to:(${recipient})` : null,
-  ]
+  return ['in:inbox', unreadOnly ? 'is:unread' : null, recipient ? `to:(${recipient})` : null]
     .filter(Boolean)
     .join(' ');
 }
@@ -49,11 +37,6 @@ export function inboxQuery({ unreadOnly = true } = {}) {
 function bareAddress(header) {
   const raw = String(header || '');
   return (raw.match(/<([^>]+)>/)?.[1] ?? raw).trim().toLowerCase();
-}
-
-/** Second line of defence, in case the Gmail query ever returns more. */
-export function isEnquirySender(fromHeader) {
-  return enquirySenders().includes(bareAddress(fromHeader));
 }
 
 /**
@@ -71,11 +54,13 @@ export function isEnquiryRecipient(toHeader) {
 }
 
 /**
- * The gate every fetched message passes before it can become a Query Case.
+ * The gate every fetched message passes before it is shown to the Front Officer.
  * Applied to what Gmail actually returned, not only to what we asked for.
+ *
+ * Recipient only. Who sent it is not a filter — see `inboxQuery`.
  */
 export function isEligibleEnquiry(message) {
-  return isEnquirySender(message?.from) && isEnquiryRecipient(message?.to);
+  return isEnquiryRecipient(message?.to);
 }
 
 const header = (payload, name) =>
@@ -264,8 +249,9 @@ async function list(recipient, { unreadOnly = false, max = 25, client = null } =
   );
 
   const eligible = messages
-    // Never hand back mail that may not open a case, whatever the search
-    // returned. The Gmail query is the first filter, this is the binding one.
+    // Never hand back mail that was not addressed to the Front Officer,
+    // whatever the search returned. The Gmail query is the first filter, this
+    // is the binding one.
     .filter(isEligibleEnquiry)
     // Oldest first, matching the other stores' insertion ordering.
     .sort((a, b) => new Date(a.receivedAt) - new Date(b.receivedAt));

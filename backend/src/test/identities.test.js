@@ -15,8 +15,7 @@ import {
 import {
   toMailboxMessage,
   inboxQuery,
-  enquirySenders,
-  isEnquirySender,
+  isEligibleEnquiry,
 } from '../services/email/mailbox/gmailInboxReader.js';
 
 const ORIGINAL_ENV = { ...process.env };
@@ -315,39 +314,39 @@ describe('preflight is a standalone script', () => {
   });
 });
 
-describe('only a real enquiry may open a Query Case', () => {
-  // The Front Officer's inbox is a real personal mailbox. An unqualified
-  // is:unread search would turn her private mail into Query Cases.
+describe('an enquiry may arrive from anyone, addressed to the Front Officer', () => {
+  // Intake is N:1 — many external inquirers, one Front Office mailbox. Nobody
+  // registers or authenticates before writing in, so the sender cannot be a
+  // filter. What stops the Front Officer's private mail becoming a case is not
+  // a sender allow-list any more: it is that arriving mail creates nothing at
+  // all until she accepts it.
 
-  it('asks Gmail only for mail from a known inquirer, addressed to the Front Officer', () => {
-    expect(inboxQuery()).toBe(
-      'in:inbox is:unread from:(inquirer@test.invalid) to:(front-office@test.invalid)',
-    );
-    expect(inboxQuery({ unreadOnly: false })).toBe(
-      'in:inbox from:(inquirer@test.invalid) to:(front-office@test.invalid)',
-    );
+  it('asks Gmail for mail addressed to the Front Officer, from anyone', () => {
+    expect(inboxQuery()).toBe('in:inbox is:unread to:(front-office@test.invalid)');
+    expect(inboxQuery({ unreadOnly: false })).toBe('in:inbox to:(front-office@test.invalid)');
   });
 
-  it('allows only inquirer addresses to open a case', () => {
-    expect(enquirySenders()).toEqual(['inquirer@test.invalid']);
-
-    // IPC staff write about cases that already exist; they never open one.
-    expect(enquirySenders()).not.toContain('front-office@test.invalid');
-    expect(enquirySenders()).not.toContain('officer@test.invalid');
-    expect(enquirySenders()).not.toContain('assigned-official@test.invalid');
+  it('carries no from: clause — a sender allow-list would silently drop real enquiries', () => {
+    expect(inboxQuery()).not.toContain('from:');
+    expect(inboxQuery({ unreadOnly: false })).not.toContain('from:');
   });
 
-  it('rejects anything that is not from an inquirer, whatever the query returned', () => {
-    expect(isEnquirySender('Test Inquirer <inquirer@test.invalid>')).toBe(true);
-    expect(isEnquirySender('inquirer@test.invalid')).toBe(true);
-    expect(isEnquirySender('  INQUIRER@Test.Invalid  ')).toBe(true);
+  it('accepts a message from an address nobody has ever seen', () => {
+    const fromStranger = (to) => isEligibleEnquiry({ from: 'A Stranger <new@example.com>', to });
 
-    // Her friend, a newsletter, a phishing attempt — none may create a case.
-    expect(isEnquirySender('A Friend <friend@example.com>')).toBe(false);
-    expect(isEnquirySender('newsletter@shop.example')).toBe(false);
-    expect(isEnquirySender('front-office@test.invalid')).toBe(false);
-    expect(isEnquirySender('')).toBe(false);
-    expect(isEnquirySender(undefined)).toBe(false);
+    expect(fromStranger('front-office@test.invalid')).toBe(true);
+    expect(fromStranger('Front Office <front-office@test.invalid>')).toBe(true);
+    // Several recipients, the Front Officer among them.
+    expect(fromStranger('someone@else.invalid, front-office@test.invalid')).toBe(true);
+  });
+
+  it('still requires the message to be addressed to the Front Officer', () => {
+    // Mail merely cc'd to her, or sent to another of her addresses, is not an
+    // enquiry to IPC. This is the one filter that remains.
+    expect(
+      isEligibleEnquiry({ from: 'anyone@example.com', to: 'someone@else.invalid' }),
+    ).toBe(false);
+    expect(isEligibleEnquiry({ from: 'anyone@example.com', to: '' })).toBe(false);
   });
 });
 

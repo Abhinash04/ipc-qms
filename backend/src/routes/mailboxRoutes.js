@@ -1,13 +1,18 @@
 import express from 'express';
 import verifyToken from '../middleware/verifyToken.js';
 import { verifyRole } from '../middleware/verifyRole.js';
+import validateBody from '../middleware/validateBody.js';
 import { ROLES } from '../constants/roles.js';
+import { mailboxDecisionSchema, acceptMessageSchema } from '../validators/mailboxSchemas.js';
 import {
   listMessages,
   receiveMessage,
   markIngested,
   deleteMessage,
   resetMailbox,
+  decideMessage,
+  acceptMessage,
+  listDecisions,
 } from '../controllers/mailboxController.js';
 
 const router = express.Router();
@@ -30,6 +35,43 @@ router.post(
   verifyRole(FRONT_OFFICE_ONLY),
   markIngested,
 );
+
+/**
+ * The validation gate: the Front Officer accepts an incoming message as an IPC
+ * query, or rejects it. Nothing upstream of this creates a case.
+ *
+ * Idempotent by construction — the first decision on a message wins, and a
+ * repeat returns the stored one with `alreadyDecided: true` rather than
+ * deciding again. See services/email/mailbox/decisions.js.
+ */
+router.post(
+  '/mailbox/messages/:messageId/decision',
+  verifyToken,
+  verifyRole(FRONT_OFFICE_ONLY),
+  validateBody(mailboxDecisionSchema),
+  decideMessage,
+);
+
+/**
+ * Accept: the whole intake sequence in one call — mint the Case ID, create the
+ * case, acknowledge the sender, forward to the Officer-in-Charge.
+ *
+ * Server-side because the browser is the wrong place for it: a closed tab
+ * halfway through used to leave a case nobody had been told about, and the id
+ * came from a counter the client held, so two tabs could mint the same one.
+ * Safe to retry — every step checks its own artefact before acting.
+ */
+router.post(
+  '/mailbox/messages/:messageId/accept',
+  verifyToken,
+  verifyRole(FRONT_OFFICE_ONLY),
+  validateBody(acceptMessageSchema),
+  acceptMessage,
+);
+
+// Lets the inbox show what has already been accepted or rejected. Necessary
+// because under MAILBOX_SOURCE=gmail the message itself carries no QMS state.
+router.get('/mailbox/decisions', verifyToken, verifyRole(FRONT_OFFICE_ONLY), listDecisions);
 
 // Trashes the message in the real account when MAILBOX_SOURCE=gmail.
 router.delete(

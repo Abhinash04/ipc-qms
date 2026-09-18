@@ -79,18 +79,20 @@ describe('list() materialises inbound attachment bytes', () => {
 
   it('does not download attachments for mail that fails the eligibility filter', async () => {
     inboxContains(
-      gmailMessageWithAttachment({ id: 'friend-mail', filename: 'photo.jpg', mimeType: 'image/jpeg' }),
+      gmailMessageWithAttachment({ id: 'elsewhere', filename: 'photo.jpg', mimeType: 'image/jpeg' }),
     );
-    // Make it ineligible: sender outside the known inquirer directory.
-    listMessages.mockResolvedValue({ data: { messages: [{ id: 'friend-mail' }] } });
+    // Make it ineligible. Sender no longer qualifies anything — intake is N:1 —
+    // so the remaining filter is the one that matters: this was not addressed
+    // to the Front Officer.
+    listMessages.mockResolvedValue({ data: { messages: [{ id: 'elsewhere' }] } });
     getMessage.mockResolvedValue({
       data: {
-        ...gmailMessageWithAttachment({ id: 'friend-mail' }),
+        ...gmailMessageWithAttachment({ id: 'elsewhere' }),
         payload: {
           headers: [
-            { name: 'From', value: 'A Friend <friend@example.com>' },
-            { name: 'To', value: FRONT_OFFICE },
-            { name: 'Subject', value: 'Not an enquiry' },
+            { name: 'From', value: 'A Stranger <new@example.com>' },
+            { name: 'To', value: 'someone.else@example.com' },
+            { name: 'Subject', value: 'Not addressed to IPC' },
           ],
           parts: [{ filename: 'photo.jpg', mimeType: 'image/jpeg', body: { attachmentId: 'x', size: 10 } }],
         },

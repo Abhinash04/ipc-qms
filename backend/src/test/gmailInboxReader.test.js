@@ -97,13 +97,15 @@ describe('list() — the call the endpoint makes', () => {
     expect(listMessages.mock.calls[0][0].q).not.toContain('is:unread');
   });
 
-  it('constrains the search to the inquirer and the Front Officer', async () => {
+  it('constrains the search to the Front Officer, and to nothing else', async () => {
     inboxContains(gmailMessage());
     await list(FRONT_OFFICE, { unreadOnly: true, client: fakeGmail });
 
     const { q } = listMessages.mock.calls[0][0];
-    expect(q).toContain(`from:(${INQUIRER})`);
     expect(q).toContain(`to:(${FRONT_OFFICE})`);
+    // No sender clause: an enquiry can come from anyone, and filtering by
+    // sender would discard a real one before a human ever saw it.
+    expect(q).not.toContain('from:');
   });
 
   it('returns the enquiry with its sender, recipient and Gmail ids intact', async () => {
@@ -136,29 +138,49 @@ describe('list() — the call the endpoint makes', () => {
   });
 });
 
-describe('list() drops anything that may not open a case', () => {
-  // The Gmail query is the first filter; this is the binding one. If Gmail ever
-  // returns more than asked, her private mail still cannot become a Query Case.
+describe('list() drops only what was not addressed to her', () => {
+  // The Gmail query is the first filter; this is the binding one. Sender is no
+  // longer a filter on either side — intake is N:1, and nothing a message does
+  // on arrival creates a case, so an unwanted email is rejected by a person
+  // rather than hidden by a query.
 
-  it('ignores an unrelated unread email from someone else', async () => {
+  it('returns mail from a sender nobody has ever seen', async () => {
     inboxContains(
-      gmailMessage({ id: 'friend', from: 'A Friend <friend@example.com>', subject: 'Lunch?' }),
+      gmailMessage({ id: 'stranger', from: 'A Stranger <new@example.com>', subject: 'IP query' }),
       gmailMessage({ id: 'enquiry' }),
     );
 
     const messages = await list(FRONT_OFFICE, { unreadOnly: true, client: fakeGmail });
 
-    expect(messages).toHaveLength(1);
-    expect(messages[0].mailboxMessageId).toBe('enquiry');
+    expect(messages.map((m) => m.mailboxMessageId).sort()).toEqual(['enquiry', 'stranger']);
   });
 
-  it('ignores mail from IPC staff — they do not open cases', async () => {
+  it('returns several distinct external senders — the N of the N:1 intake', async () => {
+    inboxContains(
+      gmailMessage({ id: 'one', from: 'inquirer1@example.com' }),
+      gmailMessage({ id: 'two', from: 'Second Person <inquirer2@example.org>' }),
+      gmailMessage({ id: 'three', from: 'inquirer3@example.net' }),
+    );
+
+    const messages = await list(FRONT_OFFICE, { unreadOnly: true, client: fakeGmail });
+
+    expect(messages).toHaveLength(3);
+    expect(messages.map((m) => m.from)).toEqual([
+      'inquirer1@example.com',
+      'Second Person <inquirer2@example.org>',
+      'inquirer3@example.net',
+    ]);
+  });
+
+  it('returns mail from IPC staff too — a human decides what it is', async () => {
+    // Staff correspondence is not an enquiry, but that is a judgement, not a
+    // pattern match. It reaches the Front Officer and she rejects it.
     inboxContains(
       gmailMessage({ id: 'oic', from: 'Test Officer <officer@test.invalid>' }),
       gmailMessage({ id: 'official', from: 'assigned-official@test.invalid' }),
     );
 
-    expect(await list(FRONT_OFFICE, { unreadOnly: true, client: fakeGmail })).toEqual([]);
+    expect(await list(FRONT_OFFICE, { unreadOnly: true, client: fakeGmail })).toHaveLength(2);
   });
 
   it('ignores mail addressed to somebody else', async () => {
@@ -175,10 +197,9 @@ describe('list() drops anything that may not open a case', () => {
     expect(await list(FRONT_OFFICE, { unreadOnly: true, client: fakeGmail })).toHaveLength(1);
   });
 
-  it('filters on the unreadOnly=false path too', async () => {
-    // Returning the whole inbox unfiltered was the second half of the bug.
+  it('applies the recipient filter on the unreadOnly=false path too', async () => {
     inboxContains(
-      gmailMessage({ id: 'friend', from: 'friend@example.com', unread: false }),
+      gmailMessage({ id: 'elsewhere', to: 'someone.else@example.com', unread: false }),
       gmailMessage({ id: 'enquiry', unread: false }),
     );
 
