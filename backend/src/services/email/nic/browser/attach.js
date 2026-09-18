@@ -9,18 +9,41 @@ import browserConfig from '../../../../config/browserConfig.js';
  * OTP field. If it cannot find an authenticated session it says exactly what
  * the human must do and stops — silently opening a fresh browser would defeat
  * the entire purpose, since a fresh browser is not logged in.
+ *
+ * Reading and sending mail happen in session.js, in a separate tab of the same
+ * signed-in context; the tab found here is only the proof of that session.
  */
 
-/** The four session states, worded for the operator rather than the log. */
+/** The session states, worded for the operator rather than the log. */
 export const MESSAGES = {
   NO_CHROME:
     'Chrome is not available for browser automation. Please open the supported Chrome session first.',
+  PORT_NOT_CDP:
+    'Something is listening on the CDP port, but it is not a Chrome DevTools endpoint. ' +
+    'Another browser (Brave, Edge, a second Chrome profile) is most likely holding the port — ' +
+    'close it, or point NIC_CDP_ENDPOINT at a different port.',
   NO_TAB: 'No NICeMail tab found. Please open NICeMail in Chrome.',
   NOT_AUTHENTICATED:
     'NICeMail is open, but the session is not authenticated. ' +
     'Please complete the NICeMail login/OTP manually.',
   SESSION_EXPIRED: 'NICeMail session expired. Please authenticate again in Chrome.',
 };
+
+/**
+ * "Nothing is listening" and "something is listening that is not CDP" need
+ * different fixes, and reporting both as "start Chrome" sends an operator to
+ * restart a browser that is already running. A refused connection is the first;
+ * anything that completed a TCP connection and then failed to speak CDP is the
+ * second — which is what a rival Chromium browser squatting port 9222 looks
+ * like.
+ */
+function connectFailureMessage(error) {
+  const text = String(error?.message || error);
+  if (/ECONNREFUSED|connect ECONNREFUSED|refused/i.test(text)) return MESSAGES.NO_CHROME;
+  if (/ENOTFOUND|EAI_AGAIN|getaddrinfo/i.test(text)) return MESSAGES.NO_CHROME;
+  if (/timeout|ETIMEDOUT/i.test(text)) return MESSAGES.NO_CHROME;
+  return MESSAGES.PORT_NOT_CDP;
+}
 
 /** URL fragments that mean "this is a sign-in screen", not a mailbox. */
 const LOGIN_MARKERS = ['/login', '/signin', 'accounts.', 'oauth', 'otp', 'twofactor', '2fa'];
@@ -101,7 +124,7 @@ export async function attachToNicemail({ connect = null } = {}) {
     return {
       ok: false,
       stage: 'connect_browser',
-      error: MESSAGES.NO_CHROME,
+      error: connectFailureMessage(error),
       details: {
         endpoint: browserConfig.cdpEndpoint,
         reason: String(error?.message || error).split('\n')[0],

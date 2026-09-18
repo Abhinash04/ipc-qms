@@ -67,6 +67,37 @@ const browserConfig = {
   get artifactDir() {
     return (process.env.NIC_BROWSER_ARTIFACT_DIR || 'storage/browser-artifacts').trim();
   },
+
+  /**
+   * Is the NICeMail mailbox, read through the browser agent, a second Front
+   * Office mailbox? Only the exact string "true" enables it.
+   */
+  get mailboxEnabled() {
+    return String(process.env.NIC_BROWSER_MAILBOX || '').trim().toLowerCase() === 'true';
+  },
+
+  /**
+   * The mailbox the browser agent reads — NIC_EMAIL, the one place the address
+   * lives. It is also the sign-in email of that mailbox's Front Office user.
+   */
+  get mailboxAddress() {
+    return (process.env.NIC_EMAIL || '').trim().toLowerCase();
+  },
+
+  /** Display name of the Front Office user who owns the NICeMail mailbox. */
+  get frontOfficeName() {
+    return (process.env.NIC_FRONT_OFFICE_NAME || 'NICeMail Front Office').trim();
+  },
+
+  /** Minimum gap between two inbox syncs; the inbox poll is what triggers them. */
+  get syncTtlMs() {
+    return parseInt(process.env.NIC_BROWSER_SYNC_TTL_MS || '30000', 10);
+  },
+
+  /** How many of the newest inbox rows one sync inspects. */
+  get syncMax() {
+    return parseInt(process.env.NIC_BROWSER_SYNC_MAX || '20', 10);
+  },
 };
 
 export default browserConfig;
