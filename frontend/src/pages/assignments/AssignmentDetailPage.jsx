@@ -84,8 +84,11 @@ export function AssignmentDetailPage() {
                 <Label htmlFor="override-assignee" className="text-xs text-muted-foreground mb-1 block">
                   Choose from full directory
                 </Label>
-                <Select id="override-assignee" value={override} onValueChange={setOverride}>
-                  <SelectTrigger>
+                {/* The id belongs on the trigger, not on Select.Root: Root
+                    renders no DOM node, so the Label above pointed at nothing
+                    and the control had no accessible name at all. */}
+                <Select value={override} onValueChange={setOverride}>
+                  <SelectTrigger id="override-assignee">
                     <SelectValue placeholder="Select an official" />
                   </SelectTrigger>
                   <SelectContent>

@@ -25,8 +25,11 @@ export function AddReviewLevelField({ label, value, onChange, onAdd }) {
     <div className="space-y-1.5 border-t border-border pt-3">
       <Label htmlFor="new-reviewer">{label}</Label>
       <div className="flex gap-2">
-        <Select id="new-reviewer" value={value} onValueChange={onChange}>
-          <SelectTrigger className="flex-1">
+        {/* The id goes on the trigger: Select.Root renders no DOM node, so the
+            Label above resolved to nothing and screen readers announced an
+            unnamed combobox. */}
+        <Select value={value} onValueChange={onChange}>
+          <SelectTrigger id="new-reviewer" className="flex-1">
             <SelectValue placeholder="Select reviewer" />
           </SelectTrigger>
           <SelectContent>
