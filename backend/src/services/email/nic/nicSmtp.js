@@ -42,7 +42,16 @@ function stageForError(error) {
  *
  * `createTransport` is the injection seam for tests; production never passes it.
  */
-export async function sendMessage({ to, subject, text, createTransport = null } = {}) {
+export async function sendMessage({
+  to,
+  subject,
+  text,
+  from = null,
+  cc = [],
+  bcc = [],
+  attachments = [],
+  createTransport = null,
+} = {}) {
   const password = await getPassword();
 
   if (!password) {
@@ -68,10 +77,16 @@ export async function sendMessage({ to, subject, text, createTransport = null } 
 
   try {
     const info = await transport.sendMail({
-      from: nicConfig.email,
+      // The envelope sender is always the authenticated mailbox — NIC rejects a
+      // MAIL FROM it did not authenticate. `from` only sets the display name,
+      // so a QMS role can be identified without spoofing the address.
+      from: from ? `${from} <${nicConfig.email}>` : nicConfig.email,
       to,
+      cc: cc.length ? cc : undefined,
+      bcc: bcc.length ? bcc : undefined,
       subject,
       text,
+      attachments: attachments.length ? attachments : undefined,
     });
 
     return {

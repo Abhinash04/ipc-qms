@@ -3,6 +3,9 @@ import env, { MAILBOX_SOURCES } from '../../../config/env.js';
 import * as memoryMailbox from './mockIpcMailbox.js';
 import * as mongoMailbox from './mongoIpcMailbox.js';
 import * as gmailInbox from './gmailInboxReader.js';
+import * as nicInbox from './nicInboxReader.js';
+import browserConfig from '../../../config/browserConfig.js';
+import { normaliseAddress } from './address.js';
 
 let forced = null;
 
@@ -24,7 +27,9 @@ const mailboxSource = () =>
 
 function active() {
   if (forced) return forced;
-  if (mailboxSource() === MAILBOX_SOURCES.GMAIL) return gmailInbox;
+  const source = mailboxSource();
+  if (source === MAILBOX_SOURCES.GMAIL) return gmailInbox;
+  if (source === MAILBOX_SOURCES.NIC) return nicInbox;
   return isConnected() ? mongoMailbox : memoryMailbox;
 }
 
@@ -35,6 +40,13 @@ function describe() {
     return {
       backend: 'gmail',
       persistence: "the Front Officer's real Gmail inbox; unread mail is what is pending",
+    };
+  }
+
+  if (impl === nicInbox) {
+    return {
+      backend: 'nic',
+      persistence: 'the NICeMail mailbox over IMAP, read-only; mail arrives by being sent',
     };
   }
 
@@ -50,11 +62,15 @@ function describe() {
 /**
  * Can the active store accept a locally-deposited copy of an outgoing message?
  *
- * The in-memory and Mongo stores can. A real Gmail inbox cannot — it is read
- * only, and mail arrives in it by actually being sent. Callers must check this
- * before depositing rather than discovering it through a thrown error.
+ * The in-memory and Mongo stores can. A real Gmail or NICeMail inbox cannot —
+ * both are read only, and mail arrives in them by actually being sent. Callers
+ * must check this before depositing rather than discovering it through a thrown
+ * error.
  */
-const supportsDelivery = () => active() !== gmailInbox;
+const supportsDelivery = () => {
+  const impl = active();
+  return impl !== gmailInbox && impl !== nicInbox;
+};
 
 /**
  * Short-lived cache for Gmail list() only.
@@ -114,6 +130,29 @@ const reset = async () => {
 
 const stats = async () => active().stats();
 
+/**
+ * The mailbox a signed-in user owns, when it is not the primary one.
+ *
+ * There are at most two Front Office mailboxes: the primary one, selected by
+ * MAILBOX_SOURCE exactly as before, and — when NIC_BROWSER_MAILBOX=true — the
+ * NICeMail mailbox read by the browser agent, owned by the Front Office user
+ * whose sign-in address is NIC_EMAIL. Routing is by the mailbox, never by the
+ * sender: whatever arrives in the NICeMail mailbox is that user's to handle.
+ *
+ * Resolves to `{ source, address, store }` for the NICeMail mailbox, or null
+ * to mean "the primary mailbox".
+ *
+ * The store is imported on demand: it reaches playwright-core through the
+ * browser reader, and nothing on the boot path may load that — a backend
+ * without Chrome must start exactly as before.
+ */
+async function forUser(user) {
+  if (!browserConfig.mailboxEnabled || !browserConfig.mailboxAddress) return null;
+  if (normaliseAddress(user?.email) !== browserConfig.mailboxAddress) return null;
+  const store = await import('./nicBrowserMailbox.js');
+  return { source: store.SOURCE, address: browserConfig.mailboxAddress, store };
+}
+
 export {
   deliver,
   list,
@@ -125,4 +164,5 @@ export {
   supportsDelivery,
   forceInMemory,
   useAuto,
+  forUser,
 };
