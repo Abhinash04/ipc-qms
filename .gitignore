@@ -8,6 +8,11 @@ dist/
 
 frontend/node_modules/
 frontend/dist/
+coverage/
+
+# The IPC source corpus. Kept out of the repository deliberately; the committed
+# artefact of record is backend/src/data/ipcKnowledge.json, produced from these
+# by `npm run ingest:ipc`. See backend/README.md → IPC knowledge base.
 docs/markdown/
 
 backend/node_modules/
@@ -25,5 +30,7 @@ token.json
 *.log
 .DS_Store
 
-frontend/package-lock.json
-backend/package-lock.json
+# Lockfiles are deliberately NOT ignored. Both are tracked, and a reproducible
+# `npm ci` in CI and on a deployment host depends on them. Rules ignoring them
+# used to sit here; they were inert against files already tracked, but they
+# said the opposite of the intent.

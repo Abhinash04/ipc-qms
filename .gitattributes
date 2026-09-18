@@ -1,0 +1,24 @@
+# Normalise line endings on commit.
+#
+# Without this, a Windows checkout with core.autocrlf=true rewrites every file
+# to CRLF in the working tree. Generated files feel it worst:
+# backend/src/data/ipcKnowledge.json is 6,300 lines and showed as modified in
+# `git status` after every `npm run ingest:ipc`, with a byte-identical content
+# hash — a whole-file diff that says nothing.
+* text=auto eol=lf
+
+# Binary, never touched.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.woff binary
+*.woff2 binary
+*.zip binary
+
+# Generated. Collapsed in diffs and pull requests so a regenerated knowledge
+# base or a dependency bump does not bury the change that matters.
+backend/src/data/ipcKnowledge.json linguist-generated=true
+package-lock.json linguist-generated=true
