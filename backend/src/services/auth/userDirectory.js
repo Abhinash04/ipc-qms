@@ -1,5 +1,5 @@
 import bcrypt from 'bcryptjs';
-import { USERS } from '../../constants/users.js';
+import { allUsers } from '../../constants/users.js';
 import authConfig from '../../config/authConfig.js';
 
 /**
@@ -34,15 +34,15 @@ const toPublicUser = ({ id, name, email, role, divisionId }) => ({ id, name, ema
 export function findByEmail(email) {
   const wanted = normalise(email);
   if (!wanted) return null;
-  return USERS.find((user) => normalise(user.email) === wanted) || null;
+  return allUsers().find((user) => normalise(user.email) === wanted) || null;
 }
 
 export function findById(id) {
-  return USERS.find((user) => user.id === id) || null;
+  return allUsers().find((user) => user.id === id) || null;
 }
 
 export function listUsers() {
-  return USERS.map(toPublicUser);
+  return allUsers().map(toPublicUser);
 }
 
 /**

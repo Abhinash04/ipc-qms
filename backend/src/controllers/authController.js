@@ -6,6 +6,7 @@ import { verifyCredentials, findByEmail, findById, toPublicUser } from '../servi
 import * as audit from '../services/audit/auditService.js';
 import { AUDIT_ACTIONS, AUDIT_RESULTS } from '../constants/auditActions.js';
 import { ACTOR_TYPES } from '../constants/roles.js';
+import { nicFrontOfficeUser } from '../constants/users.js';
 
 /**
  * Session endpoints — step 1 of the chain in .claude/backend-rules.md.
@@ -102,6 +103,31 @@ async function devLogin(req, res, next) {
       return res
         .status(HTTP_STATUS.UNAUTHORIZED)
         .json({ error: 'Unknown dev account' });
+    }
+
+    /**
+     * Never password-less into a live government mailbox.
+     *
+     * Dev login exists so a developer can switch between seeded demo accounts.
+     * The NICeMail Front Office is not one: its inbox is the real .gov.in
+     * mailbox the browser agent reads, and its session can make that agent
+     * send. NODE_ENV defaults to "development" and the server listens on every
+     * interface, so before this check anyone who could reach the port could
+     * POST that address here and read official mail. It signs in with a
+     * password like any account whose data is real.
+     */
+    if (user.id === nicFrontOfficeUser()?.id) {
+      await audit.record({
+        action: AUDIT_ACTIONS.LOGIN_FAILED,
+        actorType: ACTOR_TYPES.HUMAN,
+        actorId: user.id,
+        actorRole: user.role,
+        result: AUDIT_RESULTS.DENIED,
+        details: { devLogin: true, reason: 'the NICeMail Front Office requires a password' },
+      });
+      return res
+        .status(HTTP_STATUS.FORBIDDEN)
+        .json({ error: 'This account reads a live NICeMail mailbox. Sign in with a password.' });
     }
 
     const publicUser = toPublicUser(user);

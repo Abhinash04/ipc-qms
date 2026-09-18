@@ -3,6 +3,28 @@ import * as emailService from '../services/email/emailService.js';
 import * as audit from '../services/audit/auditService.js';
 import { AUDIT_ACTIONS, AUDIT_RESULTS } from '../constants/auditActions.js';
 import { ACTOR_TYPES } from '../constants/roles.js';
+import { QueryCase } from '../models/index.js';
+import { isConnected } from '../config/db.js';
+
+/**
+ * The mailbox a case's external mail must go out through — read from the
+ * stored case, never from the request.
+ *
+ * The accept and final-approval paths already pass it. These two endpoints are
+ * the case page's *retry* buttons, and they did not: a NICeMail case whose
+ * acknowledgement or response had failed was retried through EMAIL_TRANSPORT —
+ * Bhumika's Gmail — bypassing both the signed-in NICeMail session and its
+ * outbound interlock. Taking it from the body instead would let a caller pick
+ * which mailbox sends, so the case is the only authority.
+ *
+ * No case, no database, or a case from before the field existed: the default
+ * transport, exactly as before.
+ */
+async function mailboxOf(queryId) {
+  if (!queryId || !isConnected()) return null;
+  const stored = await QueryCase.findOne({ queryId }, { sourceMailbox: 1 }).lean();
+  return stored?.sourceMailbox ?? null;
+}
 
 /**
  * Every send is audited, successes and failures alike. A send that failed is
@@ -56,7 +78,12 @@ async function sendEnquiry(req, res, next) {
 async function sendAcknowledgement(req, res, next) {
   try {
     const { to, queryId, timestamp } = req.body || {};
-    const result = await emailService.sendAcknowledgement({ to, queryId, timestamp });
+    const result = await emailService.sendAcknowledgement({
+      to,
+      queryId,
+      timestamp,
+      sourceMailbox: await mailboxOf(queryId),
+    });
     await auditSend({ req, action: AUDIT_ACTIONS.EMAIL_SENT, queryId, result });
     res.status(HTTP_STATUS.CREATED).json(result);
   } catch (error) {
@@ -90,6 +117,10 @@ async function forwardQuery(req, res, next) {
 }
 
 async function sendResponse(req, res, next) {
+  // Optional, and only ever used to look the case up: it names which case's
+  // mailbox answers, and lets the audit row be traced back to that case.
+  const queryId = req.body?.queryId ?? null;
+
   try {
     const { to, subject, body, attachments, cc, timestamp, providerThreadId } = req.body || {};
     const result = await emailService.sendResponse({
@@ -100,11 +131,12 @@ async function sendResponse(req, res, next) {
       cc,
       timestamp,
       providerThreadId,
+      sourceMailbox: await mailboxOf(queryId),
     });
-    await auditSend({ req, action: AUDIT_ACTIONS.EMAIL_REPLIED, result });
+    await auditSend({ req, action: AUDIT_ACTIONS.EMAIL_REPLIED, queryId, result });
     res.status(HTTP_STATUS.CREATED).json(result);
   } catch (error) {
-    await auditSend({ req, action: AUDIT_ACTIONS.EMAIL_SEND_FAILED, error });
+    await auditSend({ req, action: AUDIT_ACTIONS.EMAIL_SEND_FAILED, queryId, error });
     next(error);
   }
 }

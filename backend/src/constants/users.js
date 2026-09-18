@@ -1,4 +1,5 @@
 import { ROLES } from './roles.js';
+import browserConfig from '../config/browserConfig.js';
 
 /**
  * The QMS user directory.
@@ -29,3 +30,28 @@ export const USERS = [
   { id: 'USR-0007', name: 'Suresh Gupta', role: ROLES.ADMIN, email: 'suresh.gupta@ipc.example', divisionId: 'DIV-004' },
   { id: 'USR-0008', name: 'System Administrator', role: ROLES.SUPER_ADMIN, email: 'admin@ipc.example', divisionId: 'DIV-004' },
 ];
+
+/**
+ * The Front Officer for the NICeMail mailbox, when that mailbox is enabled.
+ *
+ * Built from configuration rather than listed above: the mailbox address is a
+ * deployment setting (a test mailbox today, the IPC one later), and this
+ * account signs in with exactly that address. Read at call time, like the
+ * config it comes from.
+ */
+export function nicFrontOfficeUser() {
+  if (!browserConfig.mailboxEnabled || !browserConfig.mailboxAddress) return null;
+  return {
+    id: 'USR-0014',
+    name: browserConfig.frontOfficeName,
+    role: ROLES.FRONT_OFFICE,
+    email: browserConfig.mailboxAddress,
+    divisionId: 'DIV-004',
+  };
+}
+
+/** Every account that can sign in right now. */
+export function allUsers() {
+  const nic = nicFrontOfficeUser();
+  return nic ? [...USERS, nic] : USERS;
+}
