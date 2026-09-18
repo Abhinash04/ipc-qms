@@ -71,16 +71,25 @@ function buildDisplayedOfficials(eligibleColleagues, aiRecommendations, searchQu
   return eligibleColleagues.map(asOption);
 }
 
-/** Ranks officials for this query once the dialog opens, after a short debounce. */
+/**
+ * Ranks officials for this query once the dialog opens, after a short debounce.
+ *
+ * `isLoading` is derived rather than stored. Setting it synchronously in the
+ * effect body was a cascading render — React rendered the dialog, the effect
+ * immediately set state, and React rendered it again before the browser had
+ * painted anything. `result === null` already means "the debounce has not
+ * produced an answer yet", so the extra state variable only restated it.
+ */
 function useAiRecommendations(query, isOpen) {
-  const [recommendations, setRecommendations] = useState([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState(null);
+  // Tagged with the query it was computed for, so reopening the dialog on a
+  // different case does not flash the previous case's ranking. That tag is also
+  // what makes the reset unnecessary: a stale result is recognised by its key
+  // rather than cleared by a second setState.
+  const [result, setResult] = useState(null);
+  const key = isOpen && query ? query.queryId : null;
 
   useEffect(() => {
-    if (!isOpen || !query) return;
-    setIsLoading(true);
-    setError(null);
+    if (!isOpen || !query) return undefined;
 
     const timer = setTimeout(() => {
       try {
@@ -88,21 +97,28 @@ function useAiRecommendations(query, isOpen) {
           .getState()
           .queries.filter((q) => q.workflowState !== 'CLOSED');
         const recs = recommendTopOfficials(query, MOCK_USERS, openQueries, query.currentAssigneeId);
-        setRecommendations(recs || []);
+        setResult({ key: query.queryId, recommendations: recs || [], error: null });
       } catch (err) {
         console.warn('[AI Rec] Failed to compute recommendations:', err);
-        setError(
-          'AI recommendations are currently unavailable. You can select an official manually.',
-        );
-      } finally {
-        setIsLoading(false);
+        setResult({
+          key: query.queryId,
+          recommendations: [],
+          error:
+            'AI recommendations are currently unavailable. You can select an official manually.',
+        });
       }
     }, 300);
 
     return () => clearTimeout(timer);
   }, [isOpen, query]);
 
-  return { recommendations, isLoading, error };
+  const fresh = key !== null && result?.key === key;
+
+  return {
+    recommendations: fresh ? result.recommendations : [],
+    isLoading: key !== null && !fresh,
+    error: fresh ? result.error : null,
+  };
 }
 
 function CurrentAssigneeRow({ name }) {
@@ -160,7 +176,7 @@ function OfficialCard({ rec, isSelected, onSelect }) {
                 </span>
               )}
             </div>
-            <p className="text-xs font-medium text-slate-500 truncate max-w-[220px]">{rec.email}</p>
+            <p className="text-xs font-medium text-slate-500 truncate max-w-55">{rec.email}</p>
           </div>
 
           <OfficialCardBadge rec={rec} isSelected={isSelected} />
@@ -502,7 +518,7 @@ export function TransferQueryModal({ query, isOpen, onClose, currentUser }) {
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && handleClose()}>
-      <DialogContent className="sm:max-w-[620px] max-h-[90vh] overflow-y-auto rounded-3xl p-6 bg-white border border-slate-200/90 shadow-2xl">
+      <DialogContent className="sm:max-w-155 max-h-[90vh] overflow-y-auto rounded-3xl p-6 bg-white border border-slate-200/90 shadow-2xl">
         <DialogHeader className="border-b border-slate-100 pb-2.5">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-2xl bg-indigo-50 text-indigo-700 border border-indigo-100 flex items-center justify-center shrink-0">

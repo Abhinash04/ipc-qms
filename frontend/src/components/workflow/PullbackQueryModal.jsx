@@ -87,7 +87,7 @@ export function PullbackQueryModal({ query, isOpen, onClose, currentUser }) {
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && handleClose()}>
-      <DialogContent className="sm:max-w-[620px] max-h-[90vh] overflow-y-auto rounded-3xl p-6 bg-white border border-slate-200/90 shadow-2xl">
+      <DialogContent className="sm:max-w-155 max-h-[90vh] overflow-y-auto rounded-3xl p-6 bg-white border border-slate-200/90 shadow-2xl">
         <DialogHeader className="border-b border-slate-100 pb-3">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-2xl bg-amber-50 text-amber-700 border border-amber-200/80 flex items-center justify-center shrink-0">
@@ -223,7 +223,7 @@ export function PullbackQueryModal({ query, isOpen, onClose, currentUser }) {
                   <span className="text-slate-400 font-bold uppercase tracking-wider text-xs">
                     Reason:
                   </span>
-                  <span className="font-bold text-slate-800 text-right max-w-[260px]">
+                  <span className="font-bold text-slate-800 text-right max-w-65">
                     {selectedReason}
                   </span>
                 </div>
@@ -232,7 +232,7 @@ export function PullbackQueryModal({ query, isOpen, onClose, currentUser }) {
                     <span className="text-slate-400 font-bold uppercase tracking-wider text-xs">
                       Remarks:
                     </span>
-                    <span className="font-semibold text-slate-700 text-right max-w-[260px]">
+                    <span className="font-semibold text-slate-700 text-right max-w-65">
                       {customRemarks.trim()}
                     </span>
                   </div>
