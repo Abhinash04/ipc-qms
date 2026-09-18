@@ -1,6 +1,6 @@
 import { google } from 'googleapis';
 import env from '../config/env.js';
-import { allIdentities } from '../config/identities.js';
+import { allIdentities, IDENTITY_ROLES } from '../config/identities.js';
 
 const SEND_SCOPE = 'https://www.googleapis.com/auth/gmail.send';
 const READ_SCOPES = [
@@ -32,8 +32,9 @@ async function checkIdentity(identity) {
   console.log(`   GMAIL_REFRESH_TOKEN_${role}  ${mask(refreshToken)}`);
 
   if (!refreshToken) {
-    console.log('   ○ No token — this role falls back to the mock transport.');
-    console.log('     It will NOT send real email, and no other account is used on its behalf.');
+    console.log('   ○ Not configured — this role falls back to the mock transport.');
+    console.log('     Expected for every role except FRONT_OFFICE: inquirers are external');
+    console.log('     senders who never authenticate here, and nothing sends as the OIC.');
     return 'skipped';
   }
 
@@ -82,13 +83,13 @@ async function checkIdentity(identity) {
 
   // Only the Front Officer's inbox is polled, so only that role needs read access.
   const canRead = READ_SCOPES.some((scope) => has(scopes, scope));
-  if (role === 'FRONT_OFFICE') {
+  if (role === IDENTITY_ROLES.FRONT_OFFICE) {
     if (canRead) {
       console.log('   ✓ Read scope granted — inbox polling (MAILBOX_SOURCE=gmail) will work');
     } else {
       console.warn('   ⚠ No gmail.readonly/gmail.modify scope.');
       console.warn('     Sending works, but MAILBOX_SOURCE=gmail cannot read this inbox,');
-      console.warn('     so incoming enquiries will not become Query Cases.');
+      console.warn('     so no enquiry ever reaches the Front Officer for validation.');
     }
   }
 
@@ -146,16 +147,37 @@ async function preflight() {
   console.log('\n────────────────────────────────────────');
   console.log(`Real senders: ${ok.length}   Mock fallback: ${skipped.length}   Failed: ${failed.length}`);
 
-  if (failed.length) {
-    console.error(`\nPREFLIGHT FAILED for: ${failed.map(([role]) => role).join(', ')}`);
+  /**
+   * Only one mailbox is authenticated, so only one can fail the thing that
+   * matters. The Front Office account is what this system reads from and sends
+   * as: acknowledgements, the forward to the Officer-in-Charge and the final
+   * dispatch all go out as the Front Officer, and inbox polling uses the same
+   * token.
+   */
+  const frontOffice = results.find(([role]) => role === IDENTITY_ROLES.FRONT_OFFICE);
+  if (!frontOffice || frontOffice[1] !== 'ok') {
+    console.error('\nPREFLIGHT FAILED — the Front Office mailbox is not authenticated.');
+    console.error('Set GMAIL_REFRESH_TOKEN_FRONT_OFFICE with gmail.send and a read scope.');
     console.error('Nothing was sent.\n');
     process.exit(1);
   }
 
-  console.log('\nPREFLIGHT PASSED — every configured account authenticates as itself.');
+  // A broken token on any other role cannot affect anything — nothing sends as
+  // the Officer-in-Charge, and an inquirer is whoever sent the mail. So this is
+  // reported as dead configuration to delete rather than as a failure to fix.
+  const strays = failed.filter(([role]) => role !== IDENTITY_ROLES.FRONT_OFFICE);
+  if (strays.length) {
+    console.warn(`\n⚠ Configured but unusable: ${strays.map(([role]) => role).join(', ')}`);
+    console.warn('  These tokens are no longer used by anything. Nothing is broken by');
+    console.warn('  their failure — delete the GMAIL_REFRESH_TOKEN_<ROLE> variables from');
+    console.warn('  backend/.env so the configuration stops claiming a capability that');
+    console.warn('  does not exist.');
+  }
+
+  console.log('\nPREFLIGHT PASSED — the Front Office mailbox authenticates as itself.');
   console.log('This does NOT mean the Gmail integration is verified end-to-end.');
-  console.log('To verify: run the three-inbox procedure in docs/EMAIL_MANUAL_TEST.md and');
-  console.log('confirm the messages in all three real Gmail accounts.\n');
+  console.log('To verify: run the procedure in docs/EMAIL_MANUAL_TEST.md — send an');
+  console.log('enquiry from any external address and confirm it arrives for validation.\n');
 }
 
 preflight().catch((error) => {

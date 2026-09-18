@@ -1,14 +1,33 @@
 import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { validateNicConfig } from './nicConfig.js';
 
+/**
+ * An overlay file first, then `.env` for whatever it did not name.
+ *
+ * `ENV_FILE=.env.e2e npm start` is how the end-to-end suite points the server
+ * at its own database and the mock mail transport without touching a
+ * developer's `.env` — which on this machine is configured for a real Gmail
+ * account. Order is the whole mechanism: dotenv never overwrites a variable
+ * that is already set, so the overlay wins on every key it declares and `.env`
+ * still supplies the secrets the overlay deliberately omits (JWT_SECRET,
+ * QMS_SEED_PASSWORD). Unset, this is exactly the single `.env` load it replaced.
+ */
+if (process.env.ENV_FILE) dotenv.config({ path: process.env.ENV_FILE });
 dotenv.config();
 
 /** The backend package root — this file is at <root>/src/config/env.js. */
 const BACKEND_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 
-const EMAIL_TRANSPORTS = { MOCK: 'mock', GMAIL: 'gmail' };
-const MAILBOX_SOURCES = { AUTO: 'auto', GMAIL: 'gmail' };
+/**
+ * `nic` is the NICeMail IMAP/SMTP path — the direct mail protocols, configured
+ * by the NIC_* variables and validated below. It is not the NICeMail browser
+ * agent, which drives an authenticated web session over CDP, is never selected
+ * here, and is not part of the request path at all.
+ */
+const EMAIL_TRANSPORTS = { MOCK: 'mock', GMAIL: 'gmail', NIC: 'nic' };
+const MAILBOX_SOURCES = { AUTO: 'auto', GMAIL: 'gmail', NIC: 'nic' };
 
 const env = {
   PORT: process.env.PORT || 5000,
@@ -25,8 +44,10 @@ const env = {
   IPC_ACK_FROM_EMAIL: process.env.IPC_ACK_FROM_EMAIL || 'arnd-ipc-mock@example.com',
   IPC_ACK_FROM_NAME: process.env.IPC_ACK_FROM_NAME || 'AR&D Division',
 
-  INQUIRER_EMAIL: process.env.INQUIRER_EMAIL || 'abhinash.pritiraj@gmail.com',
-  INQUIRER_NAME: process.env.INQUIRER_NAME || 'Abhinash Pritiraj',
+  // INQUIRER_EMAIL / INQUIRER_NAME used to be mirrored here and had zero
+  // consumers. They are still read — by config/identities.js, through the
+  // dynamic `process.env[`${role}_EMAIL`]` — but an inquirer is now whoever
+  // sent the mail, so there is no single configured address to surface.
 
   GMAIL_CLIENT_ID: process.env.GMAIL_CLIENT_ID || '',
   GMAIL_CLIENT_SECRET: process.env.GMAIL_CLIENT_SECRET || '',
@@ -75,16 +96,25 @@ function validateEmailConfig(config = env) {
     for (const key of ['GMAIL_CLIENT_ID', 'GMAIL_CLIENT_SECRET']) {
       if (!config[key]) errors.push(`${key} is required when EMAIL_TRANSPORT=gmail`);
     }
-    // Per-role refresh tokens are NOT required here: a role without one falls
-    // back to the mock transport rather than borrowing another account. Only a
-    // completely unauthenticated Gmail setup is a configuration error.
-    const anyToken = ['INQUIRER', 'FRONT_OFFICE', 'OFFICER_IN_CHARGE'].some(
-      (role) => process.env[`GMAIL_REFRESH_TOKEN_${role}`],
-    );
-    if (!anyToken) {
-      errors.push(
-        'At least one GMAIL_REFRESH_TOKEN_<ROLE> is required when EMAIL_TRANSPORT=gmail',
-      );
+    // Only the Front Office mailbox is authenticated. It is the one account the
+    // system reads from and sends as: acknowledgements, the forward to the
+    // Officer-in-Charge and the final dispatch all go out as the Front Officer,
+    // and inbox polling uses the same token. Inquirers are external senders who
+    // never authenticate to anything here, and nothing sends as the OIC — that
+    // role is a recipient, addressed by OFFICER_IN_CHARGE_EMAIL.
+    if (!process.env.GMAIL_REFRESH_TOKEN_FRONT_OFFICE) {
+      errors.push('GMAIL_REFRESH_TOKEN_FRONT_OFFICE is required when EMAIL_TRANSPORT=gmail');
+    }
+  }
+
+  // NICeMail is validated by config/nicConfig.js, which owns the NIC_* names
+  // and their defaults. Re-listing them here would let the two drift.
+  if (
+    config.EMAIL_TRANSPORT === EMAIL_TRANSPORTS.NIC ||
+    config.MAILBOX_SOURCE === MAILBOX_SOURCES.NIC
+  ) {
+    for (const problem of validateNicConfig()) {
+      errors.push(`${problem} (required when NICeMail is selected)`);
     }
   }
 
@@ -92,6 +122,18 @@ function validateEmailConfig(config = env) {
     errors.push(
       `MAILBOX_SOURCE must be one of: ${Object.values(MAILBOX_SOURCES).join(', ')} (got "${config.MAILBOX_SOURCE}")`,
     );
+  }
+
+  // The NICeMail browser mailbox is a second Front Office mailbox, alongside
+  // whatever MAILBOX_SOURCE selects. It needs only its address — the browser
+  // session carries the authentication, so none of the IMAP settings apply.
+  if (String(process.env.NIC_BROWSER_MAILBOX || '').trim().toLowerCase() === 'true') {
+    const nicEmail = (process.env.NIC_EMAIL || '').trim().toLowerCase();
+    const frontOffice = (process.env.FRONT_OFFICE_EMAIL || '').trim().toLowerCase();
+    if (!nicEmail) errors.push('NIC_EMAIL is required when NIC_BROWSER_MAILBOX=true');
+    else if (nicEmail === frontOffice) {
+      errors.push('NIC_EMAIL must differ from FRONT_OFFICE_EMAIL when NIC_BROWSER_MAILBOX=true');
+    }
   }
 
   if (!config.IPC_QUERY_EMAIL) errors.push('IPC_QUERY_EMAIL is required');

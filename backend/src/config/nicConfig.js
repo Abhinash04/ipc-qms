@@ -5,10 +5,13 @@
  * process.env at import, plus a `validate*` returning error strings and an
  * `assert*` that throws.
  *
- * Deliberately separate from config/env.js: NICeMail is a standalone
- * read/send capability at this stage and is NOT a selectable email transport.
- * Keeping it out of `EMAIL_TRANSPORTS` means the Gmail and mock paths cannot
- * be disturbed by anything in this file.
+ * Deliberately separate from config/env.js, which owns EMAIL_TRANSPORT and
+ * MAILBOX_SOURCE and calls `validateNicConfig()` when either is set to `nic`.
+ * Keeping the NIC_* names in one file means the Gmail and mock paths cannot be
+ * disturbed by anything here, and that the two validators cannot drift.
+ *
+ * This file configures IMAP/SMTP only. The NICeMail browser agent has its own
+ * settings in config/browserConfig.js and shares nothing with these.
  *
  * Endpoint defaults are empty on purpose. The working pair as of Phase 0 is
  * imap.mgovcloud.in:993 / smtp.mgovcloud.in:465, documented in .env.example —

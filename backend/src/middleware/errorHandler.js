@@ -21,8 +21,19 @@ function errorHandler(err, req, res, next) {
     console.warn(`[qms] ${req.method} ${req.originalUrl} -> ${status}: ${err.message}`);
   }
 
+  // An error carrying an explicit `status` was thrown deliberately and its
+  // message was written for the caller — including the 503 that says storage is
+  // unavailable, which the frontend turns into an accurate toast. An error with
+  // no status is whatever threw: a Mongoose error naming a collection, a driver
+  // error carrying a connection string. Outside development that one is
+  // replaced, and the full text is already on stderr above.
+  const safeMessage =
+    !err.status && env.NODE_ENV !== 'development'
+      ? 'Internal Server Error'
+      : err.message || 'Internal Server Error';
+
   res.status(status).json({
-    error: err.message || 'Internal Server Error',
+    error: safeMessage,
     // Structured extras a thrower opts into (e.g. AttachmentUnavailableError's
     // `unavailableAttachments`) — never request bodies/headers, and only what
     // the error explicitly attached.

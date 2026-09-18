@@ -41,6 +41,30 @@ export default defineConfig({
       // Unroutable on purpose: an un-stubbed attach fails instantly instead of
       // hanging, or worse, reaching a real Chrome on the developer's machine.
       NIC_CDP_ENDPOINT: 'http://127.0.0.1:1',
+
+      /**
+       * The NICeMail browser mailbox, pinned OFF. Every key here that is not
+       * pinned is read from the developer's own backend/.env, because env.js
+       * loads it and dotenv only skips keys that are already set. Enabling the
+       * feature locally therefore changed what the suite saw: with
+       * NIC_BROWSER_MAILBOX=true in .env, config validation reported an extra
+       * error and email.test.js failed on a machine where nothing was wrong.
+       * Tests that exercise the feature switch it on themselves (vi.stubEnv).
+       */
+      NIC_BROWSER_MAILBOX: '',
+      NIC_FRONT_OFFICE_NAME: '',
+      NIC_BROWSER_TEST_RECIPIENT: '',
+      NIC_BROWSER_TIMEOUT_MS: '',
+      NIC_BROWSER_SYNC_TTL_MS: '',
+      NIC_BROWSER_SYNC_MAX: '',
+      NIC_BROWSER_ARTIFACT_DIR: '',
+      NIC_WEBMAIL_URL_PATTERNS: '',
+      NIC_WEBMAIL_TITLE_PATTERNS: '',
+      // The outbound interlock, pinned to its safe default. A developer who has
+      // enabled real outbound mail locally must not run the suite with the
+      // two-key check switched off.
+      NIC_ALLOW_OUTBOUND: '',
+
       INQUIRER_NAME: 'Test Inquirer',
       INQUIRER_EMAIL: 'inquirer@test.invalid',
       FRONT_OFFICE_NAME: 'Test Front Officer',
