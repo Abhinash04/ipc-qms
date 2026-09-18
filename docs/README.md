@@ -12,14 +12,23 @@ design system).
 
 ## Operational Guides
 
-- [auth.md](./auth.md) — the 13 development accounts, their roles and landing dashboards, how
+- [auth.md](./auth.md) — the 13 seeded accounts (a 14th, the NICeMail Front Office, when `NIC_BROWSER_MAILBOX=true`), their roles and landing dashboards, how
   sign-in works, and the known limitations of the seeded-account mechanism. **Contains no
   credentials** — the password is referenced by environment-variable name.
 - [EMAIL_MANUAL_TEST.md](./EMAIL_MANUAL_TEST.md) — manual procedure for proving real Gmail sends
-  and the browser end-to-end workflow across four real accounts.
+  and the browser end-to-end workflow. Only the Front Office mailbox is authenticated; an enquiry is
+  sent from any external address and validated by hand.
 - [NIC_EMAIL_PHASE0.md](./NIC_EMAIL_PHASE0.md) — the feasibility gate for NIC government email
-  (`@gov.in`) over IMAP/SMTP. **Phase 0 has not passed**; nothing downstream should be built until
-  it does.
+  (`@gov.in`) over IMAP/SMTP. The `mgovcloud.in` endpoints are reachable and the transport is
+  implemented and selectable, but **authentication has not yet succeeded**: an application-specific
+  password is required under MFA.
+- [NIC_BROWSER_AGENT.md](./NIC_BROWSER_AGENT.md) — setup runbook for the NICeMail browser agent:
+  dedicated Chrome profile, CDP on `localhost:9222`, manual sign-in, `nic:browser:discover`.
+
+> NICeMail has **two unrelated mechanisms** — IMAP/SMTP (the mail protocols, selected by
+> `EMAIL_TRANSPORT=nic`) and the browser agent over CDP (attaching to a Chrome session an operator
+> signed in to by hand). They share no code and no credential. See
+> [backend/README.md](../backend/README.md#nicemail-two-separate-mechanisms) before changing either.
 
 ## SRS (`srs/`)
 
@@ -66,6 +75,11 @@ do*; where they describe implementation status, defer to the READMEs.
 
 `docs/markdown/` holds IPC source material — guidance documents, amendment lists, notices and FAQs
 — used to build the AI's grounding corpus. It is **gitignored and not part of the repository**, and
-it is not project documentation. See
-[backend/README.md](../backend/README.md#ai-grounding-layer) for how it is ingested and why
-`npm run ingest:ipc` cannot be re-run on a fresh clone.
+it is not project documentation.
+
+The committed artefact of record is `backend/src/data/ipcKnowledge.json`, which is what the
+application reads: a fresh clone has full grounding and needs no build step. `npm run ingest:ipc` is
+a maintainer step, run when the source documents change, and it needs the corpus obtained
+separately. See [backend/README.md](../backend/README.md#ai-grounding-layer) for the ingestion
+rules, including which documents are deliberately excluded from retrieval and why none of them are
+deleted.

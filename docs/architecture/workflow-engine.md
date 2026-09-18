@@ -40,10 +40,16 @@ without any change to the data model or the components that render it
 (`frontend/src/components/workflow/QueryLifecycleTimeline.jsx` renders any length of
 `workflowSteps` sorted by `sequence`).
 
-> **Implementation status.** This model is **implemented client-side** in
-> `frontend/src/store/useWorkflowStore.js`, persisted to IndexedDB. It is **not yet implemented
-> server-side** — there is no Case or WorkflowStep collection in the backend, which is why this
-> document still describes the shape the server should adopt.
+> **Implementation status.** The engine is **implemented client-side** in
+> `frontend/src/store/useWorkflowStore.js`, and its steps are now **persisted server-side**:
+> `backend/src/models/WorkflowStep.js` is the collection — unique on `stepId`, with a compound
+> index on `{queryId, sequence}` so a query's chain reads back in order — and every transition
+> syncs through `POST /api/v1/queries/persist`.
+>
+> What is still client-side is the *decision*. Whether a transition is legal for the acting role in
+> the current `workflowState` is checked in the store; the server's `verifyAction` enforces only
+> the role half of `canPerform`. That is why this document still describes the rules the backend
+> should adopt.
 
 ## Step Lifecycle
 
@@ -75,8 +81,25 @@ workflow activity.
 
 A query's coarse `workflowState` (e.g. `UNDER_REVIEW`) tracks where its `currentWorkflowStepId`
 sits. In the client implementation this invariant is held by `applyTransition`, the store's single
-writer: it is the only place that changes `workflowState`, it **derives `businessStatus` from it**
+writer: it is the only place *in the client* that changes `workflowState`, it **derives
+`businessStatus` from it**
 via `deriveBusinessStatus` so those two can never disagree, and it **always appends exactly one
 audit event**. A server-side implementation should preserve that property — one commit point that
 updates the step, the state and the audit record together, rather than three call sites that can
 drift apart.
+
+Two pieces of that server-side implementation already exist, one at each end of the lifecycle.
+`backend/src/services/email/mailbox/acceptMessage.js` owns the intake transitions
+(`RECEIVED → FRONT_OFFICE_VERIFICATION → PENDING_ASSIGNMENT`), and
+`backend/src/services/workflow/finalApproval.js` owns the closing ones
+(`PENDING_FINAL_APPROVAL → READY_FOR_DISPATCH → DISPATCHED → CLOSED`). Both write their own audit
+events, and the client reads the result back with `refreshFromServer()` rather than reconstructing
+it. They are worth reading as the shape the rest should follow — and as a caveat: with no
+cross-document transactions on a standalone MongoDB they achieve safety by making every step check
+its own artefact before acting, not by rolling back.
+
+The closing sequence also shows what "one commit point" has to mean when a step leaves the machine.
+The approval is written before the response is sent, so a mail failure costs the response and not
+the decision; the case is marked `CLOSED` only after a send that actually happened, so the state can
+never claim more than occurred. A failed send stops at `READY_FOR_DISPATCH` — no new state was
+invented for it — and the Front Office retry resumes from there.

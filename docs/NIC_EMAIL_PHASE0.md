@@ -1,8 +1,19 @@
 # NIC eMail — Phase 0 Verification
 
-**This is a gate, not a formality.** No NIC integration code gets written until this
-passes. The plan's viability rests on one question that documentation cannot answer for
-a specific account:
+> **Status update.** Reachability has passed: the `mgovcloud.in` endpoints answer, and the
+> integration is now written — `EMAIL_TRANSPORT=nic` and `MAILBOX_SOURCE=nic` select a working
+> IMAP/SMTP transport (`backend/src/services/email/transports/nicTransport.js` and
+> `mailbox/nicInboxReader.js`). **Authentication has not passed.** IMAP returns
+> `Invalid credentials` and SMTP `535`, which under MFA is the expected result for a webmail
+> password: an application-specific password is required. Until one is supplied, nothing has been
+> proven about this mailbox and the transport must not be enabled in production.
+>
+> This document remains the authoritative record of the gate and of how to test it. The
+> mailbox address is configurable (`NIC_EMAIL`) and is not hardcoded anywhere in the source, so
+> moving to `lab.ipc@gov.in` is a one-variable change.
+
+**This is a gate, not a formality.** The plan's viability rests on one question that documentation
+cannot answer for a specific account:
 
 > Can a **headless server** authenticate to `contact.ecoclubs-edu@gov.in` over IMAP/SMTP?
 

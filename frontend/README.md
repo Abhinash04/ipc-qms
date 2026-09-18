@@ -15,10 +15,22 @@ npm run dev        # http://localhost:5173
 |---|---|
 | `npm run dev` | Vite dev server |
 | `npm run build` | Production build |
+| `npm run build:check` | Production build, then enforce the bundle budget (`scripts/check-bundle-budget.mjs`) |
 | `npm run preview` | Serve the build |
 | `npm run lint` | ESLint |
-| `npm test` | Vitest, 38 test files |
+| `npm test` | Vitest, 42 test files (787 tests) |
 | `npm run test:watch` | Vitest watch mode |
+| `npm run test:e2e` | Playwright, specs in `e2e/` — same as `npx playwright test`. See below |
+| `npm run doctor` | React Doctor locally (the same check CI runs) |
+
+**End-to-end tests.** `playwright.config.js` starts both servers itself and drives a real Chromium
+against them. Unlike the Vitest suite it needs a **local MongoDB on `127.0.0.1:27017`** — it uses its
+own `qms_e2e` database and wipes it between specs — and a one-off
+`npx playwright install chromium`. Backend settings come from `backend/.env.e2e`, which is
+credential-free and committed on purpose; `JWT_SECRET` and `QMS_SEED_PASSWORD` are deliberately not
+in it and still come from `backend/.env`. Stop a hand-started backend first: with something already
+on `:5000` Playwright reuses it, along with whatever database and mail transport it was started
+with.
 
 **Environment** — one variable:
 
@@ -39,8 +51,13 @@ App      → HydrationGate → NotificationHost + BrowserRouter → AppRoutes
                           ProtectedRoute → MainLayout → page
 ```
 
-`HydrationGate` blocks rendering until both the workflow store has loaded from IndexedDB and
-`/auth/me` has answered — without it, a reload flashes the login screen before the session is known.
+`HydrationGate` waits for `/auth/me` to answer — without it, a reload flashes the login screen
+before the session is known — and then loads the workflow store, but **only once someone is signed
+in**. That ordering is the point: `GET /queries` requires a session, so hydrating at module load
+raced ahead of the cookie check, every call 401'd on a first visit, and the store silently fell back
+to its local seed and never reloaded. Signing out clears the store (`resetHydration`) so the next
+account does not inherit the previous one's cases.
+
 `NotificationHost` mounts *outside* the router so the login page gets toasts too, but *inside* the
 gate so seeded history is never replayed as a burst of notifications.
 
@@ -111,18 +128,136 @@ Permissions are enforced *in the store*, not only in the UI: `assertCan` throws 
 `canPerform(role, action, workflowState)` allows it, and `assertOwnsStep` stops a reviewer acting on
 another reviewer's level.
 
-### Persistence — Dexie / IndexedDB
+**Two actions deliberately bypass it**, because the server — not this store — is the one that did
+the work: `acceptMailboxMessage` (below) and `grantFinalApproval`. Both post to a single endpoint
+and then call `refreshFromServer()` to read the result back, rather than reconstructing it locally
+and hoping the two agree.
 
-Database `qms`, schema v2. `persistDelta` writes only the delta for the affected case, fired
-without blocking the UI; a failure surfaces as `persistenceError` and an error toast.
+### `grantFinalApproval` — approving is answering
 
-> **Query Cases are browser-local.** There is no `/queries` endpoint and no server-side Case model,
-> so cases, workflow steps, reviews, draft versions, client audit events and in-app notifications
-> live only in the current browser profile. Another user, another browser or the server cannot see
-> them. The admin console labels these figures "This browser only" for exactly this reason.
+`grantFinalApproval` posts to `POST /queries/:queryId/final-approval`. The server records the
+approval, emails the approved response to the inquirer and closes the case; the store re-hydrates.
+`assertCan` still runs in front of it, but as a convenience — it refuses an unauthorised click by
+name instead of after a round trip, and the server enforces `FINAL_APPROVE` independently.
 
-What *does* cross the wire: authentication, emails (send/forward/acknowledge/ingest/delete),
-attachment bytes and metadata, AI requests, health, and the **server-side** audit trail.
+It used to record the approval here and then call `dispatchResponse` with a null actor, on the
+theory that an automatic send is "the system acting". The null actor skipped only *this store's*
+permission check: the request still went out on the approving officer's session, against the
+Front-Office-only `POST /emails/response`, so every approval ended in a **403** with the case
+stranded at `READY_FOR_DISPATCH` and the inquirer never answered.
+
+`dispatchResponse` still serves the Front Office **Retry sending response** control on
+`pages/dispatch/DispatchDetailPage.jsx`, which passes a real actor and is gated on `DISPATCH` as it
+always was. It sends the case's `queryId` with the request, so the server answers through the
+mailbox the case came from — a NICeMail case from NICeMail, not the default transport. That page is
+otherwise a status view: it shows what was sent, to whom and when, and offers the retry only when no
+`OUTGOING_RESPONSE` message exists, so it does not distinguish a send that failed from one that was
+**unconfirmed** — the case's audit history shows which — and a NICeMail case's Sent folder should be
+checked before retrying. A retry that itself ends unconfirmed shows the server's Sent-folder
+warning in the error banner.
+
+Approving and answering are one click but two outcomes, and the second can fail on its own, so
+`ApprovalDetailPage` reads `dispatched` and `alreadyDispatched` off the response and raises
+*"Approved, but the inquirer was not emailed: …"* when neither is true. The approval stands either
+way; the case waits at `READY_FOR_DISPATCH` for the retry.
+
+### Persistence — the server, via `/api/v1/queries`
+
+`services/persistence/queryState.js`. The store hydrates from `GET /queries` and writes one delta
+per committed transition to `POST /queries/persist` — only the delta for the affected case, fired
+without blocking the UI.
+
+Query Cases are **server-side**, in MongoDB. Cases, workflow steps, reviews, draft versions, audit
+events and notifications are shared across users and browsers. This module held its own Dexie /
+IndexedDB database until the server-side Query Case API landed; the folder was named `services/db/`
+then, and Dexie is no longer a dependency.
+
+`memoryStore` mirrors the state in memory so the UI keeps working when the API is unreachable. It is
+**per-tab memory, not storage** — it does not survive a refresh, which is exactly why a failed
+write-through is reported rather than swallowed:
+
+- `loadAll()` throws on failure. `hydrate()` turns that into `persistenceError`.
+- the write paths keep the optimistic local update — the user's action already took effect on
+  screen — and raise one toast, `"Changes were not saved"`, under a fixed id so a mailbox sweep
+  produces one message rather than a dozen. A 403 and a 503 get their own wording.
+- a **400** names the field. `validateBody` has always answered `{ error, fields: ['auditEvent.event'] }`
+  and this module discarded the list, so a contract mismatch between this client and the server's
+  schema — a bug, not something a user can retry their way out of — read as an unactionable "changes
+  were not saved". The toast now carries the field paths (paths only, never values, since a delta
+  carries case content) — so a rejection like `addReviews.0.stepId`, which used to 400 every
+  return-for-revision from final approval, names itself. Note the limit: Zod *strips* an undeclared
+  key rather than rejecting it, so a field the schema never learned is lost without any 400 at all.
+
+What else crosses the wire: authentication, emails (send/forward/acknowledge/ingest/delete),
+attachment bytes and metadata, AI requests, health, and the server-side audit trail.
+
+## Mail intake — the validation gate
+
+Arriving mail creates nothing. `pages/frontOffice/MailboxInboxPage.jsx` lists what is waiting, and
+each undecided row carries two circular icon buttons:
+
+| Control | What it does |
+|---|---|
+| ✓ **Accept** | `acceptMailboxMessage` — one `POST /mailbox/messages/:messageId/accept`. The server registers the Query Case, mints its id, stores the sender as the inquirer, summarises the enquiry onto `aiSummary`, acknowledges that sender, **and forwards to the Officer-in-Charge** with that same summary, landing the case in `PENDING_ASSIGNMENT`. |
+| ✕ **Reject** | records the decision and nothing else: no case, no Case ID, no acknowledgement. The message stays listed, marked *Rejected*. |
+
+Both confirm first, and both are final — the server keeps the first decision on a message and
+ignores any later one.
+
+**Accepting mints nothing in the browser.** The whole sequence runs server-side, and
+`acceptMailboxMessage` then calls `refreshFromServer()` to read the result back rather than
+reconstructing it locally — including on a repeat accept, whose answer may name a case this tab has
+never seen. Two things were wrong with doing it here: the Case ID came from a counter this tab held,
+so two tabs hydrated at the same number both minted it; and a tab closed midway left a case nobody
+had been told about.
+
+The response is
+`{ queryId, created, alreadyDecided, acknowledged, forwarded, aiSummaryStatus, errors }` and arrives
+as a 200 even when a step failed, so the toast can name what did and did not happen
+(`describeAccept` in `MailboxInboxPage.jsx`, which reports the acknowledgement and the forward).
+`aiSummaryStatus` is `GENERATED`, `FALLBACK` or `FAILED` — the summary now belongs to the case
+(`query.aiSummary`, rendered by `AiSummaryCard`) instead of being made inside the forward and thrown
+away, and `FALLBACK` means the model did not answer and the deterministic stand-in was used, which is
+an ordinary outcome rather than a failure. Pressing ✓ again is safe: each server step checks for
+its own artefact first, so a retry finishes what did not complete and repeats nothing. If the
+forward is what failed, the case sits at `FRONT_OFFICE_VERIFICATION` and **Forward to
+Officer-in-Charge** on the case page is the recovery path — that button is no longer a required
+second step.
+
+**An unconfirmed acknowledgement gets different advice.** When the server flags the acknowledgement
+`unconfirmed` — sent through the NICeMail browser, Send pressed, no confirmation seen — it may
+already be in the inquirer's inbox, and nothing recorded it, so ✓ would send it again. The toast
+then reads "acknowledgement may already have been sent … check the NICeMail Sent folder before
+retrying", naming the sender who may otherwise receive it twice, instead of "retry from the case
+page".
+The case page's **Acknowledgement email not sent** notice is derived from the missing record and
+still offers **Retry sending**; the case's audit history has an `EMAIL_SEND_FAILED` row saying the
+acknowledgement may have been sent, but the notice does not read it. A retry that itself ends
+unconfirmed turns the notice into **Acknowledgement may already have been sent**, with the server's
+warning (`acknowledgeInquirer` returns the server's reason and `unconfirmed`, not axios's status
+text).
+
+Intake is **N:1**: many external inquirers, one Front Office mailbox. The inquirer on a case is
+parsed from the incoming `From` header, so anyone can write in without an account here; a sender the
+system has never seen gets `inquirer.id: null` and is otherwise a normal case.
+
+**A second Front Office mailbox.** With the backend's `NIC_BROWSER_MAILBOX=true`, a second Front
+Office account sees the NICeMail mailbox on this same page; the server chooses the mailbox by who is
+signed in, and the client does nothing different. That mailbox is filled by a browser agent reading
+a signed-in NICeMail tab, and a failed read does not fail the inbox request: the server answers 200
+with what it already stored and reports the failure in a `sync` field. When `sync.ok === false` the
+page shows **NICeMail could not be read — this list may be out of date**, with the reason and its
+stage, rather than something that looks like an empty inbox. No other mailbox's response carries
+`sync`, so the notice never appears for them. See
+[`../docs/NIC_BROWSER_AGENT.md`](../docs/NIC_BROWSER_AGENT.md#13-troubleshooting).
+
+`components/workflow/MailboxAutoSync.jsx` still polls every 30 s, but only to count what is waiting
+and say so. It used to register, acknowledge and forward everything it found, from whatever page
+happened to be open — so a case could reach the Officer-in-Charge without anyone having read the
+email. The poll is useful; what it may do with the result is not.
+
+There is correspondingly **no "Validate Query" button on the case page**. Validation happens once,
+in the mailbox; a second validate step asked the Front Officer to judge the same email twice.
 
 ## API layer
 
@@ -184,10 +319,11 @@ Charts are **hand-written SVG** in `components/admin/charts.jsx` (`StatusDonut`,
 `constants/chartPalette.js`, a validated colour-blind-safe series; identity is never carried by hue
 alone.
 
-`components/ui/` holds 34 shadcn/ui files, of which **17 are actually reachable** from app code
+`components/ui/` holds 33 shadcn/ui files, of which **17 are actually reachable** from app code
 (button, card, badge, label, skeleton, textarea, select, tooltip, dialog, tabs, table, checkbox,
-scroll-area, sonner and their variant helpers). The other 17 are dormant scaffold — safe to adopt
-or delete, currently imported by nothing.
+scroll-area, sonner and their variant helpers). The other 16 are dormant scaffold — safe to adopt
+or delete, currently imported by nothing. (`breadcrumb.jsx` was one of them and has been removed: it
+duplicated the live `components/common/Breadcrumb.jsx`.)
 
 ## Layout
 
@@ -198,42 +334,69 @@ src/
   routes/        AppRoutes, roleRoutes, ProtectedRoute
   constants/     enums, RBAC tables, policies, mock directory data
   store/         useAuthStore, useWorkflowStore
-  services/      api/, db/ (Dexie), ai/ (local), notify.js
+  services/      api/, persistence/ (queryState.js), ai/ (local), notify.js
   hooks/         useQueryCase, useWorkflowAction, useMailboxIngestion, useBucketFilter, useRoutePaths
   components/    admin/ ai/ attachments/ common/ dashboard/ email/ layout/ notifications/ ui/ workflow/
-  pages/         35 page components across 14 folders
-  test/          38 test files + setup.js
+  pages/         34 page components across 14 folders
+  test/          42 test files + setup.js and three in-process fakes (fakeQueryApi.js,
+                 fakeAcceptEndpoint.js, fakeFinalApprovalEndpoint.js)
   utils/         cn, greeting, queryOwnership
 ```
 
+`e2e/` sits beside `src/` and holds the Playwright specs plus their `helpers/`; the runner is
+configured by `playwright.config.js` at the package root.
+
 ## Tests
 
-38 files, `npm test` (Vitest 4 + Testing Library, jsdom).
+42 files (787 tests), `npm test` (Vitest 4 + Testing Library, jsdom).
 
 The harness is deliberately strict:
 
-- **`fake-indexeddb/auto`** — Dexie runs for real against an in-memory IndexedDB, so persistence
-  round-trips are genuinely exercised rather than mocked.
-- **`aiService` is mocked** globally so no test reaches the network.
+- **`aiService` and `queryCaseService` are mocked globally**, so no test reaches the network.
+  `queryCaseService` is backed by `test/fakeQueryApi.js`, an in-process stand-in that keeps its own
+  state and applies the same upsert-by-id semantics as the real controller — so `loadAll()` is a
+  genuine round trip through a boundary, not a read-back of the object just written. Its
+  `grantFinalApproval` is `test/fakeFinalApprovalEndpoint.js`, which stands in for the server
+  operation the same way `fakeAcceptEndpoint.js` stands in for accept: the approval, the outbound
+  response and the closing audit rows are produced behind the boundary, so a test that reads them
+  back is reading what a server would have returned.
 - **A console trap** — `afterEach` asserts that nothing wrote to `console.error` or `console.warn`.
   Any test producing console output fails. Several modules note this constraint in their source.
 
 Notable suites: `routes.test.jsx` renders **every generated route for the role that owns it**;
-`enumGuard.test.js` scans source for references to workflow/audit enum members that do not exist;
-`lifecycle.test.js` carries one email end-to-end to `CLOSED` and asserts one audit event per
-transition and survival across a reload; `notifications.test.jsx` proves a toast follows a committed
-transition rather than a click.
+`enumGuard.test.js` scans source for references to workflow/audit enum members that do not exist —
+it is what caught `AUDIT_EVENT.QUERY_PULLEDBACK`, a misspelling that had every pullback writing
+`event: undefined`; `lifecycle.test.js` carries one email end-to-end to `CLOSED` and asserts one
+audit event per transition; `notifications.test.jsx` proves a toast follows a committed transition
+rather than a click.
+
+> `routes/routeElements.eager.jsx` has no importers and **must not be deleted**. Vitest resolves
+> `@/routes/routeElements` to it through a path alias in `vite.config.js`, because tests drive pages
+> synchronously and cannot wait on `React.lazy`. It and `routeElements.jsx` are deliberately kept in
+> sync; edit them as a pair.
+
+### End-to-end (`e2e/`)
+
+Playwright, run with `npx playwright test` (or `npm run test:e2e`), configured by
+`playwright.config.js`. These are the opposite trade-off to the Vitest suite: a real browser, a real
+Express server and a real MongoDB, with nothing mocked. Prerequisites are a local MongoDB on
+`127.0.0.1:27017` and a one-off `npx playwright install chromium`; backend configuration comes from
+`backend/.env.e2e`, which names no mailbox, no OAuth token and no password, and points at its own
+`qms_e2e` database. `JWT_SECRET` and `QMS_SEED_PASSWORD` stay in the gitignored `backend/.env`.
+
+The specs share one database and each wipes it first, so the config runs one worker, no parallelism
+and no retries. Playwright starts both servers itself — stop a hand-started backend before running
+it, or it reuses that one along with whatever database and mail transport it holds.
 
 ## Known dead code
 
 Not wired to anything, kept here so nobody rediscovers it:
 
-- `components/dashboard/DashboardResolutionRate.jsx` — zero importers.
-- `hooks/useHealthCheck.js` — zero importers; `AdminSettingsPage` calls `fetchHealth` directly.
 - `adminService.fetchAuditForQuery` — exported, never called.
-- 17 dormant `components/ui/` files (above); `src/assets/` and `src/features/` are empty.
-- **Declared but never imported:** `react-hook-form`, `@hookform/resolvers`, `zod` — forms are plain
-  controlled `useState`.
+- 16 dormant `components/ui/` files (above); `src/assets/` and `src/features/` are empty.
 
-`frontend/DESIGN.md` is a brand-analysis reference that predates the current UI; treat it as
-historical input, not a spec.
+Previously listed here and now removed: `DashboardResolutionRate.jsx`, `hooks/useHealthCheck.js`,
+`components/ui/breadcrumb.jsx` (a duplicate of the live `components/common/Breadcrumb.jsx`),
+`test/dbMigration.test.js` (tested Dexie's own upgrade machinery for a schema the app no longer
+declares), and the `dexie`, `fake-indexeddb`, `react-hook-form`, `@hookform/resolvers` and `zod`
+dependencies, none of which had a single importer in `src/`.

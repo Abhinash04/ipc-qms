@@ -7,7 +7,7 @@ Design rationale. For the concrete file map, scripts, dependency list and dead-c
 
 ```
 frontend/src/
-  main.jsx           React root: QueryClientProvider, font CSS, both store hydrations
+  main.jsx           React root: QueryClientProvider, font CSS, auth hydration only
   App.jsx            HydrationGate -> NotificationHost + BrowserRouter -> AppRoutes
   index.css          Tailwind v4 @theme tokens + custom utility layers (no tailwind.config.js)
   components/
@@ -22,13 +22,13 @@ frontend/src/
     dashboard/       BucketDashboard and its widgets
     email/           EmailThread
     notifications/   NotificationHost
-  pages/             35 page components across 14 folders; thin, no business logic
+  pages/             34 page components across 14 folders; thin, no business logic
   layouts/           MainLayout (authenticated shell), AuthLayout (bare, for /login)
   hooks/             useQueryCase, useWorkflowAction, useMailboxIngestion, useBucketFilter,
                      useRoutePaths
   services/
     api/             axiosClient (the only place axios is imported) + per-resource services
-    db/              db.js — Dexie/IndexedDB schema and transactions
+    persistence/     queryState.js — server-backed Query Case sync via /api/v1/queries
     ai/              mockAiService (deterministic fallback), draftComposer — local, no network
     notify.js        the only module importing sonner
   store/             useAuthStore, useWorkflowStore
@@ -36,7 +36,7 @@ frontend/src/
   constants/         roles, permissions, routeSections, routePaths, navigation, status enums,
                      workflowRules, queryBuckets, policies, directory data
   utils/             cn, greeting, queryOwnership
-  test/              38 test files + setup.js
+  test/              39 test files + setup.js + fakeQueryApi.js
 ```
 
 `src/assets/` and `src/features/` exist but are empty.
@@ -47,8 +47,15 @@ State is deliberately split by concern:
 
 - **Global client state (Zustand)** — two stores. `useAuthStore` (session) and `useWorkflowStore`
   (the domain). One store per concern; never a single catch-all.
-- **Domain persistence (Dexie/IndexedDB)** — the workflow store writes a per-case delta on every
-  transition. Database `qms`, schema v2.
+- **Domain persistence (`/api/v1/queries`)** — the workflow store hydrates once from
+  `GET /queries` after sign-in and posts a per-case delta on every transition, through
+  `services/persistence/queryState.js`. That module mirrors the state in tab-local memory so the
+  UI keeps working when a write-through fails, and raises a toast rather than swallowing it. It
+  was a Dexie/IndexedDB database until the server-side Query Case API landed. A **400** is named
+  rather than generalised: `validateBody` has always answered `{ error, fields: ['auditEvent.event'] }`
+  and the client discarded the list, so a contract mismatch read as an unactionable "changes were not
+  saved"; the toast now carries the offending field paths — paths only, never values, since a delta
+  carries case content.
 - **Server state (TanStack Query)** — everything fetched from the API: mailbox messages, email
   config, audit events and summaries, health. Fetching goes through a service module in
   `services/api/`, never a raw `axios` call inside a component.
@@ -73,6 +80,45 @@ Two consequences worth knowing before changing anything here:
 Permissions are enforced *in the store*, not only in the UI: `assertCan` throws unless
 `canPerform(role, action, workflowState)` allows it, and `assertOwnsStep` prevents a reviewer acting
 on another reviewer's level.
+
+Every workflow action failure — assign, draft, submit, approve, request revision, forward — surfaces
+through `hooks/useWorkflowAction`, which reads `response.data.error` before falling back to the axios
+message. Every API error is shaped `{ error, … }` by `middleware/errorHandler.js`, so reporting the
+axios string showed "Request failed with status code 403" while the server had been naming the actual
+refusal in the body all along.
+
+**Two paths deliberately do not go through `applyTransition`: accepting a mailbox message, and
+granting final approval.**
+`acceptMailboxMessage` posts to `POST /mailbox/messages/:messageId/accept`, where the server mints
+the Case ID, creates the case, summarises the enquiry onto `aiSummary`, acknowledges the sender and
+forwards to the Officer-in-Charge, and then calls `refreshFromServer()` to read the result back. It reconstructs nothing locally, because
+the server is now the only holder of that case — and it refreshes on a repeat accept too, since the
+answer may name a case this tab has never seen and the inbox row would otherwise have nothing to
+link to. The client no longer mints Case IDs on the email path; the in-app **Raise Enquiry** portal
+path still does, and `POST /queries/persist` answers 409 if two tabs mint the same id.
+
+`grantFinalApproval` follows the same shape: it posts to
+`POST /queries/:queryId/final-approval` and calls `refreshFromServer()`, because the server is the
+only holder of what just happened — the locked version, the outbound response, the closing audit
+rows. `assertCan` stays in front of it, but as a convenience: it refuses an unauthorised click by
+name rather than after a round trip, and the server enforces `FINAL_APPROVE` independently. Approving
+and answering are one click but two outcomes, so `ApprovalDetailPage` reads `dispatched` and
+`alreadyDispatched` off the response and raises an error if the approval was recorded but the
+inquirer was not emailed — reporting only "approved" in that case is the failure the whole path
+exists to prevent.
+
+This replaces an arrangement where the store recorded the approval locally and then called
+`dispatchResponse` with a null actor, on the theory that an automatic send is the system acting. The
+null actor skipped only this store's own permission check; the HTTP request still went out on the
+approving officer's session against the Front-Office-only `POST /emails/response`, so every approval
+ended in a 403. `dispatchResponse` itself is unchanged and still serves the Front Office **Retry
+sending response** control on the Dispatch page, which passes a real actor and is gated on
+`DISPATCH` as it always was.
+
+`refreshFromServer()` is separate from `hydrate()` rather than a flag on it: `hydrate()` returns
+immediately once `hydrated` is true, which is exactly when this is called. It reports through
+`persistenceError` instead of throwing — the server has already done the work, so a failed read is a
+stale screen, not a lost case.
 
 ## Routing & RBAC
 
@@ -137,9 +183,10 @@ already imports the client through `authService`, so importing back would close 
 
 | Area | Source |
 |---|---|
-| Dashboards, queries, my work, assignments, drafting, reviews, approvals, dispatch, notifications | The workflow store (IndexedDB — **browser-local**) |
+| Dashboards, queries, my work, assignments, drafting, reviews, approvals, dispatch, notifications | The workflow store, hydrated from `GET /queries` — **server-side** |
+| Approvals → **Approve** | `POST /queries/:queryId/final-approval`, then a re-hydration. Not a state mirror: the server records the approval, sends the response and closes the case, and the store reads back what it did |
 | Raise Enquiry | `GET /emails/config` for identities; `POST /attachments` then `POST /emails/enquiry` |
-| IPC Mailbox | `GET /mailbox/messages`, `POST /mailbox/messages/:id/ingested`, `DELETE /mailbox/messages/:id` |
+| IPC Mailbox | `GET /mailbox/messages`, `GET /mailbox/decisions`, `POST /mailbox/messages/:id/accept`, `POST /mailbox/messages/:id/decision` (rejections), `POST /mailbox/messages/:id/ingested`, `DELETE /mailbox/messages/:id` |
 | Admin overview / activity / email / AI | `GET /audit`, `/audit/summary` — **server-side** |
 | Admin settings | `GET /health`, `GET /audit/summary`, `GET /emails/config` |
 | Admin users / divisions / categories | Static constants — no API exists for these yet |

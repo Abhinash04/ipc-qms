@@ -21,6 +21,7 @@ or `<a download>` cannot send an `Authorization` header, but it does send the co
 |---|---|---|
 | `POST /api/v1/auth/login` | public | obtain a session |
 | `POST /api/v1/auth/logout` | public | clear the cookie, even if the token already expired |
+| `POST /api/v1/auth/dev-login` | public, **development only** | sign in as a seeded account by `email` alone, **no password**. Answers 404 unless `NODE_ENV=development`. Refuses the NICeMail Front Office with 403 — see below |
 | `GET /api/v1/auth/me` | cookie | who am I — used by the frontend on boot |
 
 The frontend never stores the session: `useAuthStore` calls `/auth/me` at startup rather than
@@ -47,7 +48,8 @@ The server **refuses to boot** without these — see `validateAuthConfig()` in
 
 ## Accounts
 
-Source of truth: `backend/src/constants/users.js`. All 13 accounts share the one seed password.
+Source of truth: `backend/src/constants/users.js`. All 13 accounts share the one seed password — and
+so does a 14th, which exists only when `NIC_BROWSER_MAILBOX=true` ([below](#the-nicemail-front-office)).
 
 ### One per role — the set to test with
 
@@ -61,6 +63,11 @@ Source of truth: `backend/src/constants/users.js`. All 13 accounts share the one
 | `REVIEWER` | Amit Mehta | `amit.mehta@ipc.example` | `/reviewer/dashboard` |
 | `INQUIRER` | Abhinash Pritiraj | `abhinash.pritiraj@gmail.com` | `/inquirer/dashboard` |
 
+> **An `INQUIRER` account is not required to submit a query.** Real inquirers are external senders:
+> they email the Front Office mailbox from their own mail client, hold no account here and never
+> sign in. The sender is read off the incoming `From` header and stored on the case. This seeded
+> account exists only to exercise the in-app **Raise Enquiry** test harness.
+
 ### The remaining accounts
 
 Extra officials and a second reviewer, used to exercise assignment and multi-level review.
@@ -73,6 +80,25 @@ Extra officials and a second reviewer, used to exercise assignment and multi-lev
 | `ASSIGNED_OFFICIAL` | Sana Qureshi | `sana.qureshi@ipc.example` | DIV-008 |
 | `ASSIGNED_OFFICIAL` | Vikram Desai | `vikram.desai@ipc.example` | DIV-009 |
 | `REVIEWER` | Kavita Rao | `kavita.rao@ipc.example` | DIV-002 |
+
+### The NICeMail Front Office
+
+Present only when `NIC_BROWSER_MAILBOX=true`, and built from configuration rather than listed in
+`users.js` (`nicFrontOfficeUser()`), so it has no fixed address:
+
+| Id | Role | Name | Email | Division |
+|---|---|---|---|---|
+| `USR-0014` | `FRONT_OFFICE` | the value of `NIC_FRONT_OFFICE_NAME` (default `NICeMail Front Office`) | the value of `NIC_EMAIL` | DIV-004 |
+
+It is a Front Office user in every respect but one, its mailbox: listing, accepting, marking and
+deleting messages always act on the NICeMail mailbox read by the browser agent (see
+[NIC_BROWSER_AGENT.md §17](./NIC_BROWSER_AGENT.md#17-two-front-office-mailboxes)), and `?recipient=`
+cannot point them anywhere else. It lands on `/front-officer/dashboard` and shares every case list.
+
+It signs in through `POST /auth/login` with `QMS_SEED_PASSWORD`. **Dev login refuses it** with 403
+(`This account reads a live NICeMail mailbox. Sign in with a password.`) and records the attempt as
+`LOGIN_FAILED` with result `denied`: its inbox is a live government mailbox, and its session can make
+the browser agent send. It is not in the login page's development account list.
 
 ---
 
@@ -149,9 +175,15 @@ These are development-mechanism properties, not bugs to be surprised by later.
    authentication; there is no user collection, so accounts cannot be created, disabled or have
    their password changed at runtime.
 3. **Authorization is role-level only.** Any signed-in user can read any attachment by id, because
-   Query Case ownership is not yet stored server-side. The server prints this warning at boot. Do
+   Query Case ownership is not yet checked server-side. The server prints this warning at boot. Do
    not expose this backend outside a trusted network.
-4. **No password rotation, lockout, or rate limiting** on `/auth/login`.
+4. **No password rotation or per-account lockout** on `/auth/login`. Failed sign-ins are
+   rate-limited per client address — 10 per 15 minutes, outside tests (`app.js`).
+5. **Dev login needs no password.** `POST /auth/dev-login` answers whenever `NODE_ENV=development` —
+   the default when `NODE_ENV` is unset — and the server listens on all interfaces, so anyone who can
+   reach the port can sign in as any seeded account. That includes the primary Front Office, whose
+   inbox may be a real Gmail account under `MAILBOX_SOURCE=gmail`. Only the NICeMail Front Office is
+   refused. Do not run a development-mode backend where untrusted hosts can reach it.
 
-Because of (1)–(4), this is a development authentication mechanism. Production needs per-user
-credentials, resource-level authorization, and login rate limiting.
+Because of (1)–(5), this is a development authentication mechanism. Production needs per-user
+credentials, resource-level authorization, and per-account lockout.
