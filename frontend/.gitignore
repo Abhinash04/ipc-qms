@@ -12,6 +12,13 @@ dist
 dist-ssr
 *.local
 
+# Playwright run artefacts (traces, screenshots, reports). The suite itself —
+# playwright.config.js and e2e/ — is tracked.
+test-results/
+playwright-report/
+blob-report/
+.playwright/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
