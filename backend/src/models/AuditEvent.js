@@ -22,6 +22,17 @@ const auditEventSchema = new mongoose.Schema(
     actorId: { type: String, default: null, index: true },
     actorRole: { type: String, default: null },
 
+    /**
+     * The client's own id for an event it originated (`AUD-00007`).
+     *
+     * Optional, because events the server writes on its own — intake, denials,
+     * transport failures — have no client to have named them, and those read
+     * back keyed by `_id` instead. Not unique: the counter it comes from lives
+     * in a browser, so two tabs can mint the same one, and rejecting the second
+     * would lose an audit record to protect a display detail.
+     */
+    auditId: { type: String, default: null, index: true },
+
     action: { type: String, required: true, index: true },
     result: {
       type: String,

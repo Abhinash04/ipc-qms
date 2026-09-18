@@ -71,11 +71,34 @@ describe('Backend MongoDB Models', () => {
       stepId: 'stp-001',
       reviewerId: 'usr-002',
       decision: 'APPROVED',
-      comments: 'Looks good',
+      // Singular, matching the client that writes it and the four pages that
+      // display it. The model said `comments`, which nothing ever populated.
+      comment: 'Looks good',
+      responseId: 'RESP-00002',
+      version: 'v2',
     });
     expect(rev.reviewId).toBe('rev-001');
     expect(rev.decision).toBe('APPROVED');
-    expect(rev.comments).toBe('Looks good');
+    expect(rev.comment).toBe('Looks good');
+    expect(rev.responseId).toBe('RESP-00002');
+  });
+
+  /**
+   * The Officer-in-Charge can return a draft for revision from final approval,
+   * where no review level is open. That review is real and has no step.
+   */
+  it('instantiates a Review with no step, for a return from final approval', () => {
+    const rev = new Review({
+      reviewId: 'rev-002',
+      queryId: 'QRY-2026-00001',
+      stepId: null,
+      reviewerId: 'USR-0003',
+      decision: 'CHANGES_REQUESTED',
+      comment: 'Please cite the monograph.',
+    });
+
+    expect(rev.validateSync()).toBeUndefined();
+    expect(rev.stepId).toBeNull();
   });
 
   it('instantiates ResponseVersion document', () => {

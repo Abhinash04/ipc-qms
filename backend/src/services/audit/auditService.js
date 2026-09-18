@@ -26,6 +26,7 @@ function toRecord(input) {
     actorType: input.actorType || ACTOR_TYPES.SYSTEM,
     actorId: input.actorId ?? null,
     actorRole: input.actorRole ?? null,
+    auditId: input.auditId ?? null,
     action: input.action,
     result: input.result || AUDIT_RESULTS.SUCCESS,
     queryId: input.queryId ?? null,

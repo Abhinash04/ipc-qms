@@ -1,4 +1,8 @@
 import HTTP_STATUS from '../constants/httpStatus.js';
+import { isConnected } from '../config/db.js';
+import * as audit from '../services/audit/auditService.js';
+import * as workflow from '../services/workflow/finalApproval.js';
+import { ACTOR_TYPES } from '../constants/roles.js';
 import {
   QueryCase,
   WorkflowStep,
@@ -7,8 +11,8 @@ import {
   Notification,
   EmailMessage,
   EmailThread,
-  WorkflowAuditEvent,
-  Counter,
+  AuditEvent,
+  QueryCounter,
 } from '../models/index.js';
 
 const toPlain = (doc) => {
@@ -19,42 +23,160 @@ const toPlain = (doc) => {
 
 const COUNTER_KEY = 'counters';
 
+/**
+ * A ceiling on one hydration response.
+ *
+ * The client loads the whole workflow state in a single call, so there is no
+ * pagination to fall back on — but an unbounded `find({})` is how a server runs
+ * out of memory in year two. The cap is far above any realistic case load and
+ * is reported to the caller when it bites, rather than silently truncating.
+ */
+const MAX_ROWS = 5000;
+
+/**
+ * The workflow store and the compliance trail describe the same events with
+ * different field names: the client reads `{event, actor, at}` (see
+ * `frontend/src/constants/pullbackRules.js` and `components/dashboard/
+ * DashboardActivity.jsx`), while `models/AuditEvent.js` stores `{action,
+ * actorRole, timestamp}` — `action` deliberately, because it is the name the
+ * compliance record is queried by.
+ *
+ * Hydration previously returned the stored records unmapped, so every client
+ * filter on `e.event` matched nothing and the activity feed and pullback stage
+ * rules ran on an empty list. Translating here keeps one server-side source of
+ * truth without asking the client to learn a second vocabulary.
+ */
+const toClientAuditEvent = (row) => ({
+  /**
+   * Always present, so the trail always has a stable key.
+   *
+   * Events the client originated carry their own `AUD-…`; events the server
+   * wrote — intake, denials, transport failures — have none, and fall back to
+   * the document id, which Mongo guarantees is unique and never changes.
+   * Returning neither is what left `AuditHistoryCard` keying every row on
+   * `undefined` the moment the store started hydrating the trail from here.
+   */
+  auditId: row.auditId ?? String(row._id),
+
+  event: row.action,
+  actor: row.actorRole ?? null,
+  at: row.timestamp,
+  queryId: row.queryId ?? null,
+  details: row.details ?? null,
+});
+
+/**
+ * The inverse, for history a caller seeds through `/queries/reset`.
+ *
+ * `actorType` has to be one the model's enum accepts. Writing a value outside
+ * it is the original bug both branches set out to fix: the old code wrote
+ * `'USER'`, validation rejected it, a swallowed `catch` hid the rejection, and
+ * every workflow event vanished without a trace.
+ */
+const fromClientAuditEvent = (event) => ({
+  auditId: event.auditId ?? null,
+  action: event.event,
+  timestamp: event.at || new Date().toISOString(),
+  queryId: event.queryId ?? null,
+  actorType: ACTOR_TYPES.HUMAN,
+  actorRole: event.actor ?? null,
+  details: event.details ?? null,
+});
+
+/**
+ * Has this exact event already been written? A retried delta must not add a
+ * second row for the same transition.
+ *
+ * Idea taken from Aakash's `WorkflowAuditEvent` (origin/aakash, 5539f7b), which
+ * upserted on `auditId` alone. That is not safe here: the id is minted by a
+ * browser's counter, so two tabs can issue the same `AUD-00007` for different
+ * events, and an upsert on it would silently replace one event with the other —
+ * the same overwrite the `queryId` 409 guard below exists to stop.
+ *
+ * So the match is the event's whole identity. A retry of the same delta carries
+ * identical values and is skipped; a colliding id from another tab differs in
+ * its action or timestamp and is recorded, as it must be.
+ */
+async function alreadyRecorded(auditEvent) {
+  if (!auditEvent.auditId) return false;
+
+  const existing = await AuditEvent.exists({
+    auditId: auditEvent.auditId,
+    queryId: auditEvent.queryId || null,
+    action: auditEvent.event,
+    timestamp: auditEvent.at,
+  });
+
+  return Boolean(existing);
+}
+
+/**
+ * `/queries/*` writes straight to Mongo with no in-memory equivalent. Without a
+ * connection Mongoose buffers the operation and then rejects on a timeout,
+ * which surfaces as a 500 — a server fault for what is really an unavailable
+ * dependency. Say so directly instead.
+ */
+function requireDb(next) {
+  if (isConnected()) return true;
+  next(
+    Object.assign(new Error('Query storage is unavailable'), {
+      status: HTTP_STATUS.SERVICE_UNAVAILABLE,
+    }),
+  );
+  return false;
+}
+
 async function loadAllQueries(req, res, next) {
+  if (!requireDb(next)) return;
+
   try {
     const [
       queries,
       workflowSteps,
       reviews,
       responseVersions,
-      auditEvents,
       notifications,
       emailMessages,
       emailThreads,
+      auditEvents,
       counterDoc,
     ] = await Promise.all([
-      QueryCase.find({}).lean(),
-      WorkflowStep.find({}).lean(),
-      Review.find({}).lean(),
-      ResponseVersion.find({}).lean(),
-      WorkflowAuditEvent.find({}).lean(),
-      Notification.find({}).lean(),
-      EmailMessage.find({}).lean(),
-      EmailThread.find({}).lean(),
-      Counter.findOne({ key: COUNTER_KEY }).lean(),
+      QueryCase.find({}).limit(MAX_ROWS).lean(),
+      WorkflowStep.find({}).limit(MAX_ROWS).lean(),
+      Review.find({}).limit(MAX_ROWS).lean(),
+      ResponseVersion.find({}).limit(MAX_ROWS).lean(),
+      Notification.find({}).limit(MAX_ROWS).lean(),
+      EmailMessage.find({}).limit(MAX_ROWS).lean(),
+      EmailThread.find({}).limit(MAX_ROWS).lean(),
+      AuditEvent.find({}).sort({ timestamp: 1 }).limit(MAX_ROWS).lean(),
+      QueryCounter.findOne({ key: COUNTER_KEY }).lean(),
     ]);
 
     const stripId = (rows) => (rows || []).map(toPlain);
 
-    res.status(HTTP_STATUS.OK).json({
+    const collections = {
       queries: stripId(queries),
       workflowSteps: stripId(workflowSteps),
       reviews: stripId(reviews),
       responseVersions: stripId(responseVersions),
-      auditEvents: stripId(auditEvents),
       notifications: stripId(notifications),
       emailMessages: stripId(emailMessages),
       emailThreads: stripId(emailThreads),
+      auditEvents: (auditEvents || []).map(toClientAuditEvent),
+    };
+
+    const truncated = Object.entries(collections)
+      .filter(([, rows]) => rows.length >= MAX_ROWS)
+      .map(([name]) => name);
+
+    if (truncated.length) {
+      console.warn(`[qms] GET /queries truncated at ${MAX_ROWS} rows: ${truncated.join(', ')}`);
+    }
+
+    res.status(HTTP_STATUS.OK).json({
+      ...collections,
       counters: counterDoc?.value || null,
+      ...(truncated.length ? { truncated } : {}),
     });
   } catch (error) {
     next(error);
@@ -62,6 +184,8 @@ async function loadAllQueries(req, res, next) {
 }
 
 async function checkIsEmpty(req, res, next) {
+  if (!requireDb(next)) return;
+
   try {
     const count = await QueryCase.countDocuments();
     res.status(HTTP_STATUS.OK).json({ isEmpty: count === 0 });
@@ -71,53 +195,65 @@ async function checkIsEmpty(req, res, next) {
 }
 
 async function persistTransition(req, res, next) {
+  if (!requireDb(next)) return;
+
   try {
-    const {
-      query,
-      auditEvent,
-      notification,
-      counters,
-      upsertSteps = [],
-      deleteStepIds = [],
-      addReviews = [],
-      addVersions = [],
-      upsertVersions = [],
-      addMessages = [],
-      addThreads = [],
-    } = req.body || {};
+    // `?? []` rather than a destructuring default: the store sends an explicit
+    // `null` for slots a transition does not touch, and a default only fires on
+    // `undefined`.
+    const body = req.body || {};
+    const { query, auditEvent, notification, counters } = body;
+    const upsertSteps = body.upsertSteps ?? [];
+    const deleteStepIds = body.deleteStepIds ?? [];
+    const addReviews = body.addReviews ?? [];
+    const addVersions = body.addVersions ?? [];
+    const upsertVersions = body.upsertVersions ?? [];
+    const addMessages = body.addMessages ?? [];
+    const addThreads = body.addThreads ?? [];
 
     const ops = [];
 
     if (query?.queryId) {
+      /**
+       * Refuse to overwrite a different case that happens to share this id.
+       *
+       * Every case write here is an upsert keyed on `queryId`, so the unique
+       * index can never fire: a second case minted with the same id does not
+       * collide, it *replaces* the first one and the original enquiry is gone.
+       * The email path no longer mints client-side (see
+       * services/email/mailbox/acceptMessage.js), but the portal still does,
+       * and two tabs hydrated at the same counter mint the same number.
+       *
+       * `createdAt` is the witness: a genuine update to a case carries the same
+       * one it was created with, a collision from another tab carries its own.
+       * Answering 409 keeps the stored case and tells the client, rather than
+       * accepting the write and losing an enquiry silently.
+       */
+      const existing = await QueryCase.findOne({ queryId: query.queryId })
+        .select('createdAt')
+        .lean();
+
+      if (existing?.createdAt && query.createdAt && existing.createdAt !== query.createdAt) {
+        return res.status(HTTP_STATUS.CONFLICT).json({
+          error: 'Query case id already belongs to a different case',
+          queryId: query.queryId,
+        });
+      }
+
+      // `sourceMailbox` is set by the server at intake and decides which mailbox
+      // answers the inquirer; a client write can neither change nor clear it.
+      const { sourceMailbox, ...clientQuery } = query;
+
       ops.push(
         QueryCase.findOneAndUpdate(
           { queryId: query.queryId },
-          { $set: query },
+          { $set: clientQuery },
           { upsert: true, new: true },
         ),
       );
     }
 
-    if (auditEvent && auditEvent.auditId && auditEvent.event) {
-      ops.push(
-        WorkflowAuditEvent.findOneAndUpdate(
-          { auditId: auditEvent.auditId },
-          {
-            $set: {
-              auditId: auditEvent.auditId,
-              queryId: auditEvent.queryId || null,
-              event: auditEvent.event,
-              actor: auditEvent.actor || null,
-              at: auditEvent.at || new Date().toISOString(),
-              details: auditEvent.details || null,
-            },
-          },
-          { upsert: true },
-        ),
-      );
-    }
-
-    if (notification && notification.notificationId) {
+    if (notification?.notificationId) {
       ops.push(
         Notification.findOneAndUpdate(
           { notificationId: notification.notificationId },
@@ -128,15 +264,9 @@ async function persistTransition(req, res, next) {
     }
 
     for (const step of upsertSteps) {
-      if (step.stepId) {
-        ops.push(
-          WorkflowStep.findOneAndUpdate(
-            { stepId: step.stepId },
-            { $set: step },
-            { upsert: true },
-          ),
-        );
-      }
+      ops.push(
+        WorkflowStep.findOneAndUpdate({ stepId: step.stepId }, { $set: step }, { upsert: true }),
+      );
     }
 
     for (const stepId of deleteStepIds) {
@@ -144,58 +274,61 @@ async function persistTransition(req, res, next) {
     }
 
     for (const review of addReviews) {
-      if (review.reviewId) {
-        ops.push(
-          Review.findOneAndUpdate(
-            { reviewId: review.reviewId },
-            { $set: review },
-            { upsert: true },
-          ),
-        );
-      }
+      ops.push(
+        Review.findOneAndUpdate(
+          { reviewId: review.reviewId },
+          { $set: review },
+          { upsert: true },
+        ),
+      );
     }
 
     for (const version of [...addVersions, ...upsertVersions]) {
-      if (version.responseId) {
-        ops.push(
-          ResponseVersion.findOneAndUpdate(
-            { responseId: version.responseId },
-            { $set: version },
-            { upsert: true },
-          ),
-        );
-      }
+      ops.push(
+        ResponseVersion.findOneAndUpdate(
+          { responseId: version.responseId },
+          { $set: version },
+          { upsert: true },
+        ),
+      );
     }
 
     for (const msg of addMessages) {
-      if (msg.messageId) {
-        ops.push(
-          EmailMessage.findOneAndUpdate(
-            { messageId: msg.messageId },
-            { $set: msg },
-            { upsert: true },
-          ),
-        );
-      }
+      ops.push(
+        EmailMessage.findOneAndUpdate(
+          { messageId: msg.messageId },
+          { $set: msg },
+          { upsert: true },
+        ),
+      );
     }
 
     for (const thread of addThreads) {
-      if (thread.threadId) {
-        ops.push(
-          EmailThread.findOneAndUpdate(
-            { threadId: thread.threadId },
-            { $set: thread },
-            { upsert: true },
-          ),
-        );
-      }
+      ops.push(
+        EmailThread.findOneAndUpdate(
+          { threadId: thread.threadId },
+          { $set: thread },
+          { upsert: true },
+        ),
+      );
     }
 
     if (counters) {
+      // `$max` per key, not `$set` of the whole map.
+      //
+      // A client reports the counter it believes it holds, and that belief goes
+      // stale: a second tab, a reload against an empty read, or a refused reset
+      // all leave a browser thinking the sequence is lower than it is. A
+      // wholesale `$set` let that stale value overwrite the server's, and the
+      // next case then re-issued an id that already existed. `$max` makes the
+      // counter monotonic — a lagging client simply has no effect.
+      const bumps = Object.fromEntries(
+        Object.entries(counters).map(([prefix, value]) => [`value.${prefix}`, value]),
+      );
       ops.push(
-        Counter.findOneAndUpdate(
+        QueryCounter.findOneAndUpdate(
           { key: COUNTER_KEY },
-          { $set: { value: counters } },
+          { $max: bumps },
           { upsert: true },
         ),
       );
@@ -203,13 +336,58 @@ async function persistTransition(req, res, next) {
 
     await Promise.all(ops);
 
+    // Written after the batch lands, and with the actor taken from the session
+    // rather than the request body — an actor a caller can name is an actor a
+    // caller can impersonate. `audit.record` never throws and reports its own
+    // failures, so the transition is not rolled back by a failed audit write.
+    if (auditEvent?.event && !(await alreadyRecorded(auditEvent))) {
+      await audit.record({
+        action: auditEvent.event,
+        auditId: auditEvent.auditId || null,
+        timestamp: auditEvent.at || new Date().toISOString(),
+        queryId: auditEvent.queryId || null,
+        actorType: ACTOR_TYPES.HUMAN,
+        actorId: req.user?.id ?? null,
+        actorRole: req.user?.role ?? null,
+        details: auditEvent.details || null,
+      });
+    }
+
     res.status(HTTP_STATUS.OK).json({ success: true });
   } catch (error) {
     next(error);
   }
 }
 
+/**
+ * The Officer-in-Charge grants final approval; the server answers the inquirer.
+ *
+ * Reports what each half did rather than collapsing to success or failure. An
+ * approval that was recorded but whose response could not be sent is a real,
+ * recoverable state — the case waits at READY_FOR_DISPATCH and the Front Office
+ * retry acts on it — and a 500 would hide that behind "something went wrong".
+ */
+async function finalApproval(req, res, next) {
+  if (!requireDb(next)) return;
+
+  try {
+    const result = await workflow.grantFinalApproval({
+      queryId: req.params.queryId,
+      // From the session. The audit trail records who decided, and an actor a
+      // caller can name is an actor a caller can impersonate.
+      actor: { id: req.user?.id ?? null, role: req.user?.role ?? null },
+      comment: req.body?.comment ?? '',
+    });
+
+    return res.status(HTTP_STATUS.OK).json(result);
+  } catch (error) {
+    return next(error);
+  }
+}
+
 async function resetQueryState(req, res, next) {
+  if (!requireDb(next)) return;
+
   try {
     const seed = req.body || {};
 
@@ -219,25 +397,52 @@ async function resetQueryState(req, res, next) {
       Review.deleteMany({}),
       ResponseVersion.deleteMany({}),
       Notification.deleteMany({}),
-      WorkflowAuditEvent.deleteMany({}),
       EmailMessage.deleteMany({}),
       EmailThread.deleteMany({}),
-      Counter.deleteOne({ key: COUNTER_KEY }),
+      QueryCounter.deleteOne({ key: COUNTER_KEY }),
+
+      /**
+       * The history of the cases being deleted goes with them — they would
+       * otherwise be audit rows pointing at cases that no longer exist. From
+       * Aakash's branch (5539f7b), which cleared his workflow-history
+       * collection on reset.
+       *
+       * Scoped to rows that belong to a case. Everything with no `queryId` is
+       * the compliance trail — sign-ins, authorization denials, transport
+       * failures — and a reset of workflow data is not a reason to erase who
+       * did what to the system. His collection held case history only, so he
+       * never had that distinction to draw; here it is one collection, so it
+       * has to be drawn explicitly.
+       */
+      AuditEvent.deleteMany({ queryId: { $ne: null } }),
     ]);
 
-    if (seed.queries && Array.isArray(seed.queries)) {
-      await Promise.all([
-        seed.queries.length ? QueryCase.insertMany(seed.queries) : null,
-        seed.workflowSteps?.length ? WorkflowStep.insertMany(seed.workflowSteps) : null,
-        seed.reviews?.length ? Review.insertMany(seed.reviews) : null,
-        seed.responseVersions?.length ? ResponseVersion.insertMany(seed.responseVersions) : null,
-        seed.notifications?.length ? Notification.insertMany(seed.notifications) : null,
-        seed.auditEvents?.length ? WorkflowAuditEvent.insertMany(seed.auditEvents) : null,
-        seed.emailMessages?.length ? EmailMessage.insertMany(seed.emailMessages) : null,
-        seed.emailThreads?.length ? EmailThread.insertMany(seed.emailThreads) : null,
-        seed.counters ? Counter.create({ key: COUNTER_KEY, value: seed.counters }) : null,
-      ]);
-    }
+    await Promise.all([
+      seed.queries?.length ? QueryCase.insertMany(seed.queries) : null,
+      seed.workflowSteps?.length ? WorkflowStep.insertMany(seed.workflowSteps) : null,
+      seed.reviews?.length ? Review.insertMany(seed.reviews) : null,
+      seed.responseVersions?.length ? ResponseVersion.insertMany(seed.responseVersions) : null,
+      seed.notifications?.length ? Notification.insertMany(seed.notifications) : null,
+      seed.emailMessages?.length ? EmailMessage.insertMany(seed.emailMessages) : null,
+      seed.emailThreads?.length ? EmailThread.insertMany(seed.emailThreads) : null,
+      seed.counters ? QueryCounter.create({ key: COUNTER_KEY, value: seed.counters }) : null,
+      // Seeded history arrives in the client's vocabulary (`event`, `at`) and
+      // is stored in the compliance model's (`action`, `timestamp`) — the
+      // inverse of `toClientAuditEvent` above. Also from Aakash's branch.
+      seed.auditEvents?.length
+        ? AuditEvent.insertMany(seed.auditEvents.map(fromClientAuditEvent))
+        : null,
+    ]);
+
+    // Destroying every case is the single most consequential thing this API
+    // does. It is recorded whether or not it succeeded quietly.
+    await audit.record({
+      action: 'QUERY_STATE_RESET',
+      actorType: ACTOR_TYPES.HUMAN,
+      actorId: req.user?.id ?? null,
+      actorRole: req.user?.role ?? null,
+      details: { seededQueries: seed.queries?.length || 0 },
+    });
 
     res.status(HTTP_STATUS.OK).json({ success: true });
   } catch (error) {
@@ -245,4 +450,4 @@ async function resetQueryState(req, res, next) {
   }
 }
 
-export { loadAllQueries, checkIsEmpty, persistTransition, resetQueryState };
+export { loadAllQueries, checkIsEmpty, persistTransition, resetQueryState, finalApproval };
