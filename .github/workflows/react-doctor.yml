@@ -3,6 +3,11 @@
 #
 # Docs: https://www.react.doctor/ci
 # Source: https://github.com/millionco/react-doctor
+#
+# This file lived at frontend/.github/workflows/ and therefore never ran:
+# GitHub Actions only reads .github/workflows at the repository root. Moving it
+# here is what makes it execute; `directory: frontend` below is what keeps it
+# pointed at the React app now that checkout lands at the repo root.
 
 name: React Doctor
 
@@ -10,9 +15,11 @@ on:
   # Scans the PR's changed files and posts a sticky summary comment listing only the new issues introduced relative to the merge base of the target branch.
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
+    paths: ["frontend/**"]
   # Scans `main` on every push to track the health-score trend and catch regressions that slipped past PR review.
   push:
     branches: ["main"]
+    paths: ["frontend/**"]
 
 permissions:
   contents: read
@@ -35,6 +42,11 @@ jobs:
           fetch-depth: 0
 
       - uses: millionco/react-doctor@v2
+        with:
+          # Required now that the workflow runs from the repository root: the
+          # React app is in frontend/, and the default of "." would scan the
+          # backend and docs as well.
+          directory: frontend
         # Advisory by default: React Doctor reports findings on every PR — a
         # sticky summary comment, inline review comments, and a commit status
         # with the health score — but never fails the check, so it won't red-X
@@ -46,12 +58,12 @@ jobs:
         # Security: @v2 is a floating major tag that may move. For supply-chain-
         # hardened CI, pin to a full commit SHA with a version comment instead:
         # uses: millionco/react-doctor@<sha>  # v2.x.x
-        # with:
+        #
+        # Further options, added alongside `directory` above:
         #   blocking: error          # Gate level: "none" (advisory, the default) | "warning" | "error"
         #   scope: full              # On PRs, scan the whole project instead of just changed files
         #   comment: false           # Disable the sticky PR summary comment
         #   review-comments: false   # Disable inline review comments on changed lines
         #   commit-status: false     # Disable the commit status (score + counts, links to the run)
         #   version: "0.4.0"         # Pin to a specific react-doctor version instead of "latest"
-        #   directory: apps/web      # Scan a sub-directory (default: ".")
         #   project: "web,admin"     # In a monorepo, scan specific workspace project(s)
