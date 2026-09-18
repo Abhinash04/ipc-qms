@@ -25,12 +25,6 @@ export const STAGE = {
   DELIVERED: 'DELIVERED',
 };
 
-const DRAFTING_STATES = [
-  WORKFLOW_STATE.ASSIGNED,
-  WORKFLOW_STATE.DRAFTING,
-  WORKFLOW_STATE.RETURNED_FOR_REVISION,
-];
-
 export function buildLifecycle({
   query,
   steps = [],
