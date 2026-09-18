@@ -8,11 +8,11 @@ Every item below is tagged:
 
 ## Email
 
-- Automatic or manual email ingestion? — *Client Clarification Required*
-- Which email provider/API? — **Resolved in implementation**: Gmail API (OAuth2, per-role refresh tokens) with a mock transport for development. A NICeMail (`@gov.in`) IMAP/SMTP path is built but blocked at Phase 0 — see [../NIC_EMAIL_PHASE0.md](../NIC_EMAIL_PHASE0.md). Client confirmation of the production choice still outstanding.
+- Automatic or manual email ingestion? — **Resolved in implementation**: both, at different stages. The mailbox is polled automatically, but only to *list* what is waiting; registration is manual. A Front Officer accepts or rejects each message, and only an accepted one becomes a case. See the intake section below.
+- Which email provider/API? — **Resolved in implementation**: Gmail API (OAuth2) with a mock transport for development. **One mailbox is authenticated — the Front Office's** — because it is the only account the system reads from and sends as; inquirers are external and authenticate to nothing. A NICeMail (`@gov.in`) IMAP/SMTP path is built and selectable, awaiting an application-specific password — see [../NIC_EMAIL_PHASE0.md](../NIC_EMAIL_PHASE0.md). Client confirmation of the production choice still outstanding.
 - Does the system need email threading (replies attach to the same query)? — **Resolved in implementation**: yes, threading is implemented (RFC 5322 headers, provider thread ids); a reply attaches to the existing case rather than opening a new one.
 - How should an incoming reply mid-workflow be handled? — *Client Clarification Required*
-- Should outgoing dispatch email be automatic on approval, or require a Front Office confirmation step? — *Client Clarification Required*
+- ~~Should outgoing dispatch email be automatic on approval, or require a Front Office confirmation step?~~ — **✅ Decided by the user: automatic on approval.** Granting final approval sends the response; there is no Front Office confirmation step. See *Automatic final dispatch* and [Dispatch](#dispatch) below.
 - Email is the primary intake source for the sample query. — *Confirmed Requirement* (per spec example)
 
 ### Acknowledgement email (built, user-directed)
@@ -39,9 +39,14 @@ Query Case, using the client-supplied template, recorded on the same email threa
 
 ### Real multi-account Gmail identities (development phase, user-directed)
 
-The first three stakeholders now use real Gmail accounts — Abhinash Pritiraj (INQUIRER), Bhumika
-Makker (FRONT_OFFICE), Jatin Rawat (OFFICER_IN_CHARGE). The rest remain mock. Each real account
-authenticates itself; no account sends on another's behalf.
+**One** account authenticates: Bhumika Makker's, the Front Office mailbox. It is the only address
+the system reads from and the only one it sends as.
+
+This section previously described three authenticated accounts — an inquirer, the Front Officer and
+the Officer-in-Charge. That arrangement is gone. Inquirers are **external**: anyone may write in from
+their own mail client, and there is no configured inquirer address at all. Nothing sends as the
+Officer-in-Charge either; that role is a recipient, addressed by `OFFICER_IN_CHARGE_EMAIL`. Every
+other identity remains mock.
 
 - **Enquiries are addressed to the Front Officer**, not to a shared IPC mailbox. The SRS describes
   a single IPC query mailbox (`lab.ipc@gov.in`), not a named officer. This is a development
@@ -66,47 +71,88 @@ authenticates itself; no account sends on another's behalf.
   `QUERY_RECEIVED` audit entry and no workflow transition. The SRS says nothing about mid-workflow
   replies — [srs/14 Email](#email) still lists that as open. — *Proposed Design*
 
-### Automatic Front Office intake (user-directed)
+### Front Office intake (user-directed) — ✅ RESOLVED
 
-Registering an enquiry now performs the whole Front Office stage in one step: acknowledge → verify →
-forward to the Officer-in-Charge.
+Two questions in this section were open because intake ran unattended. Both are now settled by
+implementation, and the answers went the way the SRS assumed.
 
-- **Verification happens automatically** rather than by a human click. The `QUERY_REGISTERED` audit
-  event is still written with the Front Officer as actor, so the checkpoint that
-  [05-workflow-and-state-machine.md](./05-workflow-and-state-machine.md) documents survives as a
-  record. But nobody now inspects an enquiry before it reaches the OIC — an incomplete or
-  misdirected enquiry is forwarded automatically. Is unattended intake acceptable, or must Front
-  Office remain a human gate? — *Client Clarification Required*
-- **Forwarding to the OIC is automatic and sends a real email.** The SRS treats forwarding as a
-  workflow transition and describes no email. — *Proposed Design* (user-directed)
-- **Only mail from a known inquirer address opens a case.** Enquiries from anyone outside the
-  identity directory are invisible. In production, intake presumably must accept mail from any
-  member of the public; this allow-list is a development-phase control. — *Client Clarification
-  Required*
+- ~~**Verification happens automatically** rather than by a human click … Is unattended intake
+  acceptable, or must Front Office remain a human gate?~~
+  **✅ Resolved: Front Office is a human gate.** Arriving mail is listed and creates nothing. The
+  Front Officer accepts or rejects each message in the IPC Mailbox; accepting is what registers the
+  case, mints the Case ID, acknowledges the sender and forwards to the Officer-in-Charge. The
+  `QUERY_REGISTERED` audit event now records a judgement somebody actually made.
+- ~~**Only mail from a known inquirer address opens a case.** … In production, intake presumably must
+  accept mail from any member of the public.~~
+  **✅ Resolved: intake accepts mail from anyone.** The sender allow-list is gone; the Gmail query
+  filters on the recipient only. Intake is N:1 — many external inquirers, one Front Office mailbox
+  (two with the optional NICeMail browser mailbox, each with its own Front Officer) —
+  and the inquirer on a case is read off the incoming `From` header. What protects the Front
+  Officer's private mail is no longer a filter but the gate: nothing becomes a case unaided.
+- **Forwarding to the OIC still sends a real email**, and is now **part of the accept** rather than
+  a separate explicit action after it: ✓ registers the case and forwards it in one server call, so
+  an accepted case lands at `PENDING_ASSIGNMENT`. The manual **Forward to Officer-in-Charge** action
+  survives only to recover a forward that failed. The SRS treats forwarding as a workflow transition
+  and describes no email. — *Proposed Design* (user-directed)
+- **Rejection has no SRS counterpart.** A rejected message records who rejected it, when and why,
+  and creates no case. `05-workflow-and-state-machine.md` models the case lifecycle and has nothing
+  to say about mail that never became a case. — *Proposed Design*
 - **Attachments are metadata only** (name, type, size); content is never downloaded or stored.
   [13-data-model.md](./13-data-model.md) leaves the `WorkflowAttachment` field list open. —
   *Proposed Design*
 
-### Automatic final dispatch (user-directed)
+### Automatic final dispatch (user-directed) — ✅ RESOLVED
 
-Granting final approval now sends the response and closes the case. The Front Officer presses
-nothing on the normal path.
+Granting final approval sends the response and closes the case. The Front Officer presses nothing on
+the normal path.
 
-- **Dispatch is no longer a Front Office action.** `05-workflow-and-state-machine.md` describes
-  Front Office dispatching the approved response; it is now automatic on the transition to
-  `READY_FOR_DISPATCH`. The Dispatch page becomes a status view with a retry, used only when the
-  automatic send failed. — *Proposed Design* (user-directed)
-- **The automatic send runs as a system action.** It executes in the approving OIC's session, so it
-  carries no actor and is gated on the workflow state alone rather than on the Front Office
-  `DISPATCH` permission. A human retry still passes an actor and is gated normally. The audit event
-  records the Front Office identity that actually sent the mail. Is an unattended dispatch, with no
-  Front Office review of the outgoing message, acceptable? — *Client Clarification Required*
-- **No dispatch-failure state exists.** A failed send leaves the case at `READY_FOR_DISPATCH` —
-  approved, response locked, never `CLOSED` — and the error surfaces for retry. The SRS's 16 audit
-  events contain no `DISPATCH_FAILED`, so none was invented. Should a failed dispatch be an explicit
-  state with its own audit event? — *Client Clarification Required*
+This document previously disagreed with itself: whether an unattended dispatch is acceptable was
+listed as open here, while [Dispatch](#dispatch) recorded the opposite answer — Front Office
+dispatches — as a *Confirmed Requirement*. **The user has decided: the server sends automatically
+on final approval.** The Dispatch entry below keeps what the requirement was and names what
+superseded it.
+
+It is one server endpoint — `POST /api/v1/queries/:queryId/final-approval`
+(`backend/src/services/workflow/finalApproval.js`) — gated `verifyToken` +
+`verifyAction(FINAL_APPROVE)` + `validateBody(finalApprovalSchema)`, answering
+`{ queryId, approved, dispatched, alreadyDispatched, workflowState, recipient, errors }` at HTTP
+200 even when the send failed.
+
+- **Dispatch is no longer a Front Office action on the normal path.** The Dispatch page is a status
+  view with a retry, used only when the automatic send did not complete. — *Proposed Design*
+  (user-directed)
+- ~~**The automatic send runs as a system action.** It executes in the approving OIC's session, so
+  it carries no actor and is gated on the workflow state alone rather than on the Front Office
+  `DISPATCH` permission.~~
+  **✅ Resolved: the send moved to the server, and no role gained `DISPATCH`.** That arrangement
+  never worked. The client had been widened to allow an "actorless system dispatch", but the server
+  never was and could not be: the request still carried the Officer-in-Charge's session cookie, and
+  `POST /emails/response` is gated on `DISPATCH`, which belongs to Front Office. Every approval
+  ended in **403**, with the case stranded at `READY_FOR_DISPATCH` and the inquirer never answered.
+  The Officer-in-Charge's session now authorises `FINAL_APPROVE`, which is theirs, and the
+  **server** performs the send under the Front Office identity it already holds. The permission
+  table is unchanged.
+- **Is an unattended dispatch, with no Front Office review of the outgoing message, acceptable?** —
+  **✅ Decided by the user: yes.** The response goes out on approval without a second human gate.
+  The review that precedes it is the review ladder and the Officer-in-Charge's own approval.
+- **No dispatch-failure state exists.** A failed send still leaves the case at `READY_FOR_DISPATCH`
+  — approved, response locked, never `CLOSED` — and the error surfaces for retry. The SRS's 16
+  audit events contain no `DISPATCH_FAILED`, and none was invented. What changed is that the
+  failure is now **recorded against the case**: an `EMAIL_SEND_FAILED` row carrying the `queryId`,
+  where the transport's own failure rows carry none and so cannot be traced back to what failed.
+  Should a failed dispatch be an explicit state with its own audit event? — *Client Clarification
+  Required*
+- **The approval is recorded before any mail is attempted, and the case closes only after a send
+  that actually happened.** A decision a person made must survive a mail server being down; a case
+  reading `CLOSED` while the inquirer received nothing is the worse failure, because nobody goes
+  looking for it. — *Proposed Design*
+- **A transport that silently degrades to the mock counts as a failure**, unless `EMAIL_TRANSPORT`
+  is `mock` — which is what the deployment asked for. `getTransport` falls back to the mock when a
+  role holds no usable credential and the mock returns an ordinary success, so without this check a
+  missing Front Office credential would close cases having sent nothing. — *Proposed Design*
 - **Idempotency** is enforced by the stored `OUTGOING_RESPONSE` message: one response per query,
-  surviving reload and restart. — *Proposed Design*
+  surviving reload and restart. Approving twice does not email the inquirer twice, and retrying
+  after a failed send completes the send without recording a second approval. — *Proposed Design*
 
 ### AI assistance as built (user-directed)
 
@@ -139,7 +185,8 @@ There is no model behind it yet; the interface is the swap point.
   Officer-in-Charge in the mock data. Proposed: any OIC may act on it. — *Client Clarification
   Required*
 - **Dispatch failure.** There is no `DISPATCH_FAILED` among the 16 audit events, so a failed send
-  leaves the query at `READY_FOR_DISPATCH` with nothing written and surfaces the error for retry.
+  leaves the query at `READY_FOR_DISPATCH` and surfaces the error for retry. It is no longer
+  *unwritten*: the final-approval path records an `EMAIL_SEND_FAILED` row against the `queryId`.
   Is a failure state and retry policy required? — *Client Clarification Required*
 
 ## Roles
@@ -194,14 +241,26 @@ There is no model behind it yet; the interface is the swap point.
 ## Final Approval
 
 - OIC grants or rejects final approval, or returns for revision. — *Confirmed Requirement*
+- **Granting it also sends the response and closes the query**, in the same server call — see
+  [Dispatch](#dispatch). — *User-Directed Proposed Behaviour*
 - Can the OIC directly edit the response at final approval, or only approve/reject/return? — *Client Clarification Required*
 
 ## Dispatch
 
-- Front Office dispatches the approved response, which closes the query. — *Confirmed Requirement*
-- Manual send (Front Office clicks send) or fully automatic on approval? — *Client Clarification Required*
+- ~~Front Office dispatches the approved response, which closes the query.~~ — *Confirmed
+  Requirement*, **superseded by user direction**. The requirement as stated is what the SRS,
+  `05-workflow-and-state-machine.md` and the reference workflow diagram all describe, and it is
+  recorded here rather than deleted because it is what the client originally asked for. The user has
+  since directed that the response go out automatically on final approval, and that is what is
+  implemented: granting final approval sends the response and closes the query in one server call.
+  Front Office keeps the `DISPATCH` permission and the Dispatch page, which is now a status view
+  with a retry for a send that did not complete. Needs client confirmation as a change to a
+  previously confirmed requirement — see the *Automatic final dispatch* section under Email, above,
+  for what was built and why.
+- ~~Manual send (Front Office clicks send) or fully automatic on approval?~~ — **✅ Decided by the
+  user: fully automatic on approval.** A manual send survives only as the retry path.
 - Is a fixed email template required, or free-form? — *Client Clarification Required*
-- Are attachments carried through automatically from the query record? — *Proposed Design*, not confirmed.
+- Are attachments carried through automatically from the query record? — *Client Clarification Required*. **As built they are not**: neither the automatic send nor the Front Office retry attaches anything, so the inquirer receives the response text alone. The Dispatch page says as much. (The forward to the Officer-in-Charge *does* carry them, fail-closed.)
 - Is delivery tracking (opened/bounced) required? — *Client Clarification Required*
 - Does dispatch alone trigger closure, or is there a separate closure confirmation step? — *Proposed Design*: dispatch triggers closure directly (per the reference workflow diagram); not confirmed.
 

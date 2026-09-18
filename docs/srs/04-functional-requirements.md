@@ -40,8 +40,13 @@ Requirements are grouped by module. Each has a stable identifier (`FR-NNN`) for 
 ## 4.6 Final Approval & Dispatch
 
 - **FR-021** — The OIC shall be able to grant or reject final approval, or return the query for revision.
-- **FR-022** — Front Office shall be able to dispatch an approved response to the inquirer.
-- **FR-023** — Dispatch shall transition the query's Business Status to `CLOSED` and Workflow State to `CLOSED`.
+- **FR-022** — ~~Front Office shall be able to dispatch an approved response to the inquirer.~~
+  **Superseded by user direction:** granting final approval shall dispatch the approved response to
+  the inquirer automatically, in the same operation. Front Office retains the dispatch permission as
+  the retry path for a send that did not complete. The original requirement is kept here because it
+  is what the client asked for; the change needs their confirmation — see
+  [14-open-questions-and-client-clarifications.md](./14-open-questions-and-client-clarifications.md#dispatch).
+- **FR-023** — Dispatch shall transition the query's Business Status to `CLOSED` and Workflow State to `CLOSED`, and only after a send that actually completed. A failed send shall leave the query at `READY_FOR_DISPATCH` with the approval intact.
 
 ## 4.7 Audit
 

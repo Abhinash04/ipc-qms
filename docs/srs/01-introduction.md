@@ -15,11 +15,12 @@ built today, see [docs/HANDOFF.md](../HANDOFF.md) and the two READMEs.
 Delivered since this was first written: real authentication (JWT in an httpOnly cookie with
 role-based route guards), the email pipeline (mock and Gmail transports, inbox ingestion,
 acknowledgement, forwarding, dispatch), AI integration (Pravah Gemma grounded in an indexed IPC
-corpus), server-side persistence (MongoDB for the mailbox and audit trail), attachments, and the
-workflow state-transition engine with dynamic review levels.
+corpus), server-side persistence (MongoDB for Query Cases, the mailbox and the audit trail),
+attachments, and the workflow state-transition engine with dynamic review levels.
 
-Still outstanding: **server-side Query Cases** — case state lives in the browser's IndexedDB, which
-is what blocks case-level authorization — and the items still awaiting client sign-off in
+Still outstanding: **case-level authorization** — Query Cases now live in MongoDB behind
+`/api/v1/queries`, but nothing yet checks a case against the user reading it — and the items still
+awaiting client sign-off in
 [14-open-questions-and-client-clarifications.md](./14-open-questions-and-client-clarifications.md).
 
 ## 1.3 Objectives

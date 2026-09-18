@@ -43,6 +43,19 @@ pullback must create an audit event (`QUERY_PULLED_BACK`).
 sits in `CLARIFICATION_REQUIRED_ACTIONS`, so `canPerform` refuses it for every role and no UI
 exposes it.
 
+A server-side endpoint also exists — `POST /api/v1/queries/:queryId/pullback`, guarded by
+`verifyAction(PULLBACK)`, which `ROLE_ACTIONS` grants to ADMIN and SUPER_ADMIN. It persists
+`workflowState` and writes the `QUERY_PULLED_BACK` audit event. Two things to know before relying on
+it:
+
+- **The UI does not call it.** `PullbackQueryModal` goes through the store's `pullBackQuery`, which
+  reaches MongoDB via `POST /queries/persist` together with the richer client-side record
+  (`pullbackHistory`, workflow steps). The endpoint is the server-authoritative path to adopt as
+  workflow enforcement moves off the client; its write is an idempotent upsert on `queryId`, so
+  calling both does not corrupt the case.
+- **It does not answer the questions above.** The grant it enforces is provisional and follows
+  `ROLE_ACTIONS`; the stage rules, review-validity rules and reason requirement are still open.
+
 ## Why These Are Deliberately Unresolved
 
 Guessing these rules risks building UI/API shapes that don't match the client's actual

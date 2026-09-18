@@ -247,6 +247,13 @@ Review Process
 
 ## 12. Final Dispatch
 
+> **As built, this is not a Front Office step.** The user has since directed that the response go
+> out automatically: granting final approval records the approval, emails the response and closes
+> the case in one server call, and the Front Office Dispatch page is a status view with a retry for
+> a send that did not complete. The checklist below is what the reference material describes, kept
+> as the origin of the requirement — see
+> [../srs/14-open-questions-and-client-clarifications.md](../srs/14-open-questions-and-client-clarifications.md#dispatch).
+
 The Front Office should verify:
 
 -   Recipient

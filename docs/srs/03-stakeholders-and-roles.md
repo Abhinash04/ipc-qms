@@ -6,8 +6,8 @@
 | ---------------------| --------------------------------------------------------------------------|
 | `SUPER_ADMIN`       | Full system configuration access.                                        |
 | `ADMIN`             | System configuration (users, categories) without super-admin-only areas. |
-| `FRONT_OFFICE`      | Registers/verifies incoming queries, dispatches approved responses.      |
-| `OFFICER_IN_CHARGE` | Assigns queries, grants final approval.                                  |
+| `FRONT_OFFICE`      | Registers/verifies incoming queries. Holds the dispatch permission, now used only to retry a send that did not complete. |
+| `OFFICER_IN_CHARGE` | Assigns queries, grants final approval — which dispatches the response.  |
 | `ASSIGNED_OFFICIAL` | Drafts the response for an assigned query.                               |
 | `REVIEWER`          | Reviews a draft at one review level.                                     |
 
@@ -67,6 +67,12 @@ These are development identities only, not real IPC employees:
 
 Note `Rawat Jatin` (USR-0009) and `Jatin Rawat` (USR-0003) are **different people** — a deliberate
 near-collision the test suite pins, so name-matching code cannot conflate them.
+
+**The INQUIRER row is not the inquirer.** A real inquirer is any member of the public who emails the
+Front Office mailbox; they hold no account here and sign in to nothing. Their name and address are
+read off the incoming message and stored on the case, so the system supports arbitrarily many
+inquirers against one mailbox. USR-0001 exists only to exercise the in-app "Raise Enquiry" test
+harness.
 
 There is a real login screen; all accounts share the development password `QMS_SEED_PASSWORD`. Full
 detail, including each role's landing dashboard and section access, is in

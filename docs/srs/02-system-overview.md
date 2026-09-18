@@ -19,8 +19,9 @@ pullback for exceptional cases.
 - **Assignment** — AI recommendation + human (OIC) decision.
 - **Drafting** — AI-generated initial response + human editing, with versioning.
 - **Dynamic Review** — a variable-length chain of review levels.
-- **Final Approval** — OIC sign-off before dispatch.
-- **Dispatch** — sends the approved response and closes the query.
+- **Final Approval** — OIC sign-off, which also dispatches.
+- **Dispatch** — sends the approved response and closes the query. Automatic on final approval; the
+  Front Office page is a status view with a retry for a send that did not complete.
 - **Audit & Compliance** — records every workflow event.
 - **Admin** — users, roles, divisions, workflow templates, categories.
 
@@ -29,8 +30,8 @@ pullback for exceptional cases.
 | Actor | Summary |
 | --- | --- |
 | Inquirer | External party who submitted the query. Does not use the system directly. |
-| Front Office | Registers/verifies incoming queries and dispatches approved responses. |
-| Officer-in-Charge (OIC) | Assigns queries and grants final approval. |
+| Front Office | Registers/verifies incoming queries. Retains the dispatch permission, now exercised only to retry a send that did not complete. |
+| Officer-in-Charge (OIC) | Assigns queries and grants final approval, which dispatches the response. |
 | Assigned Official | Drafts the response. |
 | Reviewer | Reviews a draft at one review level. |
 | Admin / Super Admin | Configures users, roles, divisions, workflows, categories. |
@@ -41,13 +42,13 @@ See [03-stakeholders-and-roles.md](./03-stakeholders-and-roles.md) for the full 
 
 In scope and **built**: the frontend shell and role-generated routing, real authentication and
 RBAC, email ingestion/dispatch, AI-assisted summary/assignment/drafting, server-side persistence of
-the mailbox and audit trail, attachments, the workflow state-transition engine with dynamic review
-levels, in-app notifications and toasts, and the administration console.
+Query Cases, the mailbox and the audit trail, attachments, the workflow state-transition engine with
+dynamic review levels, in-app notifications and toasts, and the administration console.
 
 In scope but **not yet built**:
 
-- **Server-side Query Cases** — cases live in the browser's IndexedDB. This blocks case-level
-  authorization, cross-user visibility, and a `/queries` API.
+- **Case-level authorization** — Query Cases and their workflow steps are in MongoDB behind
+  `/api/v1/queries`, but every signed-in role can read every case and every attachment.
 - **Per-user credentials** — accounts are seeded from source and share one development password.
 - **Transfer and pullback** — implemented in the store but deliberately disabled pending client
   answers.
