@@ -12,6 +12,7 @@ import {
 } from '@/constants/statusEnums';
 import { WORKFLOW_ACTION, canPerform } from '@/constants/workflowRules';
 import { EMAIL_DIRECTION, EMAIL_TYPE } from '@/constants/emailModel';
+import { fakeFinalApprovalEndpoint } from '@/test/fakeFinalApprovalEndpoint';
 
 vi.mock('@/services/api/mailboxService');
 
@@ -45,6 +46,14 @@ const fakeSend = (payload) =>
     providerMessageId: 'mock-msg-dispatch',
     sentAt: '2026-08-18T12:00:00.000Z',
   });
+
+/**
+ * Final approval is one server call now, so the mail leg is injected into the
+ * endpoint rather than into the store — see src/test/fakeFinalApprovalEndpoint.js.
+ */
+const finalApproval = (send = fakeSend) => fakeFinalApprovalEndpoint({ send });
+
+const failingSend = () => Promise.reject(new Error('Gmail unavailable'));
 
 function mailboxMessage(overrides = {}) {
   return {
@@ -92,13 +101,14 @@ async function runTo(stopAt, { reviewers = [REVIEWER_A], message } = {}) {
   if (stopAt === WORKFLOW_STATE.PENDING_FINAL_APPROVAL) return queryId;
 
   if (stopAt === WORKFLOW_STATE.READY_FOR_DISPATCH) {
-    await s()
-      .grantFinalApproval(queryId, OIC, () => Promise.reject(new Error('Gmail unavailable')))
-      .catch(() => {});
+    // A send that fails is reported, not thrown: the approval stands, the
+    // response stays locked, and the case waits where the Front Office retry
+    // acts on it.
+    await s().grantFinalApproval(queryId, OIC, finalApproval(failingSend));
     return queryId;
   }
 
-  await s().grantFinalApproval(queryId, OIC, fakeSend);
+  await s().grantFinalApproval(queryId, OIC, finalApproval());
   return queryId;
 }
 
@@ -248,13 +258,13 @@ describe('dynamic review levels — nothing is hard-coded to two', () => {
     });
 
     expect(canPerform(ROLES.OFFICER_IN_CHARGE, WORKFLOW_ACTION.FINAL_APPROVE, stateOf(queryId))).toBe(false);
-    await expect(s().grantFinalApproval(queryId, OIC, fakeSend)).rejects.toThrow(
+    await expect(s().grantFinalApproval(queryId, OIC, finalApproval())).rejects.toThrow(
       /may not perform FINAL_APPROVE/,
     );
 
     s().approveReview(queryId, 'Level 1 fine', REVIEWER_A);
     expect(canPerform(ROLES.OFFICER_IN_CHARGE, WORKFLOW_ACTION.FINAL_APPROVE, stateOf(queryId))).toBe(false);
-    await expect(s().grantFinalApproval(queryId, OIC, fakeSend)).rejects.toThrow(
+    await expect(s().grantFinalApproval(queryId, OIC, finalApproval())).rejects.toThrow(
       /may not perform FINAL_APPROVE/,
     );
 
@@ -325,7 +335,7 @@ describe('revision cycles', () => {
     s().approveReview(queryId, 'Level 2 fine', REVIEWER_B);
     expect(stateOf(queryId)).toBe(WORKFLOW_STATE.PENDING_FINAL_APPROVAL);
 
-    await s().grantFinalApproval(queryId, OIC, fakeSend);
+    await s().grantFinalApproval(queryId, OIC, finalApproval());
     expect(stateOf(queryId)).toBe(WORKFLOW_STATE.CLOSED);
   });
 });
@@ -338,7 +348,7 @@ describe('response versioning and locking', () => {
     s().addReviewLevel(queryId, REVIEWER_A.id, OFFICIAL);
     s().submitForReview(queryId, OFFICIAL);
     s().approveReview(queryId, 'ok', REVIEWER_A);
-    await s().grantFinalApproval(queryId, OIC, fakeSend);
+    await s().grantFinalApproval(queryId, OIC, finalApproval());
 
     const versions = s().getVersions(queryId);
     expect(versions).toHaveLength(3);
@@ -369,7 +379,7 @@ describe('response versioning and locking', () => {
     s().submitForReview(queryId, OFFICIAL);
     s().approveReview(queryId, 'ok', REVIEWER_A);
 
-    await s().grantFinalApproval(queryId, OIC, fakeSend);
+    await s().grantFinalApproval(queryId, OIC, finalApproval());
 
     const sent = s().emailMessages.find((m) => m.emailType === EMAIL_TYPE.OUTGOING_RESPONSE);
     expect(sent.body).toBe('The final agreed wording.');
@@ -749,7 +759,7 @@ describe('reviewers may only act on their own level', () => {
     s().approveReview(queryId, 'Level 2 fine', REVIEWER_B);
     expect(stateOf(queryId)).toBe(WORKFLOW_STATE.PENDING_FINAL_APPROVAL);
 
-    await s().grantFinalApproval(queryId, OIC, fakeSend);
+    await s().grantFinalApproval(queryId, OIC, finalApproval());
     expect(stateOf(queryId)).toBe(WORKFLOW_STATE.CLOSED);
     expect(s().getReviews(queryId).map((r) => r.reviewerId)).toEqual([REVIEWER_A.id, REVIEWER_B.id]);
   });
@@ -835,7 +845,7 @@ describe('the specified two-level path, end to end', () => {
     s().approveReview(queryId, 'Reviewer II approves', REVIEWER_B);
     expect(stateOf(queryId)).toBe(WORKFLOW_STATE.PENDING_FINAL_APPROVAL);
 
-    await s().grantFinalApproval(queryId, OIC, fakeSend);
+    await s().grantFinalApproval(queryId, OIC, finalApproval());
     expect(stateOf(queryId)).toBe(WORKFLOW_STATE.CLOSED);
 
     expect(s().getVersions(queryId).map((v) => v.version)).toEqual(['v1', 'v2', 'v3']);

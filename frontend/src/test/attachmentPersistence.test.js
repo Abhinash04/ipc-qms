@@ -1,8 +1,9 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { useWorkflowStore } from '@/store/useWorkflowStore';
-import { loadAll } from '@/services/db/db';
+import { loadAll } from '@/services/persistence/queryState';
 import { findUserById } from '@/constants/mockUsers';
 import { WORKFLOW_STATE } from '@/constants/statusEnums';
+import { fakeFinalApprovalEndpoint } from '@/test/fakeFinalApprovalEndpoint';
 
 vi.mock('@/services/api/mailboxService');
 
@@ -40,6 +41,12 @@ const fakeSend = (payload) =>
     providerMessageId: 'mock-msg-dispatch',
     sentAt: '2026-08-18T12:00:00.000Z',
   });
+
+/**
+ * Final approval is one server call now, so the mail leg is injected into the
+ * endpoint rather than into the store — see src/test/fakeFinalApprovalEndpoint.js.
+ */
+const finalApproval = () => fakeFinalApprovalEndpoint({ send: fakeSend });
 
 function mailboxMessage(overrides = {}) {
   return {
@@ -133,7 +140,7 @@ describe('attachments persist against the correct Case ID', () => {
     s().addReviewLevel(queryId, REVIEWER.id, OFFICIAL);
     s().submitForReview(queryId, OFFICIAL);
     s().approveReview(queryId, 'Approved', REVIEWER);
-    await s().grantFinalApproval(queryId, OIC, fakeSend);
+    await s().grantFinalApproval(queryId, OIC, finalApproval());
 
     expect(s().getQuery(queryId).workflowState).toBe(WORKFLOW_STATE.CLOSED);
     expect(s().getQuery(queryId).attachments).toEqual(ATTACHMENTS);

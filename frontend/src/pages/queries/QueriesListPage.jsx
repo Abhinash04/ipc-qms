@@ -1,5 +1,4 @@
 import { QueryTable } from "@/components/workflow/QueryTable";
-import { MailboxIngestButton } from "@/components/workflow/MailboxIngestButton";
 import { useRoutePaths } from "@/hooks/useRoutePaths";
 import { useBucketFilter } from "@/hooks/useBucketFilter";
 import { useAuthStore } from "@/store/useAuthStore";
@@ -28,11 +27,10 @@ export function QueriesListPage() {
         { label: "Queries" },
       ]}
       detailPath={paths.QUERY_DETAIL}
-      actions={!isAssignedOfficial && <MailboxIngestButton />}
       emptyMessage={
         isAssignedOfficial
           ? "No queries assigned to you yet."
-          : "No queries yet. A case is created when an email is ingested from the IPC mailbox."
+          : "No queries yet. A case is created when the Front Office accepts an email in the IPC mailbox."
       }
       filter={filter}
     />

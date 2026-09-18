@@ -11,6 +11,8 @@ import { findUserById } from '@/constants/mockUsers';
 vi.mock('@/services/api/mailboxService', () => ({
   fetchEmailConfig: vi.fn().mockResolvedValue({}),
   fetchMailboxMessages: vi.fn().mockResolvedValue({ messages: [] }),
+  fetchMailboxDecisions: vi.fn().mockResolvedValue({ decisions: [] }),
+  recordMailboxDecision: vi.fn().mockResolvedValue({ alreadyDecided: false }),
   markMessageIngested: vi.fn().mockResolvedValue({ ingested: true }),
   deleteMailboxMessage: vi.fn().mockResolvedValue({ deleted: true }),
   sendEnquiry: vi.fn().mockResolvedValue({}),
@@ -118,22 +120,38 @@ describe('nothing was lost to the compaction', () => {
     // Every control the reviewer had before.
     expect(screen.getByRole('heading', { name: 'Available actions' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Review draft/ })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Transfer query/ })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Pull back query/ })).toBeInTheDocument();
+
+    // Transfer and pullback are NOT among them, and this assertion is the
+    // point rather than an omission. ROLE_ACTIONS grants TRANSFER to the
+    // assigned official and PULLBACK to ADMIN (constants/workflowRules.js:51-56)
+    // — a reviewer holds neither, and WorkflowActionsCard renders each button
+    // only when the grant is present. This test previously required both to be
+    // on screen for a reviewer, which contradicted the role matrix in
+    // docs/workflow/role-permission-matrix.md and had been failing since the
+    // two actions were gated.
+    expect(screen.queryByRole('button', { name: /Transfer query/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Pull back query/ })).not.toBeInTheDocument();
 
     // The second right-hand card, which is what made the column tall.
     expect(screen.getByRole('heading', { name: 'Review decision' })).toBeInTheDocument();
   });
 
-  it('keeps the Front Office actions intact on a fresh query', async () => {
+  it('keeps the Front Office actions intact on an accepted query', async () => {
     const { queryId: fresh } = s().ingestEmail(
       { ...enquiry(), mailboxMessageId: 'MSG-LAYOUT-2' },
       async () => null,
     );
+    // A case reaches the Front Office workspace already validated — accepting
+    // the message in the mailbox is what registers and acknowledges it. There
+    // is no second "Validate Query" step here any more.
+    await s().verifyQuery(fresh, FRONT_OFFICE);
 
     renderAs(FRONT_OFFICE, `/front-officer/queries/${fresh}`);
 
-    expect(screen.getByRole('button', { name: /Validate Query/ })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Validate Query/ })).toBeNull();
+    expect(
+      screen.getByRole('button', { name: /Forward to Officer-in-Charge/ }),
+    ).toBeInTheDocument();
     expect(actionsCard().className).not.toMatch(/h-full/);
   });
 

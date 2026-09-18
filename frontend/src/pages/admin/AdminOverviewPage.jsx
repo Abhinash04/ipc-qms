@@ -51,11 +51,13 @@ import { cn } from '@/utils/cn';
  *
  * Two data sources, deliberately distinguished on screen rather than blended:
  *
- *  - **Server-recorded** (audit trail): email, AI, attachment and access
- *    events. Real persisted records, true across every user.
- *  - **This browser** (workflow store): case counts and the case lifecycle.
- *    Real user-generated data, but Query Cases are not yet persisted
- *    server-side, so these numbers describe this device only.
+ *  - **Audit API** (`GET /audit`): email, AI, attachment and access events,
+ *    queried directly and paginated server-side.
+ *  - **Workflow store** (hydrated from `GET /queries`): case counts and the
+ *    case lifecycle. Both are now server-side and true across every user —
+ *    Query Cases moved out of browser-local IndexedDB into MongoDB. The two
+ *    stay separate because they are fetched differently, not because one is
+ *    less real than the other.
  *
  * Nothing here is seeded, sampled or estimated. Where there is no data, the
  * section says so instead of showing a zero dressed up as a measurement.
@@ -428,7 +430,7 @@ function CaseOverviewSection({ byStatus, caseVolume, trend, funnel }) {
           Query cases overview
         </h2>
         <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-[11px] font-bold text-slate-500">
-          This browser only — cases are not yet stored server-side
+          System-wide — cases are stored server-side
         </span>
       </div>
 
@@ -437,7 +439,7 @@ function CaseOverviewSection({ byStatus, caseVolume, trend, funnel }) {
           <StatusDonut
             title="Status distribution"
             data={byStatus}
-            emptyText="No cases in this browser yet"
+            emptyText="No cases yet"
           />
         </Panel>
 
@@ -628,7 +630,7 @@ export function AdminOverviewPage() {
         />
       </div>
 
-      {/* ── This browser ──────────────────────────────────────────────────── */}
+      {/* ── Query cases (workflow store) ───────────────────────────────────── */}
       <CaseOverviewSection
         byStatus={statusDistribution(queries)}
         caseVolume={volumeByDay(queries)}

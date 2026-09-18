@@ -156,7 +156,35 @@ export function ApprovalDetailPage() {
                   <Button
                     className="w-full"
                     onClick={() =>
-                      run(() => grantFinalApproval(queryId, currentUser))
+                      run(async () => {
+                        const result = await grantFinalApproval(
+                          queryId,
+                          currentUser,
+                          undefined,
+                          { comment },
+                        );
+                        setComment("");
+
+                        /**
+                         * Approving and answering are one click but two
+                         * outcomes, and the second can fail on its own. Saying
+                         * only "approved" when the inquirer was never emailed
+                         * is the state this whole change exists to prevent, so
+                         * a failed send is raised here — the approval stands
+                         * either way, and the case waits at READY_FOR_DISPATCH
+                         * for the Front Office to retry.
+                         */
+                        if (!result?.dispatched && !result?.alreadyDispatched) {
+                          const reason =
+                            result?.errors?.[0]?.error ||
+                            "the response could not be sent";
+                          throw new Error(
+                            `Approved, but the inquirer was not emailed: ${reason}`,
+                          );
+                        }
+
+                        return result;
+                      })
                     }
                   >
                     Approve

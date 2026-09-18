@@ -16,7 +16,7 @@ import { sectionPath, buildPath } from "@/constants/routePaths";
 import { SECTION } from "@/constants/routeSections";
 import { useAuthStore } from "@/store/useAuthStore";
 import { useWorkflowStore } from "@/store/useWorkflowStore";
-import { ROLE_LABELS } from "@/constants/roles";
+import { ROLES, ROLE_LABELS } from "@/constants/roles";
 import { stableKey } from "@/utils/stableKey";
 import { activateOnKey } from "@/utils/a11y";
 import { IpcLogo } from "@/components/common/IpcLogo";
@@ -150,14 +150,21 @@ export function Header() {
             </button>
           </div>
 
-          <button
-            onClick={resetDemo}
-            className="glass-control flex h-auto items-center gap-2 rounded-full px-3.5 py-1.5 text-[12.5px] font-bold text-slate-600 transition-[color,transform] hover:-translate-y-0.5 hover:text-rose-600 focus:outline-none cursor-pointer"
-            title="Reset database to initial state"
-          >
-            <RotateCcwIcon className="h-4 w-4" />
-            <span className="hidden sm:inline-block">Reset</span>
-          </button>
+          {/* SUPER_ADMIN only. This wipes every Query Case on the server, and it
+              sat in the header for every role: the API refused the write with a
+              403, but `resetDemo` had already replaced local state and does not
+              roll back, so that tab carried on against a zeroed counter while
+              the server still held the real cases. */}
+          {currentUser?.role === ROLES.SUPER_ADMIN && (
+            <button
+              onClick={resetDemo}
+              className="glass-control flex h-auto items-center gap-2 rounded-full px-3.5 py-1.5 text-[12.5px] font-bold text-slate-600 transition-[color,transform] hover:-translate-y-0.5 hover:text-rose-600 focus:outline-none cursor-pointer"
+              title="Reset database to initial state"
+            >
+              <RotateCcwIcon className="h-4 w-4" />
+              <span className="hidden sm:inline-block">Reset</span>
+            </button>
+          )}
 
           {/* Identity, not a switcher. Changing user now means signing out and
               signing in again — the old dropdown called login(userId) directly

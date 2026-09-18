@@ -116,9 +116,9 @@ const KNOWN_LIMITATIONS = [
     hint: 'Any signed-in user can read any attachment by id — Query Case ownership is not yet server-side',
   },
   {
-    label: 'Query case storage',
-    value: 'browser',
-    hint: "Cases live in each browser's IndexedDB, so case counts are per-device",
+    label: 'Workflow enforcement',
+    value: 'client-side',
+    hint: 'The server validates the shape of a transition, not whether the workflow state allowed it',
   },
   {
     label: 'Session revocation',

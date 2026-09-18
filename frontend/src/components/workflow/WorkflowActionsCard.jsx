@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { Lock, ArrowRight, Zap, ArrowRightLeft, RotateCcw } from "lucide-react";
+import { Lock, ArrowRight, ArrowRightLeft, RotateCcw } from "lucide-react";
 import { useQueryCase } from "@/hooks/useQueryCase";
 import { useWorkflowStore } from "@/store/useWorkflowStore";
 import {
@@ -8,12 +8,11 @@ import {
   CLARIFICATION_REQUIRED_ACTIONS,
 } from "@/constants/workflowRules";
 import { WORKFLOW_STATE } from "@/constants/statusEnums";
+import { EMAIL_TYPE } from "@/constants/emailModel";
 import { ROLES } from "@/constants/roles";
 import { buildPath } from "@/constants/routePaths";
 import { SECTION } from "@/constants/routeSections";
 import { useRoutePaths } from "@/hooks/useRoutePaths";
-import { useWorkflowAction } from "@/hooks/useWorkflowAction";
-import { ActionError } from "@/components/workflow/ActionError";
 import { TransferQueryModal } from "@/components/workflow/TransferQueryModal";
 import { PullbackQueryModal } from "@/components/workflow/PullbackQueryModal";
 import { notify } from "@/services/notify";
@@ -74,7 +73,6 @@ function deriveCaseActions({ query, currentStep, currentUser, can, paths }) {
   const isCurrentAssignee =
     query.currentAssigneeId === currentUser?.id || role === ROLES.SUPER_ADMIN;
 
-  const canVerify = can(WORKFLOW_ACTION.VERIFY);
   const canForward = can(WORKFLOW_ACTION.FORWARD);
   const canTransfer = can(WORKFLOW_ACTION.TRANSFER) && isCurrentAssignee;
   const canPullback = isAdminRole || can(WORKFLOW_ACTION.PULLBACK);
@@ -82,68 +80,103 @@ function deriveCaseActions({ query, currentStep, currentUser, can, paths }) {
   const links = buildActionLinks(can, paths, ownsCurrentStep);
 
   return {
-    canVerify,
     canForward,
     canTransfer,
     canPullback,
     links,
     isClosed: query.workflowState === WORKFLOW_STATE.CLOSED,
     hasNoActions:
-      !canVerify &&
-      !canForward &&
-      !canTransfer &&
-      !canPullback &&
-      links.length === 0,
+      !canForward && !canTransfer && !canPullback && links.length === 0,
   };
 }
 
 /**
- * Verification registers the query even when the outgoing email fails, so the
- * two delivery failures are tracked separately and can each be retried.
+ * A registered query whose acknowledgement never left, and the forward that may
+ * also have failed. Each is retried on its own.
+ *
+ * The acknowledgement is sent when the Front Officer accepts the message in the
+ * mailbox, not from this page — so whether it went out is read from the case
+ * rather than remembered from a click. A registered case carrying no
+ * acknowledgement message is one whose inquirer was never told. Deriving it
+ * this way survives a page reload, and clears itself the moment a retry
+ * succeeds.
  */
-function useEmailDeliveryRetries(queryId, currentUser) {
-  const validateAndForward = useWorkflowStore(
-    (state) => state.validateAndForward,
-  );
+function useEmailDeliveryRetries(queryId, currentUser, query) {
   const forwardToOic = useWorkflowStore((state) => state.forwardToOic);
   const acknowledgeInquirer = useWorkflowStore(
     (state) => state.acknowledgeInquirer,
   );
+  const emailMessages = useWorkflowStore((state) => state.emailMessages);
 
-  const [ackError, setAckError] = useState(null);
-  const [forwardError, setForwardError] = useState(null);
+  const [retryError, setRetryError] = useState(null);
+  // The last retry's send may have gone out: NICeMail pressed Send and never
+  // confirmed. Only ever true alongside `retryError`, which it qualifies.
+  const [retryUnconfirmed, setRetryUnconfirmed] = useState(false);
+  const [forwardFailure, setForwardFailure] = useState(null);
   const [retrying, setRetrying] = useState(false);
 
-  const validate = async () => {
-    setAckError(null);
-    setForwardError(null);
-    const result = await validateAndForward(queryId, currentUser);
-    if (!result.acknowledged) {
-      setAckError(result.acknowledgementError);
-      notify.warning(
-        "Acknowledgement email not sent",
-        result.acknowledgementError,
-      );
-    }
-    if (!result.forwarded) {
-      setForwardError(result.forwardError);
-      // Carries the "Missing attachment(s): …" text from the fail-closed
-      // resolver, so the OIC never appears to have received an incomplete
-      // forward without anyone being told.
-      notify.error(
-        "Forward to the Officer-in-Charge failed",
-        result.forwardError,
-      );
-    }
-  };
+  const acknowledged = emailMessages.some(
+    (m) => m.queryId === queryId && m.emailType === EMAIL_TYPE.ACKNOWLEDGEMENT,
+  );
+  // Only once the case is past intake: a case still in RECEIVED has not been
+  // accepted yet, and is not owed an acknowledgement.
+  const registered = query && query.workflowState !== WORKFLOW_STATE.RECEIVED;
+  const ackError =
+    retryError ||
+    (registered && !acknowledged
+      ? "The inquirer has not been told their query was received."
+      : null);
+
+  /**
+   * Derived the same way `ackError` is, and for the same reason.
+   *
+   * Accepting a message now forwards it to the Officer-in-Charge too, so a
+   * forward that failed happened on a different page — the mailbox — and its
+   * error lived in that page's state, which is gone by the time anyone opens
+   * the case. The case itself still says what happened: stuck at
+   * FRONT_OFFICE_VERIFICATION with no FORWARD message means the Officer-in-
+   * Charge was never told. That survives a reload and clears itself when the
+   * retry below succeeds.
+   */
+  const forwarded = emailMessages.some(
+    (m) => m.queryId === queryId && m.emailType === EMAIL_TYPE.FORWARD,
+  );
+  const forwardError =
+    forwardFailure ||
+    (query?.workflowState === WORKFLOW_STATE.FRONT_OFFICE_VERIFICATION && !forwarded
+      ? "The Officer-in-Charge has not received this case."
+      : null);
 
   const retryAcknowledgement = async () => {
     setRetrying(true);
     const result = await acknowledgeInquirer(queryId, currentUser);
     setRetrying(false);
-    setAckError(result.acknowledged ? null : result.error);
+    setRetryError(result.acknowledged ? null : result.error);
+    setRetryUnconfirmed(!result.acknowledged && Boolean(result.unconfirmed));
     if (!result.acknowledged) {
-      notify.warning("Acknowledgement email still not sent", result.error);
+      notify.warning(
+        result.unconfirmed ? "Acknowledgement not confirmed" : "Acknowledgement email still not sent",
+        result.error,
+      );
+    }
+  };
+
+  /**
+   * The forward, and its own named failure notice.
+   *
+   * Not routed through `useWorkflowAction`: a failed forward is not a refused
+   * action. The case is registered and stays registered, and what the Front
+   * Officer needs is the specific reason plus a retry — including the
+   * "Missing attachment(s): …" text the fail-closed resolver produces, so the
+   * OIC never appears to have received an incomplete forward with nobody told.
+   */
+  const forward = async () => {
+    setForwardFailure(null);
+    try {
+      await forwardToOic(queryId, currentUser);
+    } catch (caught) {
+      setForwardFailure(caught?.message || String(caught));
+      notify.error("Forward to the Officer-in-Charge failed", caught);
     }
   };
 
@@ -151,9 +184,9 @@ function useEmailDeliveryRetries(queryId, currentUser) {
     setRetrying(true);
     try {
       await forwardToOic(queryId, currentUser);
-      setForwardError(null);
+      setForwardFailure(null);
     } catch (caught) {
-      setForwardError(caught?.message || String(caught));
+      setForwardFailure(caught?.message || String(caught));
       notify.error("Forward to the Officer-in-Charge failed", caught);
     } finally {
       setRetrying(false);
@@ -162,12 +195,12 @@ function useEmailDeliveryRetries(queryId, currentUser) {
 
   return {
     ackError,
+    ackUnconfirmed: Boolean(retryError) && retryUnconfirmed,
     forwardError,
     retrying,
-    validate,
+    forward,
     retryAcknowledgement,
     retryForward,
-    forwardToOic,
   };
 }
 
@@ -182,10 +215,14 @@ function EmailRetryNotice({
   busyLabel,
   idleLabel,
   onRetry,
+  // A forward that failed closed means the Officer-in-Charge never received the
+  // case and does not know it exists — that interrupts. A missing
+  // acknowledgement is worth saying but not worth interrupting for.
+  urgent = false,
 }) {
   return (
     <div
-      role="status"
+      role={urgent ? "alert" : "status"}
       className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-[14px] text-amber-900"
     >
       <p className="font-bold m-0">{title}</p>
@@ -223,29 +260,24 @@ function PrimaryActionButton({
   );
 }
 
-/** The actions this user can take on the case right now. */
+/**
+ * The actions this user can take on the case right now.
+ *
+ * There is no "Validate Query" here any more. Validation happens once, in the
+ * mailbox: accepting a message is what registers the case and acknowledges the
+ * sender. A second validate step on the case page asked the Front Officer to
+ * judge the same email twice.
+ */
 function PrimaryActions({
-  canVerify,
   canForward,
   canTransfer,
   canPullback,
-  onValidate,
   onForward,
   onTransfer,
   onPullback,
 }) {
   return (
     <>
-      {canVerify && (
-        <PrimaryActionButton
-          onClick={onValidate}
-          icon={Zap}
-          className="bg-blue-600 hover:bg-blue-700 text-white shadow-md shadow-blue-500/20"
-        >
-          Validate Query
-        </PrimaryActionButton>
-      )}
-
       {canForward && (
         <PrimaryActionButton
           onClick={onForward}
@@ -337,16 +369,15 @@ function ClarificationList({ actions, openAction, onToggle }) {
 export function WorkflowActionsCard() {
   const { queryId, query, currentStep, currentUser, can } = useQueryCase();
   const paths = useRoutePaths();
-  const { run, error, clearError } = useWorkflowAction();
   const {
     ackError,
+    ackUnconfirmed,
     forwardError,
     retrying,
-    validate,
+    forward,
     retryAcknowledgement,
     retryForward,
-    forwardToOic,
-  } = useEmailDeliveryRetries(queryId, currentUser);
+  } = useEmailDeliveryRetries(queryId, currentUser, query);
 
   const [showClarification, setShowClarification] = useState(null);
   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
@@ -354,15 +385,8 @@ export function WorkflowActionsCard() {
 
   if (!query) return null;
 
-  const {
-    canVerify,
-    canForward,
-    canTransfer,
-    canPullback,
-    links,
-    isClosed,
-    hasNoActions,
-  } = deriveCaseActions({ query, currentStep, currentUser, can, paths });
+  const { canForward, canTransfer, canPullback, links, isClosed, hasNoActions } =
+    deriveCaseActions({ query, currentStep, currentUser, can, paths });
 
   const clarificationActions = Object.keys(CLARIFICATION_REQUIRED_ACTIONS);
 
@@ -376,12 +400,23 @@ export function WorkflowActionsCard() {
       </div>
 
       <div className="space-y-3">
-        <ActionError message={error} onDismiss={clearError} />
+        {/* No ActionError here any more. Its only producer was the removed
+            "Validate Query" step; the two failures this card can still surface
+            — a missing acknowledgement and a failed forward — each get their own
+            named notice with a retry, below. */}
 
         {ackError && (
           <EmailRetryNotice
-            title="Acknowledgement email not sent"
-            description={`The query is verified, but the inquirer was not emailed. ${ackError}`}
+            title={
+              ackUnconfirmed
+                ? "Acknowledgement may already have been sent"
+                : "Acknowledgement email not sent"
+            }
+            description={
+              ackUnconfirmed
+                ? `The case is registered. The inquirer may or may not have been emailed. ${ackError}`
+                : `The case is registered, but the inquirer was not emailed. ${ackError}`
+            }
             retrying={retrying}
             busyLabel="Sending…"
             idleLabel="Retry sending"
@@ -391,6 +426,7 @@ export function WorkflowActionsCard() {
 
         {forwardError && (
           <EmailRetryNotice
+            urgent
             title="Not forwarded to the Officer-in-Charge"
             description={`The query is registered, but the enquiry was not forwarded on. ${forwardError}`}
             retrying={retrying}
@@ -408,12 +444,10 @@ export function WorkflowActionsCard() {
         )}
 
         <PrimaryActions
-          canVerify={canVerify}
           canForward={canForward}
           canTransfer={canTransfer}
           canPullback={canPullback}
-          onValidate={() => run(validate)}
-          onForward={() => run(() => forwardToOic(queryId, currentUser))}
+          onForward={forward}
           onTransfer={() => setIsTransferModalOpen(true)}
           onPullback={() => setIsPullbackModalOpen(true)}
         />

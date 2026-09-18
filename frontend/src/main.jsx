@@ -14,14 +14,19 @@ import '@fontsource/outfit/800.css'
 import '@fontsource/outfit/900.css'
 import './index.css'
 import App from './App.jsx'
-import { useWorkflowStore } from '@/store/useWorkflowStore'
 import { useAuthStore } from '@/store/useAuthStore'
 
 const queryClient = new QueryClient()
 
-useWorkflowStore.getState().hydrate()
 // Restores the session from the httpOnly cookie before the router decides
 // which route the visitor is allowed on.
+//
+// The workflow store is deliberately NOT hydrated here. /queries requires a
+// session, so hydrating at module load raced ahead of the cookie check and
+// every call 401'd on a first visit — the store then fell back to the local
+// seed, marked itself hydrated, and never reloaded, so a user who signed in
+// afterwards worked against seed data while the real cases sat in Mongo.
+// App.jsx hydrates it once the session is known.
 useAuthStore.getState().hydrate()
 
 createRoot(document.getElementById('root')).render(

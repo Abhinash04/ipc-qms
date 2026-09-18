@@ -6,7 +6,7 @@ import { useWorkflowStore } from '@/store/useWorkflowStore';
 import { useAuthStore } from '@/store/useAuthStore';
 import { axiosClient } from '@/services/api/axiosClient';
 import { notify, beginBatch, endBatch } from '@/services/notify';
-import { notifyIngestResult } from '@/hooks/useMailboxIngestion';
+import { notifyMailboxCheck } from '@/hooks/useMailboxIngestion';
 import { findUserById } from '@/constants/mockUsers';
 import { AUDIT_EVENT } from '@/constants/statusEnums';
 import * as mailboxService from '@/services/api/mailboxService';
@@ -191,22 +191,26 @@ describe('a mailbox sweep reports itself once', () => {
       screen.queryByText('Forwarded to the Officer-in-Charge'),
     ).not.toBeInTheDocument();
 
-    notifyIngestResult({
-      created: ['QRY-1'],
-      skipped: [],
-      acknowledged: ['QRY-1'],
-      forwarded: ['QRY-1'],
-    });
-    await screen.findByText('1 new case registered');
+    notifyMailboxCheck({ fetched: 1 });
+    await screen.findByText('1 message awaiting validation');
+  });
+
+  it('reports mail as waiting, never as registered', async () => {
+    render(<NotificationHost />);
+
+    // The background poll used to register everything it found and announce
+    // "N new cases registered". It now only counts what is waiting — a timer
+    // must not open a case on somebody's behalf.
+    notifyMailboxCheck({ fetched: 3 });
+
+    await screen.findByText('3 messages awaiting validation');
+    expect(screen.queryByText(/registered/)).not.toBeInTheDocument();
   });
 
   it('stays quiet when a background poll finds nothing', async () => {
     render(<NotificationHost />);
 
-    notifyIngestResult(
-      { created: [], skipped: [], acknowledged: [], forwarded: [] },
-      { announceIdle: false },
-    );
+    notifyMailboxCheck({ fetched: 0 }, { announceIdle: false });
 
     await waitFor(() => {
       expect(screen.queryByText('No new mail')).not.toBeInTheDocument();
@@ -216,10 +220,7 @@ describe('a mailbox sweep reports itself once', () => {
   it('reports an unreachable mailbox even in the background', async () => {
     render(<NotificationHost />);
 
-    notifyIngestResult(
-      { created: [], skipped: [], acknowledged: [], forwarded: [], error: 'IMAP refused' },
-      { announceIdle: false },
-    );
+    notifyMailboxCheck({ fetched: 0, error: 'IMAP refused' }, { announceIdle: false });
 
     await screen.findByText('Could not check the IPC mailbox');
   });

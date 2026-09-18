@@ -4,6 +4,7 @@ import { useWorkflowStore } from '@/store/useWorkflowStore';
 import { findUserById } from '@/constants/mockUsers';
 import { WORKFLOW_STATE } from '@/constants/statusEnums';
 import { buildLifecycle, STAGE, STAGE_STATUS } from '@/constants/queryLifecycle';
+import { fakeFinalApprovalEndpoint } from '@/test/fakeFinalApprovalEndpoint';
 
 vi.mock('@/services/api/mailboxService');
 
@@ -36,6 +37,12 @@ const fakeSend = (payload) =>
     providerMessageId: 'mock-msg-dispatch',
     sentAt: '2026-08-18T12:00:00.000Z',
   });
+
+/**
+ * Final approval is one server call now, so the mail leg is injected into the
+ * endpoint rather than into the store — see src/test/fakeFinalApprovalEndpoint.js.
+ */
+const finalApproval = () => fakeFinalApprovalEndpoint({ send: fakeSend });
 
 const enquiry = () => ({
   mailboxMessageId: 'MSG-00001',
@@ -247,7 +254,7 @@ describe('a closed query reads as fully complete', () => {
     s().submitForReview(queryId, OFFICIAL);
     s().approveReview(queryId, 'ok', REVIEWER_A);
     s().approveReview(queryId, 'ok', REVIEWER_B);
-    await s().grantFinalApproval(queryId, OIC, fakeSend);
+    await s().grantFinalApproval(queryId, OIC, finalApproval());
 
     expect(s().getQuery(queryId).workflowState).toBe(WORKFLOW_STATE.CLOSED);
     expect(currentOf(queryId)).toBeUndefined();

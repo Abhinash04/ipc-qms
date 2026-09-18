@@ -14,10 +14,19 @@ import { MOCK_USERS, findUserById, findUserByEmail } from '@/constants/mockUsers
 import { createEmailMessage, EMAIL_DIRECTION, EMAIL_TYPE } from '@/constants/emailModel';
 import { buildSeedState } from '@/constants/mockDomain';
 import { summarise, recommendAssignee, draftResponse } from '@/services/ai/mockAiService';
-// Dexie/IndexedDB loads on first persistence call, keeping it (and its ~25 kB
-// gzip) out of the entry chunk that the login page downloads.
-const dbModule = () => import('@/services/db/db');
-import { sendResponse, forwardQuery, sendAcknowledgement } from '@/services/api/mailboxService';
+// The persistence client loads on first use, keeping it out of the entry chunk
+// that the login page downloads. It talks to /queries — the store held its own
+// Dexie/IndexedDB database until the server-side Query Case API landed.
+const dbModule = () => import('@/services/persistence/queryState');
+import {
+  sendResponse,
+  forwardQuery,
+  sendAcknowledgement,
+  acceptMailboxMessage as acceptOnServer,
+} from '@/services/api/mailboxService';
+// Final approval is a server operation, not a state mirror, so it is imported
+// directly like the mail commands above rather than through `dbModule()`.
+import { grantFinalApproval as approveOnServer } from '@/services/api/queryCaseService';
 import { fetchGemmaAiSummary, fetchGemmaAiDraft } from '@/services/api/aiService';
 import { assembleDraftEmail } from '@/services/ai/draftComposer';
 import { notify } from '@/services/notify';
@@ -177,6 +186,24 @@ function reopenReviewCycle(steps, queryId) {
 }
 
 function computeTransition(state, { queryId, event, actor, patch = {}, details, actorLabel, notify, mutate }) {
+  /**
+   * Every transition writes an audit event, so every transition needs a name.
+   *
+   * One call site omitted it. `JSON.stringify` drops an undefined value rather
+   * than sending null, so the delta reached the server without the field at
+   * all, the schema rejected the whole batch, and because `persistDelta` is
+   * fire-and-forget the only sign was a toast saying changes were not saved.
+   * The state change had already been applied locally, so the case looked
+   * updated and was not. Throwing here turns that into a visible failure at the
+   * call site instead of silent divergence between the tab and the database.
+   */
+  if (!event) {
+    throw new Error(
+      `applyTransition(${queryId}): every transition must name an audit event — ` +
+        'see AUDIT_EVENT in constants/statusEnums.js',
+    );
+  }
+
   const timestamp = now();
   const minted = mintId(state.counters, 'AUD');
   let counters = { ...state.counters, ...minted.bump };
@@ -227,10 +254,30 @@ async function persistDelta(prev, next, queryId, auditEvent, notification) {
   const nextStepIds = new Set(nextSteps.map((s) => s.stepId));
 
   const prevReviewIds = new Set(byQuery(prev.reviews, queryId).map((r) => r.reviewId));
-  const prevVersionIds = new Set(byQuery(prev.responseVersions, queryId).map((v) => v.responseId));
 
   const prevMessageIds = new Set(prev.emailMessages.map((m) => m.messageId));
   const prevThreadIds = new Set(prev.emailThreads.map((t) => t.threadId));
+
+  /**
+   * Versions split into new rows and changed ones.
+   *
+   * Only the new ones used to be sent, so editing a version in place — which is
+   * how the final-approval lock was applied, `status: FINAL_APPROVED` on a row
+   * that already existed — reached the server as nothing at all. The lock held
+   * in the tab and was gone after a reload. `upsertVersions` is carried by the
+   * validator and the controller already; this was the one end that never
+   * filled it in.
+   */
+  const prevVersions = new Map(
+    byQuery(prev.responseVersions, queryId).map((v) => [v.responseId, v]),
+  );
+  const nextVersions = byQuery(next.responseVersions, queryId);
+
+  const addVersions = nextVersions.filter((v) => !prevVersions.has(v.responseId));
+  const upsertVersions = nextVersions.filter((v) => {
+    const before = prevVersions.get(v.responseId);
+    return before && before !== v;
+  });
 
   const { persistTransition } = await dbModule();
   await persistTransition({
@@ -241,7 +288,8 @@ async function persistDelta(prev, next, queryId, auditEvent, notification) {
     upsertSteps: nextSteps,
     deleteStepIds: prevStepIds.filter((id) => !nextStepIds.has(id)),
     addReviews: byQuery(next.reviews, queryId).filter((r) => !prevReviewIds.has(r.reviewId)),
-    addVersions: byQuery(next.responseVersions, queryId).filter((v) => !prevVersionIds.has(v.responseId)),
+    addVersions,
+    upsertVersions,
     addThreads: next.emailThreads.filter((t) => !prevThreadIds.has(t.threadId)),
     addMessages: next.emailMessages.filter((m) => !prevMessageIds.has(m.messageId)),
   });
@@ -587,7 +635,16 @@ export const useWorkflowStore = create((set, get) => ({
       });
       return { acknowledged: true };
     } catch (error) {
-      return { acknowledged: false, error: error?.message || String(error) };
+      // The server's reason, not axios's "Request failed with status code …".
+      // For a NICeMail send that may already have gone out, the reason is the
+      // instruction to check the Sent folder before retrying, and `unconfirmed`
+      // is what lets the page stop calling it "not sent".
+      const data = error?.response?.data;
+      return {
+        acknowledged: false,
+        error: data?.error || error?.message || String(error),
+        ...(data?.unconfirmed ? { unconfirmed: true } : {}),
+      };
     }
   },
 
@@ -606,6 +663,55 @@ export const useWorkflowStore = create((set, get) => ({
       details: 'Front Office verified the query details and attachments.',
     });
     return get().acknowledgeInquirer(queryId, actor, send);
+  },
+
+  /**
+   * Accept an incoming mailbox message as a genuine IPC query.
+   *
+   * This is the gate. Arriving mail creates nothing on its own; a case exists
+   * only because a Front Officer looked at the message and clicked accept.
+   *
+   * The whole intake sequence — mint the Case ID, create the case, acknowledge
+   * the sender, forward to the Officer-in-Charge — runs on the server, in one
+   * request. It used to run here, in the browser, and that was wrong twice
+   * over: the Case ID came from a counter this tab held, so two tabs hydrated
+   * at the same number both minted it; and a tab closed midway left a case
+   * nobody had been told about. The server mints atomically and checks each
+   * artefact before acting, so a retry resumes rather than repeats.
+   *
+   * `accept` is injectable for the same reason `forwardToOic`'s `forward` is:
+   * tests drive the outcome without a network.
+   *
+   * Takes no actor, unlike every other action here. The acting officer is read
+   * from the session cookie on the server, and a client that also named one
+   * would be naming an actor it could choose — which is how an audit trail
+   * stops being evidence.
+   *
+   * The acknowledgement goes to whoever actually wrote in — the server reads
+   * the inquirer off the message's From header, so there is no configured
+   * inquirer address anywhere in this path.
+   */
+  acceptMailboxMessage: async (message, accept = acceptOnServer) => {
+    const mailboxMessageId = message?.mailboxMessageId || message?.providerMessageId;
+    if (!mailboxMessageId) {
+      throw new Error('acceptMailboxMessage: message must carry a mailboxMessageId');
+    }
+
+    const result = await accept(mailboxMessageId, message);
+
+    // The server is now the only holder of this case, so read it back rather
+    // than reconstructing it here. Done for a repeat accept too: that answer
+    // names a case this tab may never have seen, and without the read the
+    // inbox row has no case to link to.
+    if (result?.queryId) await get().refreshFromServer();
+
+    return {
+      ...result,
+      accepted: Boolean(result?.created),
+      acknowledged: Boolean(result?.acknowledged),
+      forwarded: Boolean(result?.forwarded),
+      errors: result?.errors || [],
+    };
   },
 
   /**
@@ -640,6 +746,30 @@ export const useWorkflowStore = create((set, get) => ({
 
   forwardToOic: async (queryId, actor, forward = forwardQuery) => {
     const query = assertCan(get(), WORKFLOW_ACTION.FORWARD, queryId, actor);
+
+    /**
+     * Already forwarded — a retry, a double click, or a second Front Officer
+     * on the same case. Modelled on `dispatchResponse`, which has had this
+     * guard from the start; this one did not, and the workflow-state check
+     * alone does not cover it: a send that succeeds and then fails to record
+     * leaves the case forwardable and the OIC receives the mail twice. It
+     * happened — three EMAIL_FORWARDED rows for one case.
+     *
+     * Returns rather than throws, for the same reason: a duplicate trigger is
+     * a no-op, not a failure, and `validateAndForward` must not report an
+     * error for work that was already done.
+     */
+    const alreadyForwarded = get().emailMessages.find(
+      (m) => m.queryId === queryId && m.emailType === EMAIL_TYPE.FORWARD,
+    );
+    if (alreadyForwarded) {
+      return {
+        queryId,
+        messageId: alreadyForwarded.messageId,
+        forwarded: false,
+        reason: 'already-forwarded',
+      };
+    }
 
     const original = get().emailMessages.find(
       (m) => m.queryId === queryId && m.emailType === EMAIL_TYPE.INCOMING_QUERY,
@@ -1121,36 +1251,40 @@ export const useWorkflowStore = create((set, get) => ({
     });
   },
 
-  grantFinalApproval: async (queryId, actor, send = sendResponse) => {
+  /**
+   * Final approval, and the response that follows it — one server call.
+   *
+   * This used to record the approval locally and then call `dispatchResponse`
+   * with a null actor, on the theory that an automatic send is "the system
+   * acting". The null actor skipped only this store's own permission check: the
+   * HTTP request still went out on the approving officer's session, and sending
+   * is a Front Office permission, so every approval ended in a 403 with the
+   * case stranded at READY_FOR_DISPATCH and the inquirer never answered.
+   *
+   * The server does both halves now. It records the approval first and sends
+   * afterwards, so a mail failure costs the response and not the decision, and
+   * it closes the case only once a send has actually happened.
+   *
+   * `assertCan` stays: it refuses an unauthorised click immediately and by
+   * name, rather than after a round trip. The server enforces the same rule
+   * independently — this is the convenience, not the control.
+   *
+   * `approve` is injectable for the same reason `forwardToOic`'s `forward` is.
+   * The optional `comment` is the officer's note from the approval screen; it
+   * lands on the FINAL_APPROVAL_GRANTED audit row. The screen collected one and
+   * threw it away before — the same silent discard as the review `comment`.
+   */
+  grantFinalApproval: async (queryId, actor, approve = approveOnServer, { comment } = {}) => {
     assertCan(get(), WORKFLOW_ACTION.FINAL_APPROVE, queryId, actor);
-    const state = get();
-    const current = state.getCurrentStep(queryId);
-    const approved = state.getLatestVersion(queryId);
-    const timestamp = now();
 
-    state.applyTransition({
-      queryId,
-      actor,
-      event: AUDIT_EVENT.FINAL_APPROVAL_GRANTED,
-      patch: { workflowState: WORKFLOW_STATE.READY_FOR_DISPATCH },
-      details: `Final approval granted; ${approved ? `${approved.version} locked` : 'no draft to lock'} and ready for dispatch.`,
-      notify: {
-        recipientRole: 'FRONT_OFFICE',
-        message: `${queryId} is approved and ready for dispatch.`,
-      },
-      mutate: (base) => ({
-        workflowSteps: base.workflowSteps.map((s) =>
-          s.stepId === current?.stepId ? { ...s, status: 'COMPLETED', completedAt: timestamp } : s,
-        ),
-        responseVersions: base.responseVersions.map((v) =>
-          v.responseId === approved?.responseId
-            ? { ...v, status: RESPONSE_STATUS.FINAL_APPROVED, approvedAt: timestamp }
-            : v,
-        ),
-      }),
-    });
+    const result = await approve(queryId, { comment });
 
-    return get().dispatchResponse(queryId, null, send);
+    // The server is the only holder of what just happened — the locked version,
+    // the outbound response, the closing audit rows. Read it back rather than
+    // reconstructing it here and hoping the two agree.
+    await get().refreshFromServer();
+
+    return result;
   },
 
   rejectFinalApproval: (queryId, reason, actor) => {
@@ -1223,12 +1357,18 @@ export const useWorkflowStore = create((set, get) => ({
 
     // Order matters, and each step guards something different.
     //
-    // 1. PERMISSION first, so an unauthorised caller is refused outright and
-    //    never receives the benign "already dispatched" shape instead.
-    //    A human retry from the Dispatch page passes an actor and is gated
-    //    exactly as before. The automatic dispatch that follows final approval
-    //    passes NO actor: it is the system acting on the READY_FOR_DISPATCH
-    //    transition. Recorded in docs/srs/14 as a deliberate widening.
+    /**
+     * 1. PERMISSION first, so an unauthorised caller is refused outright and
+     *    never receives the benign "already dispatched" shape instead.
+     *
+     *    Every remaining caller is a human retry from the Dispatch page, and is
+     *    gated. The actorless branch is a remnant: final approval used to call
+     *    this with `actor: null` on the theory that an automatic send is "the
+     *    system acting", which skipped only this check — the request still went
+     *    out on the approving officer's session, and sending is a Front Office
+     *    permission, so it 403ed every time. That path is now a server endpoint
+     *    (services/workflow/finalApproval.js) and does not come through here.
+     */
     if (actor) {
       assertCan(state, WORKFLOW_ACTION.DISPATCH, queryId, actor);
     }
@@ -1265,6 +1405,10 @@ export const useWorkflowStore = create((set, get) => ({
       body: approved.content,
       attachments: [],
       providerThreadId: query.providerThreadId || null,
+      // Names the case, so the server answers through the mailbox it arrived
+      // in. This is the Front Office retry path; without it a NICeMail case
+      // was retried through the default transport.
+      queryId,
     });
 
     const timestamp = sent?.sentAt || now();
@@ -1438,7 +1582,7 @@ export const useWorkflowStore = create((set, get) => ({
     get().applyTransition({
       queryId,
       actor,
-      event: AUDIT_EVENT.QUERY_PULLEDBACK,
+      event: AUDIT_EVENT.QUERY_PULLED_BACK,
       patch: {
         workflowState: targetStage,
         currentAssigneeId: newAssigneeId,
@@ -1468,46 +1612,104 @@ export const useWorkflowStore = create((set, get) => ({
   },
 
   hydrate: async () => {
-if (get().hydrated) return;
-try {
-  const { isEmpty, replaceAll, loadAll } = await dbModule();
-  if (await isEmpty()) {
-    const seed = buildSeedState();
-    await replaceAll(seed);
-    set({ ...seed, hydrated: true, persistenceError: null });
-    return;
-  }
-  const stored = await loadAll();
-  set({
-    queries: stored.queries,
-    workflowSteps: stored.workflowSteps,
-    reviews: stored.reviews,
-    responseVersions: stored.responseVersions,
-    auditEvents: stored.auditEvents,
-    notifications: stored.notifications,
-    emailMessages: stored.emailMessages || [],
-    emailThreads: stored.emailThreads || [],
-    counters: stored.counters || buildSeedState().counters,
-    hydrated: true,
-    persistenceError: null,
-  });
-} catch (error) {
-  console.error('[qms] IndexedDB unavailable — running from in-memory seed', error);
-  set({ hydrated: true, persistenceError: String(error?.message || error) });
-}
+    if (get().hydrated) return;
+    try {
+      const { isEmpty, loadAll } = await dbModule();
+      if (await isEmpty()) {
+        /**
+         * An empty database is a perfectly ordinary state — a fresh install, or
+         * the morning after `npm run db:reset`. It is NOT a cue to write
+         * anything back.
+         *
+         * This branch used to call `replaceAll(seed)`, which issues
+         * `POST /queries/reset` and, among other things, deletes the server's
+         * `QueryCounter`. Any tab that loaded before the first case existed
+         * therefore wiped the counter the server mints Case IDs from. The seed
+         * is now applied locally only: empty collections and zeroed counters,
+         * which is what `buildSeedState()` returns.
+         */
+        set({ ...buildSeedState(), hydrated: true, persistenceError: null });
+        return;
+      }
+      const stored = await loadAll();
+      set({
+        queries: stored.queries,
+        workflowSteps: stored.workflowSteps,
+        reviews: stored.reviews,
+        responseVersions: stored.responseVersions,
+        auditEvents: stored.auditEvents,
+        notifications: stored.notifications,
+        emailMessages: stored.emailMessages || [],
+        emailThreads: stored.emailThreads || [],
+        counters: stored.counters || buildSeedState().counters,
+        hydrated: true,
+        persistenceError: null,
+      });
+    } catch (error) {
+      // No console here: `src/test/setup.js` fails any test that writes to it.
+      // `persistenceError` is the channel, and it is what the UI reads to say
+      // the session is running on unsaved local state.
+      set({ hydrated: true, persistenceError: String(error?.message || error) });
+    }
   },
 
+  /**
+   * Re-read everything from the server, ignoring the `hydrated` flag.
+   *
+   * Needed because some work now happens server-side — the accept sequence
+   * mints the Case ID, writes the case and sends the mail without this store
+   * ever seeing it. `hydrate()` cannot be reused: it returns immediately once
+   * hydrated, which is exactly when this is called.
+   *
+   * Reports through `persistenceError` rather than throwing: the server has
+   * already done the work, and a failed read is a stale screen, not a lost
+   * case.
+   */
+  refreshFromServer: async () => {
+    try {
+      const { loadAll } = await dbModule();
+      const stored = await loadAll();
+      set({
+        queries: stored.queries || [],
+        workflowSteps: stored.workflowSteps || [],
+        reviews: stored.reviews || [],
+        responseVersions: stored.responseVersions || [],
+        auditEvents: stored.auditEvents || [],
+        notifications: stored.notifications || [],
+        emailMessages: stored.emailMessages || [],
+        emailThreads: stored.emailThreads || [],
+        counters: stored.counters || get().counters,
+        persistenceError: null,
+      });
+      return true;
+    } catch (error) {
+      set({ persistenceError: String(error?.message || error) });
+      return false;
+    }
+  },
+
+  /**
+   * Signing out must drop the loaded workflow state.
+   *
+   * The store is shared process-wide, so without this the next account to sign
+   * in would see the previous one's cases until the tab was refreshed — and
+   * would then write transitions against them.
+   */
+  resetHydration: () => set({ ...buildSeedState(), hydrated: false, persistenceError: null }),
+
   resetDemo: async () => {
-const seed = buildSeedState();
-set({ ...seed });
-try {
-  const { replaceAll } = await dbModule();
-  await replaceAll(seed);
-  set({ persistenceError: null });
-} catch (error) {
-  console.error('[qms] failed to reset demo data', error);
-  set({ persistenceError: String(error?.message || error) });
-}
+    const seed = buildSeedState();
+    // Local state is cleared only after the server has accepted the reset. It
+    // used to be cleared first, so a refused reset still emptied the tab.
+    try {
+      const { replaceAll } = await dbModule();
+      await replaceAll(seed);
+      set({ ...seed, persistenceError: null });
+    } catch (error) {
+      // See hydrate() — the test setup fails on console output, and
+      // `persistenceError` is the channel the UI already reads.
+      set({ persistenceError: String(error?.message || error) });
+    }
   },
 }));
 

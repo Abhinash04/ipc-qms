@@ -8,7 +8,9 @@ import {
   CheckCircle2,
   ArrowRight,
   Trash2Icon,
+  Check,
   X,
+  Ban,
   PaperclipIcon,
 } from "lucide-react";
 
@@ -22,16 +24,19 @@ import {
   TooltipTrigger,
   TooltipContent,
 } from "@/components/ui/tooltip";
+import { Button } from "@/components/ui/button";
 import {
   useMailboxIngestion,
-  notifyIngestResult,
+  notifyMailboxCheck,
 } from "@/hooks/useMailboxIngestion";
 import { useRoutePaths } from "@/hooks/useRoutePaths";
 import { useWorkflowStore } from "@/store/useWorkflowStore";
 import {
   fetchMailboxMessages,
+  fetchMailboxDecisions,
   deleteMailboxMessage,
 } from "@/services/api/mailboxService";
+import { notify } from "@/services/notify";
 import { buildPath } from "@/constants/routePaths";
 import { useAuthStore } from "@/store/useAuthStore";
 import { ROLE_SLUG } from "@/constants/permissions";
@@ -77,26 +82,97 @@ function formatReceived(receivedAt) {
   };
 }
 
-/** One line summarising what the last mailbox check actually did. */
-function describeIngestResult(result) {
-  const parts = [];
+/**
+ * One line summarising the last mailbox check.
+ *
+ * It reports what is *waiting*, never what was registered — checking the
+ * mailbox registers nothing. A case appears only when somebody accepts a
+ * message below.
+ */
+function describeMailboxCheck(result) {
+  const waiting = result.fetched || 0;
+  if (waiting === 0) return "No new mail";
+  return `${waiting} message${waiting === 1 ? "" : "s"} awaiting validation`;
+}
 
-  if (result.created.length > 0) {
-    parts.push(
-      `${result.created.length} case${result.created.length > 1 ? "s" : ""} registered`,
-    );
-  } else {
-    parts.push("No new mail to register");
-  }
+/**
+ * What accepting actually achieved, step by step.
+ *
+ * Accepting does three things now — case, acknowledgement, forward — and any
+ * one of them can fail on its own without losing the case. Naming the step that
+ * failed is the difference between "retry the tick" and an afternoon spent
+ * working out which email never went out.
+ */
+function describeAccept(result, message) {
+  const sender = parseSender(message.from).email || message.from;
+  const done = [];
+  const failed = [];
 
-  if (result.skipped.length > 0) {
-    parts.push(`${result.skipped.length} already registered`);
-  }
-  if (result.acknowledged?.length > 0) {
-    parts.push(`${result.acknowledged.length} acknowledged`);
-  }
+  // Three outcomes, not two: an "offline summary" is a real result produced
+  // without the model, and calling it a success would hide that the AI service
+  // is down — which is the thing worth knowing.
+  if (result.aiSummaryStatus === "GENERATED") done.push("AI summary generated");
+  else if (result.aiSummaryStatus === "FALLBACK") done.push("summary produced offline");
+  else if (result.aiSummaryStatus === "FAILED") failed.push("no AI summary");
 
-  return parts.join(" · ");
+  /**
+   * "Not sent" and "may have been sent" need opposite advice.
+   *
+   * The server flags an acknowledgement `unconfirmed` when Send was pressed in
+   * the NICeMail browser and nothing confirmed it left. Advising a retry there
+   * — as this toast used to for every failure — is how an inquirer ends up
+   * acknowledged twice from an official mailbox.
+   */
+  const ackUnconfirmed = (result.errors || []).some(
+    (entry) => entry.step === "acknowledgement" && entry.unconfirmed,
+  );
+
+  if (result.acknowledged) done.push(`acknowledgement sent to ${sender}`);
+  else failed.push(ackUnconfirmed ? "acknowledgement may already have been sent" : "acknowledgement not sent");
+
+  (result.forwarded ? done : failed).push(
+    result.forwarded
+      ? "forwarded to the Officer-in-Charge"
+      : "not forwarded to the Officer-in-Charge",
+  );
+
+  const sentence = [...done, ...failed].join(" · ");
+  if (!failed.length) return `${sentence}.`;
+
+  return ackUnconfirmed
+    ? `${sentence}. The case is saved — check the NICeMail Sent folder before retrying, or ${sender} may receive the acknowledgement twice.`
+    : `${sentence}. The case is saved — retry from the case page.`;
+}
+
+/**
+ * The NICeMail browser mailbox could not be read.
+ *
+ * That mailbox is filled by an agent reading a signed-in NICeMail tab, and a
+ * failed read does not fail the inbox request — the server answers 200 with
+ * whatever it already stored and reports the failure in `sync`. Nothing showed
+ * it, so a closed Chrome, an expired session or uncalibrated selectors all
+ * looked exactly like an empty inbox. Only the NICeMail Front Office's
+ * response carries `sync`, so this never appears for any other mailbox.
+ */
+function NicemailSyncNotice({ sync }) {
+  return (
+    <div
+      role="alert"
+      className="rounded-2xl border border-amber-200 bg-amber-50/90 p-4.5 text-slate-700 shadow-sm flex items-start gap-3.5"
+    >
+      <ShieldAlert className="h-6 w-6 text-amber-600 shrink-0 mt-0.5" />
+      <div>
+        <p className="font-bold text-[14px] text-amber-900">
+          NICeMail could not be read — this list may be out of date
+        </p>
+        <p className="mt-1 text-[12.5px] font-medium text-amber-800 leading-relaxed">
+          {sync.error || "The last NICeMail sync failed."}
+          {sync.stage ? ` (stage: ${sync.stage})` : ""} Check that the dedicated Chrome
+          is running with NICeMail signed in — see docs/NIC_BROWSER_AGENT.md.
+        </p>
+      </div>
+    </div>
+  );
 }
 
 function MailboxOfflineNotice() {
@@ -119,11 +195,11 @@ function MailboxOfflineNotice() {
   );
 }
 
-function IngestSummary({ result }) {
+function MailboxCheckSummary({ result }) {
   return (
     <div className="rounded-2xl bg-[#f1f5fa] border border-white p-3.5 shadow-[4px_4px_8px_#d0d7e5,-4px_-4px_8px_#ffffff] text-[13px] font-bold text-slate-700 flex items-center gap-2">
       <CheckCircle2 className="h-4.5 w-4.5 text-emerald-600 shrink-0" />
-      <span>{describeIngestResult(result)}</span>
+      <span>{describeMailboxCheck(result)}</span>
     </div>
   );
 }
@@ -168,8 +244,8 @@ function EmptyInbox() {
         No Mail in the IPC Mailbox
       </h3>
       <p className="text-[13px] font-medium text-slate-400 m-0 mt-1 max-w-sm">
-        Incoming enquiries sent to the official mailbox will automatically appear
-        here.
+        Enquiries sent to the official mailbox appear here for you to accept or
+        reject. Nothing becomes a Query Case until you accept it.
       </p>
     </div>
   );
@@ -198,8 +274,13 @@ function MailboxColumnHeader() {
   );
 }
 
-/** Whether the message already became a Query Case, or is still waiting. */
-function QueryCaseCell({ known, queryId, detailPath }) {
+/**
+ * What became of this message: a case, a rejection, or a decision still to make.
+ *
+ * Three states rather than two. "Not registered" used to mean both "waiting for
+ * you" and "you looked at it and said no", which are opposite things.
+ */
+function QueryCaseCell({ known, queryId, detailPath, rejected }) {
   if (known && detailPath) {
     return (
       <Link
@@ -212,11 +293,110 @@ function QueryCaseCell({ known, queryId, detailPath }) {
     );
   }
 
+  if (rejected) {
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200 px-3 py-1 xl:px-3.5 xl:py-1.5 text-[10.5px] xl:text-[11.5px] font-extrabold shadow-2xs">
+        <Ban className="h-3 w-3 shrink-0" aria-hidden="true" />
+        Rejected
+      </span>
+    );
+  }
+
   return (
     <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200/80 px-3 py-1 xl:px-3.5 xl:py-1.5 text-[10.5px] xl:text-[11.5px] font-extrabold shadow-2xs">
       <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse shrink-0" />
-      Not registered
+      Awaiting validation
     </span>
+  );
+}
+
+/**
+ * The validation gate, one row at a time: is this a genuine IPC enquiry?
+ *
+ * Shown only while the message is undecided. Accepting opens a case, mints its
+ * id, acknowledges whoever wrote in and forwards the enquiry to the
+ * Officer-in-Charge; rejecting records that it was seen and turned down, and
+ * creates nothing at all. Both are final — the server keeps the first decision
+ * and ignores any later one — so each asks for confirmation first.
+ */
+function RowValidationControls({ message, decision, pending, confirming, onAsk, onCancel, onConfirm }) {
+  if (decision) return null;
+
+  if (confirming) {
+    const accepting = confirming === "accept";
+    return (
+      <div className="flex flex-col items-center gap-1.5">
+        <span className="hidden xl:block text-[11px] font-extrabold text-slate-500 uppercase tracking-wider">
+          {accepting ? "Register & forward?" : "Reject?"}
+        </span>
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={pending}
+            className={`rounded-xl px-3 py-1.5 text-[11.5px] font-extrabold text-white shadow-sm transition-[background-color,transform] active:scale-95 cursor-pointer disabled:opacity-60 ${
+              accepting
+                ? "bg-emerald-600 hover:bg-emerald-700"
+                : "bg-slate-600 hover:bg-slate-700"
+            }`}
+          >
+            {pending ? "Working…" : "Yes"}
+          </button>
+          <button
+            type="button"
+            aria-label={accepting ? "Cancel accept" : "Cancel reject"}
+            onClick={onCancel}
+            disabled={pending}
+            className="rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-500 p-1.5 transition-colors cursor-pointer disabled:opacity-60"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex items-center gap-1.5">
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label={`Accept message ${message.mailboxMessageId}`}
+              onClick={() => onAsk("accept")}
+              className="border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 hover:text-emerald-800"
+            >
+              <Check className="h-4 w-4" aria-hidden="true" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent className="max-w-70 wrap-break-word">
+            Register this as an IPC query case, acknowledge the sender and
+            forward it to the Officer-in-Charge.
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label={`Reject message ${message.mailboxMessageId}`}
+              onClick={() => onAsk("reject")}
+              className="border border-slate-200 bg-slate-50 text-slate-500 hover:bg-slate-100 hover:text-slate-700"
+            >
+              <X className="h-4 w-4" aria-hidden="true" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent className="max-w-70 wrap-break-word">
+            Not an IPC query. No case is created and no acknowledgement is sent.
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+    </div>
   );
 }
 
@@ -291,27 +471,40 @@ function RowDeleteControls({
   );
 }
 
+/** Registered, rejected, or still to be decided — the rail colour says which. */
+const railColour = (known, rejected) => {
+  if (known) return "bg-emerald-500";
+  if (rejected) return "bg-slate-400";
+  return "bg-amber-500";
+};
+
 function MailboxRow({
   message,
   index,
   known,
   queryId,
   detailPath,
+  decision,
   confirming,
+  pending,
   deleting,
   onAskConfirm,
   onCancel,
   onDelete,
+  onAskDecision,
+  onCancelDecision,
+  onConfirmDecision,
 }) {
   const sender = parseSender(message.from);
   const received = formatReceived(message.receivedAt);
+  const rejected = decision?.decision === "REJECTED";
 
   return (
     <div
       className={`group relative flex flex-col xl:grid ${ROW_GRID} items-start xl:items-center gap-3 xl:gap-4 bg-white rounded-2xl border border-slate-200/70 p-4 shadow-2xs hover:shadow-md hover:border-purple-300 transition-[border-color,box-shadow] duration-200`}
     >
       <div
-        className={`absolute left-0 top-0 bottom-0 w-1.5 rounded-l-2xl ${known ? "bg-emerald-500" : "bg-amber-500"}`}
+        className={`absolute left-0 top-0 bottom-0 w-1.5 rounded-l-2xl ${railColour(known, rejected)}`}
       />
 
       <div className="hidden xl:flex justify-center pl-2">
@@ -390,16 +583,26 @@ function MailboxRow({
             known={known}
             queryId={queryId}
             detailPath={detailPath}
+            rejected={rejected}
           />
         </div>
       </div>
 
-      <div className="flex justify-center w-full xl:w-auto">
+      <div className="flex items-center justify-center gap-2 w-full xl:w-auto">
+        <RowValidationControls
+          message={message}
+          decision={decision}
+          pending={pending}
+          confirming={confirming?.action === "accept" || confirming?.action === "reject" ? confirming.action : null}
+          onAsk={onAskDecision}
+          onCancel={onCancelDecision}
+          onConfirm={onConfirmDecision}
+        />
         <RowDeleteControls
           message={message}
           known={known}
           queryId={queryId}
-          confirming={confirming}
+          confirming={confirming?.action === "delete"}
           deleting={deleting}
           onAskConfirm={onAskConfirm}
           onCancel={onCancel}
@@ -420,10 +623,11 @@ function MailboxFeedCard({ messages, deleteMessage, children }) {
           </div>
           <div>
             <h2 className="font-heading text-[22px] sm:text-[26px] font-black text-slate-900 m-0 leading-tight tracking-tight">
-              Ingested Mailbox Feed 📬
+              Incoming Mailbox Feed 📬
             </h2>
             <p className="m-0 text-[13.5px] font-medium text-slate-500 mt-1">
-              Live email messages received in the official IPC inbox.
+              Live email received in the official IPC inbox, from any sender. A
+              message becomes a Query Case only when you accept it.
             </p>
           </div>
         </div>
@@ -458,10 +662,14 @@ export function MailboxInboxPage() {
   const currentUser = useAuthStore((state) => state.currentUser);
   const queries = useWorkflowStore((state) => state.queries);
   const emailMessages = useWorkflowStore((state) => state.emailMessages);
-  const { running, error, lastResult, ingestNow } = useMailboxIngestion();
+  const { running, error, lastResult, accept, reject, checkMailbox } =
+    useMailboxIngestion();
 
   const [autoRefresh, setAutoRefresh] = useState(false);
-  const [confirmingId, setConfirmingId] = useState(null);
+  // `{ id, action }`, not a bare id: accept, reject and delete each confirm, and
+  // a single id would let one row's confirmation open another's.
+  const [confirming, setConfirming] = useState(null);
+  const [deciding, setDeciding] = useState(false);
 
   const queryClient = useQueryClient();
 
@@ -472,10 +680,21 @@ export function MailboxInboxPage() {
     refetchInterval: autoRefresh ? AUTO_REFRESH_MS : false,
   });
 
+  /**
+   * Decisions are a separate read because under MAILBOX_SOURCE=gmail the
+   * message is a live view of a real account and carries no QMS state — there
+   * is nowhere on it to record that it was rejected.
+   */
+  const decisions = useQuery({
+    queryKey: ["mailbox", "decisions"],
+    queryFn: fetchMailboxDecisions,
+    retry: false,
+  });
+
   const deleteMessage = useMutation({
     mutationFn: (mailboxMessageId) => deleteMailboxMessage(mailboxMessageId),
     onSuccess: () => {
-      setConfirmingId(null);
+      setConfirming(null);
       queryClient.invalidateQueries({ queryKey: ["mailbox"] });
     },
   });
@@ -483,9 +702,63 @@ export function MailboxInboxPage() {
   const messages = inbox.data?.messages || [];
   const loadError = inbox.isError ? inbox.error?.message : null;
 
-  const registerAll = async () => {
-    notifyIngestResult(await ingestNow());
+  const decisionFor = (mailboxMessageId) =>
+    (decisions.data?.decisions || []).find(
+      (d) => d.mailboxMessageId === mailboxMessageId,
+    ) || null;
+
+  /** Reads the mailbox. Registers nothing — that is what the tick is for. */
+  const checkNow = async () => {
+    notifyMailboxCheck(await checkMailbox());
     await inbox.refetch();
+  };
+
+  const settle = async () => {
+    setConfirming(null);
+    setDeciding(false);
+    await Promise.all([
+      inbox.refetch(),
+      queryClient.invalidateQueries({ queryKey: ["mailbox", "decisions"] }),
+    ]);
+  };
+
+  const onAcceptMessage = async (message) => {
+    setDeciding(true);
+    const result = await accept(message);
+
+    // Reported only once the case actually exists — a toast before the commit
+    // is a claim, not a result.
+    if (result.error) {
+      notify.error("Could not register that message", result.error);
+    } else if (result.accepted) {
+      notify.success(`Query case ${result.queryId} created`, describeAccept(result, message));
+    } else {
+      // Not necessarily a no-op: pressing ✓ again after a failed send retries
+      // the step that did not complete, so say where the case stands now rather
+      // than only that it already exists.
+      notify.info(
+        "Already registered",
+        `Query case ${result.queryId} — ${describeAccept(result, message)}`,
+      );
+    }
+
+    await settle();
+  };
+
+  const onRejectMessage = async (message) => {
+    setDeciding(true);
+    const result = await reject(message);
+
+    if (result.error) {
+      notify.error("Could not reject that message", result.error);
+    } else {
+      notify.info(
+        "Message rejected",
+        "No case was created and no acknowledgement was sent.",
+      );
+    }
+
+    await settle();
   };
 
   const queryIdFor = (mailboxMessageId) =>
@@ -512,20 +785,24 @@ export function MailboxInboxPage() {
       <PageHeader
         greeting="IPC Live Mailbox 📬"
         title="IPC Mailbox Inbox"
-        purpose="Incoming enquiries waiting to be ingested and registered as Query Cases."
+        purpose="Incoming enquiries awaiting your validation. Accept one to open a Query Case, acknowledge the sender and forward it to the Officer-in-Charge; reject anything that is not an IPC query."
         actions={
           <InboxActions
             autoRefresh={autoRefresh}
             onAutoRefreshChange={setAutoRefresh}
             running={running}
-            onCheck={registerAll}
+            onCheck={checkNow}
           />
         }
       />
 
       {(error || loadError) && <MailboxOfflineNotice />}
 
-      {lastResult && !error && <IngestSummary result={lastResult} />}
+      {inbox.data?.sync?.ok === false && <NicemailSyncNotice sync={inbox.data.sync} />}
+
+      {lastResult?.fetched !== undefined && !error && (
+        <MailboxCheckSummary result={lastResult} />
+      )}
 
       <MailboxFeedCard messages={messages} deleteMessage={deleteMessage}>
         {messages.length === 0 ? (
@@ -552,14 +829,32 @@ export function MailboxInboxPage() {
                         ? getQueryDetailPath(queryId)
                         : null
                     }
-                    confirming={confirmingId === message.mailboxMessageId}
+                    decision={decisionFor(message.mailboxMessageId)}
+                    confirming={
+                      confirming?.id === message.mailboxMessageId
+                        ? confirming
+                        : null
+                    }
+                    pending={deciding}
                     deleting={deleteMessage.isPending}
                     onAskConfirm={() =>
-                      setConfirmingId(message.mailboxMessageId)
+                      setConfirming({
+                        id: message.mailboxMessageId,
+                        action: "delete",
+                      })
                     }
-                    onCancel={() => setConfirmingId(null)}
+                    onCancel={() => setConfirming(null)}
                     onDelete={() =>
                       deleteMessage.mutate(message.mailboxMessageId)
+                    }
+                    onAskDecision={(action) =>
+                      setConfirming({ id: message.mailboxMessageId, action })
+                    }
+                    onCancelDecision={() => setConfirming(null)}
+                    onConfirmDecision={() =>
+                      confirming?.action === "accept"
+                        ? onAcceptMessage(message)
+                        : onRejectMessage(message)
                     }
                   />
                 );

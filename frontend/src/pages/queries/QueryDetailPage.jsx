@@ -15,6 +15,7 @@ import { useQueryCase } from '@/hooks/useQueryCase';
 import { useRoutePaths } from '@/hooks/useRoutePaths';
 import { useWorkflowStore } from '@/store/useWorkflowStore';
 import { WORKFLOW_ACTION } from '@/constants/workflowRules';
+import { AUDIT_EVENT } from '@/constants/statusEnums';
 import { AiRecommendationCard } from '@/components/ai/AiRecommendationCard';
 import { ROLES } from '@/constants/roles';
 import { isQueryOwnedBy } from '@/utils/queryOwnership';
@@ -143,6 +144,11 @@ function CaseInsightPanels({ query, steps, audit, canAssign, currentUser, assign
               queryId: query.queryId,
               actor: null,
               actorLabel: 'AI Summary Assistant',
+              // Without this the delta went out with `event: undefined`, which
+              // the server's schema rejects — so every re-generated summary
+              // 400ed and lived in this tab only. The store's own summary
+              // transition uses the same event; see useWorkflowStore.js.
+              event: AUDIT_EVENT.AI_SUMMARY_GENERATED,
               patch: { aiSummary: newSummary },
               details: newSummary.text,
             });

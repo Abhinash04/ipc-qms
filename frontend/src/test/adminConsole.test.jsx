@@ -18,6 +18,8 @@ vi.mock('@/services/api/healthService', () => ({
 vi.mock('@/services/api/mailboxService', () => ({
   fetchEmailConfig: vi.fn().mockResolvedValue({ transport: 'mock', ipcQueryEmail: 'ipc@test.invalid', participants: [] }),
   fetchMailboxMessages: vi.fn().mockResolvedValue({ messages: [] }),
+  fetchMailboxDecisions: vi.fn().mockResolvedValue({ decisions: [] }),
+  recordMailboxDecision: vi.fn().mockResolvedValue({ alreadyDecided: false }),
   markMessageIngested: vi.fn().mockResolvedValue({ ingested: true }),
   deleteMailboxMessage: vi.fn().mockResolvedValue({ deleted: true }),
   sendEnquiry: vi.fn().mockResolvedValue({}),
@@ -167,11 +169,15 @@ describe('the dashboard shows server-recorded figures, not invented ones', () =>
     expect(screen.getByText('Ai summary generated')).toBeInTheDocument();
   });
 
-  it('labels the case figures as browser-scoped rather than presenting them as system-wide', async () => {
+  it('labels the case figures as system-wide, which is what they now are', async () => {
     renderAs(ADMIN, '/admin/administration');
 
+    // This label read "This browser only — cases are not yet stored
+    // server-side" for as long as cases lived in each user's IndexedDB. They
+    // are in MongoDB now, and an admin console that understates its own scope
+    // is as misleading as one that overstates it.
     expect(
-      await screen.findByText(/This browser only — cases are not yet stored server-side/),
+      await screen.findByText(/System-wide — cases are stored server-side/),
     ).toBeInTheDocument();
   });
 

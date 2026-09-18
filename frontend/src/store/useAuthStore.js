@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import * as authService from '@/services/api/authService';
 import { setUnauthorizedHandler } from '@/services/api/axiosClient';
+import { useWorkflowStore } from '@/store/useWorkflowStore';
 import { notify } from '@/services/notify';
 
 /**
@@ -45,17 +46,30 @@ export const useAuthStore = create((set) => ({
   },
 
   logout: async () => {
+    // Caught, not just `finally`. The local state was always cleared, but the
+    // rejection still escaped to the caller — and no caller awaits `logout()`,
+    // so an offline sign-out surfaced as an unhandled rejection rather than as
+    // nothing at all. Clearing locally is the whole contract here: the user
+    // asked to leave, and the cookie expires on its own.
     try {
       await authService.logout();
-    } finally {
-      // Clear locally even if the request failed — the user asked to leave.
-      set({ currentUser: null, authReady: true });
-      notify.info('Signed out');
+    } catch {
+      // Intentionally ignored — see above.
     }
+
+    // The workflow store goes with the session: it holds case data loaded
+    // under the outgoing account, and App.jsx reloads it for whoever signs in
+    // next.
+    set({ currentUser: null, authReady: true });
+    useWorkflowStore.getState().resetHydration();
+    notify.info('Signed out');
   },
 
   /** Invoked by the axios interceptor when the API says the session is gone. */
-  clearSession: () => set({ currentUser: null, authReady: true }),
+  clearSession: () => {
+    set({ currentUser: null, authReady: true });
+    useWorkflowStore.getState().resetHydration();
+  },
 }));
 
 setUnauthorizedHandler(() => {

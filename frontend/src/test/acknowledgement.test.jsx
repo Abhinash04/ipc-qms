@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
@@ -10,6 +10,7 @@ import { AUDIT_EVENT } from '@/constants/statusEnums';
 import { EMAIL_DIRECTION, EMAIL_TYPE } from '@/constants/emailModel';
 import { findUserById } from '@/constants/mockUsers';
 import * as mailboxService from '@/services/api/mailboxService';
+import { fakeAcceptEndpoint } from '@/test/fakeAcceptEndpoint';
 
 vi.mock('@/services/api/healthService', () => ({
   fetchHealth: vi.fn().mockResolvedValue({ status: 'healthy' }),
@@ -217,49 +218,88 @@ describe('acknowledgement is idempotent — one per query', () => {
   });
 });
 
-describe('ingestion sends the acknowledgement', () => {
-  it('acknowledges each newly created case', async () => {
-    vi.mocked(mailboxService.fetchMailboxMessages).mockResolvedValue({ messages: [MESSAGE] });
-    renderAt('/super-admin/queries');
+/**
+ * Accepting a message is what acknowledges its sender, and it is the accept
+ * endpoint that sends it — one server call registers the case, emails whoever
+ * wrote in and forwards to the Officer-in-Charge. Arriving mail still
+ * acknowledges nothing on its own: an advertisement must not be thanked for its
+ * enquiry. What is left for the browser is the request and the reporting.
+ */
+describe('accepting a message sends the acknowledgement', () => {
+  it('hands the endpoint the message its sender is read off, and reports the answer', async () => {
+    const external = {
+      ...MESSAGE,
+      mailboxMessageId: 'MSG-EXTERNAL-1',
+      from: 'Ravi Kumar <ravi@pharma.example>',
+    };
+    const accept = vi.fn(fakeAcceptEndpoint());
 
-    fireEvent.click(await screen.findByRole('button', { name: /Check IPC mailbox/ }));
+    const result = await s().acceptMailboxMessage(external, accept);
 
-    await waitFor(() => {
-      expect(mailboxService.sendAcknowledgement).toHaveBeenCalledWith({
-        to: INQUIRER,
-        queryId: 'QRY-2026-00001',
-      });
-    });
+    // The From header is the only place the inquirer comes from, so the whole
+    // message goes with the request and the server reads it there. That the
+    // acknowledgement really reaches ravi@pharma.example, and nobody else, is
+    // asserted in backend/src/test/acceptMessage.test.js.
+    expect(accept).toHaveBeenCalledWith('MSG-EXTERNAL-1', external);
+    expect(result.acknowledged).toBe(true);
 
-    expect(await screen.findByText(/1 acknowledged/)).toBeInTheDocument();
+    // The browser sends no mail at all on this path.
+    expect(mailboxService.sendAcknowledgement).not.toHaveBeenCalled();
+
+    // And the acknowledgement the server sent is read back onto the case.
     expect(
       s().emailMessages.filter((m) => m.emailType === EMAIL_TYPE.ACKNOWLEDGEMENT),
     ).toHaveLength(1);
   });
 
-  it('does not acknowledge mail that was already registered', async () => {
-    s().ingestEmail(MESSAGE);
-    vi.mocked(mailboxService.fetchMailboxMessages).mockResolvedValue({ messages: [MESSAGE] });
-    renderAt('/super-admin/queries');
+  it('creates nothing, and sends nothing, for mail that was already registered', async () => {
+    const { queryId } = s().ingestEmail(MESSAGE);
+    // The endpoint recognises a message it has already accepted — the guard is
+    // the stored decision in the database, not anything this tab remembers — so
+    // it answers from the record instead of creating a second case.
+    const accept = vi.fn(async () => ({
+      queryId,
+      created: false,
+      alreadyDecided: true,
+      acknowledged: true,
+      forwarded: true,
+      errors: [],
+    }));
 
-    fireEvent.click(await screen.findByRole('button', { name: /Check IPC mailbox/ }));
+    const result = await s().acceptMailboxMessage(MESSAGE, accept);
 
-    expect(await screen.findByText(/1 already registered/)).toBeInTheDocument();
+    expect(result).toMatchObject({ queryId, created: false, alreadyDecided: true, accepted: false });
     expect(mailboxService.sendAcknowledgement).not.toHaveBeenCalled();
+    expect(s().queries).toHaveLength(1);
   });
 
   it('keeps the case when the acknowledgement cannot be sent', async () => {
-    vi.mocked(mailboxService.sendAcknowledgement).mockRejectedValue(new Error('Network Error'));
-    vi.mocked(mailboxService.fetchMailboxMessages).mockResolvedValue({ messages: [MESSAGE] });
-    renderAt('/super-admin/queries');
+    const accept = fakeAcceptEndpoint({
+      acknowledged: false,
+      errors: [{ step: 'acknowledgement', error: 'Network Error' }],
+    });
 
-    fireEvent.click(await screen.findByRole('button', { name: /Check IPC mailbox/ }));
+    const result = await s().acceptMailboxMessage(MESSAGE, accept);
 
-    expect(await screen.findByText('1 new case registered')).toBeInTheDocument();
-    expect(s().queries).toHaveLength(1);
+    // A failed acknowledgement is reported, never thrown: the case exists, and
+    // losing its id would be far worse than an email nobody received. The case
+    // page offers the retry.
+    expect(result.accepted).toBe(true);
+    expect(result.acknowledged).toBe(false);
+    expect(result.errors).toEqual([{ step: 'acknowledgement', error: 'Network Error' }]);
+    expect(s().queries.map((q) => q.queryId)).toEqual([result.queryId]);
     expect(
       s().emailMessages.filter((m) => m.emailType === EMAIL_TYPE.ACKNOWLEDGEMENT),
     ).toHaveLength(0);
+  });
+
+  it('acknowledges nothing for a message that is merely sitting in the mailbox', async () => {
+    vi.mocked(mailboxService.fetchMailboxMessages).mockResolvedValue({ messages: [MESSAGE] });
+    renderAt('/super-admin/queries');
+    await screen.findByRole('heading', { name: /Quer/ });
+
+    expect(mailboxService.sendAcknowledgement).not.toHaveBeenCalled();
+    expect(s().queries).toHaveLength(0);
   });
 });
 

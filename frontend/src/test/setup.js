@@ -1,4 +1,3 @@
-import 'fake-indexeddb/auto';
 import '@testing-library/jest-dom/vitest';
 import { afterEach, beforeEach, expect, vi } from 'vitest';
 import { cleanup } from '@testing-library/react';
@@ -20,29 +19,29 @@ vi.mock('@/services/api/aiService', () => ({
 }));
 
 /**
- * Query cases are persisted through a real HTTP API. Left unmocked the suite
- * talks to whatever backend happens to be running on localhost — and because
- * many suites call resetDemo() in beforeEach, that means POSTing to
- * /queries/reset, which deleteMany()s every collection in the developer's
- * database. Rejecting here puts db.js on the in-memory fallback every one of
- * its callers already handles, which is the behaviour these tests were written
- * against.
+ * The workflow store persists through a real HTTP API, and must never reach one
+ * from a test.
+ *
+ * Left unmocked the suite talks to whatever backend is running on localhost —
+ * and because many suites call `resetDemo()` in `beforeEach`, that means
+ * POSTing to /queries/reset, which `deleteMany()`s every collection in the
+ * developer's own database. (Aakash's warning, from origin/aakash 5539f7b.)
+ *
+ * His fix rejected every call. This replaces the module with an in-memory fake
+ * instead, so persistence round-trips are exercised rather than short-
+ * circuited: the store's accept and final-approval paths re-read the server
+ * after acting, and a rejecting stub would fail every test that covers them.
+ * Either way nothing leaves the process — see src/test/fakeQueryApi.js.
  */
-vi.mock('@/services/api/queryCaseService', () => {
-  const offline = () => Promise.reject(new Error('query API disabled in tests'));
-  return {
-    fetchAllQueries: offline,
-    checkQueriesEmpty: offline,
-    persistQueryTransition: offline,
-    resetQueries: offline,
-  };
-});
+vi.mock('@/services/api/queryCaseService', () => import('@/test/fakeQueryApi'));
 
 let consoleError;
 let consoleWarn;
 const captured = [];
 
-beforeEach(() => {
+beforeEach(async () => {
+  const { __resetFakeQueryApi } = await import('@/test/fakeQueryApi');
+  __resetFakeQueryApi();
   captured.length = 0;
   consoleError = vi.spyOn(console, 'error').mockImplementation((...args) => {
     captured.push(['error', ...args]);

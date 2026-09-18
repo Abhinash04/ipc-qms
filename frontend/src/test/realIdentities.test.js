@@ -5,6 +5,8 @@ import { useWorkflowStore } from '@/store/useWorkflowStore';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useMailboxIngestion } from '@/hooks/useMailboxIngestion';
 import * as mailboxService from '@/services/api/mailboxService';
+import { fakeAcceptEndpoint } from '@/test/fakeAcceptEndpoint';
+import { fakeFinalApprovalEndpoint } from '@/test/fakeFinalApprovalEndpoint';
 import { findUserById, MOCK_USERS } from '@/constants/mockUsers';
 import { ROLES } from '@/constants/roles';
 import { WORKFLOW_STATE, AUDIT_EVENT } from '@/constants/statusEnums';
@@ -55,6 +57,15 @@ const fakeResponse = (payload) =>
     providerThreadId: '18f2a1b2c3d4e5f6',
     sentAt: '2026-08-18T12:00:00.000Z',
   });
+
+/**
+ * Final approval is one server call now, so the mail leg is injected into the
+ * endpoint rather than into the store — see src/test/fakeFinalApprovalEndpoint.js.
+ * Jatin is the approver on this path, and the server reads that actor off the
+ * session rather than taking it from the client.
+ */
+const finalApproval = (send = fakeResponse) =>
+  fakeFinalApprovalEndpoint({ send, actor: JATIN.name });
 
 const ACK = {
   from: `${BHUMIKA.name} <${BHUMIKA.email}>`,
@@ -343,7 +354,7 @@ describe('9–10. Jatin assigns a mock official and the mocked tail completes', 
     s().approveReview(queryId, 'Reviewer I approves', findUserById('USR-0005'));
     s().approveReview(queryId, 'Reviewer II approves', findUserById('USR-0006'));
 
-    await s().grantFinalApproval(queryId, JATIN, fakeResponse);
+    await s().grantFinalApproval(queryId, JATIN, finalApproval());
 
     expect(s().queries.map((q) => q.queryId)).toEqual([queryId]);
     expect(s().getQuery(queryId).workflowState).toBe(WORKFLOW_STATE.CLOSED);
@@ -378,14 +389,33 @@ describe('9–10. Jatin assigns a mock official and the mocked tail completes', 
   });
 });
 
-describe('automatic intake — one email drives the whole Front Office stage', () => {
-
+/**
+ * Intake is a gate, not a pipeline.
+ *
+ * This suite used to assert that one email registered, acknowledged, verified
+ * AND forwarded itself with nobody involved. The gate is still the point: mail
+ * arriving changes nothing until Bhumika accepts it. What accepting then does
+ * is no longer split across two clicks — it is one server call that registers,
+ * acknowledges and forwards, and the browser orchestrates none of it.
+ */
+describe('intake — mail waits for the Front Officer', () => {
   function mockGmail({ forwardFails = false } = {}) {
     vi.mocked(mailboxService.fetchMailboxMessages).mockResolvedValue({
       messages: [gmailEnquiry()],
     });
     vi.mocked(mailboxService.markMessageIngested).mockResolvedValue({ ingested: true });
+    vi.mocked(mailboxService.recordMailboxDecision).mockResolvedValue({ alreadyDecided: false });
     vi.mocked(mailboxService.sendAcknowledgement).mockResolvedValue(ACK);
+    // The whole intake sequence lives behind this one endpoint now. With Gmail
+    // down its forward step fails on its own: the case is still created and
+    // acknowledged, and is left at FRONT_OFFICE_VERIFICATION for a retry.
+    vi.mocked(mailboxService.acceptMailboxMessage).mockImplementation(
+      fakeAcceptEndpoint(
+        forwardFails
+          ? { forwarded: false, errors: [{ step: 'forward', error: 'Gmail unavailable' }] }
+          : {},
+      ),
+    );
     vi.mocked(mailboxService.forwardQuery).mockImplementation(
       forwardFails
         ? () => Promise.reject(new Error('Gmail unavailable'))
@@ -393,12 +423,24 @@ describe('automatic intake — one email drives the whole Front Office stage', (
     );
   }
 
-  async function runIntake() {
+  /** What the background poll does: look, and report. Nothing else. */
+  async function checkMailbox() {
     useAuthStore.setState({ currentUser: BHUMIKA });
     const { result } = renderHook(() => useMailboxIngestion());
     let outcome;
     await act(async () => {
-      outcome = await result.current.ingestNow();
+      outcome = await result.current.checkMailbox();
+    });
+    return outcome;
+  }
+
+  /** What the tick does. */
+  async function acceptEnquiry() {
+    useAuthStore.setState({ currentUser: BHUMIKA });
+    const { result } = renderHook(() => useMailboxIngestion());
+    let outcome;
+    await act(async () => {
+      outcome = await result.current.accept(gmailEnquiry());
     });
     return outcome;
   }
@@ -407,47 +449,62 @@ describe('automatic intake — one email drives the whole Front Office stage', (
     vi.clearAllMocks();
   });
 
-  it('registers, acknowledges, verifies and forwards from one email', async () => {
+  it('creates nothing when mail merely arrives', async () => {
     mockGmail();
-    const outcome = await runIntake();
+    const outcome = await checkMailbox();
 
-    expect(outcome.created).toEqual(['QRY-2026-00001']);
-    expect(outcome.acknowledged).toEqual(['QRY-2026-00001']);
-    expect(outcome.forwarded).toEqual(['QRY-2026-00001']);
-
-    const query = s().getQuery('QRY-2026-00001');
-    expect(query.workflowState).toBe(WORKFLOW_STATE.PENDING_ASSIGNMENT);
+    expect(outcome.fetched).toBe(1);
+    expect(s().queries).toHaveLength(0);
+    expect(mailboxService.sendAcknowledgement).not.toHaveBeenCalled();
+    expect(mailboxService.forwardQuery).not.toHaveBeenCalled();
   });
 
-  it('writes the intake history in order, with Bhumika as the acting officer', async () => {
+  it('registers, acknowledges and forwards on accept — one click, one request', async () => {
     mockGmail();
-    await runIntake();
+    const outcome = await acceptEnquiry();
 
-    const audit = s().getAudit('QRY-2026-00001');
-    const events = audit.map((a) => a.event);
+    expect(outcome.accepted).toBe(true);
+    expect(outcome.queryId).toBe('QRY-2026-00001');
+    expect(outcome.acknowledged).toBe(true);
+    expect(outcome.forwarded).toBe(true);
 
-    expect(events).toEqual([
+    // Accepting used to stop here so Bhumika could forward separately. It was
+    // never a second judgement — every accepted enquiry goes to Jatin — and the
+    // gap left a case sitting where nobody had been told about it.
+    expect(s().getQuery('QRY-2026-00001').workflowState).toBe(
+      WORKFLOW_STATE.PENDING_ASSIGNMENT,
+    );
+    // And the browser drives none of the sequence: no mail, no decision call.
+    expect(mailboxService.forwardQuery).not.toHaveBeenCalled();
+    expect(mailboxService.sendAcknowledgement).not.toHaveBeenCalled();
+    expect(mailboxService.recordMailboxDecision).not.toHaveBeenCalled();
+  });
+
+  it('adds nothing to the intake history — it shows what the server recorded', async () => {
+    mockGmail();
+    await acceptEnquiry();
+
+    // The accept endpoint writes this trail against the Front Officer's own
+    // session. This tab used to mint its own QUERY_RECEIVED and
+    // AI_SUMMARY_GENERATED here and must now add nothing at all. The order, and
+    // Bhumika as the acting officer, are asserted in
+    // backend/src/test/acceptMessage.test.js.
+    expect(s().getAudit('QRY-2026-00001').map((a) => a.event)).toEqual([
       AUDIT_EVENT.QUERY_RECEIVED,
-      AUDIT_EVENT.AI_SUMMARY_GENERATED,
-      AUDIT_EVENT.ACKNOWLEDGEMENT_SENT,
       AUDIT_EVENT.QUERY_REGISTERED,
+      AUDIT_EVENT.ACKNOWLEDGEMENT_SENT,
       AUDIT_EVENT.QUERY_FORWARDED,
     ]);
-
-    const verified = audit.find((a) => a.event === AUDIT_EVENT.QUERY_REGISTERED);
-    const forwarded = audit.find((a) => a.event === AUDIT_EVENT.QUERY_FORWARDED);
-    expect(verified.actor).toBe(BHUMIKA.name);
-    expect(forwarded.actor).toBe(BHUMIKA.name);
-    expect(forwarded.details).toContain(JATIN.email);
   });
 
-  it('puts all three messages on one case and one thread', async () => {
+  it('puts the enquiry, its acknowledgement and the forward on one case and one thread', async () => {
     mockGmail();
-    await runIntake();
+    await acceptEnquiry();
 
     const query = s().getQuery('QRY-2026-00001');
     const thread = s().emailMessages.filter((m) => m.queryId === query.queryId);
 
+    // Three messages, not two: the forward belongs to the same accept.
     expect(thread.map((m) => m.emailType)).toEqual([
       EMAIL_TYPE.INCOMING_QUERY,
       EMAIL_TYPE.ACKNOWLEDGEMENT,
@@ -456,18 +513,44 @@ describe('automatic intake — one email drives the whole Front Office stage', (
     expect(new Set(thread.map((m) => m.threadId))).toEqual(new Set([query.threadId]));
 
     expect(thread[0].to).toEqual([BHUMIKA.email]);
+    // The acknowledgement goes back to whoever wrote in; the forward to Jatin.
     expect(thread[1].to).toEqual([ABHINASH.email]);
     expect(thread[2].to).toEqual([JATIN.email]);
     expect(s().queries).toHaveLength(1);
   });
 
+  it('forwards to the Officer-in-Charge as part of accepting, not on a second click', async () => {
+    mockGmail();
+    await acceptEnquiry();
+
+    expect(s().emailMessages.filter((m) => m.emailType === EMAIL_TYPE.FORWARD)).toHaveLength(1);
+    expect(s().getQuery('QRY-2026-00001').workflowState).toBe(
+      WORKFLOW_STATE.PENDING_ASSIGNMENT,
+    );
+
+    // The second click went with the second judgement: FORWARD is valid only at
+    // FRONT_OFFICE_VERIFICATION, so a case the server already forwarded cannot
+    // be forwarded again from here.
+    await expect(s().forwardToOic('QRY-2026-00001', BHUMIKA)).rejects.toThrow(
+      /may not perform FORWARD/,
+    );
+    expect(mailboxService.forwardQuery).not.toHaveBeenCalled();
+  });
+
   it('keeps the case at verification when the forward email fails', async () => {
     mockGmail({ forwardFails: true });
-    const outcome = await runIntake();
+    const outcome = await acceptEnquiry();
 
-    expect(outcome.created).toEqual(['QRY-2026-00001']);
-    expect(outcome.acknowledged).toEqual(['QRY-2026-00001']);
-    expect(outcome.forwarded).toEqual([]);
+    // The forward is the one step of the accept that can fail without losing
+    // anything: the case exists, Abhinash was told, and what is left is the
+    // retry the case page offers.
+    expect(outcome.accepted).toBe(true);
+    expect(outcome.forwarded).toBe(false);
+    expect(outcome.errors).toEqual([{ step: 'forward', error: 'Gmail unavailable' }]);
+
+    await expect(s().forwardToOic('QRY-2026-00001', BHUMIKA)).rejects.toThrow(
+      /Gmail unavailable/,
+    );
 
     const query = s().getQuery('QRY-2026-00001');
     expect(query.workflowState).toBe(WORKFLOW_STATE.FRONT_OFFICE_VERIFICATION);
@@ -475,15 +558,23 @@ describe('automatic intake — one email drives the whole Front Office stage', (
     expect(s().emailMessages.filter((m) => m.emailType === EMAIL_TYPE.FORWARD)).toHaveLength(0);
   });
 
-  it('re-polling the same enquiry changes nothing', async () => {
+  it('accepting the same enquiry twice changes nothing', async () => {
     mockGmail();
-    await runIntake();
-    const second = await runIntake();
+    await acceptEnquiry();
+    const second = await acceptEnquiry();
 
-    expect(second.created).toEqual([]);
-    expect(second.skipped).toEqual(['QRY-2026-00001']);
+    // The browser does not dedupe: it sends the second accept too, and the
+    // server answers it from the decision it already stored. That this leaves
+    // one case, one acknowledgement and one forward is asserted in
+    // backend/src/test/acceptMessage.test.js.
+    expect(mailboxService.acceptMailboxMessage).toHaveBeenCalledTimes(2);
+    expect(second).toMatchObject({
+      accepted: false,
+      alreadyDecided: true,
+      queryId: 'QRY-2026-00001',
+    });
     expect(s().queries).toHaveLength(1);
-    expect(s().emailMessages.filter((m) => m.emailType === EMAIL_TYPE.FORWARD)).toHaveLength(1);
+    expect(s().emailMessages.filter((m) => m.emailType === EMAIL_TYPE.ACKNOWLEDGEMENT)).toHaveLength(1);
   });
 });
 
@@ -553,7 +644,7 @@ describe('final approval dispatches automatically', () => {
   it('1–2. approval alone takes the case from READY_FOR_DISPATCH to CLOSED', async () => {
     const queryId = await readyForApproval();
 
-    await s().grantFinalApproval(queryId, JATIN, fakeResponse);
+    await s().grantFinalApproval(queryId, JATIN, finalApproval());
 
     expect(s().getQuery(queryId).workflowState).toBe(WORKFLOW_STATE.CLOSED);
   });
@@ -562,7 +653,7 @@ describe('final approval dispatches automatically', () => {
     const queryId = await readyForApproval();
     const threadId = s().getQuery(queryId).threadId;
 
-    await s().grantFinalApproval(queryId, JATIN, fakeResponse);
+    await s().grantFinalApproval(queryId, JATIN, finalApproval());
 
     const sent = s().emailMessages.find((m) => m.emailType === EMAIL_TYPE.OUTGOING_RESPONSE);
     expect(sent.from).toContain(BHUMIKA.email);
@@ -576,9 +667,20 @@ describe('final approval dispatches automatically', () => {
   it('7. a failed send leaves the case approved but NOT closed', async () => {
     const queryId = await readyForApproval();
 
-    await expect(s().grantFinalApproval(queryId, JATIN, failing)).rejects.toThrow(
-      /Gmail unavailable/,
-    );
+    /**
+     * The endpoint reports a failed send instead of throwing it. Approval is a
+     * decision a person made, and it has to survive a mail server being down —
+     * so the approval is recorded first and the case is left exactly where the
+     * Front Office retry acts on it. What must never happen is the case reading
+     * CLOSED while the inquirer received nothing, which is asserted below by
+     * the absence of an OUTGOING_RESPONSE alongside the state.
+     */
+    const outcome = await s().grantFinalApproval(queryId, JATIN, finalApproval(failing));
+
+    expect(outcome.approved).toBe(true);
+    expect(outcome.dispatched).toBe(false);
+    expect(outcome.workflowState).toBe(WORKFLOW_STATE.READY_FOR_DISPATCH);
+    expect(outcome.errors.map((e) => e.error).join(' ')).toMatch(/Gmail unavailable/);
 
     const query = s().getQuery(queryId);
     expect(query.workflowState).toBe(WORKFLOW_STATE.READY_FOR_DISPATCH);
@@ -591,7 +693,7 @@ describe('final approval dispatches automatically', () => {
 
   it('8. a retry after a failure dispatches successfully', async () => {
     const queryId = await readyForApproval();
-    await s().grantFinalApproval(queryId, JATIN, failing).catch(() => {});
+    await s().grantFinalApproval(queryId, JATIN, finalApproval(failing)).catch(() => {});
 
     const outcome = await s().dispatchResponse(queryId, BHUMIKA, fakeResponse);
 
@@ -602,7 +704,7 @@ describe('final approval dispatches automatically', () => {
 
   it('9. repeated triggers never send a second response', async () => {
     const queryId = await readyForApproval();
-    await s().grantFinalApproval(queryId, JATIN, fakeResponse);
+    await s().grantFinalApproval(queryId, JATIN, finalApproval());
 
     const sendAgain = vi.fn(fakeResponse);
     const second = await s().dispatchResponse(queryId, null, sendAgain);
@@ -616,7 +718,7 @@ describe('final approval dispatches automatically', () => {
 
   it('9. survives a reload — the guard is persisted, not in memory', async () => {
     const queryId = await readyForApproval();
-    await s().grantFinalApproval(queryId, JATIN, fakeResponse);
+    await s().grantFinalApproval(queryId, JATIN, finalApproval());
     await new Promise((r) => setTimeout(r, 60));
 
     useWorkflowStore.setState({
@@ -635,7 +737,7 @@ describe('final approval dispatches automatically', () => {
 
   it('10. the response appears in the thread and the audit trail', async () => {
     const queryId = await readyForApproval();
-    await s().grantFinalApproval(queryId, JATIN, fakeResponse);
+    await s().grantFinalApproval(queryId, JATIN, finalApproval());
 
     const thread = s().emailMessages.filter((m) => m.queryId === queryId);
     expect(thread.map((m) => m.emailType)).toEqual([
@@ -666,11 +768,11 @@ describe('final approval dispatches automatically', () => {
   it('still refuses a non-OIC approver, and a wrong role on retry', async () => {
     const queryId = await readyForApproval();
 
-    await expect(s().grantFinalApproval(queryId, BHUMIKA, fakeResponse)).rejects.toThrow(
+    await expect(s().grantFinalApproval(queryId, BHUMIKA, finalApproval())).rejects.toThrow(
       /may not perform FINAL_APPROVE/,
     );
 
-    await s().grantFinalApproval(queryId, JATIN, failing).catch(() => {});
+    await s().grantFinalApproval(queryId, JATIN, finalApproval(failing)).catch(() => {});
     await expect(s().dispatchResponse(queryId, NEHA, fakeResponse)).rejects.toThrow(
       /may not perform DISPATCH/,
     );

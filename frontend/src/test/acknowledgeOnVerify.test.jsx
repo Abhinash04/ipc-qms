@@ -10,6 +10,7 @@ import { findUserById } from '@/constants/mockUsers';
 import { WORKFLOW_STATE, AUDIT_EVENT } from '@/constants/statusEnums';
 import { EMAIL_TYPE } from '@/constants/emailModel';
 import * as mailboxService from '@/services/api/mailboxService';
+import { notify } from '@/services/notify';
 
 vi.mock('@/services/api/mailboxService');
 
@@ -36,6 +37,23 @@ const FORWARD_RESULT = {
   providerMessageId: 'fwd-msg-1',
   providerThreadId: 'thread-1',
 };
+
+/**
+ * What axios rejects with when the server answers a NICeMail send that may have
+ * gone out: its own message is the status line, and the server's reason — the
+ * instruction to check the Sent folder — is in the response body.
+ */
+const unconfirmedFailure = () =>
+  Object.assign(new Error('Request failed with status code 504'), {
+    response: {
+      status: 504,
+      data: {
+        error:
+          'NICeMail may have sent this message but did not confirm it in time. Check the NICeMail Sent folder before retrying.',
+        unconfirmed: true,
+      },
+    },
+  });
 
 const enquiry = () => ({
   mailboxMessageId: 'MSG-ACK-0001',
@@ -172,6 +190,18 @@ describe('a failed acknowledgement never blocks the workflow', () => {
     expect(ackMessages(queryId)).toHaveLength(1);
   });
 
+  it("reports the server's reason, and that the send may have gone out", async () => {
+    vi.mocked(mailboxService.sendAcknowledgement).mockRejectedValue(unconfirmedFailure());
+    const queryId = receivedQuery();
+
+    const result = await s().verifyQuery(queryId, FRONT_OFFICE);
+
+    expect(result).toMatchObject({ acknowledged: false, unconfirmed: true });
+    // Not "Request failed with status code 504".
+    expect(result.error).toMatch(/Sent folder/);
+    expect(ackMessages(queryId)).toHaveLength(0);
+  });
+
   it('keeps the permission gate throwing synchronously', () => {
     const queryId = receivedQuery();
     // The whole design rests on this: verifyQuery is not `async`, so an
@@ -185,22 +215,23 @@ describe('a failed acknowledgement never blocks the workflow', () => {
 describe('the Front Office sees when the email did not go out', () => {
   const openCase = (queryId) => renderAt(`/front-officer/queries/${queryId}`);
 
-  it('warns and offers a retry, without claiming the action failed', async () => {
+  it('warns and offers a retry, without claiming the case failed', async () => {
     vi.mocked(mailboxService.sendAcknowledgement).mockRejectedValue(
       new Error('Network Error'),
     );
     const queryId = receivedQuery();
+    await s().verifyQuery(queryId, FRONT_OFFICE);
+
+    // Opened fresh, after the fact. Whether the acknowledgement went out is
+    // read from the case rather than remembered from the click that failed, so
+    // it is still visible on a page load hours later.
     openCase(queryId);
 
-    fireEvent.click(await screen.findByRole('button', { name: /Validate Query/ }));
-
     expect(await screen.findByText('Acknowledgement email not sent')).toBeInTheDocument();
-    // Not the red "Action refused" banner — the action itself did succeed.
+    // Not a refusal — the case itself was registered.
     expect(screen.queryByText('Action refused')).toBeNull();
-    // A failed acknowledgement does not stop the forward: the query still
-    // reached the Officer-in-Charge.
     expect(s().getQuery(queryId).workflowState).toBe(
-      WORKFLOW_STATE.PENDING_ASSIGNMENT,
+      WORKFLOW_STATE.FRONT_OFFICE_VERIFICATION,
     );
 
     vi.mocked(mailboxService.sendAcknowledgement).mockResolvedValue(ACK_RESULT);
@@ -212,13 +243,37 @@ describe('the Front Office sees when the email did not go out', () => {
     expect(ackMessages(queryId)).toHaveLength(1);
   });
 
+  /**
+   * A retry that NICeMail may have sent must not be reported as "not sent" with
+   * the retry button beside it: pressed again, it can email the inquirer a
+   * second copy. The notice says what is actually known, and why to look first.
+   */
+  it('says a retry may already have been sent, rather than that it was not', async () => {
+    vi.mocked(mailboxService.sendAcknowledgement).mockRejectedValue(new Error('Network Error'));
+    const queryId = receivedQuery();
+    await s().verifyQuery(queryId, FRONT_OFFICE);
+    openCase(queryId);
+    await screen.findByText('Acknowledgement email not sent');
+
+    const warning = vi.spyOn(notify, 'warning');
+    vi.mocked(mailboxService.sendAcknowledgement).mockRejectedValue(unconfirmedFailure());
+    fireEvent.click(screen.getByRole('button', { name: /Retry sending/ }));
+
+    expect(await screen.findByText('Acknowledgement may already have been sent')).toBeInTheDocument();
+    expect(screen.getByText(/Check the NICeMail Sent folder/)).toBeInTheDocument();
+    expect(screen.queryByText('Acknowledgement email not sent')).toBeNull();
+    expect(warning).toHaveBeenCalledWith('Acknowledgement not confirmed', expect.stringMatching(/Sent folder/));
+    warning.mockRestore();
+  });
+
   it('shows no warning when the email goes out', async () => {
     const queryId = receivedQuery();
+    await s().verifyQuery(queryId, FRONT_OFFICE);
+    await waitFor(() => expect(ackMessages(queryId)).toHaveLength(1));
+
     openCase(queryId);
 
-    fireEvent.click(await screen.findByRole('button', { name: /Validate Query/ }));
-
-    await waitFor(() => expect(ackMessages(queryId)).toHaveLength(1));
+    await screen.findByRole('heading', { name: 'Available actions' });
     expect(screen.queryByText('Acknowledgement email not sent')).toBeNull();
   });
 });

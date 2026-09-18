@@ -83,13 +83,34 @@ describe('compose enquiry page', () => {
     ).toBeInTheDocument();
   });
 
-  it('warns instead that Gmail sends a real email', async () => {
-    vi.mocked(mailboxService.fetchEmailConfig).mockResolvedValue({ ...CONFIG, transport: 'gmail' });
+  it('warns that Gmail sends a real email — but only if this sender actually can', async () => {
+    vi.mocked(mailboxService.fetchEmailConfig).mockResolvedValue({
+      ...CONFIG,
+      transport: 'gmail',
+      participants: [{ role: 'INQUIRER', canSendReal: true }],
+    });
     signIn(ROLES.INQUIRER);
     renderAt(COMPOSE);
 
     expect(await screen.findByText(/Gmail transport active/)).toBeInTheDocument();
     expect(screen.queryByText(/Mock transport active/)).not.toBeInTheDocument();
+  });
+
+  it('does not promise a real email when this role has no Gmail credential', async () => {
+    // `transport: gmail` is the deployment-wide setting; whether the inquirer
+    // can use it is a per-role question. Only the Front Office mailbox is
+    // authenticated now, so this banner claiming "sends a real email" would be
+    // a lie the mock transport quietly swallows.
+    vi.mocked(mailboxService.fetchEmailConfig).mockResolvedValue({
+      ...CONFIG,
+      transport: 'gmail',
+      participants: [{ role: 'INQUIRER', canSendReal: false }],
+    });
+    signIn(ROLES.INQUIRER);
+    renderAt(COMPOSE);
+
+    expect(await screen.findByText(/Simulated enquiry/)).toBeInTheDocument();
+    expect(screen.queryByText(/sends a real email/)).not.toBeInTheDocument();
   });
 
   it('will not send an empty enquiry', async () => {
@@ -180,62 +201,42 @@ describe('compose enquiry RBAC (negative)', () => {
   });
 });
 
-describe('mailbox ingestion trigger', () => {
+/**
+ * The queries list used to carry a "Check IPC mailbox" button that registered
+ * every unread message in one click. Bulk registration is exactly what the
+ * validation gate exists to prevent, so the button is gone: mail is accepted or
+ * rejected one message at a time, in the inbox. Those behaviours are covered in
+ * `mailboxInbox.test.jsx`.
+ */
+describe('the queries list no longer registers mail', () => {
   const MESSAGE = {
     mailboxMessageId: 'MSG-00001',
     to: 'configured-ipc@test.invalid',
-    from: 'Abhinash Pritiraj <abhinash.pritiraj@gmail.com>',
+    from: 'A Member of the Public <someone@example.com>',
     subject: 'Clarification regarding submission requirements',
     body: 'Dear Sir/Madam…',
     receivedAt: '2026-08-17T09:00:00.000Z',
   };
 
-  it('turns mailbox mail into a visible Query Case', async () => {
+  it('offers no bulk registration control', async () => {
     vi.mocked(mailboxService.fetchMailboxMessages).mockResolvedValue({ messages: [MESSAGE] });
     signIn(ROLES.SUPER_ADMIN);
     renderAt(QUERIES);
 
-    expect(useWorkflowStore.getState().queries).toHaveLength(0);
-
-    fireEvent.click(await screen.findByRole('button', { name: /Check IPC mailbox/ }));
-
-    expect(await screen.findByText('1 new case registered')).toBeInTheDocument();
-    expect(useWorkflowStore.getState().queries).toHaveLength(1);
-    expect(await screen.findByText('QRY-2026-00001')).toBeInTheDocument();
-    expect(mailboxService.markMessageIngested).toHaveBeenCalledWith('MSG-00001');
+    await screen.findByRole('heading', { name: /Quer/ });
+    expect(screen.queryByRole('button', { name: /Check IPC mailbox/ })).toBeNull();
   });
 
-  it('reports already-registered mail as skipped rather than duplicating it', async () => {
+  it('shows no case for mail that is only waiting in the mailbox', async () => {
     vi.mocked(mailboxService.fetchMailboxMessages).mockResolvedValue({ messages: [MESSAGE] });
-    useWorkflowStore.getState().ingestEmail(MESSAGE);
-
     signIn(ROLES.SUPER_ADMIN);
     renderAt(QUERIES);
 
-    fireEvent.click(await screen.findByRole('button', { name: /Check IPC mailbox/ }));
+    await screen.findByRole('heading', { name: /Quer/ });
 
-    expect(await screen.findByText(/1 already registered/)).toBeInTheDocument();
-    expect(useWorkflowStore.getState().queries).toHaveLength(1);
-  });
-
-  it('says so when there is no new mail', async () => {
-    signIn(ROLES.SUPER_ADMIN);
-    renderAt(QUERIES);
-
-    fireEvent.click(await screen.findByRole('button', { name: /Check IPC mailbox/ }));
-
-    expect(await screen.findByText('No new mail')).toBeInTheDocument();
+    // Unread mail exists, and no case does. Nothing registers it but a person.
     expect(useWorkflowStore.getState().queries).toHaveLength(0);
-  });
-
-  it('surfaces a mailbox failure instead of silently doing nothing', async () => {
-    vi.mocked(mailboxService.fetchMailboxMessages).mockRejectedValue(new Error('Network Error'));
-    signIn(ROLES.SUPER_ADMIN);
-    renderAt(QUERIES);
-
-    fireEvent.click(await screen.findByRole('button', { name: /Check IPC mailbox/ }));
-
-    expect(await screen.findByText('Mailbox unreachable')).toBeInTheDocument();
+    expect(mailboxService.markMessageIngested).not.toHaveBeenCalled();
   });
 });
 

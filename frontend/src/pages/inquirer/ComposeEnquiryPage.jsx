@@ -175,6 +175,33 @@ function TransportBanner({ config, from, to }) {
   }
 
   if (config.data?.transport === "gmail") {
+    // `transport` is the deployment-wide setting; whether THIS sender can use
+    // it is a per-role question. Reading the global value alone is how this
+    // banner came to promise a real email that the mock transport was quietly
+    // swallowing.
+    const inquirer = (config.data.participants || []).find(
+      (p) => p.role === "INQUIRER",
+    );
+
+    if (!inquirer?.canSendReal) {
+      return (
+        <div className="rounded-xl border border-blue-200 bg-blue-50/90 p-4 text-sm text-blue-900 shadow-2xs flex items-start gap-3">
+          <InfoIcon className="h-5 w-5 text-blue-600 shrink-0 mt-0.5" />
+          <div>
+            <p className="font-bold text-blue-950">
+              Simulated enquiry — no mail leaves this machine
+            </p>
+            <p className="mt-0.5 text-blue-800">
+              This form exists to produce a test enquiry. Real inquirers are
+              external: they write to the IPC mailbox ({to}) from their own mail
+              client and hold no account here, so no Gmail credential is
+              configured for this role.
+            </p>
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div className="rounded-xl border border-amber-200 bg-amber-50/90 p-4 text-sm text-amber-900 shadow-2xs flex items-start gap-3">
         <ShieldCheckIcon className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />

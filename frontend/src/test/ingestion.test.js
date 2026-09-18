@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 
 import { useWorkflowStore } from '@/store/useWorkflowStore';
 import { buildSeedState } from '@/constants/mockDomain';
-import { loadAll } from '@/services/db/db';
+import { loadAll } from '@/services/persistence/queryState';
 import { BUSINESS_STATUS, WORKFLOW_STATE, AUDIT_EVENT } from '@/constants/statusEnums';
 import { EMAIL_DIRECTION, EMAIL_TYPE } from '@/constants/emailModel';
 
