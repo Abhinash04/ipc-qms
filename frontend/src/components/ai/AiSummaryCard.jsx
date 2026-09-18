@@ -6,6 +6,49 @@ import { cn } from '@/utils/cn';
 /** The overview shows a gist; the full output is one click away. */
 const KEY_POINT_PREVIEW = 3;
 
+/**
+ * Says which kind of summary this is, when it is not the model's own work.
+ *
+ * `generateSummary` degrades to a deterministic stand-in whenever the model is
+ * unreachable, times out or answers with an error — which on a deployment whose
+ * Gemma endpoint is down is *every* summary. Rendering that identically to a
+ * real one invites an officer to trust a paragraph the model never wrote, so
+ * the fallback says so. A genuine summary gets no badge: the absence of a
+ * warning is the quiet case, not a label nobody reads.
+ */
+function ProvenanceBadge({ summary }) {
+  if (!summary) return null;
+
+  /**
+   * Two shapes reach here. The accept path stores an explicit `status`; the
+   * portal path and the Re-generate button store the raw generator output,
+   * which carries only `fallback`. Reading both means a stand-in summary is
+   * labelled wherever it came from, rather than only on the newer path.
+   */
+  const status = summary.status ?? (summary.fallback ? 'FALLBACK' : 'GENERATED');
+  if (status === 'GENERATED') return null;
+
+  const failed = status === 'FAILED';
+
+  return (
+    <span
+      title={
+        failed
+          ? summary?.error || 'The AI service could not be reached.'
+          : 'The AI service did not answer, so this was produced from the enquiry text without a model.'
+      }
+      className={cn(
+        'inline-flex items-center rounded-full border px-2.5 py-0.5 text-[11px] font-extrabold',
+        failed
+          ? 'bg-rose-50 text-rose-700 border-rose-200'
+          : 'bg-amber-50 text-amber-800 border-amber-200',
+      )}
+    >
+      {failed ? 'Not generated' : 'Offline summary'}
+    </span>
+  );
+}
+
 /** The loaded summary: text, key points, expand control and topic chips. */
 function SummaryBody({ summary, expanded, onToggleExpanded }) {
   const keyPoints = summary.keyPoints || [];
@@ -97,6 +140,8 @@ export function AiSummaryCard({ summary: initialSummary, query, onSummaryUpdated
 
   const currentSummary = summary || initialSummary;
 
+
+
   const outerClass = variant === 'embedded'
     ? "select-none"
     : "bg-linear-to-br from-indigo-50/80 via-purple-50/30 to-white rounded-3xl border border-indigo-200/80 p-6 shadow-sm select-none";
@@ -114,8 +159,10 @@ export function AiSummaryCard({ summary: initialSummary, query, onSummaryUpdated
             )}
           </div>
           <h2 className="font-heading text-[20px] font-black text-slate-900 m-0">
-            {loading ? 'Generating Gemma AI Summary...' : 'AI Summary '}
+            {loading ? 'Generating Pravah AI Summary...' : 'AI Summary '}
           </h2>
+
+          {!loading && <ProvenanceBadge summary={currentSummary} />}
         </div>
 
         <div className="flex items-center gap-2">
@@ -137,7 +184,7 @@ export function AiSummaryCard({ summary: initialSummary, query, onSummaryUpdated
           <div className="flex flex-col items-center justify-center py-8 space-y-2">
             <Loader2 className="h-7 w-7 animate-spin text-purple-600" />
             <p className="text-[14px] font-bold text-slate-800">
-              Analyzing query & generating crisp AI summary with Gemma LLM...
+              Analyzing query & generating crisp AI summary with Pravah LLM...
             </p>
             <p className="text-[12px] font-medium text-slate-400">Extracting main request, key points, and domain topics</p>
           </div>
