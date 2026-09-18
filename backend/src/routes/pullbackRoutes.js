@@ -1,48 +1,31 @@
 import express from 'express';
 import verifyToken from '../middleware/verifyToken.js';
-import { ROLES } from '../constants/roles.js';
+import { verifyAction } from '../middleware/verifyRole.js';
+import validateBody from '../middleware/validateBody.js';
+import { WORKFLOW_ACTION } from '../constants/workflowActions.js';
+import { pullbackSchema } from '../validators/pullbackSchemas.js';
+import { pullBackQuery } from '../controllers/pullbackController.js';
 
 const router = express.Router();
 
-const handlePullback = (req, res) => {
-  const user = req.user;
-
-  // Strict Admin / Super Admin RBAC Check
-  if (!user || (user.role !== ROLES.ADMIN && user.role !== ROLES.SUPER_ADMIN)) {
-    return res.status(403).json({
-      error: 'You do not have permission to pull back this query.',
-    });
-  }
-
-  const { queryId } = req.params;
-  const { targetStage, reason, remarks } = req.body;
-
-  if (!targetStage) {
-    return res.status(400).json({ error: 'A targetStage is required for pullback.' });
-  }
-
-  if (!reason || !String(reason).trim()) {
-    return res.status(400).json({ error: 'A reason for pullback is required.' });
-  }
-
-  const timestamp = new Date().toISOString();
-  return res.status(200).json({
-    success: true,
-    queryId,
-    targetStage,
-    reason: String(reason).trim(),
-    remarks: remarks ? String(remarks).trim() : '',
-    pulledBackBy: {
-      id: user.id || 'USR-0008',
-      name: user.name || 'System Administrator',
-      role: user.role,
-    },
-    pulledBackAt: timestamp,
-    message: `Query ${queryId} has been successfully pulled back to ${targetStage}.`,
-  });
-};
-
-router.post('/queries/:queryId/pullback', verifyToken, handlePullback);
-router.post('/api/queries/:queryId/pullback', verifyToken, handlePullback);
+/**
+ * Authorization goes through `verifyAction(PULLBACK)` rather than a hand-rolled
+ * role comparison inside the handler. ROLE_ACTIONS already grants PULLBACK to
+ * ADMIN and SUPER_ADMIN only, so the allow-set is unchanged — what changes is
+ * that a refusal is now recorded in the audit trail like every other one, and
+ * that the rule lives with the other workflow rules instead of being restated.
+ *
+ * This router is mounted under /api/v1 (routes/index.js), so the path below
+ * resolves to /api/v1/queries/:queryId/pullback. A second registration for
+ * '/api/queries/:queryId/pullback' used to sit here too, which resolved to
+ * /api/v1/api/queries/... — a path no client could sensibly call.
+ */
+router.post(
+  '/queries/:queryId/pullback',
+  verifyToken,
+  verifyAction(WORKFLOW_ACTION.PULLBACK),
+  validateBody(pullbackSchema),
+  pullBackQuery,
+);
 
 export default router;
