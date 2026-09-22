@@ -24,6 +24,7 @@ const CASE_KEYED = [
   'emailMessages',
   'emailThreads',
   'auditEvents',
+  'outboundEmails',
 ];
 
 describe('a role that sees every case', () => {

@@ -74,6 +74,11 @@ vi.mock('../models/Notification.js', () => ({ Notification: db.model('Notificati
 vi.mock('../models/EmailMessage.js', () => ({ EmailMessage: db.model('EmailMessage') }));
 vi.mock('../models/EmailThread.js', () => ({ EmailThread: db.model('EmailThread') }));
 vi.mock('../models/QueryCounter.js', () => ({ QueryCounter: db.model('QueryCounter') }));
+// The reset clears the send ledger too — Case IDs restart after it.
+vi.mock('../models/OutboundEmail.js', async (importOriginal) => ({
+  ...(await importOriginal()),
+  OutboundEmail: db.model('OutboundEmail'),
+}));
 
 import app from '../app.js';
 import { authHeader } from './helpers/auth.js';

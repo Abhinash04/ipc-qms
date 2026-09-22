@@ -18,49 +18,22 @@ import request from 'supertest';
  * above the imports so the stand-in is in place before anything captures it.
  */
 
-const db = vi.hoisted(() => {
-  const rows = [];
-
-  const matching = (filter) =>
-    rows.filter((row) => Object.entries(filter).every(([key, value]) => row[key] === value));
-
-  const found = (filter) => {
-    const doc = matching(filter)[0];
-    return doc ? { ...doc } : null;
-  };
-
-  return {
-    rows,
-    reset: () => rows.splice(0),
-    QueryCase: {
-      // `.select()` is part of the contract here, not decoration: the guard
-      // reads only `createdAt`, and a stand-in without it would pass a test the
-      // real driver fails.
-      findOne: (filter) => ({
-        select: () => ({ lean: async () => found(filter) }),
-        lean: async () => found(filter),
-      }),
-      findOneAndUpdate: async (filter, update, options = {}) => {
-        let doc = matching(filter)[0];
-        if (!doc) {
-          if (!options.upsert) return null;
-          doc = { ...filter };
-          rows.push(doc);
-        }
-        Object.assign(doc, update.$set ?? {});
-        return { ...doc };
-      },
-    },
-  };
-});
-
 vi.mock('../config/db.js', async (importOriginal) => ({
   ...(await importOriginal()),
   isConnected: () => true,
 }));
 
-vi.mock('../models/QueryCase.js', () => ({ QueryCase: db.QueryCase }));
+/**
+ * The stand-in in support/memoryDb.js. `.select()` and `$setOnInsert` are part
+ * of the contract here, not decoration: the guard reads only `createdAt`, and
+ * the inquirer is written on insert alone — a stand-in without either would
+ * pass tests the real driver fails.
+ */
+vi.mock('../models/QueryCase.js', async () => ({
+  QueryCase: (await import('./support/memoryDb.js')).memoryDb.model('QueryCase', { unique: ['queryId'] }),
+}));
 
+import { memoryDb } from './support/memoryDb.js';
 import app from '../app.js';
 import { authHeader } from './helpers/auth.js';
 import { ROLES } from '../constants/roles.js';
@@ -87,8 +60,11 @@ const persist = (query) =>
     .set(authHeader(ROLES.FRONT_OFFICE))
     .send({ query });
 
+/** Every stored case, by value. */
+const storedCases = () => memoryDb.rows('QueryCase');
+
 beforeEach(() => {
-  db.reset();
+  memoryDb.reset();
 });
 
 describe('/api/v1/queries/persist — one id, one case', () => {
@@ -96,8 +72,8 @@ describe('/api/v1/queries/persist — one id, one case', () => {
     const res = await persist(CASE);
 
     expect(res.status).toBe(200);
-    expect(db.rows).toHaveLength(1);
-    expect(db.rows[0].subject).toBe('Dissolution profile clarification');
+    expect(storedCases()).toHaveLength(1);
+    expect(storedCases()[0].subject).toBe('Dissolution profile clarification');
   });
 
   it('updates the case it already holds', async () => {
@@ -106,8 +82,8 @@ describe('/api/v1/queries/persist — one id, one case', () => {
     const res = await persist({ ...CASE, workflowState: 'PENDING_ASSIGNMENT' });
 
     expect(res.status).toBe(200);
-    expect(db.rows).toHaveLength(1);
-    expect(db.rows[0].workflowState).toBe('PENDING_ASSIGNMENT');
+    expect(storedCases()).toHaveLength(1);
+    expect(storedCases()[0].workflowState).toBe('PENDING_ASSIGNMENT');
   });
 
   /** The one that matters: a different enquiry arriving under the same id. */
@@ -128,9 +104,9 @@ describe('/api/v1/queries/persist — one id, one case', () => {
 
     // The stored case is untouched — that is the whole point. Before the guard
     // this read back as Priya's enquiry and Ravi's was unrecoverable.
-    expect(db.rows).toHaveLength(1);
-    expect(db.rows[0].subject).toBe('Dissolution profile clarification');
-    expect(db.rows[0].inquirer.email).toBe('ravi@pharma.example');
+    expect(storedCases()).toHaveLength(1);
+    expect(storedCases()[0].subject).toBe('Dissolution profile clarification');
+    expect(storedCases()[0].inquirer.email).toBe('ravi@pharma.example');
   });
 
   /**
@@ -144,6 +120,6 @@ describe('/api/v1/queries/persist — one id, one case', () => {
     const res = await persist({ ...CASE, workflowState: 'PENDING_ASSIGNMENT' });
 
     expect(res.status).toBe(200);
-    expect(db.rows[0].workflowState).toBe('PENDING_ASSIGNMENT');
+    expect(storedCases()[0].workflowState).toBe('PENDING_ASSIGNMENT');
   });
 });

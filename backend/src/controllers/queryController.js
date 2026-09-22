@@ -2,6 +2,8 @@ import HTTP_STATUS from '../constants/httpStatus.js';
 import { isConnected } from '../config/db.js';
 import * as audit from '../services/audit/auditService.js';
 import * as workflow from '../services/workflow/finalApproval.js';
+import * as caseMail from '../services/email/caseMail.js';
+import { toPublic as publicOutbound } from '../services/email/outbox.js';
 import { ACTOR_TYPES, ROLES } from '../constants/roles.js';
 import { isKnownAuditAction } from '../constants/auditActions.js';
 import { caseScopeFor, scopeFilter } from '../services/authz/caseAccess.js';
@@ -15,6 +17,8 @@ import {
   EmailThread,
   AuditEvent,
   QueryCounter,
+  OutboundEmail,
+  OUTBOUND_TYPES,
 } from '../models/index.js';
 
 const toPlain = (doc) => {
@@ -24,6 +28,12 @@ const toPlain = (doc) => {
 };
 
 const COUNTER_KEY = 'counters';
+
+/** Outbound case emails only the server records — see persistTransition. */
+const SERVER_RECORDED_EMAILS = new Set(Object.values(OUTBOUND_TYPES));
+
+/** States only the server's dispatch may move a case into. */
+const SERVER_OWNED_STATES = new Set(['DISPATCHED', 'CLOSED']);
 
 /**
  * A ceiling on one hydration response.
@@ -72,6 +82,9 @@ export function buildScopedFilters(scope) {
     emailMessages: byCase,
     emailThreads: byCase,
     auditEvents: byCase,
+    // The outbound ledger names each case's recipients and send errors: it
+    // follows the case set like everything else keyed on queryId.
+    outboundEmails: byCase,
   };
 }
 
@@ -192,6 +205,7 @@ async function loadAllQueries(req, res, next) {
       emailThreads,
       auditEvents,
       counterDoc,
+      outboundEmails,
     ] = await Promise.all([
       QueryCase.find(f.queries).limit(MAX_ROWS).lean(),
       WorkflowStep.find(f.workflowSteps).limit(MAX_ROWS).lean(),
@@ -203,6 +217,7 @@ async function loadAllQueries(req, res, next) {
       AuditEvent.find(f.auditEvents).sort({ timestamp: 1 }).limit(MAX_ROWS).lean(),
       // NOT scoped, deliberately — see buildScopedFilters.
       QueryCounter.findOne({ key: COUNTER_KEY }).lean(),
+      OutboundEmail.find(f.outboundEmails).limit(MAX_ROWS).lean(),
     ]);
 
     const stripId = (rows) => (rows || []).map(toPlain);
@@ -216,6 +231,9 @@ async function loadAllQueries(req, res, next) {
       emailMessages: stripId(emailMessages),
       emailThreads: stripId(emailThreads),
       auditEvents: (auditEvents || []).map(toClientAuditEvent),
+      // Whether each case email is sent, being sent, failed or uncertain — what
+      // the retry controls read. The claim token never leaves the server.
+      outboundEmails: (outboundEmails || []).map(publicOutbound),
     };
 
     const truncated = Object.entries(collections)
@@ -266,6 +284,23 @@ async function persistTransition(req, res, next) {
 
     const ops = [];
 
+    /**
+     * The acknowledgement, the forward and the final response are recorded by
+     * the server, when — and only when — each is known to have been sent
+     * (services/email/caseMail.js). A client that wrote one would be claiming a
+     * send nobody made, and the record is what the outbox reads as "already
+     * sent", so it would also stop the real one going out.
+     */
+    const serverRecorded = addMessages.find(
+      (msg) => msg?.direction === 'OUTBOUND' && SERVER_RECORDED_EMAILS.has(msg?.emailType),
+    );
+    if (serverRecorded) {
+      return res.status(HTTP_STATUS.CONFLICT).json({
+        error: 'Acknowledgements, forwards and responses are recorded by the server when they are sent.',
+        messageId: serverRecorded.messageId ?? null,
+      });
+    }
+
     if (query?.queryId) {
       /**
        * Refuse to overwrite a different case that happens to share this id.
@@ -283,7 +318,7 @@ async function persistTransition(req, res, next) {
        * accepting the write and losing an enquiry silently.
        */
       const existing = await QueryCase.findOne({ queryId: query.queryId })
-        .select('createdAt')
+        .select('createdAt workflowState businessStatus')
         .lean();
 
       if (existing?.createdAt && query.createdAt && existing.createdAt !== query.createdAt) {
@@ -293,9 +328,31 @@ async function persistTransition(req, res, next) {
         });
       }
 
+      /**
+       * A case is dispatched and closed by the server, once the outbox has
+       * recorded its response as sent — never by a client write. The Dispatch
+       * page's retry used to close the case here itself, after a send it had
+       * made; a client that can do that can also close a case nobody answered.
+       * A case already in that state may still be written (a pullback moves it
+       * back out); it just cannot be moved into it.
+       */
+      const closing =
+        (SERVER_OWNED_STATES.has(query.workflowState) && existing?.workflowState !== query.workflowState) ||
+        (query.businessStatus === 'CLOSED' && existing?.businessStatus !== 'CLOSED');
+      if (closing) {
+        return res.status(HTTP_STATUS.CONFLICT).json({
+          error: 'A case is dispatched and closed by the server once its response has been sent.',
+          queryId: query.queryId,
+        });
+      }
+
       // `sourceMailbox` is set by the server at intake and decides which mailbox
       // answers the inquirer; a client write can neither change nor clear it.
-      const { sourceMailbox, ...clientQuery } = query;
+      //
+      // `inquirer` is written once, when the case is created — for an email it
+      // is whoever sent the enquiry, and it is where every reply goes. A stale
+      // or careless client write must not be able to redirect the answer.
+      const { sourceMailbox, inquirer: submittedInquirer, ...clientQuery } = query;
 
       /**
        * The inquirer is who the final response gets mailed to.
@@ -312,24 +369,23 @@ async function persistTransition(req, res, next) {
        * value a caller can forge. Nobody else may write the field at all once
        * the case exists; middleware/authorizeCaseDelta.js has already refused
        * the delta if they tried to create one.
+       *
+       * Either way it goes in `$setOnInsert` alone: written when the case is
+       * created, never after. (In `$set` as well, MongoDB refuses the update —
+       * one path under two operators.)
        */
-      if (req.user?.role === ROLES.INQUIRER) {
-        if (!existing) {
-          clientQuery.inquirer = {
-            id: req.user.id,
-            name: req.user.name || null,
-            email: req.user.email || null,
-          };
-        } else {
-          delete clientQuery.inquirer;
-        }
-      }
+      const inquirer =
+        req.user?.role === ROLES.INQUIRER
+          ? { id: req.user.id, name: req.user.name || null, email: req.user.email || null }
+          : submittedInquirer;
+      const update = { $set: clientQuery };
+      if (inquirer !== undefined) update.$setOnInsert = { inquirer };
 
       ops.push(
         QueryCase.findOneAndUpdate(
           { queryId: query.queryId },
-          { $set: clientQuery },
-          { upsert: true, new: true },
+          update,
+          { upsert: true, returnDocument: 'after' },
         ),
       );
     }
@@ -495,6 +551,10 @@ async function resetQueryState(req, res, next) {
       EmailMessage.deleteMany({}),
       EmailThread.deleteMany({}),
       QueryCounter.deleteOne({ key: COUNTER_KEY }),
+      // Case IDs restart after a reset. A ledger row left behind would say the
+      // next QRY-…-00001 had already been answered, and its response would
+      // never be sent.
+      OutboundEmail.deleteMany({}),
 
       /**
        * The history of the cases being deleted goes with them — they would
@@ -545,4 +605,31 @@ async function resetQueryState(req, res, next) {
   }
 }
 
-export { loadAllQueries, checkIsEmpty, persistTransition, resetQueryState, finalApproval };
+/**
+ * A person has checked the sending mailbox's Sent folder and records what
+ * happened to an email whose send was UNCERTAIN.
+ *
+ * The only way out of UNCERTAIN for a transport the server cannot ask (both
+ * NICeMail paths; Gmail is checked automatically before any retry). `SENT`
+ * records the email as a successful send would — a final response also closes
+ * the case. `NOT_SENT` turns it into an ordinary failure the retry buttons can
+ * send again.
+ */
+async function resolveOutbound(req, res, next) {
+  if (!requireDb(next)) return;
+
+  try {
+    const { emailType, outcome } = req.body;
+    const result = await caseMail.resolve({
+      queryId: req.params.queryId,
+      emailType,
+      outcome,
+      actor: { id: req.user?.id ?? null, role: req.user?.role ?? null },
+    });
+    return res.status(HTTP_STATUS.OK).json({ queryId: req.params.queryId, emailType, ...result });
+  } catch (error) {
+    return next(error);
+  }
+}
+
+export { loadAllQueries, checkIsEmpty, persistTransition, resetQueryState, finalApproval, resolveOutbound };

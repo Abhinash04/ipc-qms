@@ -41,6 +41,9 @@ export const AUDIT_ACTIONS = {
   EMAIL_FORWARDED: 'EMAIL_FORWARDED',
   EMAIL_SEND_FAILED: 'EMAIL_SEND_FAILED',
   SENT_APPEND_FAILED: 'SENT_APPEND_FAILED',
+  /** A person settled a send whose outcome the server could not determine. */
+  EMAIL_DELIVERY_CONFIRMED: 'EMAIL_DELIVERY_CONFIRMED',
+  EMAIL_DELIVERY_DENIED: 'EMAIL_DELIVERY_DENIED',
 
   // ── Mailbox state ────────────────────────────────────────────────────────
   EMAIL_MARKED_READ: 'EMAIL_MARKED_READ',
