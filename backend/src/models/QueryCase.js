@@ -24,11 +24,12 @@ const queryCaseSchema = new mongoose.Schema(
      * `sourceMailboxMessageId` is the provider's id for the incoming message
      * and is what makes duplicate detection possible across a reload — the
      * client's guard reads it, and without it stored the guard matched every
-     * case. Indexed and sparse: portal-raised cases legitimately have none.
+     * case. Unique among cases that have one (see the index below): one
+     * incoming email opens one case. Portal-raised cases have none.
      */
     threadId: { type: String, default: null, index: true },
     sourceEmailId: { type: String, default: null },
-    sourceMailboxMessageId: { type: String, default: null, index: true, sparse: true },
+    sourceMailboxMessageId: { type: String, default: null },
 
     /**
      * The mailbox the enquiry arrived in — `{ source, address }`, e.g.
@@ -46,6 +47,21 @@ const queryCaseSchema = new mongoose.Schema(
     pullbackHistory: { type: Array, default: [] },
   },
   { versionKey: false },
+);
+
+/**
+ * One incoming email opens one case — enforced by the database.
+ *
+ * Two accepts of the same message that overlap (a double click, two Front
+ * Officers) each mint a Case ID before either has written; the second insert
+ * now fails here, and acceptMessage continues with the case that won. Partial
+ * on `$type: 'string'`, not sparse: the field defaults to null, and a sparse
+ * unique index would collide every portal-raised case on that null — the same
+ * trap as EmailMessage.sourceMessageId.
+ */
+queryCaseSchema.index(
+  { sourceMailboxMessageId: 1 },
+  { unique: true, partialFilterExpression: { sourceMailboxMessageId: { $type: 'string' } } },
 );
 
 const QueryCase = mongoose.models.QueryCase || mongoose.model('QueryCase', queryCaseSchema);

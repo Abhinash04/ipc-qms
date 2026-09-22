@@ -8,6 +8,7 @@ import {
   publicDirectory,
 } from '../../config/identities.js';
 import * as mockTransport from './transports/mockTransport.js';
+import { outboundAllowed } from './nic/outboundGuard.js';
 import { buildAcknowledgement } from './templates/acknowledgement.js';
 import * as gemmaService from '../ai/gemmaService.js';
 import { resolveAttachments, toPublicRecord } from '../attachments/resolveAttachments.js';
@@ -108,7 +109,7 @@ function getEmailConfig() {
  * before a single byte is dispatched, for every send path (enquiry, forward,
  * response) alike.
  */
-async function sendEmail(message, { asRole = null, asEmail = null, sourceMailbox = null } = {}) {
+async function sendEmail(message, { asRole = null, asEmail = null, sourceMailbox = null, onStage = null } = {}) {
   if (!message?.from) throw Object.assign(new Error('"from" is required'), { status: 400 });
 
   const recipients = (Array.isArray(message.to) ? message.to : [message.to]).filter(Boolean);
@@ -123,7 +124,17 @@ async function sendEmail(message, { asRole = null, asEmail = null, sourceMailbox
   // The Gmail client is keyed by role; when an address was supplied, use the
   // role that address actually belongs to rather than the one assumed.
   const resolvedRole = asEmail ? identityForEmail(asEmail)?.role || asRole : asRole;
-  const result = await transport.send(normalised, { asRole: resolvedRole });
+  const provider = transport.name || null;
+  onStage?.('RESOLUTION', {
+    recipient: recipients,
+    provider,
+    // Both NICeMail transports are held to the test recipient until
+    // NIC_ALLOW_OUTBOUND=true; the other providers have no such interlock.
+    ...(provider === 'nic-browser' || provider === 'nic'
+      ? { guard: outboundAllowed() ? 'production-outbound' : 'test-recipient' }
+      : {}),
+  });
+  const result = await transport.send(normalised, { asRole: resolvedRole, onStage });
 
   return {
     ...normalised,
@@ -153,19 +164,38 @@ async function sendEnquiry({ subject, body, attachments = [], cc = [], timestamp
   );
 }
 
-async function sendAcknowledgement({ to, queryId, timestamp, providerThreadId, sourceMailbox = null }) {
+/**
+ * The acknowledgement exactly as it will be sent — the subject is what the
+ * outbox records before sending, so a Sent-folder check can find it later.
+ */
+function composeAcknowledgement({ to, queryId, sourceMailbox = null }) {
   const frontOffice = senderFor(sourceMailbox);
-
-  const message = buildAcknowledgement({
+  return buildAcknowledgement({
     to,
     fromEmail: frontOffice?.email || env.IPC_ACK_FROM_EMAIL,
     fromName: frontOffice?.name || env.IPC_ACK_FROM_NAME,
     queryId,
   });
+}
+
+/**
+ * `rfcMessageId` is the outbox's id for this attempt; it becomes the Message-ID
+ * header on transports that can carry one.
+ */
+async function sendAcknowledgement({
+  to,
+  queryId,
+  timestamp,
+  providerThreadId,
+  sourceMailbox = null,
+  rfcMessageId = null,
+  onStage = null,
+}) {
+  const message = composeAcknowledgement({ to, queryId, sourceMailbox });
 
   return sendEmail(
-    { ...message, timestamp, providerThreadId },
-    { asRole: IDENTITY_ROLES.FRONT_OFFICE, sourceMailbox },
+    { ...message, timestamp, providerThreadId, messageIdHeader: rfcMessageId },
+    { asRole: IDENTITY_ROLES.FRONT_OFFICE, sourceMailbox, onStage },
   );
 }
 
@@ -177,6 +207,8 @@ async function forwardToOfficerInCharge({
   providerThreadId,
   aiSummary = null,
   attachments = [],
+  rfcMessageId = null,
+  onStage = null,
 }) {
   const frontOffice = identityForRole(IDENTITY_ROLES.FRONT_OFFICE);
   const officer = identityForRole(IDENTITY_ROLES.OFFICER_IN_CHARGE);
@@ -256,16 +288,22 @@ async function forwardToOfficerInCharge({
     {
       from: formatSender(frontOffice),
       to: [officer.email],
-      subject: `Fwd: ${subject} [${queryId}]`,
+      subject: forwardSubject({ subject, queryId }),
       body: fullBody,
       attachments,
       timestamp,
       providerThreadId,
+      messageIdHeader: rfcMessageId,
     },
-    { asRole: IDENTITY_ROLES.FRONT_OFFICE },
+    { asRole: IDENTITY_ROLES.FRONT_OFFICE, onStage },
   );
 
   return { ...sent, aiSummary: summary };
+}
+
+/** The forward's subject, known before sending — see `composeAcknowledgement`. */
+function forwardSubject({ subject, queryId }) {
+  return `Fwd: ${subject} [${queryId}]`;
 }
 
 async function sendResponse({
@@ -277,6 +315,8 @@ async function sendResponse({
   timestamp,
   providerThreadId,
   sourceMailbox = null,
+  rfcMessageId = null,
+  onStage = null,
 }) {
   const frontOffice = senderFor(sourceMailbox);
 
@@ -290,9 +330,26 @@ async function sendResponse({
       attachments,
       timestamp,
       providerThreadId,
+      messageIdHeader: rfcMessageId,
     },
-    { asRole: IDENTITY_ROLES.FRONT_OFFICE, sourceMailbox },
+    { asRole: IDENTITY_ROLES.FRONT_OFFICE, sourceMailbox, onStage },
   );
+}
+
+/**
+ * Ask the transport a case's mail went through whether an UNCERTAIN send
+ * actually left. Gmail can answer from its Sent folder; the mock and both
+ * NICeMail paths cannot, and say UNKNOWN — a person settles those.
+ */
+async function reconcileDelivery(dispatch, { sourceMailbox = null } = {}) {
+  const transport = await transportFor(sourceMailbox, IDENTITY_ROLES.FRONT_OFFICE);
+  if (typeof transport.reconcile !== 'function') return { verdict: 'UNKNOWN' };
+  return transport.reconcile(dispatch, { asRole: IDENTITY_ROLES.FRONT_OFFICE });
+}
+
+/** The domain of the address a case's external mail is sent from. */
+function senderDomainFor(sourceMailbox) {
+  return String(senderFor(sourceMailbox)?.email || '').split('@')[1] || null;
 }
 
 // `mailbox` used to be re-exported here, bound directly to mockIpcMailbox —
@@ -305,7 +362,12 @@ export {
   getTransport,
   sendEmail,
   sendEnquiry,
+  composeAcknowledgement,
   sendAcknowledgement,
+  forwardSubject,
   forwardToOfficerInCharge,
   sendResponse,
+  senderFor,
+  senderDomainFor,
+  reconcileDelivery,
 };

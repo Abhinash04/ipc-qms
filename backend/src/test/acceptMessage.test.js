@@ -18,78 +18,6 @@ import request from 'supertest';
  * before any module captures its references.
  */
 
-/**
- * A stand-in for the handful of Mongoose operators this path actually uses.
- *
- * `$inc` on a dotted path is not decoration: it is how Case IDs are minted, and
- * a fake that merged the whole `value` object instead would hide exactly the
- * kind of counter bug these tests exist to catch.
- */
-const db = vi.hoisted(() => {
-  const read = (doc, path) => path.split('.').reduce((node, key) => node?.[key], doc);
-
-  const write = (doc, path, value) => {
-    const keys = path.split('.');
-    const leaf = keys.pop();
-    keys.reduce((node, key) => (node[key] ??= {}), doc)[leaf] = value;
-  };
-
-  // Rows are handed out by value, so a caller holding a `.lean()` result cannot
-  // mutate the store the way it could not mutate a real collection.
-  const clone = (doc) => (doc ? JSON.parse(JSON.stringify(doc)) : null);
-
-  const apply = (doc, update, inserted) => {
-    for (const [path, by] of Object.entries(update.$inc ?? {})) {
-      write(doc, path, (read(doc, path) ?? 0) + by);
-    }
-    for (const [path, value] of Object.entries(update.$set ?? {})) write(doc, path, value);
-    if (!inserted) return;
-    for (const [path, value] of Object.entries(update.$setOnInsert ?? {})) write(doc, path, value);
-  };
-
-  const collections = new Map();
-
-  const model = (name) => {
-    const rows = [];
-    collections.set(name, rows);
-
-    const matching = (filter) =>
-      rows.filter((row) =>
-        Object.entries(filter).every(([path, value]) => read(row, path) === value),
-      );
-
-    const upsert = (filter, update, options) => {
-      let doc = matching(filter)[0];
-      const inserted = !doc;
-      if (inserted) {
-        if (!options.upsert) return null;
-        doc = { ...filter };
-        rows.push(doc);
-      }
-      apply(doc, update, inserted);
-      return doc;
-    };
-
-    return {
-      create: async (doc) => {
-        rows.push(clone(doc));
-        return clone(doc);
-      },
-      findOne: (filter) => ({ lean: async () => clone(matching(filter)[0]) }),
-      find: (filter = {}) => ({ lean: async () => matching(filter).map(clone) }),
-      updateOne: async (filter, update, options = {}) => {
-        upsert(filter, update, options);
-        return { acknowledged: true };
-      },
-      findOneAndUpdate: (filter, update, options = {}) => ({
-        lean: async () => clone(upsert(filter, update, options)),
-      }),
-    };
-  };
-
-  return { model, reset: () => collections.forEach((rows) => rows.splice(0)) };
-});
-
 // Only `isConnected` is replaced: the real module still registers the mongoose
 // connection listeners the rest of the app imports it for.
 vi.mock('../config/db.js', async (importOriginal) => ({
@@ -98,17 +26,48 @@ vi.mock('../config/db.js', async (importOriginal) => ({
 }));
 
 // Mocked one model file at a time rather than models/index.js, so the real
-// barrel keeps re-exporting the models this path does not touch.
-vi.mock('../models/QueryCase.js', () => ({ QueryCase: db.model('QueryCase') }));
-vi.mock('../models/QueryCounter.js', () => ({ QueryCounter: db.model('QueryCounter') }));
-vi.mock('../models/EmailMessage.js', () => ({ EmailMessage: db.model('EmailMessage') }));
-vi.mock('../models/EmailThread.js', () => ({ EmailThread: db.model('EmailThread') }));
-vi.mock('../models/AuditEvent.js', () => ({ AuditEvent: db.model('AuditEvent') }));
-vi.mock('../models/MailboxDecision.js', () => ({
-  MailboxDecision: db.model('MailboxDecision'),
+// barrel keeps re-exporting the models this path does not touch. The stand-in
+// (support/memoryDb.js) enforces the unique keys the intake relies on: one case
+// per incoming message, one ledger row per case email.
+vi.mock('../models/QueryCase.js', async () => ({
+  QueryCase: (await import('./support/memoryDb.js')).memoryDb.model('QueryCase', {
+    unique: ['queryId'],
+    uniqueWhenString: ['sourceMailboxMessageId'],
+  }),
+}));
+vi.mock('../models/QueryCounter.js', async () => ({
+  QueryCounter: (await import('./support/memoryDb.js')).memoryDb.model('QueryCounter'),
+}));
+vi.mock('../models/EmailMessage.js', async () => ({
+  EmailMessage: (await import('./support/memoryDb.js')).memoryDb.model('EmailMessage', {
+    unique: ['messageId'],
+    uniqueWhenString: ['sourceMessageId'],
+  }),
+}));
+vi.mock('../models/EmailThread.js', async () => ({
+  EmailThread: (await import('./support/memoryDb.js')).memoryDb.model('EmailThread'),
+}));
+vi.mock('../models/AuditEvent.js', async () => ({
+  AuditEvent: (await import('./support/memoryDb.js')).memoryDb.model('AuditEvent'),
+}));
+// The forward tells the Officer-in-Charge in-app as well as by email.
+vi.mock('../models/Notification.js', async () => ({
+  Notification: (await import('./support/memoryDb.js')).memoryDb.model('Notification'),
+}));
+vi.mock('../models/MailboxDecision.js', async () => ({
+  MailboxDecision: (await import('./support/memoryDb.js')).memoryDb.model('MailboxDecision', {
+    unique: ['mailboxMessageId'],
+  }),
   DECISIONS: { ACCEPTED: 'ACCEPTED', REJECTED: 'REJECTED' },
 }));
+vi.mock('../models/OutboundEmail.js', async (importOriginal) => ({
+  ...(await importOriginal()),
+  OutboundEmail: (await import('./support/memoryDb.js')).memoryDb.model('OutboundEmail', {
+    unique: ['dispatchKey'],
+  }),
+}));
 
+import { memoryDb as db } from './support/memoryDb.js';
 import app from '../app.js';
 import { authHeader } from './helpers/auth.js';
 import { ROLES } from '../constants/roles.js';
@@ -245,6 +204,8 @@ describe('POST /mailbox/messages/:messageId/accept — an unseen message', () =>
     expect(history).toEqual([
       'QUERY_RECEIVED',
       'QUERY_REGISTERED',
+      // The mailbox message → case link, the one row that carries both ids.
+      'CASE_ASSOCIATED',
       /**
        * The summary is generated and stored on the case here, before either
        * email goes out. It used to be produced inside the forward, for the
@@ -400,6 +361,38 @@ describe('accepting the same message twice', () => {
     // once, and the Officer-in-Charge received the case once.
     expect(ackSpy).toHaveBeenCalledTimes(1);
     expect(forwardSpy).toHaveBeenCalledTimes(1);
+  });
+});
+
+/**
+ * Two officers (or one impatient double click) accepting the same message.
+ *
+ * Nothing about intake is atomic across documents, so each guard has to hold on
+ * its own: the case by a unique index on the message id, the acknowledgement and
+ * the forward by the outbox's claim.
+ */
+describe('two accepts of the same message at once', () => {
+  it('opens one case, and sends one acknowledgement and one forward', async () => {
+    const [first, second] = await Promise.all([
+      accept('gmail-msg-ravi-1'),
+      accept('gmail-msg-ravi-1'),
+    ]);
+
+    expect(await QueryCase.find({}).lean()).toHaveLength(1);
+    expect(await messagesOfType('ACKNOWLEDGEMENT')).toHaveLength(1);
+    expect(await messagesOfType('FORWARD')).toHaveLength(1);
+    expect(ackSpy).toHaveBeenCalledTimes(1);
+    expect(forwardSpy).toHaveBeenCalledTimes(1);
+
+    // Both are answered, and both name the same case.
+    expect(first.status).toBe(200);
+    expect(second.status).toBe(200);
+    expect(first.body.queryId).toBe(second.body.queryId);
+
+    // The registration is recorded once, by whichever request created the case.
+    const history = (await AuditEvent.find({ queryId: first.body.queryId }).lean()).map((e) => e.action);
+    expect(history.filter((action) => action === 'QUERY_REGISTERED')).toHaveLength(1);
+    expect(history.filter((action) => action === 'CASE_ASSOCIATED')).toHaveLength(1);
   });
 });
 

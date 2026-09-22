@@ -4,7 +4,8 @@ import {
   EmailMessage,
   EmailThread,
 } from '../../../models/index.js';
-import * as emailService from '../emailService.js';
+import * as caseMail from '../caseMail.js';
+import { isDuplicateKey, OUTCOMES } from '../outbox.js';
 import * as audit from '../../audit/auditService.js';
 import * as gemmaService from '../../ai/gemmaService.js';
 import * as decisions from './decisions.js';
@@ -23,11 +24,13 @@ import { AUDIT_RESULTS } from '../../../constants/auditActions.js';
  * mint the same one.
  *
  * Here the whole sequence is one request. MongoDB has no cross-document
- * transactions on a standalone server, so this is not atomic — instead **every
- * step checks its own artefact before acting**, which makes the whole operation
- * safe to retry. Pressing ✓ again after a failure re-attempts only what did not
- * complete; it cannot produce a second case, a second acknowledgement or a
- * second forward.
+ * transactions on a standalone server, so this is not atomic — instead every
+ * step is guarded on its own, which makes the whole operation safe to retry
+ * and safe to run twice at once. The case by a unique index on the message id;
+ * the acknowledgement and the forward by the outbox's claim (caseMail.js), so
+ * of two overlapping requests exactly one sends each. Pressing ✓ again after
+ * a failure re-attempts only what did not complete; it cannot produce a second
+ * case, a second acknowledgement or a second forward.
  *
  * What is deliberately NOT done here: failing the request because a step
  * failed. A case that exists but was not forwarded is a real state an operator
@@ -63,7 +66,7 @@ async function mintIds(timestamp) {
   const counter = await QueryCounter.findOneAndUpdate(
     { key: COUNTER_KEY },
     { $inc: { 'value.QRY': 1, 'value.THREAD': 1, 'value.MSG': 1 } },
-    { new: true, upsert: true },
+    { returnDocument: 'after', upsert: true },
   ).lean();
 
   const year = new Date(timestamp || Date.now()).getUTCFullYear();
@@ -86,6 +89,36 @@ const record = (actor, event) => ({
 /** A summary we already have and can use — anything else is worth retrying. */
 const isUsable = (summary) =>
   summary?.status === 'GENERATED' || summary?.status === 'FALLBACK';
+
+/** Outcomes after which the email is known to be out. */
+const SENT = new Set([OUTCOMES.SENT, OUTCOMES.ALREADY_SENT]);
+
+/**
+ * How a send that did not complete is reported to the page.
+ *
+ * `unconfirmed` means the email may already be in the recipient's inbox — the
+ * flag that stops the page offering a blind retry. `retryable` means it
+ * provably never left. `inProgress` means another request holds the send.
+ */
+function stepError(step, result, noRecipientMessage = null) {
+  if (result.outcome === 'NO_RECIPIENT') {
+    return { step, outcome: result.outcome, error: noRecipientMessage || result.error };
+  }
+
+  const uncertain = result.outcome === OUTCOMES.UNCERTAIN || result.outcome === OUTCOMES.BLOCKED_UNCERTAIN;
+  const inProgress = result.outcome === OUTCOMES.IN_PROGRESS;
+
+  return {
+    step,
+    outcome: result.outcome,
+    error: inProgress ? `The ${step} is being sent by another request.` : result.error,
+    // The step a staged sender (the NICeMail agent) stopped at.
+    ...(result.stage ? { stage: result.stage } : {}),
+    ...(uncertain ? { unconfirmed: true } : {}),
+    ...(inProgress ? { inProgress: true } : {}),
+    ...(result.outcome === OUTCOMES.FAILED ? { retryable: true } : {}),
+  };
+}
 
 /**
  * Summarise the enquiry, and say honestly what kind of summary it is.
@@ -160,7 +193,7 @@ export async function acceptMessage({ mailboxMessageId, message = {}, actor, sou
   const knownQueryId = decidedQueryId || already?.queryId || null;
   // Decided, but the case is gone — a reset, or a write that never landed. The
   // case is rebuilt below rather than leaving the message unusable.
-  const known = knownQueryId
+  let known = knownQueryId
     ? await QueryCase.findOne({ queryId: knownQueryId }).lean()
     : null;
 
@@ -169,35 +202,53 @@ export async function acceptMessage({ mailboxMessageId, message = {}, actor, sou
   const senderEmail = bareAddress(message.from);
 
   let queryId = known?.queryId;
-  let threadId = known?.threadId;
-  // A case keeps the mailbox it was registered from, even across a retry.
-  const caseMailbox = known ? known.sourceMailbox ?? null : sourceMailbox;
+  let minted = null;
 
   // 2. The case. A real insert, not an upsert — so a duplicate id is rejected
   //    by the unique index rather than silently overwriting a live case.
   if (!known) {
-    const minted = await mintIds(receivedAt);
-    queryId = minted.queryId;
-    threadId = minted.threadId;
+    minted = await mintIds(receivedAt);
 
-    await QueryCase.create({
-      queryId,
-      subject: message.subject || '(no subject)',
-      description: message.body || '',
-      source: 'Email',
-      // The inquirer is whoever wrote in. No lookup, no configured address.
-      inquirer: { id: null, name: displayName(message.from), email: senderEmail },
-      workflowState: 'RECEIVED',
-      businessStatus: 'OPEN',
-      priority: 'NORMAL',
-      attachments: message.attachments || [],
-      threadId,
-      sourceEmailId: minted.messageId,
-      sourceMailboxMessageId: mailboxMessageId,
-      sourceMailbox: caseMailbox,
-      createdAt: now,
-      updatedAt: now,
-    });
+    try {
+      await QueryCase.create({
+        queryId: minted.queryId,
+        subject: message.subject || '(no subject)',
+        description: message.body || '',
+        source: 'Email',
+        // The inquirer is whoever wrote in. No lookup, no configured address.
+        inquirer: { id: null, name: displayName(message.from), email: senderEmail },
+        workflowState: 'RECEIVED',
+        businessStatus: 'OPEN',
+        priority: 'NORMAL',
+        attachments: message.attachments || [],
+        threadId: minted.threadId,
+        sourceEmailId: minted.messageId,
+        sourceMailboxMessageId: mailboxMessageId,
+        sourceMailbox,
+        createdAt: now,
+        updatedAt: now,
+      });
+      queryId = minted.queryId;
+    } catch (error) {
+      /**
+       * Another accept of this same message created the case first — the
+       * unique index on sourceMailboxMessageId admits one. Carry on with that
+       * case: its registration is the winner's to record, and the sends below
+       * are guarded on their own, so nothing happens twice. The minted id is
+       * simply never used.
+       */
+      if (!isDuplicateKey(error)) throw error;
+      known = await QueryCase.findOne({ sourceMailboxMessageId: mailboxMessageId }).lean();
+      if (!known) throw error;
+      queryId = known.queryId;
+    }
+  }
+
+  // Registration is recorded once, by the request whose insert created the case.
+  const created = !known;
+
+  if (created) {
+    const { threadId } = minted;
 
     await EmailThread.updateOne(
       { threadId },
@@ -232,6 +283,14 @@ export async function acceptMessage({ mailboxMessageId, message = {}, actor, sou
 
     await audit.record({ ...record(actor, 'QUERY_RECEIVED'), queryId, details: `Enquiry received from ${senderEmail}.` });
     await audit.record({ ...record(actor, 'QUERY_REGISTERED'), queryId, details: 'Front Office accepted the message and registered the query.' });
+    // The one row that ties the mailbox message to the case it became.
+    await audit.record({
+      ...record(actor, 'CASE_ASSOCIATED'),
+      queryId,
+      messageId: mailboxMessageId,
+      threadId: message.providerThreadId || null,
+      details: { source: sourceMailbox?.source ?? null },
+    });
 
     await QueryCase.updateOne(
       { queryId },
@@ -288,118 +347,37 @@ export async function acceptMessage({ mailboxMessageId, message = {}, actor, sou
     if (attempt.error) errors.push({ step: 'aiSummary', error: attempt.error });
   }
 
-  // 4. Acknowledge the person who actually wrote in. Guarded on the stored
-  //    message, so a retry cannot email them twice.
-  let acknowledged = false;
-  const ackExists = await EmailMessage.findOne({ queryId, emailType: 'ACKNOWLEDGEMENT' }).lean();
-  if (ackExists) {
-    acknowledged = true;
-  } else if (!senderEmail) {
-    errors.push({ step: 'acknowledgement', error: 'The incoming message carried no sender address.' });
-  } else {
-    try {
-      const sent = await emailService.sendAcknowledgement({
-        to: senderEmail,
-        queryId,
-        sourceMailbox: caseMailbox,
-      });
-      await EmailMessage.create({
-        messageId: `MSG-ACK-${queryId}`,
-        threadId,
-        queryId,
-        direction: 'OUTBOUND',
-        emailType: 'ACKNOWLEDGEMENT',
-        timestamp: sent.sentAt || new Date().toISOString(),
-        from: sent.from,
-        to: [sent.to].flat(),
-        subject: sent.subject,
-        body: sent.body,
-        providerMessageId: sent.providerMessageId || null,
-        providerThreadId: sent.providerThreadId || null,
-      });
-      await audit.record({ ...record(actor, 'ACKNOWLEDGEMENT_SENT'), queryId, details: `Acknowledgement sent to ${senderEmail}.` });
-      acknowledged = true;
-    } catch (error) {
-      // `unconfirmed` means Send was pressed and the transport could not tell
-      // whether the message left — only the NICeMail browser can say that. The
-      // acknowledgement is not recorded either way, so the flag is what stops
-      // the page inviting a blind retry that would email the inquirer twice.
-      const unconfirmed = Boolean(error.unconfirmed);
-
-      // Audited like a failed dispatch in final approval. The toast is gone
-      // once the Front Officer moves on; this row stays in the case's history,
-      // and for an unconfirmed send it is the only lasting record that the
-      // inquirer may already have the acknowledgement.
-      await audit.record({
-        ...record(actor, 'EMAIL_SEND_FAILED'),
-        queryId,
-        result: AUDIT_RESULTS.FAILURE,
-        error: error.message,
-        details: unconfirmed
-          ? `The acknowledgement to ${senderEmail} may have been sent but was not confirmed. Check the NICeMail Sent folder before retrying.`
-          : `The acknowledgement to ${senderEmail} could not be sent.`,
-      });
-
-      errors.push({
-        step: 'acknowledgement',
-        error: error.message,
-        ...(unconfirmed ? { unconfirmed: true } : {}),
-      });
-    }
+  // 4. Acknowledge the person who actually wrote in, and 5. forward to the
+  //    Officer-in-Charge. Each is sent at most once, whatever retries or
+  //    concurrent accepts do (caseMail.js); a failure costs that step, never
+  //    the case. A forward that did not go out leaves the case at
+  //    FRONT_OFFICE_VERIFICATION, which is the state the manual "Forward to
+  //    Officer-in-Charge" button acts on.
+  const ack = await caseMail.acknowledge({ queryId, actor });
+  const acknowledged = SENT.has(ack.outcome);
+  if (!acknowledged) {
+    errors.push(
+      stepError('acknowledgement', ack, 'The incoming message carried no sender address.'),
+    );
   }
 
-  // 5. Forward to the Officer-in-Charge. Same shape of guard — this is the step
-  //    that had none, and sent the same case to the OIC three times.
-  let forwarded = false;
-  const fwdExists = await EmailMessage.findOne({ queryId, emailType: 'FORWARD' }).lean();
-  if (fwdExists) {
-    forwarded = true;
-  } else {
-    try {
-      const sent = await emailService.forwardToOfficerInCharge({
-        queryId,
-        subject: message.subject || '(no subject)',
-        body: message.body || '',
-        providerThreadId: message.providerThreadId || null,
-        attachments: message.attachments || [],
-        // The summary already stored on the case. Passing it stops the forward
-        // generating a second one — the covering note and the case now carry
-        // the same text, which they did not before.
-        aiSummary: isUsable(aiSummary) ? aiSummary : null,
-      });
-      await EmailMessage.create({
-        messageId: `MSG-FWD-${queryId}`,
-        threadId,
-        queryId,
-        direction: 'OUTBOUND',
-        emailType: 'FORWARD',
-        timestamp: sent.sentAt || new Date().toISOString(),
-        from: sent.from,
-        to: [sent.to].flat(),
-        subject: sent.subject,
-        body: sent.body,
-        providerMessageId: sent.providerMessageId || null,
-        providerThreadId: sent.providerThreadId || null,
-      });
-      await QueryCase.updateOne(
-        { queryId },
-        { $set: { workflowState: 'PENDING_ASSIGNMENT', updatedAt: new Date().toISOString() } },
-      );
-      await audit.record({ ...record(actor, 'QUERY_FORWARDED'), queryId, details: `Forwarded to the Officer-in-Charge for assignment.` });
-      forwarded = true;
-    } catch (error) {
-      // The case stays at FRONT_OFFICE_VERIFICATION, which is exactly the state
-      // the manual "Forward to Officer-in-Charge" button acts on. Nothing is
-      // lost; the recovery path is the one that already exists.
-      errors.push({ step: 'forward', error: error.message });
-    }
-  }
+  const fwd = await caseMail.forward({ queryId, actor, source: created ? message : null });
+  const forwarded = SENT.has(fwd.outcome);
+  if (!forwarded) errors.push(stepError('forward', fwd));
 
   return {
     queryId,
-    created: !known,
+    created,
     alreadyDecided: Boolean(known && decidedQueryId),
     acknowledged,
+    // What became of the acknowledgement. On a repeat Accept this is the send
+    // that already happened (ALREADY_SENT, with its provider id) — nothing is
+    // sent twice, and the answer is the same.
+    acknowledgement: {
+      outcome: ack.outcome,
+      providerMessageId: ack.sent?.providerMessageId || ack.dispatch?.providerMessageId || null,
+      sentAt: ack.sent?.sentAt || ack.dispatch?.sentAt || null,
+    },
     forwarded,
     // Reported as a status rather than a boolean: "we fell back to the
     // deterministic summary because the model timed out" and "the model
