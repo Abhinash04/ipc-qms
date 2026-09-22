@@ -1,5 +1,5 @@
-import { chromium } from 'playwright-core';
 import browserConfig from '../../../../config/browserConfig.js';
+import { connect as cdpConnect } from './cdp.js';
 
 /**
  * Attaching to the NICeMail tab the human already opened and authenticated.
@@ -11,7 +11,8 @@ import browserConfig from '../../../../config/browserConfig.js';
  * the entire purpose, since a fresh browser is not logged in.
  *
  * Reading and sending mail happen in session.js, in a separate tab of the same
- * signed-in context; the tab found here is only the proof of that session.
+ * signed-in context; the tab found here is only the proof of that session, and
+ * is read — never driven.
  */
 
 /** The session states, worded for the operator rather than the log. */
@@ -133,6 +134,76 @@ export async function isAuthenticated(page) {
   return true;
 }
 
+/** Does this element exist and occupy space? The whole of what a page is asked. */
+const isElementVisible = (selector) => {
+  const element = document.querySelector(selector);
+  if (!element) return false;
+  const box = element.getBoundingClientRect();
+  return box.width > 0 && box.height > 0;
+};
+
+/**
+ * One tab, in the shape attachToNicemail uses.
+ *
+ * Deliberately three methods wide. Scoring a tab needs its URL and title, both
+ * of which CDP reports for every target without attaching to any of them, and
+ * the only question ever asked of the page itself is whether a password field
+ * is on it. Keeping the surface this small is what let the transport change
+ * underneath without touching the scoring or the session detection above — or
+ * the tests that pin them.
+ */
+function cdpPage(client, target) {
+  return {
+    targetId: target.targetId,
+    browserContextId: target.browserContextId,
+    url: () => target.url,
+    title: async () => target.title || '',
+    locator: (selector) => ({
+      first: () => ({
+        isVisible: async ({ timeout = browserConfig.timeoutMs } = {}) => {
+          const session = await client.attach(target.targetId);
+          try {
+            return Boolean(await session.evaluate(isElementVisible, selector, { timeout }));
+          } finally {
+            await session.close();
+          }
+        },
+      }),
+    }),
+  };
+}
+
+/**
+ * The default connector: a CDP client wearing just enough of a browser to be
+ * scored. `client` rides along on it for session.js, which needs to open the
+ * agent's own tab in the same browser.
+ */
+async function cdpBrowser(endpoint, { timeout } = {}) {
+  const client = await cdpConnect(endpoint, { timeoutMs: timeout });
+
+  let targets;
+  try {
+    targets = await client.listTargets();
+  } catch (error) {
+    await client.disconnect();
+    throw error;
+  }
+
+  // Page targets and iframe targets both: on the workplace front door the mail
+  // UI is a cross-origin iframe with a target of its own, and that iframe — not
+  // its host page — is what carries the signed-in mailbox.
+  const pages = targets
+    .filter((target) => target.type === 'page' || target.type === 'iframe')
+    .map((target) => cdpPage(client, target));
+
+  return {
+    client,
+    contexts: () => [{ pages: () => pages }],
+    isConnected: () => client.isConnected(),
+    close: () => client.disconnect(),
+  };
+}
+
 /**
  * Connect, find the NICeMail tab, confirm it is signed in.
  *
@@ -144,7 +215,7 @@ export async function isAuthenticated(page) {
  * nicImap.js. Production never passes it.
  */
 export async function attachToNicemail({ connect = null } = {}) {
-  const connector = connect || ((endpoint) => chromium.connectOverCDP(endpoint));
+  const connector = connect || cdpBrowser;
 
   let browser;
   try {
@@ -214,10 +285,9 @@ export async function attachToNicemail({ connect = null } = {}) {
 /**
  * Detach without disturbing the human's browser.
  *
- * On a browser obtained through `connectOverCDP`, Playwright's `close()`
- * disconnects and clears contexts *it* created rather than terminating Chrome
- * — Playwright has no separate `disconnect()`. We create no contexts, only
- * reuse existing pages, so there is nothing of the user's for it to tear down.
+ * `close()` here closes the agent's own CDP socket and nothing else: no tab of
+ * the operator's is closed, and Chrome keeps running. It must still be called
+ * on every path, or the socket — and the process holding it — outlives the work.
  */
 export async function release(browser) {
   try {
