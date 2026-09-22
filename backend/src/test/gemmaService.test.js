@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { generateSummary } from '../services/ai/gemmaService.js';
+import { generateSummary, status } from '../services/ai/gemmaService.js';
 import env from '../config/env.js';
 
 describe('Gemma AI Service Unit Tests', () => {
@@ -85,5 +85,45 @@ describe('Gemma AI Service Unit Tests', () => {
     expect(result.topics).toContain('certificate');
     expect(result.aiGenerated).toBe(false);
     expect(result.fallback).toBe(true);
+  });
+
+  /**
+   * `fetch failed` is all undici says; the reason is in `error.cause`. A whole
+   * live run logged nothing but that phrase while the actual fault was the
+   * machine's DNS resolver — which is diagnosable, and was not diagnosed.
+   */
+  it('logs why the call failed, not just that it did', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    global.fetch = vi.fn().mockRejectedValue(
+      Object.assign(new Error('fetch failed'), {
+        cause: Object.assign(new Error('getaddrinfo ENOTFOUND pravahai.aicte-india.org'), { code: 'ENOTFOUND' }),
+      }),
+    );
+
+    await generateSummary({ subject: 'x', body: 'y' });
+
+    expect(warn.mock.calls.some(([line]) => String(line).includes('ENOTFOUND'))).toBe(true);
+  });
+
+  /** The fallback is deliberate, but it must not be silent: /health reports it. */
+  it('remembers the last failure, so a deployment running on fallbacks can be seen', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    global.fetch = vi.fn().mockRejectedValue(new Error('Network error or timeout'));
+
+    await generateSummary({ subject: 'x', body: 'y' });
+
+    expect(status()).toMatchObject({ configured: true, endpoint: 'gemma.test.invalid' });
+    expect(status().lastFailureAt).toBeTruthy();
+    expect(status().lastError).toMatch(/summary/);
+
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ answer: JSON.stringify({ text: 'ok', keyPoints: [], topics: [] }) }),
+    });
+
+    await generateSummary({ subject: 'x', body: 'y' });
+
+    expect(status().lastSuccessAt).toBeTruthy();
+    expect(status().lastError).toBeNull();
   });
 });
