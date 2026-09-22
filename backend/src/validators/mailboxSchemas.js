@@ -31,6 +31,30 @@ export const mailboxDecisionSchema = z.object({
 });
 
 /**
+ * Listing the inbox. Without `limit` the whole list comes back, as it always
+ * has; with it, one page plus the total. `unreadOnly` keeps its old meaning:
+ * not yet handled by the Front Office — not "not read".
+ */
+export const listMessagesQuerySchema = z.object({
+  recipient: z.string().optional(),
+  unreadOnly: z
+    .string()
+    .optional()
+    .transform((value) => value === 'true'),
+  q: z
+    .string()
+    .trim()
+    .max(200)
+    // A control character is never typed into a search box, and a NUL is
+    // refused by MongoDB's $regex — which would surface as a mailbox outage.
+    .refine((value) => [...value].every((char) => char.charCodeAt(0) >= 32), 'contains a control character')
+    .optional()
+    .transform((value) => value || undefined),
+  limit: z.coerce.number().int().min(1).max(200).optional(),
+  offset: z.coerce.number().int().min(0).default(0),
+});
+
+/**
  * The incoming message as the Front Office inbox saw it.
  *
  * The server does not re-fetch the message before accepting it — under

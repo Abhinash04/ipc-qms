@@ -21,6 +21,10 @@ describe('401 — no session at all', () => {
   it.each([
     ['get', '/api/v1/emails/config'],
     ['get', '/api/v1/mailbox/messages'],
+    ['get', '/api/v1/mailbox/messages/MSG-00001'],
+    ['get', '/api/v1/mailbox/messages/MSG-00001/attachments/att_1'],
+    ['post', '/api/v1/mailbox/messages/MSG-00001/read'],
+    ['post', '/api/v1/mailbox/sync'],
     ['post', '/api/v1/emails/forward'],
     ['post', '/api/v1/ai/summary'],
     ['get', '/api/v1/attachments/att_00000000-0000-4000-8000-000000000000'],
@@ -58,6 +62,12 @@ describe('403 — a session without the role', () => {
   it('the mailbox is the Front Officer\'s — other staff may not read it', async () => {
     expect((await request(app).get('/api/v1/mailbox/messages').set(as(ROLES.REVIEWER))).status).toBe(403);
     expect((await request(app).get('/api/v1/mailbox/messages').set(as(ROLES.FRONT_OFFICE))).status).not.toBe(403);
+    expect((await request(app).get('/api/v1/mailbox/messages/MSG-00001').set(as(ROLES.REVIEWER))).status).toBe(403);
+    expect(
+      (await request(app).get('/api/v1/mailbox/messages/MSG-00001/attachments/att_1').set(as(ROLES.REVIEWER))).status,
+    ).toBe(403);
+    expect((await request(app).post('/api/v1/mailbox/messages/MSG-00001/read').set(as(ROLES.REVIEWER))).status).toBe(403);
+    expect((await request(app).post('/api/v1/mailbox/sync').set(as(ROLES.REVIEWER))).status).toBe(403);
   });
 
   it('wiping the whole mailbox is Super Admin only — not even the Front Officer', async () => {
