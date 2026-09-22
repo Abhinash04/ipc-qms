@@ -314,7 +314,13 @@ IPC AI Recommendations:`;
   }
 }
 
-const DRAFT_TIMEOUT_FACTOR = 5;
+// Each question is now its own small call rather than one call answering all of them, so the
+// per-call budget is much smaller than the old single-shot draft needed.
+const DRAFT_TIMEOUT_FACTOR = 2;
+
+// How many question calls may be in flight at once. The Gemma endpoint is shared, so a
+// ten-question enquiry must not open ten sockets on it.
+const DRAFT_CONCURRENCY = 4;
 
 const MAX_BODY_CHARS = 4000;
 
@@ -534,140 +540,273 @@ function normaliseSufficiency(value, paragraphs) {
   return paragraphs.length > 0 ? SUFFICIENCY.PARTIAL : SUFFICIENCY.NOT_ESTABLISHED;
 }
 
-function parseDraftJson(jsonStr, { subject, evidence, contextUsed }) {
-  try {
-    const parsed = JSON.parse(jsonStr);
-    const rawAnswers = Array.isArray(parsed?.answers) ? parsed.answers : [];
-    if (rawAnswers.length === 0) return null;
+/**
+ * Pulls the first balanced JSON object out of surrounding prose.
+ *
+ * A small model very often returns the right object wrapped in a sentence ("Sure, here is
+ * the JSON: {...} Let me know if..."). Throwing that reply away wastes a correct answer, so
+ * the object is salvaged before a repair call is considered. String contents are skipped so
+ * a brace inside a quoted paragraph cannot close the object early.
+ */
+export function extractJsonObject(text) {
+  const str = String(text || '');
+  const start = str.indexOf('{');
+  if (start === -1) return null;
 
-    const answers = evidence.map((item) => {
-      const match =
-        rawAnswers.find((a) => Number(a?.question) === item.number) ||
-        rawAnswers[item.number - 1] ||
-        null;
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
 
-      const paragraphs = Array.isArray(match?.paragraphs)
-        ? match.paragraphs.map((p) => String(p).trim()).filter(Boolean)
-        : [];
+  for (let i = start; i < str.length; i += 1) {
+    const ch = str[i];
 
-      const sufficiency =
-        item.passages.length === 0
-          ? SUFFICIENCY.NOT_ESTABLISHED
-          : normaliseSufficiency(match?.sufficiency, paragraphs);
-      const claimed = Array.isArray(match?.sources)
-        ? match.sources.map((s) => String(s).trim()).filter(Boolean)
-        : [];
-      const verified = claimed.filter((id) => item.sources.includes(id));
-      const passageIds = item.passages.map((p) => p.id);
-
-      const notEstablished =
-        typeof match?.notEstablished === 'string' ? match.notEstablished.trim() : '';
-
-      const topic =
-        typeof match?.topic === 'string' && match.topic.trim()
-          ? match.topic.trim()
-          : deriveTopic(item.question);
-
-      return {
-        question: item.number,
-        questionText: item.question,
-        topic,
-        sufficiency,
-        paragraphs: sufficiency === SUFFICIENCY.NOT_ESTABLISHED ? [] : paragraphs,
-        notEstablished: sufficiency === SUFFICIENCY.ANSWERED ? '' : notEstablished,
-        sources:
-          sufficiency === SUFFICIENCY.NOT_ESTABLISHED
-            ? []
-            : (verified.length > 0 ? verified : passageIds),
-      };
-    });
-
-    if (answers.every((a) => a.paragraphs.length === 0 && a.sufficiency !== SUFFICIENCY.NOT_ESTABLISHED)) {
-      return null;
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (ch === '\\') escaped = true;
+      else if (ch === '"') inString = false;
+      continue;
     }
 
-    return {
-      subject:
-        typeof parsed.subject === 'string' && parsed.subject.trim()
-          ? parsed.subject.trim()
-          : `Response regarding ${subject.trim() || 'your enquiry'}`,
-      answers: assertOneToOne(
-        evidence.map((item) => item.question),
-        answers,
-      ),
-      termsUsed: Array.isArray(parsed.termsUsed)
-        ? parsed.termsUsed.map((t) => String(t).trim()).filter(Boolean)
-        : [],
-      contextUsed,
-      aiGenerated: true,
-      fallback: false,
-    };
-  } catch {
-    if (typeof jsonStr === 'string' && jsonStr.trim().length > 10) {
-      const paragraphs = jsonStr
-        .split(/(?:\r?\n){2,}/)
-        .map((p) => p.trim())
-        .filter((p) => p.length > 0 && !/^```/i.test(p));
-
-      const answers = evidence.map((item, idx) => {
-        const passageIds = item.passages.map((p) => p.id);
-        const sufficiency =
-          item.passages.length === 0 ? SUFFICIENCY.NOT_ESTABLISHED : SUFFICIENCY.PARTIAL;
-
-        return {
-          question: item.number,
-          questionText: item.question,
-          topic: deriveTopic(item.question),
-          sufficiency,
-          paragraphs: sufficiency === SUFFICIENCY.NOT_ESTABLISHED ? [] : [paragraphs[idx] || paragraphs[0] || ''],
-          notEstablished: '',
-          sources: sufficiency === SUFFICIENCY.NOT_ESTABLISHED ? [] : passageIds,
-        };
-      });
-
-      return {
-        subject: `Response regarding ${subject.trim() || 'your enquiry'}`,
-        answers,
-        termsUsed: [],
-        contextUsed,
-        aiGenerated: true,
-        fallback: false,
-      };
+    if (ch === '"') inString = true;
+    else if (ch === '{') depth += 1;
+    else if (ch === '}') {
+      depth -= 1;
+      if (depth === 0) return str.slice(start, i + 1);
     }
-    return null;
   }
+
+  return null;
 }
 
 /**
- * Reusable system prompt template for QMS Response Draft Generation.
+ * Valid JSON is not yet an answer. A reply that parses but carries none of the answer
+ * fields — `{"subject":"S"}`, or some object the model invented — would otherwise be
+ * accepted and rendered as an empty section, so it is treated as a parse failure and sent
+ * to the repair call instead.
+ */
+function isAnswerShaped(parsed) {
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return false;
+  return typeof parsed.sufficiency === 'string' || Array.isArray(parsed.paragraphs);
+}
+
+function parseAnswerJson(rawAnswer) {
+  const cleaned = cleanApiResponse(rawAnswer);
+  if (!cleaned) return null;
+
+  for (const candidate of [cleaned, extractJsonObject(cleaned)]) {
+    if (!candidate) continue;
+    try {
+      const parsed = JSON.parse(candidate);
+      if (isAnswerShaped(parsed)) return parsed;
+    } catch {
+      // try the next candidate
+    }
+  }
+
+  return null;
+}
+
+const ANSWER_SCHEMA =
+  '{"topic": "<at most six words>", "sufficiency": "ANSWERED" | "PARTIAL" | "NOT_ESTABLISHED", "paragraphs": ["..."], "notEstablished": "<one sentence, or empty>", "sources": ["<ids shown above>"]}';
+
+/**
+ * Builds the prompt that answers ONE question from its own evidence.
+ *
+ * One call per question, rather than one call answering all of them: a small model holds a
+ * flat five-field object far more reliably than an N-element numbered array, a single
+ * question can fail without collapsing the whole draft, and evidence cannot bleed between
+ * questions. The envelope ({ query, caseContext, previousCommunication }) is kept so the
+ * template stays reusable, with caseContext carrying one question and its passages.
+ *
+ * Ordering matters: the evidence sits immediately before the schema, and the prompt ends on
+ * the "Answer JSON:" anchor, which is what actually holds a completion model to JSON.
  */
 export function buildDraftPromptTemplate({ query = '', caseContext = '', previousCommunication = '' }) {
-  return `You are an official QMS response drafting assistant for the Indian Pharmacopoeia Commission (IPC).
+  return `You are drafting ONE section of an official reply from the Indian Pharmacopoeia Commission (IPC), Ministry of Health & Family Welfare, Government of India.
 
-Your task is to generate a professional response draft for the incoming query.
+Answer the single question below using only the IPC material supplied with it.
 
-Rules:
-1. Carefully understand the incoming query before generating the draft.
-2. Use only the information provided in the query and supplied case context.
-3. Never invent facts, names, dates, reference numbers, statuses, policies, or commitments.
-4. Do not assume information that is not provided.
-5. Maintain formal, professional and official communication language.
-6. Keep the response clear, concise and directly relevant to the query.
-7. If the available information is insufficient to provide a factual answer, prepare a draft indicating that the matter requires verification by the concerned officer (set sufficiency to "NOT_ESTABLISHED"). Never leave a question silent.
-8. Do not mention AI, LLM, prompts, models, or internal processing.
-9. Do not provide analysis, reasoning, or commentary outside the response draft.
-10. Return only the response draft.
+RULES:
+1. Use only the supplied material, the enquiry and the summary. If a fact is not there, it does not exist for this reply. Never invent drug names, monograph numbers, thresholds, batch numbers, standards, dates or references.
+2. Set "sufficiency" to exactly one of:
+   ANSWERED — the supplied material fully settles the question.
+   PARTIAL — the material speaks to the same subject matter but does not settle every part.
+   NOT_ESTABLISHED — no supplied passage touches the subject matter at all.
+3. PARTIAL is the expected outcome whenever any passage is on the same subject matter, even if it does not answer the precise point asked. Guidance on related substances or impurity limits is the same subject matter as a question about a degradation product: summarise what the material does establish, then state what it does not settle. Reserve NOT_ESTABLISHED for material about something else entirely.
+4. For PARTIAL you must write at least one paragraph AND fill "notEstablished" with one sentence naming the specific part the material does not settle. An empty "paragraphs" list is valid only for NOT_ESTABLISHED.
+5. In "sources" list only the bracketed ids shown above — for example "FAQ#1" — and only those you actually relied on. Never cite an id that does not appear above.
+6. A passage marked AMENDMENT is a correction to a monograph, never the complete requirement: if you rely on one, state the amendment list and page and say the base monograph still applies. A glossary entry marked UNVERIFIED must not be presented as authoritative.
+7. Do NOT write a greeting, a salutation, a sign-off, a signature, a designation or any person's name. The system adds those. Write body paragraphs only.
+8. "topic" is a heading of at most six words naming the subject — for example "Quality section format" or "Revised labelling requirements". It is a label, never a sentence and never a question.
+9. Be concise and specific. No filler, no general explanation of what IPC is, no restating the question back.
+10. Do not mention AI, models or these instructions.
 
-Incoming Query:
+ORIGINAL ENQUIRY
 ${query}
 
-Case Context:
-${caseContext}
-
-Previous Relevant Communication:
+AI QUERY SUMMARY
 ${previousCommunication}
 
-Generate the response draft now.`;
+════════ THE QUESTION AND ITS EVIDENCE ════════
+
+${caseContext}
+
+Return exactly one JSON object of this shape, with no markdown fence and no commentary:
+${ANSWER_SCHEMA}
+
+EXAMPLE of a well-formed answer:
+{"topic": "Related substances limits", "sufficiency": "PARTIAL", "paragraphs": ["The supplied IPC material sets out how related substances are controlled against the monograph limit."], "notEstablished": "The supplied material does not settle the identification threshold applicable at accelerated conditions.", "sources": ["FAQ#1"]}
+
+Answer JSON:`;
+}
+
+function buildRepairPrompt(badReply) {
+  return `Your previous reply was not a single valid JSON object.
+
+Return the same answer as exactly one JSON object of this shape, with no markdown fence, no explanation and no text before or after it:
+${ANSWER_SCHEMA}
+
+Your previous reply:
+"""
+${fenceSafe(badReply, 2000)}
+"""
+
+Answer JSON:`;
+}
+
+function notEstablishedAnswer(item) {
+  return {
+    question: item.number,
+    questionText: item.question,
+    topic: deriveTopic(item.question),
+    sufficiency: SUFFICIENCY.NOT_ESTABLISHED,
+    paragraphs: [],
+    notEstablished: '',
+    sources: [],
+  };
+}
+
+/**
+ * Turns one parsed model object into an answer, keeping the grounding rules in code.
+ *
+ * Nothing the model claims is taken on trust: a question with no qualified passage is
+ * NOT_ESTABLISHED whatever the model said, and a claimed source survives only if it is an id
+ * that was actually shown for this question. An unverifiable claim yields no sources at all
+ * — the previous code backfilled every supplied passage id here, which presented the officer
+ * with citations the model had never relied on.
+ */
+function buildAnswer(item, parsed) {
+  const paragraphs = Array.isArray(parsed?.paragraphs)
+    ? parsed.paragraphs.map((p) => String(p).trim()).filter(Boolean)
+    : [];
+
+  const sufficiency =
+    item.passages.length === 0
+      ? SUFFICIENCY.NOT_ESTABLISHED
+      : normaliseSufficiency(parsed?.sufficiency, paragraphs);
+
+  const claimed = Array.isArray(parsed?.sources)
+    ? parsed.sources.map((s) => String(s).trim()).filter(Boolean)
+    : [];
+  const verified = [...new Set(claimed.filter((id) => item.sources.includes(id)))];
+
+  const notEstablished =
+    typeof parsed?.notEstablished === 'string' ? parsed.notEstablished.trim() : '';
+
+  const topic =
+    typeof parsed?.topic === 'string' && parsed.topic.trim()
+      ? parsed.topic.trim()
+      : deriveTopic(item.question);
+
+  return {
+    question: item.number,
+    questionText: item.question,
+    topic,
+    sufficiency,
+    paragraphs: sufficiency === SUFFICIENCY.NOT_ESTABLISHED ? [] : paragraphs,
+    notEstablished: sufficiency === SUFFICIENCY.ANSWERED ? '' : notEstablished,
+    sources: sufficiency === SUFFICIENCY.NOT_ESTABLISHED ? [] : verified,
+  };
+}
+
+function formatQuestionBlock(item) {
+  if (item.passages.length === 0) {
+    return `QUESTION ${item.number}
+${fenceSafe(item.question, 800)}
+
+  No IPC passage qualified as evidence for this question.`;
+  }
+
+  return `QUESTION ${item.number}
+${fenceSafe(item.question, 800)}
+
+  IPC GLOSSARY FOR QUESTION ${item.number}
+${formatContextForPrompt(item.glossary)}
+
+  IPC REFERENCE PASSAGES FOR QUESTION ${item.number}
+${formatPassagesForPrompt(item.passages)}`;
+}
+
+/**
+ * Answers one question: ask, salvage, repair once, else say nothing was established.
+ *
+ * A question with no qualified evidence is forced to NOT_ESTABLISHED anyway, so it never
+ * reaches the network. Every failure path degrades to NOT_ESTABLISHED with no sources —
+ * text that could not be parsed is never dressed up as a grounded answer.
+ */
+async function answerQuestion(item, { queryBlock, previousCommBlock }) {
+  if (item.passages.length === 0) {
+    return { answer: notEstablishedAnswer(item), status: 'no-evidence' };
+  }
+
+  const timeoutMs = env.GEMMA_TIMEOUT_MS * DRAFT_TIMEOUT_FACTOR;
+  const label = `Draft question ${item.number}`;
+
+  try {
+    const prompt = buildDraftPromptTemplate({
+      query: queryBlock,
+      caseContext: formatQuestionBlock(item),
+      previousCommunication: previousCommBlock,
+    });
+
+    const raw = await askGemma(prompt, { timeoutMs, label });
+
+    if (raw) {
+      const parsed = parseAnswerJson(raw);
+      if (parsed) return { answer: buildAnswer(item, parsed), status: 'answered' };
+
+      const repairedRaw = await askGemma(buildRepairPrompt(raw), {
+        timeoutMs,
+        label: `${label} (repair)`,
+      });
+
+      if (repairedRaw) {
+        const repaired = parseAnswerJson(repairedRaw);
+        if (repaired) return { answer: buildAnswer(item, repaired), status: 'repaired' };
+      }
+
+      console.warn(`[Gemma AI] ${label} did not return JSON. Reporting NOT_ESTABLISHED.`);
+    }
+  } catch (error) {
+    console.warn(`[Gemma AI] ${label} failed: ${error.message}. Reporting NOT_ESTABLISHED.`);
+  }
+
+  return { answer: notEstablishedAnswer(item), status: 'failed' };
+}
+
+/** Runs `fn` over `items` with at most `limit` in flight, preserving input order. */
+async function mapWithLimit(items, limit, fn) {
+  const results = new Array(items.length);
+  let next = 0;
+
+  const worker = async () => {
+    for (let index = next++; index < items.length; index = next++) {
+      results[index] = await fn(items[index]);
+    }
+  };
+
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return results;
 }
 
 export async function generateDraft({
@@ -694,52 +833,49 @@ export async function generateDraft({
     ? keyPoints.map((point) => `- ${String(point).trim()}`).join('\n')
     : '- No key points were extracted.';
 
-  const questionBlocks = evidence
-    .map((item) => {
-      if (item.passages.length === 0) {
-        return `QUESTION ${item.number}
-${fenceSafe(item.question, 800)}
-
-  No IPC passage qualified as evidence for this question.`;
-      }
-
-      return `QUESTION ${item.number}
-${fenceSafe(item.question, 800)}
-
-  IPC GLOSSARY FOR QUESTION ${item.number}
-${formatContextForPrompt(item.glossary)}
-
-  IPC REFERENCE PASSAGES FOR QUESTION ${item.number}
-${formatPassagesForPrompt(item.passages)}`;
-    })
-    .join('\n\n────────────────\n\n');
-
   const queryBlock = `Subject: "${fenceSafe(subject, 300) || 'Untitled Enquiry'}"\nFrom: ${fenceSafe(inquirerName, 120) || 'the inquirer'}\nBody:\n"""\n${fenceSafe(body) || 'No body content provided.'}\n"""`;
 
   const previousCommBlock = `Summary: ${fenceSafe(summaryText, 1000) || 'No summary available.'}\nKey points:\n${pointsBlock}`;
 
-  const prompt = buildDraftPromptTemplate({
-    query: queryBlock,
-    caseContext: questionBlocks,
-    previousCommunication: previousCommBlock,
-  });
+  const outcomes = await mapWithLimit(evidence, DRAFT_CONCURRENCY, (item) =>
+    answerQuestion(item, { queryBlock, previousCommBlock }),
+  );
 
-  const rawAnswer = await askGemma(prompt, {
-    timeoutMs: env.GEMMA_TIMEOUT_MS * DRAFT_TIMEOUT_FACTOR,
-    label: 'Draft',
-  });
+  const answers = assertOneToOne(
+    evidence.map((item) => item.question),
+    outcomes.map((outcome) => outcome.answer),
+  );
 
-  if (rawAnswer) {
-    const parsed = parseDraftJson(cleanApiResponse(rawAnswer), { subject, evidence, contextUsed });
-    if (parsed) return parsed;
-    console.warn('[Gemma AI] Could not parse the draft reply. Using fallback.');
+  const tally = (status) => outcomes.filter((outcome) => outcome.status === status).length;
+  const stats = {
+    questions: evidence.length,
+    answered: tally('answered'),
+    repaired: tally('repaired'),
+    failed: tally('failed'),
+    noEvidence: tally('no-evidence'),
+  };
+
+  // The model contributed nothing: report the fallback honestly rather than dressing up a
+  // draft of empty sections as an AI answer.
+  if (stats.answered + stats.repaired === 0) {
+    console.warn('[Gemma AI] No question produced a usable answer. Using fallback draft.');
+    assertOneToOne(
+      evidence.map((item) => item.question),
+      fallback.answers,
+    );
+    return { ...fallback, stats };
   }
 
-  assertOneToOne(
-    evidence.map((item) => item.question),
-    fallback.answers,
-  );
-  return fallback;
+  return {
+    subject: `Response regarding ${subject.trim() || 'your enquiry'}`,
+    answers,
+    // Derived from what survived verification, not from a list the model asserts.
+    termsUsed: [...new Set(answers.flatMap((answer) => answer.sources))],
+    contextUsed,
+    aiGenerated: true,
+    fallback: false,
+    stats,
+  };
 }
 
 export const gemmaService = {
@@ -747,6 +883,7 @@ export const gemmaService = {
   recommendOfficial,
   generateDraft,
   buildDraftPromptTemplate,
+  extractJsonObject,
   decomposeEnquiry,
   dedupeQuestions,
   deriveTopic,

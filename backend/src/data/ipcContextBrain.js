@@ -665,7 +665,9 @@ export function formatContextForPrompt(entries = []) {
   return entries
     .map((entry) => {
       const trust = entry.verified ? '' : ' [UNVERIFIED — do not present as authoritative]';
-      return `- ${entry.term} (${entry.category}): ${entry.definition} [source: ${entry.source?.name || 'unknown'}]${trust}`;
+      // Leading id for the same reason as formatPassagesForPrompt: glossary ids are part of
+      // the evidence set a claimed source is verified against.
+      return `- [${entry.id}] ${entry.term} (${entry.category}): ${entry.definition} [source: ${entry.source?.name || 'unknown'}]${trust}`;
     })
     .join('\n');
 }

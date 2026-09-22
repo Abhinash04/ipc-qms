@@ -14,7 +14,9 @@
     "nic:verify": "node src/scripts/nicVerify.js",
     "nic:browser:discover": "node src/scripts/nicBrowserDiscover.js",
     "ingest:ipc": "node scripts/ingestIpcDocs.mjs",
-    "db:reset": "node scripts/resetWorkflowState.mjs"
+    "db:reset": "node scripts/resetWorkflowState.mjs",
+    "draft:trace": "node src/scripts/testDraftLive.js",
+    "draft:eval": "node src/scripts/evalDraft.js"
   },
   "keywords": [],
   "author": "",

@@ -163,7 +163,11 @@ export function formatPassagesForPrompt(chunks = []) {
         chunk.kind === 'AMENDMENT'
           ? ' [AMENDMENT — a correction to a monograph, not the complete requirement; always state the amendment list and page]'
           : '';
-      return `- [${ref} › ${chunk.section}]${caution}\n${chunk.text}`;
+      // The id leads the line because it is the citation token: generateDraft verifies a
+      // model's claimed "sources" against these ids, so a passage the model cannot name by
+      // id can never be cited. Before this, only the title/section was shown and every
+      // claim failed verification silently.
+      return `- [${chunk.id}] ${ref} › ${chunk.section}${caution}\n${chunk.text}`;
     })
     .join('\n\n');
 }

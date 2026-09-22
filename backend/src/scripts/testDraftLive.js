@@ -2,6 +2,9 @@ import env from '../config/env.js';
 import { generateDraft, decomposeEnquiry } from '../services/ai/gemmaService.js';
 import { retrieveContext } from '../data/ipcKnowledge.js';
 import { selectContext } from '../data/ipcContextBrain.js';
+// Reaches across the package boundary on purpose: this script exists to show the email the
+// officer actually sees, and the frontend composer is what renders it. A copy here would
+// drift. Safe to import directly — the composer is dependency-free ESM.
 import { assembleDraftEmail } from '../../../frontend/src/services/ai/draftComposer.js';
 import { qualifyPassages } from '../data/evidenceQualification.js';
 
@@ -33,7 +36,7 @@ const ENQUIRY = {
 };
 
 console.log(`GEMMA_API_URL: ${env.GEMMA_API_URL || '(not configured — will use the fallback)'}`);
-console.log(`timeout: ${env.GEMMA_TIMEOUT_MS}ms, x5 for drafting\n`);
+console.log(`timeout: ${env.GEMMA_TIMEOUT_MS}ms, x2 per question call\n`);
 
 console.log('--- decomposition ---');
 const questions = await decomposeEnquiry(ENQUIRY);
@@ -62,6 +65,12 @@ const draft = await generateDraft(ENQUIRY);
 console.log(`took ${Date.now() - started}ms; aiGenerated=${draft.aiGenerated} fallback=${draft.fallback}\n`);
 
 console.log(`questions: ${questions.length}   answers: ${draft.answers.length}`);
+if (draft.stats) {
+  const { answered, repaired, failed, noEvidence } = draft.stats;
+  console.log(
+    `per question: ${answered} parsed first try, ${repaired} repaired, ${failed} unusable, ${noEvidence} skipped (no evidence)`,
+  );
+}
 console.log(
   `sufficiency: ${draft.answers.map((a) => `${a.question}=${a.sufficiency}`).join(' ')}\n`,
 );
