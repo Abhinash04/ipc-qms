@@ -18,7 +18,7 @@ npm run dev        # http://localhost:5173
 | `npm run build:check` | Production build, then enforce the bundle budget (`scripts/check-bundle-budget.mjs`) |
 | `npm run preview` | Serve the build |
 | `npm run lint` | ESLint |
-| `npm test` | Vitest, 42 test files (787 tests) |
+| `npm test` | Vitest, 44 test files (804 tests) |
 | `npm run test:watch` | Vitest watch mode |
 | `npm run test:e2e` | Playwright, specs in `e2e/` — same as `npx playwright test`. See below |
 | `npm run doctor` | React Doctor locally (the same check CI runs) |
@@ -28,9 +28,9 @@ against them. Unlike the Vitest suite it needs a **local MongoDB on `127.0.0.1:2
 own `qms_e2e` database and wipes it between specs — and a one-off
 `npx playwright install chromium`. Backend settings come from `backend/.env.e2e`, which is
 credential-free and committed on purpose; `JWT_SECRET` and `QMS_SEED_PASSWORD` are deliberately not
-in it and still come from `backend/.env`. Stop a hand-started backend first: with something already
-on `:5000` Playwright reuses it, along with whatever database and mail transport it was started
-with.
+in it and still come from `backend/.env`. **Stop a hand-started backend first**: `reuseExistingServer`
+is `false` for the backend, so anything already on `:5000` makes the run fail outright rather than be
+adopted along with whatever database and mail transport it holds.
 
 **Environment** — one variable:
 
@@ -246,7 +246,7 @@ Office account sees the NICeMail mailbox on this same page; the server chooses t
 signed in, and the client does nothing different. That mailbox is filled by a browser agent reading
 a signed-in NICeMail tab, and a failed read does not fail the inbox request: the server answers 200
 with what it already stored and reports the failure in a `sync` field. When `sync.ok === false` the
-page shows **NICeMail could not be read — this list may be out of date**, with the reason and its
+page shows **The mailbox could not be read — this list may be out of date**, with the reason and its
 stage, rather than something that looks like an empty inbox. No other mailbox's response carries
 `sync`, so the notice never appears for them. See
 [`../docs/NIC_BROWSER_AGENT.md`](../docs/NIC_BROWSER_AGENT.md#13-troubleshooting).
@@ -266,7 +266,7 @@ All modules share `services/api/axiosClient.js` (`withCredentials: true` for the
 | Module | Endpoints |
 |---|---|
 | `authService.js` | `POST /auth/login`, `POST /auth/logout`, `GET /auth/me` |
-| `mailboxService.js` | `/emails/config`, `/emails/enquiry`, `/emails/acknowledgement`, `/emails/forward`, `/emails/response`, `/mailbox/*` |
+| `mailboxService.js` | `/emails/config`, `/emails/enquiry`, `/emails/acknowledgement`, `/emails/forward`, `/emails/response`, `/mailbox/*`: `GET /mailbox/messages` (`q`; `limit`/`offset` add `total`; `unreadOnly` means awaiting validation, not `isRead`), `GET /mailbox/messages/:messageId` (adds `bodyHtml`), `POST /mailbox/messages/:messageId/read` (QMS-local), `POST /mailbox/sync` (NICeMail, 202), plus `mailboxAttachmentUrl()` for `/mailbox/messages/:messageId/attachments/:attachmentId` |
 | `attachmentService.js` | `POST /attachments`, `GET /attachments/:id/meta`, plus `attachmentUrl()` |
 | `adminService.js` | `GET /audit`, `/audit/summary`, `/audit/query/:queryId` |
 | `aiService.js` | `POST /ai/summary`, `/ai/draft`, `/ai/recommend` |
@@ -348,7 +348,7 @@ configured by `playwright.config.js` at the package root.
 
 ## Tests
 
-42 files (787 tests), `npm test` (Vitest 4 + Testing Library, jsdom).
+44 files (804 tests), `npm test` (Vitest 4 + Testing Library, jsdom).
 
 The harness is deliberately strict:
 
@@ -363,12 +363,24 @@ The harness is deliberately strict:
 - **A console trap** — `afterEach` asserts that nothing wrote to `console.error` or `console.warn`.
   Any test producing console output fails. Several modules note this constraint in their source.
 
+`mailboxService` is auto-mocked per suite and pointed at `test/fakeCaseMail.js` by
+`installFakeCaseMail(mailboxService)`. That is not decoration: the three case emails are server
+operations now, and the record of one, its audit row and the case's move to `PENDING_ASSIGNMENT` or
+`CLOSED` all come back from the server — a bare automock resolving to `undefined` produces none of
+them. The fake also answers the way the server answers, including the two outcomes that must never
+be read as "try again": `ALREADY_SENT` and `UNCERTAIN`.
+
 Notable suites: `routes.test.jsx` renders **every generated route for the role that owns it**;
 `enumGuard.test.js` scans source for references to workflow/audit enum members that do not exist —
 it is what caught `AUDIT_EVENT.QUERY_PULLEDBACK`, a misspelling that had every pullback writing
 `event: undefined`; `lifecycle.test.js` carries one email end-to-end to `CLOSED` and asserts one
 audit event per transition; `notifications.test.jsx` proves a toast follows a committed transition
-rather than a click.
+rather than a click; `outboundIdempotency.test.jsx` covers the send UX — Approve disabled while its
+request is open, concurrent approvals collapsed into one, `ALREADY_SENT` reported as a closed case
+rather than a failure, and an unconfirmed send offering *It was sent* / *It was not sent* in place
+of a retry; `mailboxAutoSync.test.jsx` covers the polling toasts — one per outage rather than one
+per poll, the 1–2–5-minute backoff, the recovery notice, and a waiting count announced only when
+it grows.
 
 > `routes/routeElements.eager.jsx` has no importers and **must not be deleted**. Vitest resolves
 > `@/routes/routeElements` to it through a path alias in `vite.config.js`, because tests drive pages
@@ -385,8 +397,22 @@ Express server and a real MongoDB, with nothing mocked. Prerequisites are a loca
 `qms_e2e` database. `JWT_SECRET` and `QMS_SEED_PASSWORD` stay in the gitignored `backend/.env`.
 
 The specs share one database and each wipes it first, so the config runs one worker, no parallelism
-and no retries. Playwright starts both servers itself — stop a hand-started backend before running
-it, or it reuses that one along with whatever database and mail transport it holds.
+and no retries. Playwright starts both servers itself and **refuses to adopt one it did not start**:
+a backend already listening on `:5000` fails the run with *"http://localhost:5000 is already used"*.
+That is deliberate — a backend left over from a development session is typically pointed at the real
+database and a real mailbox, and adopting it would run the suite against both. Stop it and re-run.
+
+Four specs:
+
+| Spec | What it holds down |
+|---|---|
+| `lifecycle.spec.js` | One enquiry from arrival to closure, through the screens each role uses, asserted against MongoDB at every stage; plus a failed send that leaves the case open and the retry that closes it. |
+| `mailboxAccept.spec.js` | The intake gate: accept, reject, and the same message decided twice. |
+| `twoInquirers.spec.js` | **Two external inquirers, one mailbox.** Both accepted, both carried to closure **interleaved**, and each answered exactly once at their own address — neither seeing anything of the other's. |
+| `dispatchIdempotency.spec.js` | **One answer per case, however hard it is asked for.** Approve held open and clicked four times; three approvals fired at the API at once; a blocked delivery, its failure, and a retry that sends once. |
+
+The shared stage steps live in `e2e/helpers/workflow.js`, so a spec says what it is testing rather
+than how to drive five roles through five screens.
 
 ## Known dead code
 

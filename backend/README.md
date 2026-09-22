@@ -5,7 +5,7 @@ throughout** (`"type": "module"`) — no TypeScript, no CommonJS.
 
 ## What is implemented
 
-36 route registrations across ten resource routers: health, auth, emails, mailbox, AI, attachments,
+41 route registrations across ten resource routers: health, auth, emails, mailbox, AI, attachments,
 NIC, audit, queries and pullback. Session authentication (JWT in an httpOnly cookie) with role-based
 route guards and Zod request validation. MongoDB persistence for Query Cases, the workflow record,
 the mailbox and the audit trail. Three email transports — mock, Gmail OAuth and NICeMail SMTP — plus,
@@ -52,7 +52,8 @@ Operational scripts:
 | `npm run gmail:preflight` | Per-identity Gmail OAuth check — verifies scopes and detects a disabled Gmail API. |
 | `npm run nic:preflight` | Read-only NICeMail IMAP/SMTP reachability + auth probe. Never marks mail read. |
 | `npm run nic:verify` | Live three-level NICeMail verification (read, send, receipt). Sends exactly one message, only to `NIC_TEST_RECIPIENT`. |
-| `npm run nic:browser:discover` | Read-only DOM discovery against a NICeMail Chrome tab over CDP. |
+| `npm run nic:browser:discover` | Read-only inspection of the NICeMail session over CDP: which document holds the mailbox, how the selector registry resolves, the mail rows, and a diagnosis. Flags after `--`: `--json`, `--rows=N`, `--show-addresses`, `--agent-tab`. |
+| `npm run nic:browser:calibrate` | Calibrates the NICeMail compose form in the agent's own background tab. It opens one draft, checks From, tries recipient, subject and body entry, visits Sent and Drafts, then discards the draft. **It never presses Send.** Flags after `--`: `--attach` (also attaches a small generated PDF), `--show-addresses`. |
 
 Three further live-probe scripts have **no npm alias** and must be run directly:
 `node src/scripts/testGemmaLive.js`, `testRecommendationLive.js`, `testDraftLive.js`. They call the
@@ -70,10 +71,11 @@ src/
   controllers/    one per resource (ai, attachment, audit, auth, email, health, mailbox, nic,
                   pullback, query)
   data/           IPC knowledge base + retrieval layer (see below)
-  middleware/     verifyToken, verifyRole/verifyAction, validateBody, authorizeAttachmentAccess,
-                  errorHandler, notFound
+  middleware/     verifyToken, verifyRole/verifyAction, validateBody, validateQuery,
+                  authorizeAttachmentAccess, errorHandler, notFound
   models/         Mongoose schemas — AuditEvent, EmailMessage, EmailThread, MailboxMessage(+Counter),
-                  Notification, QueryCase, QueryCounter, ResponseVersion, Review, User, WorkflowStep
+                  Notification, OutboundEmail, QueryCase, QueryCounter, ResponseVersion, Review,
+                  User, WorkflowStep
   routes/         index.js mounts ten resource routers under /api/v1
   scripts/        operational + diagnostic CLIs
   services/
@@ -81,14 +83,16 @@ src/
     attachments/  policy, disk store, fail-closed resolver, error type
     audit/        auditService.js — record/list/summary, Mongo-or-buffer
     auth/         tokenService.js (stateless JWT), userDirectory.js (seeded accounts)
-    email/        emailService.js + transports/, mailbox/, nic/, templates/
-  test/           37 *.test.js + setup.js + helpers/
+    email/        emailService.js, caseMail.js, outbox.js, delivery.js
+                  + transports/, mailbox/ (incl. health.js), nic/, templates/
+  test/           50 *.test.js + setup.js + helpers/ + support/memoryDb.js
   utils/          (empty — .gitkeep only)
   validators/     Zod schemas — queryStateSchemas.js, pullbackSchemas.js
 scripts/
   ingestIpcDocs.mjs   build step for src/data/ipcKnowledge.json
 storage/
   attachments/        attachment bytes + .json sidecars (gitignored)
+  nic-browser/        nic:browser:discover --json reports (gitignored)
 ```
 
 ## API
@@ -134,7 +138,11 @@ endpoints that must not be retried blindly.
 ### Mailbox
 | Method | Path | Guards |
 |---|---|---|
-| GET | `/mailbox/messages` | `verifyRole(FRONT_OFFICE, SUPER_ADMIN)` |
+| GET | `/mailbox/messages` | `verifyRole(FRONT_OFFICE, SUPER_ADMIN)` + `validateQuery` |
+| GET | `/mailbox/messages/:messageId` | `verifyRole(FRONT_OFFICE, SUPER_ADMIN)` |
+| GET | `/mailbox/messages/:messageId/attachments/:attachmentId` | `verifyRole(FRONT_OFFICE, SUPER_ADMIN)` |
+| POST | `/mailbox/messages/:messageId/read` | `verifyRole(FRONT_OFFICE, SUPER_ADMIN)` |
+| POST | `/mailbox/sync` | `verifyRole(FRONT_OFFICE, SUPER_ADMIN)` |
 | POST | `/mailbox/messages/:messageId/accept` | `verifyRole(FRONT_OFFICE, SUPER_ADMIN)` + `validateBody` |
 | POST | `/mailbox/messages/:messageId/decision` | `verifyRole(FRONT_OFFICE, SUPER_ADMIN)` + `validateBody` |
 | GET | `/mailbox/decisions` | `verifyRole(FRONT_OFFICE, SUPER_ADMIN)` |
@@ -148,13 +156,36 @@ operate on a real account.
 
 **Which mailbox a request acts on is decided by who is signed in** (`resolveMailbox` in
 `controllers/mailboxController.js`). With `NIC_BROWSER_MAILBOX=true`, the Front Office user whose
-sign-in address is `NIC_EMAIL` always gets the NICeMail browser mailbox for `GET /messages`,
-`/accept`, `/ingested` and `DELETE /messages/:id`, and `?recipient=` is ignored; everyone else gets
-the `MAILBOX_SOURCE` mailbox, where `?recipient=` still selects the address. The decision routes are
-keyed by message id alone and belong to neither. For that user `GET /messages` also carries a `sync`
-field — `{ ok, at, stored, stage, error, running }`, the outcome of the last background read of the
-live inbox — and answers 200 from what is stored even when that read failed. See
-[NICeMail browser mailbox](#the-second-front-office-mailbox).
+sign-in address is `NIC_EMAIL` always gets the NICeMail browser mailbox for `GET /messages`, the
+message routes below, `/accept`, `/ingested` and `DELETE /messages/:id`, and `?recipient=` is
+ignored; everyone else gets the `MAILBOX_SOURCE` mailbox, where `?recipient=` still selects the
+address — but never a NICeMail row, which the Mongo primary store does not list, change or delete.
+The decision routes are keyed by message id alone and belong to neither. For that user
+`GET /messages` also carries a `sync` field —
+`{ ok, at, stored, stage, error, running, failed, failedMessages, quarantined, remaining }`, the
+outcome of the last background read of the live inbox — and answers 200 from what is stored even
+when that read failed. See [NICeMail browser mailbox](#the-second-front-office-mailbox).
+
+**Reading messages.** `GET /messages` takes `unreadOnly`, `recipient`, `q` (at most 200 characters,
+regex-escaped, searching `from`, `subject` and `body`), `limit` (1–200) and `offset`, validated by
+`validateQuery` into `req.validatedQuery` (400 naming the fields otherwise). Without `limit` the whole
+list comes back, as before; with it, one page plus `total`, `limit` and `offset`. Each message is the
+stored document without `bodyHtml`, plus `toAddresses`, `isRead` (`null` for a mailbox with no read
+state), `status` (`NEW` / `READ` / `ACCEPTED` / `REJECTED`, derived in
+`services/email/mailbox/messageView.js`, never stored), `linkedCase`
+(`{ queryId, workflowState, businessStatus }` or `null`) and `createdAt`. `unreadOnly` still means
+"not yet handled" (`ingested: false`), **not** "not read" — that is `isRead`.
+
+- `GET /messages/:messageId` — the same view plus `bodyHtml`; 404 `{ error, messageId }`.
+- `GET /messages/:messageId/attachments/:attachmentId[?download=1]` — the attachment only if it is on
+  that message in the caller's mailbox, else 404; served by the same `sendAttachment` as
+  `/attachments/:id` and audited `ATTACHMENT_DOWNLOADED` with the `messageId`.
+- `POST /messages/:messageId/read` — QMS-local read state (`readAt`, `readByUserId`); NICeMail's own
+  is never touched. Idempotent, `EMAIL_MARKED_READ` on the first call only; 409 for a mailbox that
+  keeps no read state.
+- `POST /sync` — NICeMail: 202 `{ supported: true, started, sync }`, `started: false` while a sync
+  runs or within 15 s of the last, `SYNC_STARTED` audited on a real start. Any other mailbox: 200
+  `{ supported: false, started: false, sync }`. 503 without MongoDB.
 
 **`/accept` and `/decision` are the validation gate.** An incoming message becomes a Query Case only
 because a Front Officer accepted it; rejecting records the judgement and creates nothing.
@@ -165,8 +196,10 @@ The whole intake sequence in one request (`services/email/mailbox/acceptMessage.
 ID, create the case, record the `ACCEPTED` `MailboxDecision`, summarise the enquiry onto the case,
 send the acknowledgement to the real sender, **and forward to the Officer-in-Charge**. An accepted
 case therefore lands at `PENDING_ASSIGNMENT`, not `FRONT_OFFICE_VERIFICATION`, and the audit trail
-reads `QUERY_RECEIVED → QUERY_REGISTERED → AI_SUMMARY_GENERATED → ACKNOWLEDGEMENT_SENT →
-QUERY_FORWARDED`, then `EMAIL_CLASSIFIED` when the controller records the decision.
+reads `QUERY_RECEIVED → QUERY_REGISTERED → CASE_ASSOCIATED → AI_SUMMARY_GENERATED →
+ACKNOWLEDGEMENT_SENT → QUERY_FORWARDED`, then `EMAIL_CLASSIFIED` when the controller records the
+decision. `CASE_ASSOCIATED` carries the mailbox message's id and the `queryId`, and is written only by
+the request whose insert created the case, so it appears once however many accepts race.
 
 The body is the message as the inbox saw it — `from`, `to`, `cc`, `bcc`, `subject`, `body`,
 `receivedAt`, `providerMessageId`, `providerThreadId`, `attachments` (`validators/mailboxSchemas.js`).
@@ -459,7 +492,7 @@ writes an explicit null on every acknowledgement, forward and response — and s
 them. The partial filter is the constraint actually intended: unique among records that came from an
 incoming message, ignored by those that did not.
 
-**Models** (`src/models/`, 13 across 12 files):
+**Models** (`src/models/`, 14 across 13 files):
 
 | Model | Holds |
 |---|---|
@@ -470,8 +503,9 @@ incoming message, ignored by those that did not.
 | `Notification` | per-role / per-user notifications |
 | `EmailMessage`, `EmailThread` | the case's email record |
 | `AuditEvent` | 14 fields, indexed on timestamp/actorType/actorId/auditId/action/queryId/messageId. `action` is deliberately *not* an enum so a new action never fails to record; `auditId` is indexed but **not unique**, because the counter behind it lives in a browser |
-| `MailboxMessage` + `Counter` | the ingest mailbox and the numeric `MSG-00001` sequence. Also holds the NICeMail browser mailbox's messages: `source: 'nic-browser'`, a `providerMessageId` under a unique partial index, and `removedAt`, which hides a deleted message so the next sync cannot bring it back |
+| `MailboxMessage` + `Counter` | the ingest mailbox and the numeric `MSG-00001` sequence. Also holds the NICeMail browser mailbox's messages: `source: 'nic-browser'`, a `providerMessageId` under a unique partial index, and `removedAt`, which hides a deleted message so the next sync cannot bring it back. Additive, insert-only and not backfilled: `toAddresses` (the To header; `to` stays the mailbox), `providerThreadId`, `bodyHtml` (null over 1,000,000 chars), `providerUnread`, `receivedAtSource` (`message`/`sync`), the QMS read state `readAt`/`readByUserId`, and `createdAt`. Compound index `{to, source, removedAt, receivedAt: -1, mailboxMessageId: -1}` for the inbox list |
 | `MailboxDecision` | the Front Officer's accept/reject on one incoming message |
+| `OutboundEmail` | one row per case email — `dispatchKey` = `"${emailType}:${queryId}"`, **unique**. `status` is `SENDING`/`SENT`/`FAILED`/`UNCERTAIN`, with `claimToken`, `leaseExpiresAt`, `attempts`, `recipients`, `rfcMessageId`, `lastError`, `resolvedBy` and a capped `history`. The unique key is the idempotency guard: see *One email per case* below |
 | `User` | seeded directory; written on connect, **not yet read for authentication** |
 | `QueryCounter` | the workflow store's id counters, held as an object |
 
@@ -519,7 +553,9 @@ credentials out of the connection string before printing it.
 functions (`deliver`, `list`, `markIngested`, `remove`, `reset`, `stats`), and the facade picks one
 at call time — forced override, then `MAILBOX_SOURCE=gmail`, then `MAILBOX_SOURCE=nic`, then Mongo
 if connected, else in-memory. `supportsDelivery()` is false for both Gmail and NICeMail, because a
-real inbox cannot be written into.
+real inbox cannot be written into. The facade's `get(recipient, id)` uses a store's own lookup, or
+finds the message in its list. `mongoIpcMailbox` shares its collection with the NICeMail browser
+mailbox and never lists, changes, deletes or clears a `source: 'nic-browser'` row.
 
 A fifth store, `nicBrowserMailbox`, is not chosen by `MAILBOX_SOURCE`: `mailbox.forUser(user)`
 returns it only for the NICeMail Front Office (see
@@ -582,6 +618,70 @@ SHA-256 before any outbound send; an unknown, missing or corrupt attachment thro
 `AttachmentUnavailableError` (409) naming every offender. Nothing is ever partially resolved, so a
 recipient cannot receive an apparently-complete message with documents silently missing.
 
+### One email per case
+
+Every outbound case email — acknowledgement, forward, final response — is sent by
+`services/email/caseMail.js` through `services/email/outbox.js`, from **intake, final approval and
+the retry buttons alike**. One guard per email, not one per path.
+
+Two rules, and everything else follows from them.
+
+**Nothing about the email comes from the request.** `caseMail` builds each send from the stored
+case: the acknowledgement and the final response go to `inquirer.email`, set at intake from the
+`From` header and write-once thereafter; the forward goes to the configured Officer-in-Charge; the
+body of a response is the `FINAL_APPROVED` `ResponseVersion`; the route is `transportFor
+(sourceMailbox)`. A caller names *which case* — never who is written to or what they are told. The
+three `/emails/*` endpoints therefore take `{ queryId }` and ignore a body `to`.
+
+**The claim is atomic.** `outbox.dispatchOnce` inserts an `OutboundEmail` row keyed on a unique
+`dispatchKey` (`"${emailType}:${queryId}"`). Whoever inserts it sends; everyone else is answered
+from the row — `ALREADY_SENT` (200), `IN_PROGRESS` while a three-minute lease is live (409), or, for
+a lease that expired mid-send, `UNCERTAIN`. A `FAILED` row can be re-claimed with an atomic
+`FAILED → SENDING` flip. There is no read-then-send window, which is what the previous guard had:
+four Approve clicks during one twenty-two-second send all read "no response yet" and all proceeded.
+
+`services/email/delivery.js` then classifies any failure as:
+
+- **`NOT_SENT`** — provably never reached the provider (DNS, `ECONNREFUSED`, `EHOSTUNREACH`, TLS,
+  any HTTP 4xx, a NICeMail failure before Send). Safe to retry, and one quick retry (~2 s) happens
+  automatically for the transient network cases.
+- **`UNCERTAIN`** — may have been delivered (HTTP 5xx, `ECONNRESET`, `ETIMEDOUT`, a client timeout,
+  a NICeMail send pressed but unconfirmed). **Never retried automatically.**
+
+For Gmail an `UNCERTAIN` dispatch is reconciled against the Sent folder — `in:sent
+rfc822msgid:<id>`, falling back to a recipient-and-date search with an exact `Subject` and
+`Message-ID` comparison — and is only called `NOT_SENT` after a 60-second settle window. NICeMail
+and the mock cannot be checked, so a person answers instead:
+`POST /queries/:queryId/outbound/resolve` records `SENT` (bookkeeping runs as if it had sent; a
+final response closes the case) or `NOT_SENT` (unlocks the retry), audited as
+`EMAIL_DELIVERY_CONFIRMED` / `EMAIL_DELIVERY_DENIED`. Neither sends anything.
+
+The `EmailMessage` ids are deterministic (`MSG-ACK-`/`MSG-FWD-`/`MSG-RESP-` + `queryId`), so a crash
+between sending and recording self-heals on the next attempt instead of duplicating, and a
+bookkeeping failure never turns a sent email into a reported failure. A case that predates the
+ledger but already has an outbound message of that type gets a `SENT` row written on first contact,
+so old cases are never re-sent.
+
+`npm run db:reset` and `scripts/resetWorkflowState.mjs` clear `outboundemails` along with
+everything else — Case IDs restart after a reset, so a stale ledger row would silently suppress the
+first email of a new case.
+
+### When the mailbox cannot be read
+
+A provider outage is an outage, not a stream of events. `services/email/mailbox/health.js` holds the
+state: the first failure logs once and audits `SYNC_FAILED`, repeats are counted and logged at most
+once every five minutes, and recovery logs and audits `SYNC_RECOVERED` with the duration and the
+number of attempts. `GET /mailbox/messages` answers **503** with `{ error, retryable: true, sync }`
+and `Retry-After: 30` for a transient failure, **502** for an authentication failure (pointing at
+`npm run gmail:preflight`), and the state is repeated on `GET /health`. The UI shows one standing
+banner rather than one permanent toast per poll.
+
+A steady-state Gmail poll is **two list calls** (inbox and `is:unread`) plus a `messages.get` only
+for ids not already in a 500-entry cache, at most four in flight, with concurrent identical polls
+coalesced. The Gmail client has a 30-second timeout. Previously a poll was one list plus up to 25
+parallel gets with no timeout, so a DNS outage meant 26 ten-second lookups per poll and 30–46-second
+polls.
+
 ## NICeMail: two separate mechanisms
 
 NICeMail appears twice in this codebase. They are different things, share no code, share no
@@ -640,23 +740,37 @@ Operator ──manually signs in──> NICeMail in Chrome
 ```
 
 Configured by `NIC_CDP_ENDPOINT` and the `NIC_WEBMAIL_*` / `NIC_BROWSER_*` variables. Code lives in
-`services/email/nic/browser/` — `attach.js` (connect, find the signed-in tab, release), `session.js`
-(one serialised unit of work), `selectors.js`, `readInbox.js` and `sendMail.js`. It is reached by
+`services/email/nic/browser/` — `cdp.js` (the raw DevTools Protocol client; there is no Playwright),
+`attach.js` (connect, find the signed-in tab, release), `session.js` (one serialised unit of work),
+`selectors.js` (the selector registry), `pageKit.js` (the page-side resolver), `readInbox.js`,
+`sendMail.js` and `inspect.js` (the read-only inspector). It is reached by
 `npm run nic:browser:discover` and, with `NIC_BROWSER_MAILBOX=true`, by the NICeMail mailbox and
 transport [below](#the-second-front-office-mailbox).
 
 **The agent never signs in.** It only attaches over CDP — there is no `launch` anywhere — never
 navigates to a login page, never types a credential, never touches an OTP field, and does not import
-the credentials module. Reads and sends run in a new tab of the operator's signed-in browser context,
-opened at the URL the operator's NICeMail tab is already on, and closed afterwards; the operator's
-own tab is never driven. If the work tab lands on anything that looks like a sign-in step, the work
-stops with `NICeMail session expired` before a field is touched. What it clicks and types is the inbox
-and the one outgoing message it was handed — To, Cc, Subject, body and attachments. Authentication
-is the operator's job, by hand, and stays that way.
+the credentials module. Reads and sends run in a new background tab of the operator's signed-in
+browser context, opened at `NIC_WEBMAIL_APP_URL` (`https://mail.mgovcloud.in/zm/`), and closed
+afterwards; the operator's own tab is never driven. That URL matters: on the Workplace front door the
+mailbox is a cross-origin iframe with a CDP target of its own, so anything reading the operator's tab
+sees only the Workplace shell; opened directly it is one top-level document. If the work tab lands on
+anything that looks like a sign-in step, the work stops with `NICeMail session expired` before a field
+is touched. What it clicks and types is the inbox and the one outgoing message it was handed — To,
+Cc, Subject, body and attachments. Authentication is the operator's job, by hand, and stays that way.
 
-It is **lazily loaded**: nothing on the boot path imports it, and `playwright-core` is evaluated only
-when the NICeMail mailbox is first used or a NICeMail case first sends. A missing Chrome session
-cannot stop the backend starting. With `NIC_BROWSER_MAILBOX=true` it is, however, in the request
+**Selectors live in one registry**, `selectors.js`. Controls the agent clicks or types into are
+element entries: strategies tried most semantic first — role and accessible name, `aria-label`,
+`title`, `data-testid` / other `data-*` / `id`, text, CSS last — each match checked for visibility,
+the expected accessible name and uniqueness, with no visual fallback. Keys in `UNCALIBRATED` are
+refused before the page is touched; today that is `ccToggle` and the two attachment-reading keys. The
+reading keys and the compose form are calibrated and verified against the live mailbox (the compose
+form by `npm run nic:browser:calibrate` and a real test send, 2026-09-22).
+
+It is **lazily loaded**: nothing on the boot path imports it; its modules are evaluated only when the
+NICeMail mailbox is first used or a NICeMail case first sends. It needs no automation package — it
+speaks CDP over Node's global `WebSocket`, on by default from Node 22 — and `jsdom` is a
+devDependency used only by `src/test/nicBrowserPage.test.js`. A missing Chrome session cannot stop the
+backend starting. With `NIC_BROWSER_MAILBOX=true` it is, however, in the request
 path for that mailbox: an accept, a final approval or a retry on a NICeMail case waits for its send,
 queued behind any other browser work (one read or send at a time).
 
@@ -673,7 +787,8 @@ then sign in to NICeMail in that window and run `npm run nic:browser:discover`. 
 
 > The port must be free. Another Chromium browser — Brave, Edge, a second Chrome profile — holding
 > 9222 will accept the TCP connection without speaking CDP, and Chrome cannot bind the port while it
-> does. `nic:browser:discover` tells those two cases apart and names the process to close.
+> does. `nic:browser:discover` tells those two cases apart by the raw error it prints
+> (`ECONNREFUSED` for nothing listening, `CDP endpoint answered HTTP 404` for another program).
 
 #### The second Front Office mailbox
 
@@ -687,7 +802,7 @@ mailbox, alongside whatever `MAILBOX_SOURCE` selects:
 | `NIC_FRONT_OFFICE_NAME` | `NICeMail Front Office` | a display name, not an address — that user's name and the From-line name on its mail; empty falls back to the default |
 | `NIC_BROWSER_TEST_RECIPIENT` | `NIC_TEST_RECIPIENT`, then `NIC_EMAIL` | the only address browser sends may reach until `NIC_ALLOW_OUTBOUND=true` |
 | `NIC_BROWSER_SYNC_TTL_MS` | `30000` | minimum gap between inbox syncs |
-| `NIC_BROWSER_SYNC_MAX` | `20` | inbox rows inspected per sync |
+| `NIC_BROWSER_SYNC_MAX` | `20` | new messages opened per sync, at most |
 | `NIC_BROWSER_TIMEOUT_MS` | `20000` | every browser wait, including how long a send waits to be confirmed |
 
 The IMAP settings are not needed. MongoDB is: the mailbox is stored in `MailboxMessage` and answers
@@ -698,27 +813,41 @@ The IMAP settings are not needed. MongoDB is: the mailbox is stored in `MailboxM
 - **Routing by mailbox, not sender.** `mailbox.forUser(user)` gives that user the NICeMail store and
   everyone else the primary one; the mailbox routes cannot be pointed elsewhere with `?recipient=`.
 - **Reading.** Listing starts a background sync when the last one is older than
-  `NIC_BROWSER_SYNC_TTL_MS`; the sync reads the newest rows through `readInbox.js` and stores anything
-  new once, keyed on the row's id (`$setOnInsert` under a unique index), never resetting a message
-  already ingested or removed. Listing always answers from MongoDB. A failed sync never throws — it
-  is reported in the response's `sync` field and shown on the IPC Mailbox page.
+  `NIC_BROWSER_SYNC_TTL_MS`, and `POST /mailbox/sync` starts one on demand. The sync
+  (`nicBrowserMailbox.sync`) takes as new only the unstored rows above the deepest stored row still
+  loaded, opens them oldest first through `readInbox.js`, at most `NIC_BROWSER_SYNC_MAX`, and stores
+  each as soon as it is read, keyed on Zoho's message id (`$setOnInsert` under a unique index), never
+  resetting a message already ingested or removed. The first sync takes the newest
+  `NIC_BROWSER_SYNC_MAX`; the backlog below the cut-off is never opened. A message that cannot be
+  read is recorded and retried, and quarantined in this process after three failures; a store error
+  stops the read. Listing always answers from MongoDB. A failed sync never throws — it is reported in
+  the response's `sync` field and shown on the IPC Mailbox page. Audit rows are written on the edges
+  (`SYNC_FAILED`, `SYNC_RECOVERED`) and `SYNC_COMPLETED` only when something happened or the sync was
+  manual.
 - **Answering.** The accept stores `sourceMailbox: { source: 'nic-browser', address }` on the case.
   The acknowledgement, the final response and their retries then go out through
   `nicBrowserTransport.js` — typed into the signed-in NICeMail compose form — after the
   `NIC_ALLOW_OUTBOUND` interlock (`nic/outboundGuard.js`) has approved every recipient. The forward
   to the Officer-in-Charge stays on `EMAIL_TRANSPORT`.
-- **Confirmation.** A send counts as sent only when the compose form closes, watched through the
-  Send button captured before it was pressed. If it has not closed within `NIC_BROWSER_TIMEOUT_MS`
-  the send throws with `unconfirmed: true` — the outcome is unknown, and a blind retry could reach the
-  inquirer twice — and accept and final approval report it as such rather than as a plain failure.
-  There is no sent-confirmation selector; one may be added only with a text match proven by
+- **Checks before Send.** `composeEmail` (`nic/browser/sendMail.js`) refuses, and discards the draft,
+  unless the form's From is `NIC_EMAIL`, the To/Cc chips are exactly the intended recipients, and the
+  subject, body and every attachment (uploaded and scanned) are held by the form.
+- **Confirmation.** A send counts as sent only when the compose form has closed — watched through the
+  Send button captured before it was pressed — **and** the message is in the Sent folder: exact
+  subject, the recipient on it, an id newer than the press of Send. That Sent row's id is returned as
+  `providerMessageId`. If either does not happen within `NIC_BROWSER_TIMEOUT_MS` the send throws with
+  `unconfirmed: true` — the outcome is unknown, and a blind retry could reach the inquirer twice — and
+  accept and final approval report it as such rather than as a plain failure. There is no
+  sent-confirmation selector; one may be added only with a text match proven by
   `npm run nic:browser:discover`.
 
-**Not yet usable against the live mailbox.** The selectors in `nic/browser/selectors.js` have never
-been run against the real NICeMail page, and the mailbox has open items — ingestion limits,
-isolation that covers only the NICeMail Front Office's own requests, tombstones that live only in
-MongoDB, and unconfirmed sends the QMS cannot later record. Setup, calibration, troubleshooting and
-the full list: [docs/NIC_BROWSER_AGENT.md §17](../docs/NIC_BROWSER_AGENT.md#17-two-front-office-mailboxes).
+**Reading and sending work against the live mailbox.** The reading selectors and the compose form in
+`nic/browser/selectors.js` are calibrated and verified live. The attachment-reading keys and
+`ccToggle` are still in `UNCALIBRATED`, and `providerThreadId` is stored as null. The mailbox has other open items — no scrolling beyond the
+~50 rows a fresh agent tab loads, isolation that does not cover accept or the decision routes,
+tombstones that live only in MongoDB, and unconfirmed sends the QMS cannot later record. Setup, the
+calibration runbooks, troubleshooting and the full list:
+[docs/NIC_BROWSER_AGENT.md §17](../docs/NIC_BROWSER_AGENT.md#17-two-front-office-mailboxes).
 
 ## AI grounding layer
 
@@ -868,15 +997,26 @@ Also required:
 | `gmail:preflight` → `invalid_grant` | the refresh token expired or was revoked | re-authorise that account. Not a code defect |
 | `nic:verify` → `Invalid credentials` / `535` | webmail password used instead of an app password | generate one at webmail → Security → App Passwords |
 | `nic:preflight` → `mail.gov.in` times out | those endpoints are not reachable from outside NICNET | use the `mgovcloud.in` pair, which is what `.env.example` configures |
-| `nic:browser:discover` → "not a Chrome DevTools endpoint" | another browser holds port 9222 | close it, or set `NIC_CDP_ENDPOINT` to a free port |
-| IPC Mailbox shows **NICeMail could not be read** | the last NICeMail sync failed; `sync.stage` says where | fix what the stage names — [runbook §13](../docs/NIC_BROWSER_AGENT.md#13-troubleshooting) |
-| A send "may have been sent but did not confirm it in time" | NICeMail Send was pressed; the form did not close within `NIC_BROWSER_TIMEOUT_MS` | check the NICeMail **Sent** folder before any retry — [runbook §13](../docs/NIC_BROWSER_AGENT.md#13-troubleshooting) |
+| `nic:browser:discover` → `Chrome is not available … (CDP endpoint answered HTTP 404)` (diagnosis `NO_CDP`); a sync → "not a Chrome DevTools endpoint" | another browser holds port 9222 | close it, or set `NIC_CDP_ENDPOINT` to a free port |
+| An agent or tool attached to the operator's NICeMail tab sees no mail rows, only `zmbtn__<hash>`-style classes | that tab is the Zoho Workplace shell; the mailbox is a cross-origin iframe with its own CDP target. `nic:browser:discover` reports it as `MAILBOX_IN_OOPIF` | nothing to fix for the QMS agent, which opens `NIC_WEBMAIL_APP_URL` in a tab of its own — [runbook §13](../docs/NIC_BROWSER_AGENT.md#why-an-agent-cannot-see-the-nicemail-elements) |
+| A NICeMail acknowledgement or response fails (HTTP 503/504, or the case page's notice) | the error ends in `[stage: <step>; cause: …; seen: …]`: the step the browser agent stopped at, what it ran into, and what the page showed. The backend log has every step as `ACK …` / `RESPONSE …` lines | a failure before `click_send` sent nothing and can be retried once the cause is fixed; from `click_send` on it is unconfirmed — check the NICeMail Sent folder first — [§13](../docs/NIC_BROWSER_AGENT.md#13-troubleshooting), [§17](../docs/NIC_BROWSER_AGENT.md#17-two-front-office-mailboxes) |
+| A NICeMail case's acknowledgement or response fails with `… has never been calibrated against the live NICeMail …` | the key it names is in `UNCALIBRATED`; the agent refuses it before touching the page, and nothing is sent. A backend started before 2026-09-22 still has every compose key there | restart the backend; for a key still uncalibrated, calibrate it live — [§17](../docs/NIC_BROWSER_AGENT.md#calibrating-the-selectors) |
+| IPC Mailbox shows **The mailbox could not be read** | the last sync failed; `sync.stage` or `sync.error` says why | for NICeMail, fix what the stage names — [runbook §13](../docs/NIC_BROWSER_AGENT.md#13-troubleshooting). For Gmail, see the DNS row below |
+| A send "may have been sent but did not confirm it in time" | the mailbox was asked to send and never confirmed; the dispatch is recorded `UNCERTAIN` | check the sending mailbox's **Sent** folder, then answer *It was sent* / *It was not sent* on the case or Dispatch page. **Do not retry first** — that is how a second copy reaches the inquirer |
+| `getaddrinfo ENOTFOUND gmail.googleapis.com` in the log, poll answers 503 | the machine's DNS resolver is failing intermittently — environmental, not a code defect | `nslookup gmail.googleapis.com` and `ping 8.8.8.8`. The app keeps the last listing on screen, backs off, and audits one `SYNC_FAILED` plus a `SYNC_RECOVERED` when it clears. A send that failed this way is classified `NOT_SENT` and is safe to retry |
+| Gemma falls back to the deterministic draft | `GEMMA_API_URL` empty (intended in tests and E2E), or the host unreachable | `GET /health` reports `ai: { configured, lastSuccessAt, lastFailureAt, lastError }`; the log names the real cause (`fetch failed (ENOTFOUND …)`), not a silent fallback |
 | Backend refuses to start: `NIC_EMAIL must differ from FRONT_OFFICE_EMAIL …` / `NIC_EMAIL is required …` | `NIC_BROWSER_MAILBOX=true` with a missing or shared address | set `NIC_EMAIL` to the NICeMail mailbox, distinct from the Gmail Front Office |
 
 ## Tests
 
-44 test files (589 tests) under `src/test/`, run with `npm test` (Vitest 4 + supertest,
+50 test files (660 tests) under `src/test/`, run with `npm test` (Vitest 4 + supertest,
 `environment: 'node'`).
+
+`support/memoryDb.js` is an in-memory stand-in for the Mongoose models a test replaces. It is not a
+convenience: it enforces the **unique and partial-unique indexes** the correctness of this system
+rests on — one case per incoming message, one ledger row per case email — and raises a real E11000
+on a collision, so the code paths that exist only to handle that error are actually exercised.
+Tests that need concurrency (two accepts at once, three approvals at once) run against it.
 
 The harness is pinned so **nothing in the suite touches the network**: `GEMMA_API_URL=''`,
 all Gmail and NIC credentials blank, `DATABASE_URL=''`, and `NIC_CDP_ENDPOINT` pointed at an
@@ -969,9 +1109,10 @@ Both guards fail closed with **401** if `req.user` is absent, so a route mis-wir
    refused (403, audited). Do not run a development-mode backend where untrusted hosts can reach it.
 6. **Case content decides what a mailbox sends.** `POST /queries/persist` has no role or case check,
    so any signed-in role can edit a case's inquirer and response text — which, for a NICeMail case,
-   is what the official `.gov.in` mailbox sends and to whom. Mailbox pinning, too, covers only the
-   NICeMail Front Office's own requests; the decision routes and the primary mailbox's `?recipient=`
-   are not scoped. See [docs/NIC_BROWSER_AGENT.md §17](../docs/NIC_BROWSER_AGENT.md#known-limitations--open).
+   is what the official `.gov.in` mailbox sends and to whom. Mailbox pinning, too, does not cover
+   everything: the primary mailbox's `?recipient=` no longer reaches NICeMail rows, but its accept
+   still takes a message by id from the request body, and the decision routes are not scoped. See
+   [docs/NIC_BROWSER_AGENT.md §17](../docs/NIC_BROWSER_AGENT.md#known-limitations--open).
 
 Note also that `constants/capabilities.js` (NIC agent autonomy: read / prepare / send / destructive,
 with a `HUMAN_ONLY` set) is covered by `rbac.test.js` but is **not wired into any route's middleware

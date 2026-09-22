@@ -228,9 +228,11 @@ drafting and review steps.
   only what did not complete the first time and repeats nothing.
 - **Send from a second, unrelated address.** It must appear in the inbox too — there is no sender
   filter, so an enquiry from a member of the public is never silently discarded.
-- **Double-click Approve.** One email, not two. The stored outbound response is the guard, so the
-  second press reports the case as already answered rather than sending again — and the audit trail
-  carries exactly one `FINAL_APPROVAL_GRANTED`, because the decision was taken once.
+- **Double-click Approve.** One email, not two. The button disables itself and reads *Approving and
+  sending…* for as long as the request is open, and behind it the dispatch ledger
+  (`outboundemails`) holds a unique key per case email — so even a press that gets past the button,
+  or a second officer in another tab, is answered *already sent* rather than sending again. The
+  audit trail carries exactly one `FINAL_APPROVAL_GRANTED` and one `RESPONSE_DISPATCHED`.
 - **Check which kind of summary you got.** The case now stores one (`QueryCase.aiSummary`) and the
   forward's covering note quotes the same text. The `AI_SUMMARY_GENERATED` audit row carries the
   status: `GENERATED` when the model answered, `FALLBACK` when it did not and the deterministic
@@ -242,6 +244,75 @@ drafting and review steps.
 - **Open another role's URL** (e.g. `/officer-in-charge/dashboard` while signed in as the Inquirer)
   → "Access restricted", not a page.
 - **Refresh mid-workflow.** Session and case both survive; the Query ID does not change.
+
+---
+
+## Part 2 — two inquirers, one mailbox
+
+The failure this part exists to catch was live: two people wrote to the Front Office mailbox, and
+one of them received the same final response **three times** while the other's acknowledgement
+needed a manual retry. Run this with two real external addresses — they can be two of your own —
+and do not tidy up between them. The two cases overlapping is the point.
+
+**Setup.** Reset the workflow state (`npm run db:reset`) so Case IDs start at `00001`, and sign in
+as Bhumika.
+
+| # | Do this | Expect |
+|---|---|---|
+| 1 | From address **A**, email the Front Office mailbox. Then, from address **B**, email it again with a different subject. | Both appear in the IPC Mailbox within one poll. Neither has created a case. |
+| 2 | Accept **A**, then accept **B**. | Two cases, `QRY-YYYY-00001` and `QRY-YYYY-00002`. Each carries its own sender as the inquirer. |
+| 3 | Check both external inboxes. | **One** acknowledgement each, addressed to that sender and nobody else. Jatin has two forwards. |
+| 4 | Carry **A** as far as final approval, and leave it there. Then carry **B** through to approval and approve it. | B closes and its sender receives one response. A is untouched: still `PENDING_FINAL_APPROVAL`, still unanswered. |
+| 5 | Now approve **A**. | A closes; its sender receives one response, carrying A's own draft and A's own subject. |
+| 6 | Search both external inboxes for the other person's subject line. | Nothing. Neither inquirer has seen anything belonging to the other. |
+
+**Then check the database** — this is the assertion that matters, because a screen can claim all of
+the above while the record says otherwise:
+
+```bash
+mongosh "$DATABASE_URL" --quiet --eval '
+  db.outboundemails.find({}, {dispatchKey:1, status:1, attempts:1, recipients:1, _id:0}).toArray()
+'
+```
+
+Six rows, all `SENT`: an `ACKNOWLEDGEMENT`, a `FORWARD` and an `OUTGOING_RESPONSE` for each case,
+with the acknowledgement and response addressed to that case's own inquirer. **Any second
+`OUTGOING_RESPONSE` for one case, in `emailmessages` or in a recipient's inbox, is the bug this part
+is looking for.**
+
+### While it is running, try these deliberately
+
+- **Press Approve four times during a slow send.** Easiest to arrange by disconnecting Wi-Fi the
+  moment you press it. The button greys out and says *Approving and sending…*; the extra presses do
+  nothing. When the network returns, exactly one response goes out.
+- **Disconnect Wi-Fi and leave it off for a few minutes.** The IPC Mailbox shows **one** standing
+  banner — *The mailbox could not be read* — with the server's reason, and the last list stays on
+  screen. Not one permanent toast every thirty seconds, which is what it used to do. Checks slow to
+  1, 2, then 5 minutes apart. Reconnect: the banner clears and one *reachable again* toast appears.
+- **Check the audit trail for the outage.** One `SYNC_FAILED` row for the whole outage — not one
+  per attempt — and one `SYNC_RECOVERED` when it clears, carrying how long it lasted and how many
+  attempts it took.
+- **Retry a send that failed while the network was down.** The Dispatch page offers **Retry sending
+  response**, and it is safe: a DNS failure never reached Google, so the dispatch is recorded
+  `NOT_SENT`. One press, one email.
+- **If a send is reported as *may already have been sent*** — the mailbox was asked and never
+  confirmed — the retry button is **replaced** by two: *It was sent* and *It was not sent — send
+  it*. For Gmail the Sent folder is searched automatically first, so this is rare; for NICeMail it
+  is the normal path. **Look in the Sent folder before answering.** Answering *It was sent* records
+  it and closes the case without emailing anyone; answering *It was not sent* sends once.
+
+### What the backend log should and should not say
+
+- **No Mongoose deprecation warnings.** `new: true` was replaced with `returnDocument: 'after'`
+  everywhere; `mongooseOptions.test.js` fails the build if one comes back.
+- **A Gemma failure names its cause** — `fetch failed (ENOTFOUND …)` or a timeout — rather than
+  falling back in silence. `GET /health` reports `ai.lastSuccessAt`, `ai.lastFailureAt` and
+  `ai.lastError`. The service is expected to be up; a `FALLBACK` summary during a DNS outage is the
+  outage, not a configuration problem.
+- **`getaddrinfo ENOTFOUND gmail.googleapis.com` is environmental.** It means this machine's
+  resolver failed, not that the application is misconfigured. Confirm with
+  `nslookup gmail.googleapis.com`. The application's job is to survive it without duplicating an
+  email or hiding the failure, which is what the checks above are testing.
 
 ---
 
