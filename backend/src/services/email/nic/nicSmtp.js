@@ -50,6 +50,7 @@ export async function sendMessage({
   cc = [],
   bcc = [],
   attachments = [],
+  messageId = null,
   createTransport = null,
 } = {}) {
   const password = await getPassword();
@@ -87,6 +88,9 @@ export async function sendMessage({
       subject,
       text,
       attachments: attachments.length ? attachments : undefined,
+      // The outbox's per-attempt id, so a send whose outcome is unknown can be
+      // found by it later. Nodemailer generates one when this is absent.
+      messageId: messageId ? `<${messageId}>` : undefined,
     });
 
     return {

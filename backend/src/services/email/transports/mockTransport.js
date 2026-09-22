@@ -1,9 +1,22 @@
 import * as mailbox from '../mailbox/index.js';
+import { DELIVERY, labelDelivery } from '../delivery.js';
 
 let sendCounter = 0;
 const sentMessages = [];
 
-async function send(message, { asRole = null } = {}) {
+/**
+ * Nothing leaves the machine, so a mock send cannot half-happen: whatever it
+ * throws, the message was not delivered and sending again is safe.
+ */
+async function send(message, options = {}) {
+  try {
+    return await sendToMailbox(message, options);
+  } catch (error) {
+    throw labelDelivery(error, DELIVERY.NOT_SENT);
+  }
+}
+
+async function sendToMailbox(message, { asRole = null } = {}) {
   sendCounter += 1;
   const providerMessageId = `mock-msg-${sendCounter}`;
   const providerThreadId = message.providerThreadId || `mock-thread-${sendCounter}`;

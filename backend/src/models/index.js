@@ -10,3 +10,4 @@ export { ResponseVersion } from './ResponseVersion.js';
 export { Notification } from './Notification.js';
 export { EmailMessage } from './EmailMessage.js';
 export { EmailThread } from './EmailThread.js';
+export { OutboundEmail, OUTBOUND_STATUS, OUTBOUND_TYPES } from './OutboundEmail.js';
