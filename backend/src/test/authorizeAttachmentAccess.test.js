@@ -25,10 +25,12 @@ vi.mock('../services/authz/caseAccess.js', async (importOriginal) => {
 });
 
 vi.mock('../models/index.js', () => ({ EmailMessage: { findOne: vi.fn() } }));
+vi.mock('../config/db.js', async (importOriginal) => ({ ...(await importOriginal()), isConnected: () => true }));
 
-const { default: authorizeAttachmentAccess } = await import(
+const { default: authorizeAttachmentAccess, resolveAttachmentCase } = await import(
   '../middleware/authorizeAttachmentAccess.js'
 );
+const { EmailMessage } = await import('../models/index.js');
 
 const run = async (req) => {
   const next = vi.fn();
@@ -103,6 +105,36 @@ describe('reading an attachment that belongs to a case', () => {
     party.value = false;
 
     expect(await run({ user: SUPER_ADMIN, params: { id: 'att_x' } })).toHaveBeenCalledWith();
+  });
+});
+
+/**
+ * NICeMail saves an attachment against the NICeMail message id, and Accept
+ * stores that message under its mailbox id (NICB-…) with the NICeMail id as its
+ * providerMessageId — so a lookup by sourceMessageId alone never finds the
+ * case, and everyone but the Front Office was refused the attachment.
+ */
+describe('an attachment saved from a NICeMail message', () => {
+  const NIC_ID = '1790067280420134900';
+  const meta = { attachmentId: 'att_nic', queryId: null, uploadedBy: null, providerMessageId: NIC_ID };
+  const storedAs = (queryId) =>
+    EmailMessage.findOne.mockReset().mockReturnValue({ select: () => ({ lean: async () => (queryId ? { queryId } : null) }) });
+
+  it('finds its case through the NICeMail id the message is stored with', async () => {
+    storedAs('QRY-2026-00004');
+
+    expect(await resolveAttachmentCase(meta)).toBe('QRY-2026-00004');
+    expect(EmailMessage.findOne).toHaveBeenCalledWith({
+      $or: [{ sourceMessageId: NIC_ID }, { providerMessageId: NIC_ID, direction: 'INBOUND' }],
+    });
+  });
+
+  it('admits an official on that case', async () => {
+    storedAs('QRY-2026-00004');
+    store.getMetadata.mockResolvedValue(meta);
+    party.value = true;
+
+    expect(await run({ user: OFFICIAL, params: { id: 'att_nic' } })).toHaveBeenCalledWith();
   });
 });
 
