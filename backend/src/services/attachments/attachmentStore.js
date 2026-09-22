@@ -53,7 +53,15 @@ async function ensureRoot() {
  */
 async function saveWithId(
   id,
-  { buffer, filename, mimeType, queryId = null, providerMessageId = null, providerAttachmentId = null },
+  {
+    buffer,
+    filename,
+    mimeType,
+    queryId = null,
+    providerMessageId = null,
+    providerAttachmentId = null,
+    uploadedBy = null,
+  },
 ) {
   assertValidId(id);
   if (!Buffer.isBuffer(buffer)) throw new Error('attachmentStore.saveWithId: buffer is required');
@@ -70,6 +78,16 @@ async function saveWithId(
     queryId,
     providerMessageId,
     providerAttachmentId,
+    /**
+     * Who uploaded it, from the session — never from the request body.
+     *
+     * An attachment can legitimately have no queryId yet: the portal uploads
+     * evidence before the case id exists. `uploadedBy` is what lets
+     * middleware/authorizeAttachmentAccess.js admit the uploader to their own
+     * not-yet-attached file without opening it to everyone. Null for
+     * mail-ingested files, which have no human uploader.
+     */
+    uploadedBy,
     createdAt: new Date().toISOString(),
   };
 
@@ -78,9 +96,9 @@ async function saveWithId(
   return metadata;
 }
 
-async function save({ buffer, filename, mimeType, queryId = null }) {
+async function save({ buffer, filename, mimeType, queryId = null, uploadedBy = null }) {
   const id = `att_${randomUUID()}`;
-  return saveWithId(id, { buffer, filename, mimeType, queryId });
+  return saveWithId(id, { buffer, filename, mimeType, queryId, uploadedBy });
 }
 
 async function getMetadata(id) {

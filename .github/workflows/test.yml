@@ -1,0 +1,68 @@
+# The test suites, as a required check.
+#
+# Until this existed, CI ran exactly one workflow — React Doctor — scoped to
+# `frontend/**` and advisory-only. Nothing under `backend/**` triggered
+# anything, so no backend test had ever run in CI, and the authorization tests
+# added alongside the per-case access work would have been dead weight: green on
+# a developer's machine and unenforced everywhere else.
+#
+# Deliberately NOT path-filtered. The backend and the frontend share vocabulary
+# (src/test/enumParity.test.js asserts the two lists stay identical), so a
+# frontend-only change can break a backend test and the reverse is true too.
+#
+# The Playwright suite is not here: it needs a live mongod on 127.0.0.1:27017
+# (frontend/e2e/helpers/db.js) and a real browser, which is a separate job with
+# a service container rather than something to bolt on here.
+
+name: Tests
+
+on:
+  pull_request:
+  push:
+    branches: ["main"]
+
+# Read-only. Nothing in this workflow writes to the repository, so nothing here
+# needs to be able to.
+permissions:
+  contents: read
+
+concurrency:
+  group: tests-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    strategy:
+      # Report both suites on a failure rather than cancelling the sibling: the
+      # first red one is not necessarily the informative one.
+      fail-fast: false
+      matrix:
+        package: [backend, frontend]
+
+    defaults:
+      run:
+        working-directory: ${{ matrix.package }}
+
+    steps:
+      # Pinned to commits, not tags. A tag can be repointed by whoever owns the
+      # action; a commit cannot.
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: ${{ matrix.package }}/package-lock.json
+
+      # `npm ci`, not `npm install`: it installs exactly the tracked lockfile
+      # and fails if package.json and the lockfile disagree, which is the
+      # property that makes a CI run reproducible.
+      - run: npm ci
+
+      - run: npm run lint
+
+      - run: npm test

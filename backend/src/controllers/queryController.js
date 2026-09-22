@@ -2,7 +2,9 @@ import HTTP_STATUS from '../constants/httpStatus.js';
 import { isConnected } from '../config/db.js';
 import * as audit from '../services/audit/auditService.js';
 import * as workflow from '../services/workflow/finalApproval.js';
-import { ACTOR_TYPES } from '../constants/roles.js';
+import { ACTOR_TYPES, ROLES } from '../constants/roles.js';
+import { isKnownAuditAction } from '../constants/auditActions.js';
+import { caseScopeFor, scopeFilter } from '../services/authz/caseAccess.js';
 import {
   QueryCase,
   WorkflowStep,
@@ -32,6 +34,46 @@ const COUNTER_KEY = 'counters';
  * is reported to the caller when it bites, rather than silently truncating.
  */
 const MAX_ROWS = 5000;
+
+/**
+ * The per-collection filters for one caller's hydration read.
+ *
+ * Pure, and exported, so the contract below can be asserted without a database
+ * — the suite runs with DATABASE_URL blank.
+ *
+ * Two of these are deliberate exceptions, and both are load-bearing:
+ *
+ *  - `counters` is NOT here. The whole counter map rides on every response,
+ *    scoped or not, because the client mints every id from it (`mintId` in
+ *    frontend/src/store/useWorkflowStore.js). Hand a client a scoped or absent
+ *    counter map and it falls back to a zeroed seed and re-mints ids that
+ *    already exist: best case the createdAt collision guard below rejects every
+ *    new case, worst case one replaces a live enquiry.
+ *
+ *  - Notifications scope on the RECIPIENT, as a union rather than an
+ *    intersection with the visible case set. Intersecting would drop
+ *    system-wide notifications, which carry no queryId at all. The cost is that
+ *    a notification title can mention a case the reader cannot otherwise open;
+ *    that is accepted, and preferable to silently losing the rest.
+ */
+export function buildScopedFilters(scope) {
+  const byCase = scopeFilter(scope);
+
+  const notifications = scope?.everything
+    ? {}
+    : { $or: [{ recipientUserId: scope.userId ?? null }, { recipientRole: scope.role ?? null }] };
+
+  return {
+    queries: byCase,
+    workflowSteps: byCase,
+    reviews: byCase,
+    responseVersions: byCase,
+    notifications,
+    emailMessages: byCase,
+    emailThreads: byCase,
+    auditEvents: byCase,
+  };
+}
 
 /**
  * The workflow store and the compliance trail describe the same events with
@@ -100,11 +142,18 @@ const fromClientAuditEvent = (event) => ({
 async function alreadyRecorded(auditEvent) {
   if (!auditEvent.auditId) return false;
 
+  /**
+   * Keyed on the client's own event id, NOT on the timestamp.
+   *
+   * The timestamp used to be part of this key, which worked only because the
+   * caller's `at` was stored verbatim. It is now stamped server-side (see
+   * persistTransition), so matching on it would never hit and a re-sent delta
+   * would append a second copy of the same event.
+   */
   const existing = await AuditEvent.exists({
     auditId: auditEvent.auditId,
     queryId: auditEvent.queryId || null,
     action: auditEvent.event,
-    timestamp: auditEvent.at,
   });
 
   return Boolean(existing);
@@ -130,6 +179,9 @@ async function loadAllQueries(req, res, next) {
   if (!requireDb(next)) return;
 
   try {
+    const scope = await caseScopeFor(req);
+    const f = buildScopedFilters(scope);
+
     const [
       queries,
       workflowSteps,
@@ -141,14 +193,15 @@ async function loadAllQueries(req, res, next) {
       auditEvents,
       counterDoc,
     ] = await Promise.all([
-      QueryCase.find({}).limit(MAX_ROWS).lean(),
-      WorkflowStep.find({}).limit(MAX_ROWS).lean(),
-      Review.find({}).limit(MAX_ROWS).lean(),
-      ResponseVersion.find({}).limit(MAX_ROWS).lean(),
-      Notification.find({}).limit(MAX_ROWS).lean(),
-      EmailMessage.find({}).limit(MAX_ROWS).lean(),
-      EmailThread.find({}).limit(MAX_ROWS).lean(),
-      AuditEvent.find({}).sort({ timestamp: 1 }).limit(MAX_ROWS).lean(),
+      QueryCase.find(f.queries).limit(MAX_ROWS).lean(),
+      WorkflowStep.find(f.workflowSteps).limit(MAX_ROWS).lean(),
+      Review.find(f.reviews).limit(MAX_ROWS).lean(),
+      ResponseVersion.find(f.responseVersions).limit(MAX_ROWS).lean(),
+      Notification.find(f.notifications).limit(MAX_ROWS).lean(),
+      EmailMessage.find(f.emailMessages).limit(MAX_ROWS).lean(),
+      EmailThread.find(f.emailThreads).limit(MAX_ROWS).lean(),
+      AuditEvent.find(f.auditEvents).sort({ timestamp: 1 }).limit(MAX_ROWS).lean(),
+      // NOT scoped, deliberately — see buildScopedFilters.
       QueryCounter.findOne({ key: COUNTER_KEY }).lean(),
     ]);
 
@@ -243,6 +296,34 @@ async function persistTransition(req, res, next) {
       // `sourceMailbox` is set by the server at intake and decides which mailbox
       // answers the inquirer; a client write can neither change nor clear it.
       const { sourceMailbox, ...clientQuery } = query;
+
+      /**
+       * The inquirer is who the final response gets mailed to.
+       *
+       * `services/workflow/finalApproval.js` reads `query.inquirer.email` to
+       * address the dispatch, and `services/authz/caseAccess.js` reads it to
+       * decide which cases an Inquirer may see — so a client-writable inquirer
+       * is both a redirect of outbound government mail and a self-service grant
+       * of case membership.
+       *
+       * Same treatment as the audit actor and `sourceMailbox` above: an
+       * Inquirer raising their own enquiry has it CLAMPED to the session
+       * identity rather than validated, because a value a caller can name is a
+       * value a caller can forge. Nobody else may write the field at all once
+       * the case exists; middleware/authorizeCaseDelta.js has already refused
+       * the delta if they tried to create one.
+       */
+      if (req.user?.role === ROLES.INQUIRER) {
+        if (!existing) {
+          clientQuery.inquirer = {
+            id: req.user.id,
+            name: req.user.name || null,
+            email: req.user.email || null,
+          };
+        } else {
+          delete clientQuery.inquirer;
+        }
+      }
 
       ops.push(
         QueryCase.findOneAndUpdate(
@@ -340,11 +421,25 @@ async function persistTransition(req, res, next) {
     // rather than the request body — an actor a caller can name is an actor a
     // caller can impersonate. `audit.record` never throws and reports its own
     // failures, so the transition is not rolled back by a failed audit write.
-    if (auditEvent?.event && !(await alreadyRecorded(auditEvent))) {
+    /**
+     * The action name is checked against the known vocabulary, and the
+     * timestamp comes from the server clock.
+     *
+     * Both used to be taken verbatim from the request body, so any signed-in
+     * account could append rows under invented names at arbitrary dates — and
+     * because auditService sorts and pages on the stored timestamp, a far-future
+     * row pinned itself to the head of every administrator's first page. The
+     * actor fields were always server-derived and still are, so this was
+     * pollution and ordering rather than forged attribution; it is still not
+     * something a compliance record should accept.
+     */
+    if (auditEvent?.event && !isKnownAuditAction(auditEvent.event)) {
+      console.warn(`[qms] refusing an audit event with an unknown action: ${auditEvent.event}`);
+    } else if (auditEvent?.event && !(await alreadyRecorded(auditEvent))) {
       await audit.record({
         action: auditEvent.event,
         auditId: auditEvent.auditId || null,
-        timestamp: auditEvent.at || new Date().toISOString(),
+        timestamp: new Date().toISOString(),
         queryId: auditEvent.queryId || null,
         actorType: ACTOR_TYPES.HUMAN,
         actorId: req.user?.id ?? null,

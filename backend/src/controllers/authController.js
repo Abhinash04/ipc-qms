@@ -2,7 +2,13 @@ import HTTP_STATUS from '../constants/httpStatus.js';
 import env from '../config/env.js';
 import authConfig, { cookieOptions } from '../config/authConfig.js';
 import { signToken } from '../services/auth/tokenService.js';
-import { verifyCredentials, findByEmail, findById, toPublicUser } from '../services/auth/userDirectory.js';
+import {
+  verifyCredentials,
+  findByEmail,
+  findById,
+  listUsers,
+  toPublicUser,
+} from '../services/auth/userDirectory.js';
 import * as audit from '../services/audit/auditService.js';
 import { AUDIT_ACTIONS, AUDIT_RESULTS } from '../constants/auditActions.js';
 import { ACTOR_TYPES } from '../constants/roles.js';
@@ -86,6 +92,24 @@ function me(req, res) {
 }
 
 /**
+ * The staff directory, for a signed-in caller.
+ *
+ * The client used to carry this list itself, in
+ * frontend/src/constants/mockUsers.js, complete with every account's login
+ * address — and because the login page imports that module, the whole directory
+ * shipped in the entry chunk that an UNAUTHENTICATED visitor downloads. That is
+ * a list of valid usernames and their privilege levels, handed out before
+ * anyone signs in.
+ *
+ * Serving it from here instead means it costs a session. `toPublicUser` already
+ * projects away everything that is not id/name/email/role/divisionId, and there
+ * is no credential on a user record to project away in the first place.
+ */
+function users(req, res) {
+  return res.status(HTTP_STATUS.OK).json({ users: listUsers() });
+}
+
+/**
  * Development-only: sign in as any seeded user without a password.
  * Answers 404 outside development so the endpoint is indistinguishable from
  * not existing in production.
@@ -147,4 +171,4 @@ async function devLogin(req, res, next) {
   }
 }
 
-export { login, logout, me, devLogin };
+export { login, logout, me, users, devLogin };

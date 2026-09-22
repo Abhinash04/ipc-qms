@@ -42,6 +42,10 @@ const reviewSchema = new mongoose.Schema(
   { versionKey: false },
 );
 
+// Same reason as WorkflowStep.assignedUserId: a REVIEWER's case membership is
+// resolved from the reviews they wrote.
+reviewSchema.index({ reviewerId: 1 });
+
 const Review = mongoose.models.Review || mongoose.model('Review', reviewSchema);
 
 export { Review };

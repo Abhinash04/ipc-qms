@@ -21,11 +21,10 @@ on:
     branches: ["main"]
     paths: ["frontend/**"]
 
+# Declared on the job rather than here, so the write scopes belong to the one
+# step that needs them instead of being inherited by everything in the file.
 permissions:
   contents: read
-  pull-requests: write
-  issues: write
-  statuses: write
 
 # Cancels any in-flight scan for the same PR (or branch, on push) the moment a new commit arrives, so reviewers only ever see the latest run.
 concurrency:
@@ -35,13 +34,26 @@ concurrency:
 jobs:
   react-doctor:
     runs-on: ubuntu-latest
+    # React Doctor posts a sticky PR comment, inline review comments and a
+    # commit status. `issues: write` was granted too and is not needed for any
+    # of those.
+    permissions:
+      contents: read
+      pull-requests: write
+      statuses: write
     steps:
       # fetch-depth: 0 gives React Doctor the full git history it needs to find the merge base with the target branch. Without it a shallow checkout has no merge base, so PR runs can't compare against the base and fall back to reporting every issue in the changed files (pre-existing ones included) instead of only the ones the PR introduced.
-      - uses: actions/checkout@v5
+      # Pinned to a commit, not a tag: a tag can be repointed by whoever owns
+      # the action, and this job holds write-scoped credentials.
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           fetch-depth: 0
+          # Without this, checkout leaves the GITHUB_TOKEN in .git/config inside
+          # the workspace, where the third-party step below can read it directly
+          # rather than only receiving what this workflow chooses to pass it.
+          persist-credentials: false
 
-      - uses: millionco/react-doctor@v2
+      - uses: millionco/react-doctor@013f7373f91a3b9e68bd1dc7d4d354f4b041b117 # v2
         with:
           # Required now that the workflow runs from the repository root: the
           # React app is in frontend/, and the default of "." would scan the
@@ -55,9 +67,9 @@ jobs:
         # on new error-severity findings) or "warning" (fail on any finding).
         # Full reference: https://www.react.doctor/ci
         #
-        # Security: @v2 is a floating major tag that may move. For supply-chain-
-        # hardened CI, pin to a full commit SHA with a version comment instead:
-        # uses: millionco/react-doctor@<sha>  # v2.x.x
+        # Security: pinned to a full commit SHA above, rather than the floating
+        # @v2 tag. Update it deliberately — read the diff — rather than letting
+        # a moved tag change what runs here with write-scoped credentials.
         #
         # Further options, added alongside `directory` above:
         #   blocking: error          # Gate level: "none" (advisory, the default) | "warning" | "error"

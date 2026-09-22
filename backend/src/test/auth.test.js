@@ -1,13 +1,23 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import request from 'supertest';
 import app from '../app.js';
 import authConfig from '../config/authConfig.js';
 import { validateAuthConfig } from '../config/authConfig.js';
-import { AUTH } from './helpers/auth.js';
+import { reset as resetCredentials } from '../services/auth/credentials.js';
+import { AUTH, authHeader } from './helpers/auth.js';
+import { ROLES } from '../constants/roles.js';
 
-/** vitest.config.mjs sets QMS_SEED_PASSWORD for the whole suite. */
-const PASSWORD = 'test-seed-password';
+/**
+ * Per-account passwords, from src/test/fixtures/passwords.json, which
+ * vitest.config.mjs points QMS_PASSWORDS_FILE at. They are DISTINCT on purpose:
+ * a suite where every account shared one secret could not tell a working login
+ * apart from the defect that per-account hashes replaced.
+ */
+const PASSWORD = 'test-pw-superadmin-0008';
 const SUPER_ADMIN = 'admin@ipc.example';
+
+const OFFICIAL = 'neha.singh@ipc.example';
+const OFFICIAL_PASSWORD = 'test-pw-official-0004';
 
 /** The `Set-Cookie` entry for the session, or undefined. */
 const sessionCookie = (res) =>
@@ -70,6 +80,39 @@ describe('POST /auth/login', () => {
     const res = await request(app).post('/api/v1/auth/login').send({ email: SUPER_ADMIN });
     expect(res.status).toBe(400);
   });
+
+  /**
+   * The regression for the audit's highest-severity finding.
+   *
+   * verifyCredentials used to compare every submitted password against a single
+   * process-wide hash of QMS_SEED_PASSWORD that did not depend on the account
+   * findByEmail had just resolved. Anyone holding any account could therefore
+   * sign in as SUPER_ADMIN with their own password, and the role claim in the
+   * issued JWT is the sole input to every verifyRole gate downstream.
+   */
+  it('does not accept one account password for a different account', async () => {
+    const res = await request(app)
+      .post('/api/v1/auth/login')
+      .send({ email: SUPER_ADMIN, password: OFFICIAL_PASSWORD });
+
+    expect(res.status).toBe(401);
+    expect(sessionCookie(res)).toBeUndefined();
+  });
+
+  it('accepts each account only with its own password', async () => {
+    const official = await request(app)
+      .post('/api/v1/auth/login')
+      .send({ email: OFFICIAL, password: OFFICIAL_PASSWORD });
+    expect(official.status).toBe(200);
+    expect(official.body.user).toMatchObject({ id: 'USR-0004', role: 'ASSIGNED_OFFICIAL' });
+
+    // ...and the reverse pairing fails, so the first assertion is not passing
+    // for the old reason (any password opening any account).
+    const crossed = await request(app)
+      .post('/api/v1/auth/login')
+      .send({ email: OFFICIAL, password: PASSWORD });
+    expect(crossed.status).toBe(401);
+  });
 });
 
 describe('GET /auth/me', () => {
@@ -97,12 +140,43 @@ describe('GET /auth/me', () => {
   it('accepts the cookie the login endpoint actually issued', async () => {
     const login = await request(app)
       .post('/api/v1/auth/login')
-      .send({ email: 'neha.singh@ipc.example', password: PASSWORD });
+      .send({ email: OFFICIAL, password: OFFICIAL_PASSWORD });
 
     const res = await request(app).get('/api/v1/auth/me').set('Cookie', sessionCookie(login));
 
     expect(res.status).toBe(200);
     expect(res.body.user.role).toBe('ASSIGNED_OFFICIAL');
+  });
+});
+
+/**
+ * The staff directory, served to a signed-in caller.
+ *
+ * Groundwork for moving the client's bundled directory
+ * (frontend/src/constants/mockUsers.js) behind a session. That module reaches
+ * the browser BEFORE authentication, so the account list and every login
+ * address in it are readable by an unauthenticated visitor; the frontend half
+ * of that change is not done yet, and the audit finding stays open until it is.
+ */
+describe('GET /auth/users', () => {
+  it('401s with no session cookie', async () => {
+    expect((await request(app).get('/api/v1/auth/users')).status).toBe(401);
+  });
+
+  it('returns the directory to a signed-in caller, with no credential material', async () => {
+    const res = await request(app).get('/api/v1/auth/users').set(AUTH);
+
+    expect(res.status).toBe(200);
+    expect(res.body.users.length).toBeGreaterThan(1);
+    expect(res.body.users[0]).toHaveProperty('email');
+
+    const serialised = JSON.stringify(res.body);
+    expect(serialised).not.toMatch(/password|hash|secret/i);
+  });
+
+  it('is readable by any role — it is a directory, not an admin console', async () => {
+    const res = await request(app).get('/api/v1/auth/users').set(authHeader(ROLES.INQUIRER));
+    expect(res.status).toBe(200);
   });
 });
 
@@ -131,10 +205,35 @@ describe('auth configuration', () => {
     );
   });
 
-  it('requires a seed password', () => {
+  /**
+   * QMS_SEED_PASSWORD is no longer required on its own — it is a credential
+   * source only under QMS_ALLOW_SHARED_PASSWORD=true. What IS required is a
+   * credential for every seeded account, checked at boot so a missing one is a
+   * named startup failure rather than a user who is told "Invalid email or
+   * password" and has no way to tell why.
+   */
+  it('requires a credential for every seeded account', () => {
+    vi.stubEnv('QMS_PASSWORDS_FILE', '');
+    resetCredentials();
+
+    const errors = validateAuthConfig();
+    expect(errors).toContainEqual(expect.stringContaining('No sign-in credential configured for'));
+    expect(errors.join(' ')).toContain('QMS_PASSWORD_USR_0008');
+
+    vi.unstubAllEnvs();
+    resetCredentials();
+  });
+
+  it('requires QMS_SEED_PASSWORD when the shared-password mode is enabled', () => {
+    vi.stubEnv('QMS_ALLOW_SHARED_PASSWORD', 'true');
+    resetCredentials();
+
     expect(validateAuthConfig({ ...authConfig, SEED_PASSWORD: '' })).toContainEqual(
-      expect.stringContaining('QMS_SEED_PASSWORD is required'),
+      expect.stringContaining('requires QMS_SEED_PASSWORD'),
     );
+
+    vi.unstubAllEnvs();
+    resetCredentials();
   });
 
   it('accepts the suite configuration as valid', () => {

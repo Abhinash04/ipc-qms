@@ -16,6 +16,9 @@ const workflowStepSchema = new mongoose.Schema(
 );
 
 workflowStepSchema.index({ queryId: 1, sequence: 1 });
+// services/authz/caseAccess.js resolves per-case membership by scanning for the
+// steps assigned to a principal, on every scoped read and every scoped write.
+workflowStepSchema.index({ assignedUserId: 1 });
 
 const WorkflowStep =
   mongoose.models.WorkflowStep || mongoose.model('WorkflowStep', workflowStepSchema);

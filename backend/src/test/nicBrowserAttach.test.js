@@ -47,6 +47,45 @@ describe('tab identification', () => {
     expect(scoreTab({ url: 'https://news.example.com', title: 'Mail news' })).toBe(0);
   });
 
+  /**
+   * The pattern must match the HOST, not appear anywhere in the URL.
+   *
+   * Tab selection used to be `url.includes(pattern)` over the whole lowercased
+   * URL, so each of these matched — and with an `/inbox` path segment the
+   * mailbox bonus took them to 15, ABOVE the operator's genuine tab at 10. The
+   * agent then drove the attacker's page: typing recipients, subject and body
+   * into it and handing it the resolved attachment bytes on a send, and storing
+   * whatever it rendered as real mailbox intake on a read.
+   */
+  it('ignores a host that merely ends with a configured pattern', () => {
+    expect(scoreTab({ url: 'https://mail.gov.in.attacker.example/inbox', title: 'Inbox' })).toBe(0);
+    expect(scoreTab({ url: 'https://mgovcloud.in.evil.test/mail', title: 'NIC Mail' })).toBe(0);
+  });
+
+  it('ignores a configured pattern hidden in the path or the query', () => {
+    expect(scoreTab({ url: 'https://attacker.example/?next=mgovcloud.in', title: 'Inbox' })).toBe(0);
+    expect(scoreTab({ url: 'https://attacker.example/mgovcloud.in/inbox', title: 'NIC' })).toBe(0);
+    expect(scoreTab({ url: 'https://attacker.example/#mail.gov.in', title: 'Mail' })).toBe(0);
+  });
+
+  it('ignores a plaintext or unparsable URL on a matching host', () => {
+    expect(scoreTab({ url: 'http://mail.gov.in/inbox', title: 'Inbox' })).toBe(0);
+    expect(scoreTab({ url: 'not a url at all', title: 'Inbox' })).toBe(0);
+    expect(scoreTab({ url: '', title: 'Inbox' })).toBe(0);
+  });
+
+  it('still recognises the real mailbox and its subdomains', () => {
+    expect(scoreTab({ url: 'https://mail.gov.in/inbox', title: 'Inbox' })).toBeGreaterThan(0);
+    expect(scoreTab({ url: 'https://webmail.mgovcloud.in/zm/', title: 'NIC eMail' })).toBeGreaterThan(0);
+  });
+
+  it('does not award the mailbox bonus for a query string the attacker chose', () => {
+    const genuine = scoreTab({ url: 'https://mail.gov.in/help', title: 'Help' });
+    const padded = scoreTab({ url: 'https://mail.gov.in/help?q=inbox+mail+folder', title: 'Help' });
+
+    expect(padded).toBe(genuine);
+  });
+
   it('scores a NICeMail mailbox above a plain NICeMail page', () => {
     const mailbox = scoreTab({ url: 'https://mail.gov.in/inbox', title: 'Inbox' });
     const landing = scoreTab({ url: 'https://mail.gov.in/help', title: 'Help' });

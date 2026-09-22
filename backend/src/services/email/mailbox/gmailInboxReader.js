@@ -127,6 +127,9 @@ function extractAttachments(payload, found = []) {
         name: part.filename,
         mimeType: part.mimeType || 'application/octet-stream',
         sizeKb: Math.max(1, Math.round((part.body?.size || 0) / 1024)),
+        // The raw declared byte count, for the policy check. sizeKb is rounded
+        // and floored at 1, so it cannot be used to enforce a limit.
+        declaredSize: part.body?.size ?? null,
       });
       // Do not descend into a part that is itself an attachment. A forwarded
       // message attached as .eml is one attachment, not one plus every file
@@ -186,9 +189,22 @@ async function materialiseAttachments(gmail, messageId, attachments) {
         return { ...att, attachmentId: null, materializeError: 'no attachmentId on the Gmail part' };
       }
 
-      const check = validateFile({ filename: att.name, mimeType: att.mimeType, size: null });
-      if (!check.ok) {
-        return { ...att, attachmentId: null, materializeError: check.reason };
+      /**
+       * Size is checked twice, and the second one is the one that counts.
+       *
+       * The declared size is the SENDER's claim, so it is used only to avoid
+       * downloading a part that is already over the limit — a part that
+       * declares nothing is not refused here, because the real length settles
+       * it a few lines below. Before this, the only check passed `size: null`
+       * and, since the policy skipped absent sizes, the sole ingest path a
+       * fully external sender can drive had no size limit at all.
+       */
+      const declared = Number.isFinite(att.declaredSize) ? att.declaredSize : null;
+      if (declared !== null) {
+        const check = validateFile({ filename: att.name, mimeType: att.mimeType, size: declared });
+        if (!check.ok) {
+          return { ...att, attachmentId: null, materializeError: check.reason };
+        }
       }
 
       try {
@@ -201,6 +217,18 @@ async function materialiseAttachments(gmail, messageId, attachments) {
         // unlike extractBody's stale plain 'base64' decode (a pre-existing,
         // separate issue, left untouched here).
         const buffer = Buffer.from(response.data?.data || '', 'base64url');
+
+        // Whatever was declared, this is the size that is actually true — and
+        // it is also where the type check lands for a part that declared none.
+        const actual = validateFile({
+          filename: att.name,
+          mimeType: att.mimeType,
+          size: buffer.length,
+        });
+        if (!actual.ok) {
+          return { ...att, attachmentId: null, materializeError: actual.reason };
+        }
+
         const id = deterministicAttachmentId(`${messageId}:${att.id}`);
         const meta = await attachmentStore.saveWithId(id, {
           buffer,
@@ -209,7 +237,8 @@ async function materialiseAttachments(gmail, messageId, attachments) {
           providerMessageId: messageId,
           providerAttachmentId: att.id,
         });
-        return { ...att, attachmentId: meta.attachmentId, sizeKb: Math.max(1, Math.round(meta.size / 1024)) };
+        const { declaredSize, ...rest } = att;
+        return { ...rest, attachmentId: meta.attachmentId, sizeKb: Math.max(1, Math.round(meta.size / 1024)) };
       } catch (error) {
         return { ...att, attachmentId: null, materializeError: error.message };
       }

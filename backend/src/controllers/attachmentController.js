@@ -70,6 +70,10 @@ async function uploadFiles(req, res, next) {
           filename: file.originalname,
           mimeType: file.mimetype,
           queryId: req.body?.queryId || null,
+          // From the session, never the body. This is what lets the uploader
+          // reach their own file in the window before it has a case id — see
+          // middleware/authorizeAttachmentAccess.js.
+          uploadedBy: req.user?.id || null,
         }),
       ),
     );

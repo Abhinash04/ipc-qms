@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { list, materialiseAttachments } from '../services/email/mailbox/gmailInboxReader.js';
 import * as store from '../services/attachments/attachmentStore.js';
+import env from '../config/env.js';
 
 const listMessages = vi.fn();
 const getMessage = vi.fn();
@@ -146,5 +147,74 @@ describe('materialiseAttachments (unit)', () => {
     ]);
     expect(result.attachmentId).toBeNull();
     expect(result.materializeError).toMatch(/no attachmentId/);
+  });
+});
+
+/**
+ * The size ceiling on the one ingest path a fully external sender can drive.
+ *
+ * `materialiseAttachments` used to call the shared policy with `size: null`,
+ * and the policy skipped both size guards when the size was absent — so
+ * ATTACHMENT_MAX_FILE_MB bounded an upload but not an emailed attachment, while
+ * the sibling NIC ingester passed `buffer.length` to the very same helper. The
+ * writes happen during polling, gated only on the recipient, so any member of
+ * the public who mails the published intake address causes them.
+ */
+describe('the per-file size limit on emailed attachments', () => {
+  const overLimit = (env.ATTACHMENT_MAX_FILE_MB + 1) * 1024 * 1024;
+
+  beforeEach(() => {
+    getAttachment.mockReset();
+  });
+
+  it('refuses a part that declares a size over the limit, without downloading it', async () => {
+    const [result] = await materialiseAttachments(fakeGmail, 'msg-1', [
+      { id: 'att-1', name: 'huge.pdf', mimeType: 'application/pdf', declaredSize: overLimit },
+    ]);
+
+    expect(result.attachmentId).toBeNull();
+    expect(result.materializeError).toMatch(/per-file limit/i);
+    // Refused before the fetch: the point of checking the declaration first.
+    expect(getAttachment).not.toHaveBeenCalled();
+  });
+
+  it('refuses a part that under-declares but downloads oversize', async () => {
+    getAttachment.mockResolvedValue({
+      data: { data: Buffer.alloc(overLimit).toString('base64url') },
+    });
+
+    const [result] = await materialiseAttachments(fakeGmail, 'msg-1', [
+      // The sender's claim is a lie; the real length is what settles it.
+      { id: 'att-2', name: 'sneaky.pdf', mimeType: 'application/pdf', declaredSize: 1024 },
+    ]);
+
+    expect(getAttachment).toHaveBeenCalled();
+    expect(result.attachmentId).toBeNull();
+    // A null attachmentId is itself the proof nothing was written: the store
+    // call sits after this check, so reaching it would have produced an id.
+    expect(result.materializeError).toMatch(/per-file limit/i);
+  });
+
+  it('still accepts a part within the limit that declares no size at all', async () => {
+    const bytes = Buffer.from('a modest report');
+    getAttachment.mockResolvedValue({ data: { data: bytes.toString('base64url') } });
+
+    const [result] = await materialiseAttachments(fakeGmail, 'msg-1', [
+      { id: 'att-3', name: 'fine.pdf', mimeType: 'application/pdf' },
+    ]);
+
+    expect(result.materializeError).toBeUndefined();
+    expect(result.attachmentId).toBeTruthy();
+  });
+
+  it('does not carry the internal declaredSize into the stored record', async () => {
+    const bytes = Buffer.from('bytes');
+    getAttachment.mockResolvedValue({ data: { data: bytes.toString('base64url') } });
+
+    const [result] = await materialiseAttachments(fakeGmail, 'msg-1', [
+      { id: 'att-4', name: 'ok.pdf', mimeType: 'application/pdf', declaredSize: bytes.length },
+    ]);
+
+    expect(result).not.toHaveProperty('declaredSize');
   });
 });

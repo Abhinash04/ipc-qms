@@ -5,7 +5,8 @@ import * as audit from '../services/audit/auditService.js';
 import { AUDIT_ACTIONS, AUDIT_RESULTS } from '../constants/auditActions.js';
 import { ACTOR_TYPES } from '../constants/roles.js';
 
-const PASSWORD = 'test-seed-password';
+/** USR-0008's own password, from src/test/fixtures/passwords.json. */
+const PASSWORD = 'test-pw-superadmin-0008';
 
 beforeEach(() => {
   audit.resetBuffer();

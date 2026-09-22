@@ -64,3 +64,51 @@ export const AUDIT_RESULTS = {
 };
 
 export const ALL_AUDIT_ACTIONS = Object.values(AUDIT_ACTIONS);
+
+/**
+ * The workflow event names the CLIENT writes, mirrored from
+ * frontend/src/constants/statusEnums.js (`AUDIT_EVENT`).
+ *
+ * These are a separate vocabulary from AUDIT_ACTIONS above, which the server
+ * writes for itself. Eighteen of the nineteen appear in no server-side list at
+ * all, so a bare `z.enum(ALL_AUDIT_ACTIONS)` on the persist route would reject
+ * nearly every audit row the application produces — which is why the two are
+ * unioned rather than merged.
+ *
+ * src/test/enumParity.test.js asserts this stays identical to the client list.
+ */
+export const CLIENT_AUDIT_EVENTS = [
+  'QUERY_RECEIVED',
+  'ACKNOWLEDGEMENT_SENT',
+  'AI_SUMMARY_GENERATED',
+  'AI_ASSIGNMENT_RECOMMENDED',
+  'QUERY_REGISTERED',
+  'QUERY_FORWARDED',
+  'QUERY_ASSIGNED',
+  'ASSIGNMENT_OVERRIDDEN',
+  'DRAFT_GENERATED',
+  'DRAFT_UPDATED',
+  'REVIEW_ADDED',
+  'REVIEW_COMPLETED',
+  'REVISION_REQUESTED',
+  'QUERY_TRANSFERRED',
+  'QUERY_PULLED_BACK',
+  'FINAL_APPROVAL_GRANTED',
+  'FINAL_APPROVAL_REJECTED',
+  'RESPONSE_DISPATCHED',
+  'QUERY_CLOSED',
+];
+
+const KNOWN_EVENTS = new Set([...ALL_AUDIT_ACTIONS, ...CLIENT_AUDIT_EVENTS]);
+
+/**
+ * Is this a name the audit trail recognises?
+ *
+ * The trail used to take whatever string the caller sent, so any signed-in
+ * account could append rows under invented names — and, with a client-supplied
+ * timestamp, place them at the head of the administrator's first page. Bounding
+ * the vocabulary does not make the trail unforgeable (a legitimate name is
+ * still a legitimate name), but it keeps it a closed set, which is what makes
+ * it readable as a record.
+ */
+export const isKnownAuditAction = (action) => KNOWN_EVENTS.has(action);

@@ -1,30 +1,34 @@
 import bcrypt from 'bcryptjs';
+import { randomUUID } from 'node:crypto';
 import { allUsers } from '../../constants/users.js';
-import authConfig from '../../config/authConfig.js';
+import { hashFor, reset as resetCredentials, BCRYPT_ROUNDS } from './credentials.js';
 
 /**
  * The seeded user directory.
  *
- * Every account shares one bcrypt hash derived from QMS_SEED_PASSWORD, which
- * keeps the demo ergonomics of the old shared password while removing the
- * plaintext secret from source control. The hash is computed once, lazily, so
- * importing this module in a test that never authenticates costs nothing.
+ * Each account authenticates against ITS OWN bcrypt hash, resolved by
+ * services/auth/credentials.js. Passwords are never stored in source.
  *
- * TODO(phase-2): replace with per-user credentials in a Mongo collection.
+ * This used to compare every account against a single hash of QMS_SEED_PASSWORD
+ * that did not depend on the resolved user, which meant anyone holding one
+ * account could sign in as any other — including SUPER_ADMIN — by submitting a
+ * different address with their own password. The comparison below is bound to
+ * the account `findByEmail` returned; that binding is the whole control.
+ *
+ * TODO(phase-2): move the directory itself to a Mongo collection, so accounts
+ * can be added and deactivated without a redeploy.
  */
-const BCRYPT_ROUNDS = 10;
 
-let cachedHash = null;
-let cachedFor = null;
-
-function seedHash() {
-  // Re-derive if the configured password changed (tests mutate authConfig).
-  if (cachedHash === null || cachedFor !== authConfig.SEED_PASSWORD) {
-    cachedFor = authConfig.SEED_PASSWORD;
-    cachedHash = bcrypt.hashSync(authConfig.SEED_PASSWORD, BCRYPT_ROUNDS);
-  }
-  return cachedHash;
-}
+/**
+ * A fixed hash of a random string, computed once.
+ *
+ * An unknown address, or a known account with no credential configured, is
+ * compared against this rather than skipping the compare. bcrypt then costs the
+ * same on every path, so a caller cannot distinguish "no such account" from
+ * "wrong password" by timing — the property backend/src/test/auth.test.js
+ * asserts. It can never match: nothing knows the random string.
+ */
+const DUMMY_HASH = bcrypt.hashSync(randomUUID(), BCRYPT_ROUNDS);
 
 const normalise = (email) => String(email || '').trim().toLowerCase();
 
@@ -54,16 +58,20 @@ export function listUsers() {
  */
 export async function verifyCredentials(email, password) {
   const user = findByEmail(email);
-  const passwordMatches = await bcrypt.compare(String(password || ''), seedHash());
+
+  // Bound to THIS account. An unknown address, or an account with no credential
+  // configured, falls to DUMMY_HASH so the bcrypt cost — and so the timing — is
+  // identical on every path, and so neither can ever match.
+  const expected = (user && hashFor(user.id)) || DUMMY_HASH;
+  const passwordMatches = await bcrypt.compare(String(password || ''), expected);
 
   if (!user || !passwordMatches) return null;
   return toPublicUser(user);
 }
 
-/** Test-only: drop the memoised hash so a changed SEED_PASSWORD takes effect. */
+/** Test-only: drop memoised credential hashes so a changed environment applies. */
 export function reset() {
-  cachedHash = null;
-  cachedFor = null;
+  resetCredentials();
 }
 
 export { toPublicUser };

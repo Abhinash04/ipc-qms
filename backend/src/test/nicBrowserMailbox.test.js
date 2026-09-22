@@ -118,6 +118,10 @@ import * as nicBrowserTransport from '../services/email/transports/nicBrowserTra
 import { QueryCase } from '../models/index.js';
 
 const NIC_ADDRESS = 'nic-mailbox@test.invalid';
+// USR-0014's own password, from src/test/fixtures/passwords.json. The NIC
+// Front Office is config-derived (constants/users.js), but it resolves its
+// credential by user id like every other account.
+const NIC_PASSWORD = 'test-pw-nic-frontoffice-0014';
 const INQUIRER = 'Ravi Kumar <ravi@pharma.example>';
 
 const cookieFor = (user) => ({ Cookie: `${authConfig.COOKIE_NAME}=${signToken(user)}` });
@@ -226,7 +230,7 @@ describe('signing in as the NICeMail Front Office', () => {
   it('signs in with the password, like any account whose data is real', async () => {
     const res = await request(app)
       .post('/api/v1/auth/login')
-      .send({ email: NIC_ADDRESS, password: process.env.QMS_SEED_PASSWORD });
+      .send({ email: NIC_ADDRESS, password: NIC_PASSWORD });
 
     expect(res.status).toBe(200);
     expect(res.body.user).toMatchObject({ email: NIC_ADDRESS, role: ROLES.FRONT_OFFICE });

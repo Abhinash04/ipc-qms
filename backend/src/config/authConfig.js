@@ -1,4 +1,6 @@
 import env from './env.js';
+import { allUsers } from '../constants/users.js';
+import { describeCredentials, envKeyFor } from '../services/auth/credentials.js';
 
 /**
  * Authentication configuration.
@@ -40,6 +42,11 @@ export function cookieOptions() {
   };
 }
 
+/** The legacy one-secret-opens-everything mode, off unless explicitly enabled. */
+export function sharedPasswordEnabled() {
+  return String(process.env.QMS_ALLOW_SHARED_PASSWORD || '').trim().toLowerCase() === 'true';
+}
+
 export function validateAuthConfig(config = authConfig) {
   const errors = [];
 
@@ -49,8 +56,31 @@ export function validateAuthConfig(config = authConfig) {
     errors.push(`JWT_SECRET must be at least 32 characters (got ${config.JWT_SECRET.length})`);
   }
 
-  if (!config.SEED_PASSWORD) {
-    errors.push('QMS_SEED_PASSWORD is required — it is the sign-in password for the seeded users');
+  /**
+   * Every account needs its own credential.
+   *
+   * Checked at startup rather than at login, so a missing credential is a boot
+   * failure naming the account, not a user who cannot sign in and is told only
+   * "Invalid email or password".
+   *
+   * QMS_SEED_PASSWORD is no longer required on its own: it is a credential
+   * source only under QMS_ALLOW_SHARED_PASSWORD=true, and that mode is what the
+   * per-account hashes replaced.
+   */
+  const missing = describeCredentials(allUsers()).filter((row) => !row.configured);
+  if (missing.length) {
+    const named = missing.map((row) => `${row.userId} (${envKeyFor(row.userId)})`).join(', ');
+    errors.push(
+      `No sign-in credential configured for: ${named}. ` +
+        'Set QMS_PASSWORDS_FILE to a JSON file of userId -> password outside the repository, ' +
+        'or set the named environment variable for each account. ' +
+        'QMS_ALLOW_SHARED_PASSWORD=true restores the old single-password behaviour, ' +
+        'in which one secret opens every account including SUPER_ADMIN.',
+    );
+  }
+
+  if (sharedPasswordEnabled() && !config.SEED_PASSWORD) {
+    errors.push('QMS_ALLOW_SHARED_PASSWORD=true requires QMS_SEED_PASSWORD to be set');
   }
 
   if (!Number.isFinite(config.SESSION_TTL_SECONDS) || config.SESSION_TTL_SECONDS <= 0) {

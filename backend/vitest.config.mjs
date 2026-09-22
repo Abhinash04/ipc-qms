@@ -1,6 +1,12 @@
 import { defineConfig } from 'vitest/config';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+// Resolved from this file rather than process.cwd(), so the suite finds the
+// fixture however vitest was launched. fileURLToPath, not URL.pathname: the
+// latter yields "/D:/…" on Windows and fs cannot open it.
+const PASSWORDS_FIXTURE = fileURLToPath(new URL('./src/test/fixtures/passwords.json', import.meta.url));
 
 export default defineConfig({
   test: {
@@ -12,11 +18,21 @@ export default defineConfig({
     env: {
       NODE_ENV: 'test',
       EMAIL_TRANSPORT: 'mock',
-      // Session signing and the seeded sign-in password. Test-only values:
-      // authConfig requires JWT_SECRET to be at least 32 characters, and
-      // without them tokenService throws rather than signing.
+      // Session signing. Test-only value: authConfig requires JWT_SECRET to be
+      // at least 32 characters, and without it tokenService throws rather than
+      // signing.
       JWT_SECRET: 'test-only-jwt-secret-never-used-outside-the-suite',
-      QMS_SEED_PASSWORD: 'test-seed-password',
+      /**
+       * Per-account sign-in credentials, one distinct password each.
+       *
+       * QMS_ALLOW_SHARED_PASSWORD is pinned OFF and QMS_SEED_PASSWORD blank, so
+       * the suite runs in the mode a deployment should: no single secret opens
+       * more than one account. A test that wants the legacy shared mode turns
+       * it on itself with vi.stubEnv.
+       */
+      QMS_PASSWORDS_FILE: PASSWORDS_FIXTURE,
+      QMS_ALLOW_SHARED_PASSWORD: '',
+      QMS_SEED_PASSWORD: '',
       // No test may reach the live Gemma endpoint. Blank short-circuits
       // gemmaService to its deterministic fallback before any fetch, the same
       // way EMAIL_TRANSPORT=mock keeps Gmail out of the suite.

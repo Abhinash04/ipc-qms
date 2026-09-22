@@ -50,22 +50,51 @@ const LOGIN_MARKERS = ['/login', '/signin', 'accounts.', 'oauth', 'otp', 'twofac
 
 const lower = (value) => String(value || '').toLowerCase();
 
-/** Does this page look like a NICeMail tab? URL first, title as a weaker signal. */
+/**
+ * Does this page look like a NICeMail tab? HOST first, title as a weaker signal.
+ *
+ * The host is matched, not the URL string. A substring test over the whole URL
+ * accepted anything that merely CONTAINED a configured pattern:
+ * `https://mail.gov.in.attacker.example/inbox` (the pattern as a domain
+ * prefix), `https://attacker.example/?next=mgovcloud.in` (in the query), and
+ * `https://attacker.example/mgovcloud.in/inbox` (in the path) all matched — and
+ * the mailbox-view bonus below let such a page OUTRANK the operator's real tab,
+ * which scores 10 without an `/inbox` segment.
+ *
+ * That mattered because the caller then drives whatever this returns: on a send
+ * it types the recipients, subject and body into the page and hands it the
+ * resolved attachment bytes; on a read it stores whatever the page renders as
+ * genuine government-mailbox intake.
+ */
 export function scoreTab({ url, title }) {
-  const u = lower(url);
   const t = lower(title);
 
-  const urlHit = browserConfig.urlPatterns.some((pattern) => u.includes(pattern));
-  if (!urlHit) return 0;
+  let parsed;
+  try {
+    parsed = new URL(String(url || ''));
+  } catch {
+    return 0;
+  }
+  // NICeMail is https. Refusing anything else also denies a plaintext
+  // look-alike on a matching host name.
+  if (parsed.protocol !== 'https:') return 0;
+
+  const host = parsed.hostname.toLowerCase();
+  const hostHit = browserConfig.urlPatterns.some(
+    (pattern) => host === pattern || host.endsWith(`.${pattern}`),
+  );
+  if (!hostHit) return 0;
 
   let score = 10;
-  // A mailbox view beats a marketing or help page on the same host.
-  if (/inbox|mail|folder|message/.test(u)) score += 5;
+  // A mailbox view beats a marketing or help page on the same host. Read from
+  // the PATH alone: from the whole URL, an attacker-chosen query string earned
+  // the bonus.
+  if (/inbox|mail|folder|message/.test(parsed.pathname.toLowerCase())) score += 5;
   if (browserConfig.titlePatterns.some((pattern) => t.includes(pattern))) score += 2;
   // A sign-in screen is still a NICeMail tab, just not a usable one — it must
   // rank below a real mailbox rather than being discarded, so that the caller
   // can tell "not logged in" apart from "no tab at all".
-  if (LOGIN_MARKERS.some((marker) => u.includes(marker))) score -= 8;
+  if (LOGIN_MARKERS.some((marker) => lower(parsed.href).includes(marker))) score -= 8;
 
   return score;
 }

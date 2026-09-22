@@ -3,16 +3,17 @@ import request from 'supertest';
 import { AUTH } from './helpers/auth.js';
 
 /**
- * Documents and guards the security gap recorded in backend/README.md
- * ("Security status: NOT production-ready"): the attachment endpoints have
- * no authentication in this backend, so `authorizeAttachmentAccess` is a
- * deliberate no-op seam rather than a real check. This test does not (and
- * cannot) prove access is denied — it proves the seam is mounted on every
- * attachment route's request path, so the day real authorization lands
- * there is exactly one place to fill in and every route already runs it.
+ * Proves the guard is MOUNTED on every attachment route.
  *
- * The real pass-through behaviour itself is covered separately in
- * authorizeAttachmentAccess.test.js, without any mocking.
+ * It deliberately stubs `authorizeAttachmentAccess` out, so it says nothing
+ * about whether access is denied — that is authorizeAttachmentAccess.test.js's
+ * job, and since per-case narrowing landed that file does assert real denials.
+ * What this one catches is the other failure: a route added later, or re-wired,
+ * that never runs the guard at all. Both halves are needed, because a perfect
+ * check on a route that does not call it protects nothing.
+ *
+ * (It was written when the middleware was a deliberate no-op seam and the
+ * endpoints had no authentication, which is why it is shaped this way.)
  *
  * vi.mock is hoisted above the imports below, so the mock is in place before
  * app.js (and therefore attachmentRoutes.js) is loaded and the middleware is

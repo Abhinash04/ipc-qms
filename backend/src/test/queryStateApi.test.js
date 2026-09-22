@@ -29,17 +29,54 @@ describe('/api/v1/queries — authorization', () => {
     }
   });
 
-  it('lets any signed-in role hydrate and persist — every role uses the store', async () => {
+  /**
+   * Hydration is a FILTER, not a refusal.
+   *
+   * Every role uses the store, so neither route can carry a role allow-list;
+   * what changed is that GET /queries now returns only the cases the caller is
+   * party to (services/authz/caseAccess.js) rather than all of them. A narrowed
+   * role still gets 200, with less in it.
+   */
+  it('refuses no signed-in role the hydration route', async () => {
     for (const role of [ROLES.INQUIRER, ROLES.FRONT_OFFICE, ROLES.REVIEWER]) {
       const read = await request(app).get('/api/v1/queries').set(authHeader(role));
       expect(read.status).not.toBe(403);
+    }
+  });
 
+  /**
+   * A delta that sets no protected value authorizes nothing, so it is not a
+   * denial for anyone. Turning these into 403s would break ordinary work to
+   * prove a point.
+   */
+  it('refuses no signed-in role an empty delta', async () => {
+    for (const role of [ROLES.INQUIRER, ROLES.FRONT_OFFICE, ROLES.REVIEWER]) {
       const write = await request(app)
         .post('/api/v1/queries/persist')
         .set(authHeader(role))
         .send({});
       expect(write.status).not.toBe(403);
     }
+  });
+
+  /**
+   * ...but a delta that DOES set a protected value is authorized, and with no
+   * database the guard refuses outright rather than letting it through.
+   *
+   * The refusal itself cannot be asserted here: deciding whether a value is
+   * being CHANGED requires the stored case, so those rules are unit-tested in
+   * caseDeltaAuthorization.test.js. What this pins is that the route is guarded
+   * at all — it used to carry verifyToken and a body schema and nothing else,
+   * so an Inquirer, a member of the public, could set any case to any state.
+   */
+  it('does not let a protected write through unauthorized when the store is down', async () => {
+    const res = await request(app)
+      .post('/api/v1/queries/persist')
+      .set(authHeader(ROLES.INQUIRER))
+      .send({ query: { queryId: 'QRY-2026-00001', workflowState: 'READY_FOR_DISPATCH' } });
+
+    expect(res.status).toBe(503);
+    expect(res.body.error).toMatch(/access cannot be determined/i);
   });
 
   /**

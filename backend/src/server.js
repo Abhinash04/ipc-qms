@@ -84,12 +84,20 @@ const server = app.listen(env.PORT, () => {
   console.log(`Query recipient: ${recipient}`);
   console.log(`Mailbox source:  ${source}`);
 
-  // Every route below /auth and /health now requires a session, and roles
-  // are enforced per route. What is still missing is the case-level half:
-  // see the TODO in middleware/authorizeAttachmentAccess.js.
+  /**
+   * What authorization does and does not cover, stated at boot.
+   *
+   * Case-level access IS server-side now: reads are scoped by
+   * services/authz/caseAccess.js, writes go through
+   * middleware/authorizeCaseDelta.js, and attachments resolve their owning
+   * case. What is still absent is a server-side state machine — anyone party
+   * to a case can write any field on it, and the four roles whose scope is
+   * "everything" can write any case at all.
+   */
   console.warn(
-    '[qms] Authorization is role-level only. Any signed-in user can read any ' +
-      'attachment by id, because Query Case ownership is not yet server-side. ' +
+    '[qms] Case access is enforced server-side, but there is no workflow state ' +
+      'machine yet: a principal party to a case may write any field on it, and ' +
+      'Front Office, Officer-in-Charge, Admin and Super Admin reach every case. ' +
       'Do not expose this server outside a trusted network.',
   );
 });

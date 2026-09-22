@@ -372,6 +372,13 @@ describe('attachment metadata', () => {
     },
   };
 
+  /**
+   * `declaredSize` is the raw byte count from the Gmail part, carried alongside
+   * the rounded `sizeKb` so the attachment policy has something it can enforce
+   * a limit with — sizeKb is rounded and floored at 1, so it cannot be. It is
+   * internal plumbing: materialiseAttachments strips it before the record is
+   * stored, and the real length of the downloaded bytes is what finally decides.
+   */
   it('records name, type and size for each attachment', () => {
     const mapped = toMailboxMessage(withAttachment, 'front-office@test.invalid');
 
@@ -381,6 +388,7 @@ describe('attachment metadata', () => {
         name: 'specification.pdf',
         mimeType: 'application/pdf',
         sizeKb: 200,
+        declaredSize: 204800,
       },
     ]);
   });
@@ -423,7 +431,7 @@ describe('attachment metadata', () => {
     };
 
     expect(toMailboxMessage(nested, 'x').attachments).toEqual([
-      { id: 'att-nested', name: 'diagram.png', mimeType: 'image/png', sizeKb: 50 },
+      { id: 'att-nested', name: 'diagram.png', mimeType: 'image/png', sizeKb: 50, declaredSize: 51200 },
     ]);
   });
 });

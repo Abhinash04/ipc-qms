@@ -1,29 +1,54 @@
-import { describe, it, expect, vi } from 'vitest';
-import authorizeAttachmentAccess from '../middleware/authorizeAttachmentAccess.js';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { ROLES } from '../constants/roles.js';
 
 /**
- * The real, unmocked seam.
+ * The real, unmocked seam — now a real check.
  *
- * It was a deliberate no-op while the backend had no authentication at all.
- * Now that `verifyToken` runs ahead of it on every attachment route, it is a
- * real fail-closed guard: it lets an authenticated caller through and rejects
- * anything that reaches it without `req.user` — which can only happen if a
- * route is mis-wired to omit `verifyToken`.
+ * It was a deliberate no-op while the backend had no authentication: it
+ * confirmed a session existed, which `verifyToken` had already established one
+ * line earlier, and the middleware named for access control performed none. Any
+ * signed-in account could read any attachment by id, and GET /queries handed
+ * every caller the ids.
  *
- * Per-case narrowing is still outstanding; see the TODO on the middleware.
+ * It now resolves the owning case and admits only a principal party to it. The
+ * store and the case-membership service are stubbed here so the branches can be
+ * driven directly; the store's own behaviour is covered in attachmentStore.test.js.
  */
-describe('authorizeAttachmentAccess (real implementation)', () => {
-  it('calls next() with no error when the request is authenticated', () => {
-    const next = vi.fn();
-    authorizeAttachmentAccess({ user: { id: 'USR-0002', role: 'FRONT_OFFICE' } }, {}, next);
-    expect(next).toHaveBeenCalledTimes(1);
-    expect(next).toHaveBeenCalledWith();
-  });
 
-  it('fails closed with 401 when no authenticated user reached it', () => {
-    const next = vi.fn();
+const store = { getMetadata: vi.fn() };
+vi.mock('../services/attachments/attachmentStore.js', () => store);
+
+const party = { value: true };
+vi.mock('../services/authz/caseAccess.js', async (importOriginal) => {
+  const actual = await importOriginal();
+  return { ...actual, isPartyToCase: vi.fn(async () => party.value) };
+});
+
+vi.mock('../models/index.js', () => ({ EmailMessage: { findOne: vi.fn() } }));
+
+const { default: authorizeAttachmentAccess } = await import(
+  '../middleware/authorizeAttachmentAccess.js'
+);
+
+const run = async (req) => {
+  const next = vi.fn();
+  await authorizeAttachmentAccess({ params: {}, body: {}, ...req }, {}, next);
+  return next;
+};
+
+const INQUIRER = { id: 'USR-0001', role: ROLES.INQUIRER };
+const OFFICIAL = { id: 'USR-0004', role: ROLES.ASSIGNED_OFFICIAL };
+const SUPER_ADMIN = { id: 'USR-0008', role: ROLES.SUPER_ADMIN };
+
+beforeEach(() => {
+  party.value = true;
+  store.getMetadata.mockReset().mockResolvedValue(null);
+});
+
+describe('fail-closed basics', () => {
+  it('rejects with 401 when no authenticated user reached it', async () => {
     // A route that forgot verifyToken must break loudly, not silently open.
-    authorizeAttachmentAccess({ headers: {} }, {}, next);
+    const next = await run({ headers: {} });
 
     expect(next).toHaveBeenCalledTimes(1);
     const [error] = next.mock.calls[0];
@@ -31,9 +56,109 @@ describe('authorizeAttachmentAccess (real implementation)', () => {
     expect(error.status).toBe(401);
   });
 
-  it('does not yet narrow by case — any authenticated role passes', () => {
-    const next = vi.fn();
-    authorizeAttachmentAccess({ user: { id: 'USR-0001', role: 'INQUIRER' }, params: { id: 'att_x' } }, {}, next);
+  it('passes an unknown attachment through for the controller to 404', async () => {
+    store.getMetadata.mockResolvedValue(null);
+
+    const next = await run({ user: INQUIRER, params: { id: 'att_missing' } });
+
     expect(next).toHaveBeenCalledWith();
+  });
+
+  it('passes a malformed id through rather than turning the throw into a 500', async () => {
+    store.getMetadata.mockRejectedValue(new Error('attachmentStore: invalid id'));
+
+    const next = await run({ user: INQUIRER, params: { id: 'not-an-id' } });
+
+    expect(next).toHaveBeenCalledWith();
+  });
+});
+
+describe('reading an attachment that belongs to a case', () => {
+  const meta = { attachmentId: 'att_x', queryId: 'QRY-2026-00001', uploadedBy: 'USR-0002' };
+
+  it('admits a principal party to that case', async () => {
+    store.getMetadata.mockResolvedValue(meta);
+    party.value = true;
+
+    expect(await run({ user: OFFICIAL, params: { id: 'att_x' } })).toHaveBeenCalledWith();
+  });
+
+  /**
+   * The finding this file exists for. An Inquirer is a member of the public,
+   * and before the fix this call returned the bytes of any document on any
+   * other inquirer's case.
+   */
+  it('refuses a principal who is not', async () => {
+    store.getMetadata.mockResolvedValue(meta);
+    party.value = false;
+
+    const next = await run({ user: INQUIRER, params: { id: 'att_x' } });
+
+    const [error] = next.mock.calls[0];
+    expect(error?.status).toBe(403);
+  });
+
+  it('admits a role that sees every case without consulting membership', async () => {
+    store.getMetadata.mockResolvedValue(meta);
+    party.value = false;
+
+    expect(await run({ user: SUPER_ADMIN, params: { id: 'att_x' } })).toHaveBeenCalledWith();
+  });
+});
+
+describe('an attachment with no case yet', () => {
+  /**
+   * A real population, not an edge case: the portal uploads evidence before the
+   * case id exists, and older sidecars predate `uploadedBy` entirely.
+   */
+  it('admits the uploader to their own', async () => {
+    store.getMetadata.mockResolvedValue({ queryId: null, uploadedBy: 'USR-0001' });
+
+    expect(await run({ user: INQUIRER, params: { id: 'att_x' } })).toHaveBeenCalledWith();
+  });
+
+  it('refuses anyone else', async () => {
+    store.getMetadata.mockResolvedValue({ queryId: null, uploadedBy: 'USR-0002' });
+
+    const [error] = (await run({ user: INQUIRER, params: { id: 'att_x' } })).mock.calls[0];
+    expect(error?.status).toBe(403);
+  });
+
+  it('refuses a scoped role when no uploader was recorded', async () => {
+    store.getMetadata.mockResolvedValue({ queryId: null, uploadedBy: null });
+
+    const [error] = (await run({ user: OFFICIAL, params: { id: 'att_x' } })).mock.calls[0];
+    expect(error?.status).toBe(403);
+  });
+
+  it('still admits a role that sees every case', async () => {
+    store.getMetadata.mockResolvedValue({ queryId: null, uploadedBy: null });
+
+    expect(await run({ user: SUPER_ADMIN, params: { id: 'att_x' } })).toHaveBeenCalledWith();
+  });
+});
+
+describe('uploading', () => {
+  /**
+   * No queryId is required — portal intake attaches evidence before the case
+   * exists, and requiring one would break it.
+   */
+  it('allows an upload that names no case', async () => {
+    expect(await run({ user: INQUIRER, body: {} })).toHaveBeenCalledWith();
+  });
+
+  it('refuses planting a document on a case the caller is not party to', async () => {
+    party.value = false;
+
+    const next = await run({ user: INQUIRER, body: { queryId: 'QRY-SOMEONE-ELSE' } });
+
+    const [error] = next.mock.calls[0];
+    expect(error?.status).toBe(403);
+  });
+
+  it('allows an upload onto the caller own case', async () => {
+    party.value = true;
+
+    expect(await run({ user: OFFICIAL, body: { queryId: 'QRY-MINE' } })).toHaveBeenCalledWith();
   });
 });

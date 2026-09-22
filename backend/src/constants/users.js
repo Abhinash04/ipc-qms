@@ -4,16 +4,19 @@ import browserConfig from '../config/browserConfig.js';
 /**
  * The QMS user directory.
  *
- * NO SECRETS HERE. Passwords are never stored in source — every account
- * authenticates against a bcrypt hash of QMS_SEED_PASSWORD, derived at boot
- * (see services/auth/userDirectory.js).
+ * NO SECRETS HERE. Passwords are never stored in source — each account
+ * authenticates against its OWN bcrypt hash, resolved by
+ * services/auth/credentials.js from QMS_PASSWORDS_FILE or a per-account
+ * environment variable.
  *
  * Mirrors frontend/src/constants/mockUsers.js, which remains the frontend's
  * display directory for other users' names. The two must agree on id, email
  * and role; this file is the authority for authentication.
  *
- * TODO(phase-2): move this to a real Mongo-backed user collection with
- * per-user credentials, once server-side persistence lands.
+ * TODO(phase-2): move the directory itself to a Mongo-backed collection, so
+ * accounts can be added and deactivated without a redeploy. Per-account
+ * credentials already landed; what remains is the mutable directory and the
+ * `active` flag on models/User.js, which the auth path does not yet read.
  */
 export const USERS = [
   { id: 'USR-0001', name: 'Abhinash Pritiraj', role: ROLES.INQUIRER, email: 'abhinash.pritiraj@gmail.com', divisionId: null },

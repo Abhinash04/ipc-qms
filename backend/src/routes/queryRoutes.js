@@ -2,6 +2,7 @@ import express from 'express';
 import verifyToken from '../middleware/verifyToken.js';
 import { verifyRole, verifyAction } from '../middleware/verifyRole.js';
 import validateBody from '../middleware/validateBody.js';
+import authorizeCaseDelta from '../middleware/authorizeCaseDelta.js';
 import { ROLES } from '../constants/roles.js';
 import { WORKFLOW_ACTION } from '../constants/workflowActions.js';
 import {
@@ -23,13 +24,22 @@ const router = express.Router();
  * The workflow-state sync API.
  *
  * Every signed-in role hydrates from GET /queries and writes transitions
- * through POST /queries/persist, so neither can carry a role allow-list — the
- * guard that belongs there is per-case ownership, which is not yet server-side
- * (see middleware/authorizeAttachmentAccess.js for the same gap, and
- * constants/workflowActions.js for why the workflow-state half of `canPerform`
- * is still client-side). What IS enforced here: the request body is validated
- * against a schema so a caller cannot `$set` fields the models never declared,
- * and the audit actor is taken from the session, not the payload.
+ * through POST /queries/persist, so neither can carry a role allow-list — an
+ * allow-list naming every role denies nothing. Per-case ownership is the guard
+ * that belongs here, and it is now server-side:
+ *
+ *   - GET /queries is filtered to the cases the caller is party to, by
+ *     services/authz/caseAccess.js. The four roles whose scope is "everything"
+ *     (Front Office, Officer-in-Charge, Admin, Super Admin) still see all of
+ *     them; an Inquirer sees their own enquiry.
+ *   - POST /queries/persist runs middleware/authorizeCaseDelta.js, which checks
+ *     the values the delta sets against the caller's workflow actions, and then
+ *     checks every case it touches against the caller's scope as stored BEFORE
+ *     the delta.
+ *
+ * Also still enforced: the body is validated against a schema so a caller
+ * cannot `$set` fields the models never declared, and the audit actor is taken
+ * from the session, not the payload.
  *
  * /queries/reset is different in kind: it deletes every case in the system.
  * That is an administrative act, not a workflow one.
@@ -41,6 +51,7 @@ router.post(
   '/queries/persist',
   verifyToken,
   validateBody(persistTransitionSchema),
+  authorizeCaseDelta,
   persistTransition,
 );
 

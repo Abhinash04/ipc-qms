@@ -75,8 +75,20 @@ function validateFile({ filename, mimeType, size }) {
   if (!findRow(ext, mimeType)) {
     return { ok: false, reason: `unsupported file type "${ext}" (${mimeType || 'unknown mimetype'})` };
   }
-  if (typeof size === 'number' && size <= 0) return { ok: false, reason: 'empty file' };
-  if (typeof size === 'number' && size > maxFileBytes) {
+  /**
+   * An unverifiable size FAILS, rather than skipping the check.
+   *
+   * These two guards used to read `typeof size === 'number'`, so a caller
+   * passing null silently skipped both the empty-file test and the per-file
+   * ceiling — which is exactly what the Gmail ingest path did, leaving the only
+   * route a fully external sender can drive with no size limit at all. Every
+   * caller has the size available (a declared part size, or buffer.length), so
+   * "no size" means a caller forgot to pass it, not that there is nothing to
+   * check.
+   */
+  if (!Number.isFinite(size)) return { ok: false, reason: 'file size could not be determined' };
+  if (size <= 0) return { ok: false, reason: 'empty file' };
+  if (size > maxFileBytes) {
     return { ok: false, reason: `exceeds the ${env.ATTACHMENT_MAX_FILE_MB}MB per-file limit` };
   }
   return { ok: true };

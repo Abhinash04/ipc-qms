@@ -75,6 +75,12 @@ const CASE = {
   updatedAt: '2026-09-17T09:00:00.000Z',
 };
 
+/**
+ * Posted as the Front Office, which is the role that drives intake. Note the
+ * states used below are ones that role may actually set: since
+ * middleware/authorizeCaseDelta.js landed, a delta naming a state the caller's
+ * role holds no action for is refused with 403 before the collision guard runs.
+ */
 const persist = (query) =>
   request(app)
     .post('/api/v1/queries/persist')
@@ -97,11 +103,11 @@ describe('/api/v1/queries/persist — one id, one case', () => {
   it('updates the case it already holds', async () => {
     await persist(CASE);
 
-    const res = await persist({ ...CASE, workflowState: 'ASSIGNED' });
+    const res = await persist({ ...CASE, workflowState: 'PENDING_ASSIGNMENT' });
 
     expect(res.status).toBe(200);
     expect(db.rows).toHaveLength(1);
-    expect(db.rows[0].workflowState).toBe('ASSIGNED');
+    expect(db.rows[0].workflowState).toBe('PENDING_ASSIGNMENT');
   });
 
   /** The one that matters: a different enquiry arriving under the same id. */
@@ -135,9 +141,9 @@ describe('/api/v1/queries/persist — one id, one case', () => {
   it('allows the write when there is no createdAt to compare', async () => {
     await persist({ ...CASE, createdAt: undefined });
 
-    const res = await persist({ ...CASE, workflowState: 'ASSIGNED' });
+    const res = await persist({ ...CASE, workflowState: 'PENDING_ASSIGNMENT' });
 
     expect(res.status).toBe(200);
-    expect(db.rows[0].workflowState).toBe('ASSIGNED');
+    expect(db.rows[0].workflowState).toBe('PENDING_ASSIGNMENT');
   });
 });

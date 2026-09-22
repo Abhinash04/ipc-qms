@@ -50,8 +50,9 @@ const pad = (n) => String(n).padStart(5, '0');
  * the retry states — the approval happened, the send did not, and pressing
  * approve again should finish the job rather than re-decide it or refuse.
  */
-const NEEDS_APPROVAL = ['PENDING_FINAL_APPROVAL', 'APPROVED'];
-const ALREADY_APPROVED = ['READY_FOR_DISPATCH', 'DISPATCHED', 'CLOSED'];
+// Moved to constants/workflowStates.js, which is now the one place the server
+// keeps the workflow vocabulary. These were its only server-side literals.
+import { NEEDS_APPROVAL, ALREADY_APPROVED } from '../../constants/workflowStates.js';
 
 const record = (actor, event) => ({
   action: event,
