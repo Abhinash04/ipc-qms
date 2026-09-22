@@ -603,8 +603,71 @@ function parseDraftJson(jsonStr, { subject, evidence, contextUsed }) {
       fallback: false,
     };
   } catch {
+    if (typeof jsonStr === 'string' && jsonStr.trim().length > 10) {
+      const paragraphs = jsonStr
+        .split(/(?:\r?\n){2,}/)
+        .map((p) => p.trim())
+        .filter((p) => p.length > 0 && !/^```/i.test(p));
+
+      const answers = evidence.map((item, idx) => {
+        const passageIds = item.passages.map((p) => p.id);
+        const sufficiency =
+          item.passages.length === 0 ? SUFFICIENCY.NOT_ESTABLISHED : SUFFICIENCY.PARTIAL;
+
+        return {
+          question: item.number,
+          questionText: item.question,
+          topic: deriveTopic(item.question),
+          sufficiency,
+          paragraphs: sufficiency === SUFFICIENCY.NOT_ESTABLISHED ? [] : [paragraphs[idx] || paragraphs[0] || ''],
+          notEstablished: '',
+          sources: sufficiency === SUFFICIENCY.NOT_ESTABLISHED ? [] : passageIds,
+        };
+      });
+
+      return {
+        subject: `Response regarding ${subject.trim() || 'your enquiry'}`,
+        answers,
+        termsUsed: [],
+        contextUsed,
+        aiGenerated: true,
+        fallback: false,
+      };
+    }
     return null;
   }
+}
+
+/**
+ * Reusable system prompt template for QMS Response Draft Generation.
+ */
+export function buildDraftPromptTemplate({ query = '', caseContext = '', previousCommunication = '' }) {
+  return `You are an official QMS response drafting assistant for the Indian Pharmacopoeia Commission (IPC).
+
+Your task is to generate a professional response draft for the incoming query.
+
+Rules:
+1. Carefully understand the incoming query before generating the draft.
+2. Use only the information provided in the query and supplied case context.
+3. Never invent facts, names, dates, reference numbers, statuses, policies, or commitments.
+4. Do not assume information that is not provided.
+5. Maintain formal, professional and official communication language.
+6. Keep the response clear, concise and directly relevant to the query.
+7. If the available information is insufficient to provide a factual answer, prepare a draft indicating that the matter requires verification by the concerned officer (set sufficiency to "NOT_ESTABLISHED"). Never leave a question silent.
+8. Do not mention AI, LLM, prompts, models, or internal processing.
+9. Do not provide analysis, reasoning, or commentary outside the response draft.
+10. Return only the response draft.
+
+Incoming Query:
+${query}
+
+Case Context:
+${caseContext}
+
+Previous Relevant Communication:
+${previousCommunication}
+
+Generate the response draft now.`;
 }
 
 export async function generateDraft({
@@ -651,55 +714,15 @@ ${formatPassagesForPrompt(item.passages)}`;
     })
     .join('\n\n────────────────\n\n');
 
-  const prompt = `You are an expert AI Assistant drafting an official reply on behalf of the Indian Pharmacopoeia Commission (IPC), Ministry of Health & Family Welfare, Government of India.
+  const queryBlock = `Subject: "${fenceSafe(subject, 300) || 'Untitled Enquiry'}"\nFrom: ${fenceSafe(inquirerName, 120) || 'the inquirer'}\nBody:\n"""\n${fenceSafe(body) || 'No body content provided.'}\n"""`;
 
-Your task is to draft the body of a professional reply email. The enquiry has been split into ${evidence.length} question(s), and each question has been given its OWN evidence. Answer each question separately, using only the evidence supplied for that question.
+  const previousCommBlock = `Summary: ${fenceSafe(summaryText, 1000) || 'No summary available.'}\nKey points:\n${pointsBlock}`;
 
-RULES:
-1. Answer each question ONLY from the evidence given under that question, plus the ORIGINAL ENQUIRY and the AI QUERY SUMMARY.
-2. Do NOT invent drug names, monograph numbers, thresholds, batch numbers, regulations, standards, dates, references or citations. If a fact is not in the material below, it does not exist for this reply.
-3. For every question set "sufficiency":
-   - "ANSWERED" — the evidence fully settles the question.
-   - "PARTIAL" — the evidence says something on the same subject matter but does not settle every part. Summarise what the IPC material DOES establish, then state plainly which part of the question it does not settle.
-   - "NOT_ESTABLISHED" — no supplied passage touches the subject matter at all.
-   Never answer a question from general knowledge. Never leave a question silent.
-4. "PARTIAL" is the expected outcome whenever any supplied passage is on the same subject matter, even if it does not answer the precise point asked. A question about a degradation product or an impurity is on the same subject matter as guidance about related substances, impurity limits or reference standards — summarise that guidance, then say what remains unsettled. Reserve "NOT_ESTABLISHED" for questions where every supplied passage is about something else entirely.
-4a. A question marked "No IPC passage qualified as evidence for this question." MUST be "NOT_ESTABLISHED" with an empty "paragraphs" list. Do not answer it from the glossary, from another question's evidence, or from your own knowledge.
-5. When "sufficiency" is "PARTIAL" you MUST write at least one paragraph AND you MUST fill "notEstablished" with one sentence naming the specific part of the question the supplied material does not settle. An empty paragraph list is only valid for "NOT_ESTABLISHED".
-6. Be concise and specific. No filler, no generic explanation of what IPC is, no restating the enquiry back.
-7. Use the IPC GLOSSARY terminology correctly. An entry marked UNVERIFIED must not be presented as authoritative.
-8. A passage marked AMENDMENT is a correction to a published monograph, never the complete requirement. If you rely on one, state the amendment list and page and say the base monograph still applies.
-9. Do NOT write a greeting, a salutation, a sign-off, a signature, a designation or any person's name. Those are added by the system. Write body paragraphs only.
-10. In "sources" list only the bracketed passage identifiers you actually relied on for that question.
-10a. "topic" is a heading of at most six words naming the subject of that question — for example "Quality section format", "Manufacturing site change", "Revised labelling requirements". It is a label, never a sentence and never a question.
-11. Output strictly valid JSON with this structure:
-{
-  "subject": "Response regarding <short restatement of the enquiry subject>",
-  "answers": [
-    { "question": 1, "topic": "Quality section format", "sufficiency": "PARTIAL", "paragraphs": ["..."], "notEstablished": "The supplied material does not settle <the specific point>.", "sources": ["GD-10#37"] }
-  ],
-  "termsUsed": ["IPC glossary terms or document references you actually relied on"]
-}
-12. Return ONLY the JSON object. No markdown wrappers, no commentary outside the JSON.
-
-ORIGINAL ENQUIRY
-Subject: "${fenceSafe(subject, 300) || 'Untitled Enquiry'}"
-From: ${fenceSafe(inquirerName, 120) || 'the inquirer'}
-Body:
-"""
-${fenceSafe(body) || 'No body content provided.'}
-"""
-
-AI QUERY SUMMARY
-${fenceSafe(summaryText, 1000) || 'No summary available.'}
-Key points:
-${pointsBlock}
-
-════════ EVIDENCE, PER QUESTION ════════
-
-${questionBlocks}
-
-IPC JSON Draft:`;
+  const prompt = buildDraftPromptTemplate({
+    query: queryBlock,
+    caseContext: questionBlocks,
+    previousCommunication: previousCommBlock,
+  });
 
   const rawAnswer = await askGemma(prompt, {
     timeoutMs: env.GEMMA_TIMEOUT_MS * DRAFT_TIMEOUT_FACTOR,
@@ -723,6 +746,7 @@ export const gemmaService = {
   generateSummary,
   recommendOfficial,
   generateDraft,
+  buildDraftPromptTemplate,
   decomposeEnquiry,
   dedupeQuestions,
   deriveTopic,

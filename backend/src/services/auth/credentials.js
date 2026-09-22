@@ -70,8 +70,12 @@ function passwordsFromFile() {
   return fileCache;
 }
 
-const sharedAllowed = () =>
-  String(process.env.QMS_ALLOW_SHARED_PASSWORD || '').trim().toLowerCase() === 'true';
+const sharedAllowed = () => {
+  const envVal = String(process.env.QMS_ALLOW_SHARED_PASSWORD || '').trim().toLowerCase();
+  if (envVal === 'true') return true;
+  if (envVal === 'false') return false;
+  return (process.env.NODE_ENV || 'development') !== 'production' && Boolean(process.env.QMS_SEED_PASSWORD);
+};
 
 /**
  * The configured password for one account, with the source that supplied it.

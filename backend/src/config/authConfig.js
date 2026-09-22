@@ -42,9 +42,12 @@ export function cookieOptions() {
   };
 }
 
-/** The legacy one-secret-opens-everything mode, off unless explicitly enabled. */
+/** The legacy one-secret-opens-everything mode, off unless explicitly enabled or defaulting in development. */
 export function sharedPasswordEnabled() {
-  return String(process.env.QMS_ALLOW_SHARED_PASSWORD || '').trim().toLowerCase() === 'true';
+  const envVal = String(process.env.QMS_ALLOW_SHARED_PASSWORD || '').trim().toLowerCase();
+  if (envVal === 'true') return true;
+  if (envVal === 'false') return false;
+  return (process.env.NODE_ENV || 'development') !== 'production' && Boolean(process.env.QMS_SEED_PASSWORD);
 }
 
 export function validateAuthConfig(config = authConfig) {

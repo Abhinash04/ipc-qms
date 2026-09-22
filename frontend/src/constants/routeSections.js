@@ -130,7 +130,7 @@ export const SECTIONS = {
     segment: "reports",
     label: "Reports",
     icon: BarChart3,
-    nav: true,
+    // nav: true,
   },
   [SECTION.ADMINISTRATION]: {
     segment: "administration",
