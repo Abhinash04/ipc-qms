@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
@@ -97,7 +97,10 @@ describe('forwarding a query with attachments', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: /Forward to Officer-in-Charge/ }));
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('Missing attachment(s): spec.pdf');
+    // The notice appears first with the generic "not forwarded" text, and the
+    // server's reason is added when the forward's answer arrives — so wait for
+    // the reason, not for the first alert.
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Missing attachment(s): spec.pdf'));
     expect(s().getQuery(queryId).workflowState).toBe(WORKFLOW_STATE.FRONT_OFFICE_VERIFICATION);
     expect(
       s().emailMessages.some((m) => m.queryId === queryId && m.emailType === EMAIL_TYPE.FORWARD),
