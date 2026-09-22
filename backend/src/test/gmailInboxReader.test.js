@@ -14,7 +14,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
  * no real inbox is touched.
  */
 
-import { list, markIngested, remove } from '../services/email/mailbox/gmailInboxReader.js';
+import { list, markIngested, remove, resetCache } from '../services/email/mailbox/gmailInboxReader.js';
 
 const listMessages = vi.fn();
 const getMessage = vi.fn();
@@ -72,6 +72,8 @@ function inboxContains(...messages) {
 }
 
 beforeEach(() => {
+  // The reader caches parsed messages between polls; each test starts fresh.
+  resetCache();
   vi.clearAllMocks();
 });
 
@@ -240,5 +242,90 @@ describe('remove', () => {
     trashMessage.mockResolvedValue({});
 
     expect(await remove(FRONT_OFFICE, 'msg-1', { client: fakeGmail })).toBeNull();
+  });
+});
+
+/**
+ * What a poll costs, and how it behaves under two pollers.
+ *
+ * The Front Office inbox is polled by the page and by the background count, a
+ * few seconds apart, all day. A poll used to be one search plus a fetch per
+ * message plus a re-download of every attachment — 26 requests through a
+ * four-thread DNS resolver, which in a live test took 32 to 46 seconds and
+ * failed far more often than a single request would.
+ */
+describe('polling the same inbox again', () => {
+  /** Only the `is:unread` search answers with the unread ids. */
+  const inboxHolds = (ids, { unread = ids } = {}) => {
+    listMessages.mockImplementation(({ q }) =>
+      Promise.resolve({
+        data: { messages: (q.includes('is:unread') ? unread : ids).map((id) => ({ id })) },
+      }),
+    );
+    getMessage.mockImplementation(({ id }) => Promise.resolve({ data: gmailMessage({ id }) }));
+  };
+
+  it('re-reads the searches, not the messages', async () => {
+    inboxHolds(['msg-1', 'msg-2']);
+
+    await list(FRONT_OFFICE, { unreadOnly: false, client: fakeGmail });
+    expect(getMessage).toHaveBeenCalledTimes(2);
+
+    listMessages.mockClear();
+    getMessage.mockClear();
+
+    const messages = await list(FRONT_OFFICE, { unreadOnly: false, client: fakeGmail });
+
+    // Two searches: what is in the inbox, and what of it is unread.
+    expect(listMessages).toHaveBeenCalledTimes(2);
+    expect(getMessage).not.toHaveBeenCalled();
+    expect(messages).toHaveLength(2);
+  });
+
+  it('takes read and unread from the search, so a cached message is never stale', async () => {
+    inboxHolds(['msg-1']);
+    expect((await list(FRONT_OFFICE, { unreadOnly: false, client: fakeGmail }))[0].ingested).toBe(false);
+
+    // The Front Officer has read it; only the unread search knows.
+    inboxHolds(['msg-1'], { unread: [] });
+    getMessage.mockClear();
+
+    const [message] = await list(FRONT_OFFICE, { unreadOnly: false, client: fakeGmail });
+
+    expect(message.ingested).toBe(true);
+    expect(getMessage).not.toHaveBeenCalled();
+  });
+
+  it('shares one read between two pollers asking at the same time', async () => {
+    inboxHolds(['msg-1']);
+
+    const [a, b] = await Promise.all([
+      list(FRONT_OFFICE, { unreadOnly: false, client: fakeGmail }),
+      list(FRONT_OFFICE, { unreadOnly: false, client: fakeGmail }),
+    ]);
+
+    expect(listMessages).toHaveBeenCalledTimes(2);
+    expect(getMessage).toHaveBeenCalledTimes(1);
+    expect(a).toEqual(b);
+  });
+
+  it('fetches at most four messages at once', async () => {
+    const ids = Array.from({ length: 12 }, (_, index) => `msg-${index}`);
+    inboxHolds(ids);
+
+    let inFlight = 0;
+    let peak = 0;
+    getMessage.mockImplementation(async ({ id }) => {
+      inFlight += 1;
+      peak = Math.max(peak, inFlight);
+      await new Promise((resolve) => setTimeout(resolve, 1));
+      inFlight -= 1;
+      return { data: gmailMessage({ id }) };
+    });
+
+    const messages = await list(FRONT_OFFICE, { unreadOnly: false, client: fakeGmail });
+
+    expect(messages).toHaveLength(12);
+    expect(peak).toBeLessThanOrEqual(4);
   });
 });

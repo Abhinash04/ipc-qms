@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { list, materialiseAttachments } from '../services/email/mailbox/gmailInboxReader.js';
+import { list, materialiseAttachments, resetCache } from '../services/email/mailbox/gmailInboxReader.js';
 import * as store from '../services/attachments/attachmentStore.js';
 import env from '../config/env.js';
 
@@ -56,6 +56,8 @@ function inboxContains(...messages) {
 }
 
 beforeEach(async () => {
+  // The reader caches parsed messages between polls; each test starts fresh.
+  resetCache();
   vi.clearAllMocks();
   await store.reset();
 });
