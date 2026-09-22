@@ -225,6 +225,15 @@ export const finalApprovalSchema = z.object({
   comment: z.string().max(2000).optional(),
 });
 
+/**
+ * A person's answer to "did this email go out?", given after checking the
+ * sending mailbox's Sent folder for a send whose outcome was UNCERTAIN.
+ */
+export const resolveOutboundSchema = z.object({
+  emailType: z.enum(['ACKNOWLEDGEMENT', 'FORWARD', 'OUTGOING_RESPONSE']),
+  outcome: z.enum(['SENT', 'NOT_SENT']),
+});
+
 export const resetQueryStateSchema = z.object({
   queries: z.array(queryCaseSchema).optional(),
   workflowSteps: z.array(workflowStepSchema).optional(),

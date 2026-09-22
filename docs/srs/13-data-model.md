@@ -36,6 +36,12 @@ The three enum-valued fields above are plain `String`s in the schema, not Mongoo
 
 **The unique index on `queryId` does not protect `POST /queries/persist`.** Every case write there is an upsert keyed on `queryId`, so a colliding id never raises a duplicate-key error — it *replaces* the stored case. `persistTransition` therefore compares `createdAt` first and answers **409** when the stored value differs from the incoming one, keeping the original enquiry. Case IDs on the email path are minted server-side by `QueryCounter` and cannot collide; the in-app **Raise Enquiry** portal path still mints client-side, and this is the guard that protects it.
 
+**`inquirer` is write-once.** It is written with `$setOnInsert` by `POST /queries/persist`, so the
+address read off the `From` header at intake cannot be replaced by a later delta. Every
+acknowledgement and every final response goes to it; a client able to change it is a client able to
+send one inquirer's answer to another. `workflowState` is likewise refused a move to `DISPATCHED` or
+`CLOSED` from a client — those belong to the path that actually sends the email.
+
 ## 13.2 WorkflowStep
 
 Modeled as a **dynamic, ordered collection** per query — never fixed `review1`/`review2`
@@ -120,7 +126,46 @@ One collection serves both trails. The client works in `{ event, actor, at }` an
 
 The `from`/`subject`/`receivedAt` snapshot exists for the same reason: a rejected Gmail message stops matching `is:unread` once marked read, and may later be archived or deleted by its owner. Without the snapshot, "what did she reject, and from whom?" would have no answer a month later.
 
-## 13.6 Supporting Entities
+## 13.6 OutboundEmail
+
+`backend/src/models/OutboundEmail.js`. One row per outbound email a case may send — the record of
+whether it has been sent, and the thing that makes sure it is sent only once.
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| `dispatchKey` | string | `"${emailType}:${queryId}"`. Required, **unique index**. This is the guard: a second request cannot insert it, so a second request cannot send. |
+| `queryId` | string → `Query.queryId` | **Indexed**, with `emailType`. |
+| `emailType` | string | `ACKNOWLEDGEMENT` / `FORWARD` / `OUTGOING_RESPONSE`. |
+| `status` | string | `SENDING` / `SENT` / `FAILED` / `UNCERTAIN`. |
+| `claimToken` | string | Identifies the request that holds the claim, so only it may mark the send complete. |
+| `leaseExpiresAt` | ISO-8601 string | Three minutes. A `SENDING` row past its lease is promoted to `UNCERTAIN` — the process that held it died mid-send, and whether the email went out is genuinely unknown. |
+| `recipients` | [string] | Read from the stored case, never from a request. |
+| `subject`, `transport`, `domain` | string | What was sent, through what, from where. |
+| `rfcMessageId` | string | The `Message-ID` header of the attempt, which is what a Gmail Sent-folder search matches on. |
+| `attempts` | number | Including the one automatic quick retry. |
+| `providerMessageId` / `providerThreadId` | string | Returned by the transport on success. |
+| `sentAt` | ISO-8601 string | Set only when the send is known to have happened. |
+| `lastError`, `lastOutcome` | string | The reason and the classification of the last attempt. |
+| `resolvedBy` | object | Who answered *It was sent* / *It was not sent* for an `UNCERTAIN` row, and when. |
+| `history` | [object] | Capped at 20 entries. |
+
+**Why a separate collection rather than a flag on the case.** Three different paths send a case's
+email — intake, final approval and the Front Office retry buttons — and two of them can run
+concurrently with a third. A flag read and then written leaves a window between the two; a unique
+key does not. The live failure this model exists to prevent had four Approve requests all read "no
+response sent yet" during one twenty-two-second send, and all proceed.
+
+**`UNCERTAIN` is a first-class state, not an error.** A send whose outcome was never confirmed
+cannot be retried safely and must not be silently treated as failed. The row keeps it, the UI reads
+it, and a person settles it through `POST /queries/:queryId/outbound/resolve` — audited as
+`EMAIL_DELIVERY_CONFIRMED` or `EMAIL_DELIVERY_DENIED`. For Gmail the Sent folder is searched first
+and the row is settled automatically where the answer is unambiguous.
+
+**Cleared by a reset.** `POST /queries/reset` and `npm run db:reset` delete this collection with the
+rest. Case IDs restart from `00001` after a reset, so a surviving row would silently suppress the
+first email of a new case carrying an old case's id.
+
+## 13.7 Supporting Entities
 
 - **User** (`User.js`) — `userId` (unique index), `name`, `email` (unique index), `role` (enum of `constants/roles.js`, indexed), `divisionId`, `active`, `createdAt`. Seeded on connect from `constants/users.js` with `$setOnInsert`, so a restart never overwrites an edited record.
 - **Review** (`Review.js`) — one reviewer's decision on one step: `reviewId` (unique index), `queryId` (indexed), `stepId` (indexed), `reviewerId`, `decision`, `comment`, `responseId`, `version`, `at`. The field is **singular**: it was `comments`, the client has always written `comment`, and the persist validator therefore stripped every reviewer's words in silence — stored reviews from before the fix all read `comments: ""`. `responseId` and `version` pin a comment to the draft it judged, so it stays meaningful once a later revision supersedes that text. `stepId` and `reviewerId` are **nullable**: the Officer-in-Charge returning a draft for revision from *final approval* has no review step open, and declaring `stepId` required made that request a 400 that took the case update and the audit event down with it.
@@ -129,8 +174,20 @@ The `from`/`subject`/`receivedAt` snapshot exists for the same reason: a rejecte
 - **EmailThread** (`EmailThread.js`) — `threadId` (unique index), `queryId` (indexed), `createdAt`.
 - **MailboxMessage** (`MailboxMessage.js`) — the IPC mailbox: `mailboxMessageId` (unique index), `to` (indexed), `from`, `cc`, `bcc`, `subject`, `body`, `attachments`, `receivedAt`, `ingested` (indexed), `aiSummary`, plus three fields for mail read from a provider rather than deposited locally:
   - `source` (indexed, default `local`) — `local` for a message deposited into the mock/Mongo mailbox, `nic-browser` for one read out of NICeMail by the browser agent.
-  - `providerMessageId` — the provider's id for the message, under a unique **partial** index (`partialFilterExpression: { providerMessageId: { $type: 'string' } }`), so re-reading the inbox can never store it twice while local messages, which have none, never collide. For `nic-browser` it is the id the reader takes off the inbox row — an unverified stand-in for NICeMail's own message id until the browser agent's selectors are calibrated ([NIC_BROWSER_AGENT.md §17](../NIC_BROWSER_AGENT.md#known-limitations--open)) — and `mailboxMessageId` is derived from it (`NICB-` plus a hash).
-  - `removedAt` — set when the Front Office deletes a `nic-browser` message, which is hidden rather than deleted. The row is the only record that the message was already handled: a sync writes with `$setOnInsert`, so it never resets `ingested` or `removedAt`, but a message whose row is deleted outright — `npm run db:reset`, `DELETE /api/v1/mailbox` on the Mongo store, a hard delete — is stored again by the next sync that reaches it.
+  - `providerMessageId` — the provider's id for the message, under a unique **partial** index (`partialFilterExpression: { providerMessageId: { $type: 'string' } }`), so re-reading the inbox can never store it twice while local messages, which have none, never collide. For `nic-browser` it is Zoho's own message id, taken off the inbox row — the id the mail app routes on and names the open message's container with, verified against the live mailbox ([NIC_BROWSER_AGENT.md §17](../NIC_BROWSER_AGENT.md#17-two-front-office-mailboxes)) — and `mailboxMessageId` is derived from it (`NICB-` plus a hash).
+  - `removedAt` — set when the Front Office deletes a `nic-browser` message, which is hidden rather than deleted. The row is the only record that the message was already handled: a sync writes with `$setOnInsert`, so it never resets `ingested` or `removedAt`. The Mongo primary store never lists, changes or deletes a `nic-browser` row, so `DELETE /api/v1/mailbox` and the primary mailbox's delete leave them alone; a row deleted outright by `npm run db:reset` is stored again by the next sync that reaches the message.
+
+  Further fields, additive, for what a provider reader extracts beyond the common shape. Rows are insert-only and **not backfilled**: older rows simply lack them, and the API view fills the defaults.
+
+  - `toAddresses` — the message's own To header, as read. `to` stays the mailbox the message was filed under, so Bcc'd and list mail still belongs to that mailbox's Front Office; the API falls back to `[to]` when this is empty.
+  - `providerThreadId` — the provider's conversation id. Null for `nic-browser` until the thread id is calibrated.
+  - `bodyHtml` — the body as the provider rendered it, for the dashboard's sandboxed view. Null when there is none or it is over 1,000,000 characters (dropped, never cut). Left out of list responses; only a message's own endpoint returns it.
+  - `providerUnread` — whether the provider showed the message unread when it was first read. A record of the provider's state, not the QMS read state.
+  - `receivedAtSource` — `message` when `receivedAt` is the message's own timestamp, `sync` when it is only the time the agent read it.
+  - `readAt` / `readByUserId` — the QMS read state, set once by the first `POST /api/v1/mailbox/messages/:id/read`. Only the NICeMail mailbox keeps it, and it is never written back to NICeMail.
+  - `createdAt` — when the row was written, set explicitly on insert. Its schema default is `null`, not the current time, so an older row reads `null` rather than the time it was loaded.
+
+  A compound index `{ to: 1, source: 1, removedAt: 1, receivedAt: -1, mailboxMessageId: -1 }` serves the inbox list: one mailbox, not removed, newest first.
 
   The same file exports **Counter** (`key`, numeric `value`), incremented with `$inc` to mint sequential `MSG-00001` ids for locally deposited messages. Carries no accept/reject state — that is `MailboxDecision` (13.5).
 - **QueryCounter** (`QueryCounter.js`) — the workflow store's id counters, stored whole as an object (`QRY`, `THREAD`, `MSG`, `AUD`, `NOTIF`, `STEP`, `REV`, `RESP`) under a single `counters` key. Kept apart from `Counter` because that model's `value` is a `Number`, and writing a map into it throws a `CastError` that fails the entire persist. `value` is `Mixed` rather than `Object` so per-key atomic operators reach it: accepting a message mints its Case ID with `$inc: { 'value.QRY': 1 }`, and a client's reported counters are merged with `$max: { 'value.QRY': n }`, never `$set`, so a stale tab cannot regress the sequence. Under a plain `Object` path Mongoose's strict mode strips those dotted updates and the write silently does nothing.
@@ -138,7 +195,7 @@ The `from`/`subject`/`receivedAt` snapshot exists for the same reason: a rejecte
 
 **Indexes are authoritative from the schema.** `connectDb()` calls `Model.syncIndexes()` on every model at startup. `createCollection()` builds an index that does not exist yet but will not rebuild one whose *options* have changed, which is how the database kept a unique `EmailMessage.sourceMessageId` index created without the partial filter while the schema said otherwise. `syncIndexes()` drops and recreates what has drifted, and also drops indexes these model files do not declare — the intended contract: the schema files are where indexes are defined.
 
-## 13.7 Not Yet Finalized
+## 13.8 Not Yet Finalized
 
 - **Referential integrity is not enforced by the database.** References are plain string ids, not `ObjectId`s, so nothing stops a `currentWorkflowStepId` pointing at a step that no longer exists. That invariant is held by the store's single-writer `applyTransition`, and would have to be re-established server-side alongside workflow-state enforcement.
 - **Case-field enums are not schema-constrained** — `validators/queryStateSchemas.js` bounds the key space of a persist, not the value sets.

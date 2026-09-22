@@ -9,6 +9,7 @@ import {
   persistTransitionSchema,
   resetQueryStateSchema,
   finalApprovalSchema,
+  resolveOutboundSchema,
 } from '../validators/queryStateSchemas.js';
 import {
   loadAllQueries,
@@ -16,6 +17,7 @@ import {
   persistTransition,
   resetQueryState,
   finalApproval,
+  resolveOutbound,
 } from '../controllers/queryController.js';
 
 const router = express.Router();
@@ -70,6 +72,21 @@ router.post(
   verifyAction(WORKFLOW_ACTION.FINAL_APPROVE),
   validateBody(finalApprovalSchema),
   finalApproval,
+);
+
+/**
+ * "It was sent" / "It was not sent" — settles a case email whose send was
+ * UNCERTAIN, after someone has checked the sending mailbox's Sent folder.
+ *
+ * The Front Office owns the mailbox and the retry buttons, so it owns the
+ * answer; Super Admin for support. Nothing is sent by this call.
+ */
+router.post(
+  '/queries/:queryId/outbound/resolve',
+  verifyToken,
+  verifyRole(ROLES.FRONT_OFFICE, ROLES.SUPER_ADMIN),
+  validateBody(resolveOutboundSchema),
+  resolveOutbound,
 );
 
 router.post(

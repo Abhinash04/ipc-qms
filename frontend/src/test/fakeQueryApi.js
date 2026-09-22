@@ -21,6 +21,9 @@ const empty = () => ({
   notifications: [],
   emailMessages: [],
   emailThreads: [],
+  // One row per email a case owes someone — the server's record of whether it
+  // has been sent. Written by the case-mail endpoints, never by the client.
+  outboundEmails: [],
   counters: null,
 });
 
@@ -103,6 +106,36 @@ export async function grantFinalApproval(queryId) {
   );
 }
 
+/**
+ * The send ledger, as the server would write it. `fakeCaseMail` calls this;
+ * nothing in `src/` may, which is the point of the 409 the real persist answers
+ * a client that tries.
+ */
+export function recordOutbound(row) {
+  upsert(state.outboundEmails, 'dispatchKey', { ...row, dispatchKey: `${row.emailType}:${row.queryId}` });
+}
+
+/**
+ * Recording what the Sent folder actually contained is the case-mail
+ * endpoint's job, and a page reaches it through this module rather than by
+ * injection — so `installFakeCaseMail` registers its own here.
+ */
+let outboundResolver = null;
+
+export function __setOutboundResolver(resolve) {
+  outboundResolver = resolve;
+}
+
+export async function resolveOutboundEmail(queryId, body) {
+  if (!outboundResolver) {
+    throw new Error(
+      `fakeQueryApi: no resolve endpoint is installed for ${queryId} — ` +
+        'call installFakeCaseMail(mailboxService) first',
+    );
+  }
+  return outboundResolver(queryId, body);
+}
+
 export async function resetQueries(seed = {}) {
   state = { ...empty(), ...clone(seed) };
   return { success: true };
@@ -111,4 +144,5 @@ export async function resetQueries(seed = {}) {
 /** Called from the global test setup so state does not leak between tests. */
 export function __resetFakeQueryApi() {
   state = empty();
+  outboundResolver = null;
 }

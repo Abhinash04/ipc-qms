@@ -29,4 +29,16 @@ export default defineConfig([
       globals: { ...globals.node, ...globals.vitest },
     },
   },
+  {
+    /**
+     * The browser agent is two languages in one directory: most of it runs on
+     * Node, and the functions it hands to `session.evaluate` are serialised and
+     * run inside the NICeMail tab, where `document` and `location` are exactly
+     * as defined as `process` is here.
+     */
+    files: ['src/services/email/nic/browser/*.js', 'src/scripts/nicBrowserDiscover.js', 'src/scripts/nicBrowserCalibrate.js'],
+    languageOptions: {
+      globals: { ...globals.node, ...globals.browser },
+    },
+  },
 ]);

@@ -2,7 +2,7 @@
 
 How to set up the NICeMail browser agent on a fresh Windows development machine: a dedicated Chrome
 session, the Chrome DevTools Protocol (CDP) on `localhost:9222`, a manual NICeMail sign-in, and
-Playwright attaching to that session.
+the agent's own CDP client attaching to that session.
 
 > **The browser agent never logs in to NICeMail.** You sign in by hand, MFA included, in a dedicated
 > Chrome window. The agent only *attaches* to that already-authenticated session through CDP.
@@ -14,27 +14,30 @@ Playwright attaching to that session.
 NICeMail is reachable by two unrelated mechanisms in this repo (see
 [backend/README.md](../backend/README.md), "NICeMail"):
 
-| # | Mechanism | Configured by | Used for |
-|---|---|---|---|
-| 1 | IMAP/SMTP | `NIC_EMAIL`, `NIC_IMAP_*`, `NIC_SMTP_*`, app password | the production mail path (`MAILBOX_SOURCE=nic`, `EMAIL_TRANSPORT=nic`) |
-| 2 | **Browser agent over CDP** (this document) | `NIC_CDP_ENDPOINT`, `NIC_WEBMAIL_*`, `NIC_BROWSER_*` | attaching to a human-authenticated NICeMail web session |
+| #   | Mechanism                                  | Configured by                                         | Used for                                                               |
+| -----| --------------------------------------------| -------------------------------------------------------| ------------------------------------------------------------------------|
+| 1   | IMAP/SMTP                                  | `NIC_EMAIL`, `NIC_IMAP_*`, `NIC_SMTP_*`, app password | the production mail path (`MAILBOX_SOURCE=nic`, `EMAIL_TRANSPORT=nic`) |
+| 2   | **Browser agent over CDP** (this document) | `NIC_CDP_ENDPOINT`, `NIC_WEBMAIL_*`, `NIC_BROWSER_*`  | attaching to a human-authenticated NICeMail web session                |
 
 The two share no code and no credentials.
 
 **What the browser agent does:**
 
-- Connects to a running Chrome through CDP (`playwright-core` → `chromium.connectOverCDP`).
+- Connects to a running Chrome through CDP with its own DevTools Protocol client
+  (`browser/cdp.js`). There is no Playwright anywhere in the agent.
 - Finds the NICeMail tab among all open tabs and checks that it is signed in.
-- Runs **read-only** DOM discovery (`npm run nic:browser:discover`): tabs, frames, accessibility
-  nodes, and how many elements each of the agent's selectors matches.
+- Runs a **read-only** inspection (`npm run nic:browser:discover`): the targets Chrome exposes,
+  which document holds the mailbox, its accessibility tree, how every entry in the selector
+  registry resolves, the mail rows as the agent sees them, and a diagnosis (§12).
 - With `NIC_BROWSER_MAILBOX=true`: **reads** the NICeMail inbox into a second Front Office inbox,
-  and **sends** the acknowledgement and final response for cases that came from that mailbox. See
-  [§17](#17-two-front-office-mailboxes).
+  and **sends** the acknowledgement and final response for cases that came from that mailbox.
+  A send counts only once it is proven: the compose form has closed and the message is in NICeMail's
+  Sent folder. See [§17](#17-two-front-office-mailboxes).
 
 There is no separate agent process to start. The backend runs the agent on demand, only when the
 NICeMail Front Officer's inbox is polled or a case from that mailbox sends its acknowledgement or
-final response — whoever triggers the send. `playwright-core` is loaded at that point, never at boot.
-Browser work is serialised: one read or send at a time.
+final response — whoever triggers the send. The agent's modules are imported at that point, never
+at boot. Browser work is serialised: one read or send at a time.
 
 ## 2. Architecture
 
@@ -47,10 +50,10 @@ Browser work is serialised: one read or send at a time.
                      │
                      │  CDP — Chrome listens on localhost:9222
                      ↓
-             IPC-QMS browser agent (Node, playwright-core)
-                     │  connectOverCDP → existing pages only
+             IPC-QMS browser agent (Node, raw CDP client — cdp.js)
+                     │  attaches; opens a background tab of its own at NIC_WEBMAIL_APP_URL
                      ↓
-               NICeMail web UI (tab already open)
+               NICeMail web UI (mail.mgovcloud.in/zm, a top-level document in that tab)
                      │  authenticated session (cookies in the Chrome profile)
                      ↓
               NICeMail mailbox
@@ -74,7 +77,7 @@ Core QMS backend  (npm run dev / npm start)
    ├── MongoDB
    ├── AI services (Pravah Gemma)
    └── REST API
-        ✗ does not load the browser agent at boot; playwright-core loads only on first use
+        ✗ does not load the browser agent at boot; its modules load only on first use
 
 Browser agent  (npm run nic:browser:discover, or on demand for the NICeMail Front Office)
    └── Chrome / CDP :9222 → NICeMail
@@ -88,7 +91,7 @@ Only browser-agent work fails, and it is reported (see §17), not thrown at the 
 | Requirement | Version / detail | Verify |
 |---|---|---|
 | Windows | 10 or 11 | — |
-| Node.js | **≥ 20.19**. No `engines` field, but `mongoose@9` requires `>=20.19.0` and `playwright-core@1.63` requires `>=20`. Node 22 or 24 LTS is fine. | `node --version` |
+| Node.js | **≥ 22** for the browser agent: `cdp.js` speaks CDP over Node's global `WebSocket`, which Node enables by default from 22. The backend alone needs ≥ 20.19 (`mongoose@9`). No `engines` field. Node 22 or 24 LTS is fine. | `node --version` |
 | npm | ships with Node | `npm --version` |
 | Git | any recent | `git --version` |
 | Google Chrome | **≥ 136**, installed normally | see below |
@@ -115,25 +118,37 @@ ipc-qms/
 ├── frontend/                         React + Vite SPA
 ├── backend/
 │   ├── .env.example                  authoritative env reference
-│   ├── package.json                  scripts incl. nic:browser:discover
+│   ├── package.json                  scripts incl. nic:browser:discover, nic:browser:calibrate
 │   └── src/
 │       ├── config/
 │       │   └── browserConfig.js      NIC_CDP_* / NIC_WEBMAIL_* / NIC_BROWSER_* getters
 │       ├── services/email/
 │       │   ├── nic/browser/
+│       │   │   ├── cdp.js            the raw DevTools Protocol client (no Playwright)
 │       │   │   ├── attach.js         connect, pick tab, check sign-in, release
-│       │   │   ├── session.js        one serialised unit of work in a separate tab
-│       │   │   ├── selectors.js      every NICeMail UI selector (uncalibrated — §17)
-│       │   │   ├── readInbox.js      read the newest inbox rows
-│       │   │   └── sendMail.js       fill and send one compose form
+│       │   │   ├── session.js        one serialised unit of work in the agent's own tab
+│       │   │   ├── selectors.js      the selector registry (reading and compose calibrated;
+│       │   │   │                     ccToggle and the attachment keys still in UNCALIBRATED — §17)
+│       │   │   ├── pageKit.js        page-side resolver: role/name, visibility, uniqueness
+│       │   │   ├── inspect.js        the read-only inspector behind nic:browser:discover
+│       │   │   ├── readInbox.js      semantic inbox view; open and extract new messages
+│       │   │   └── sendMail.js       composeEmail: fill one compose form, send, find it in Sent
 │       │   ├── nic/outboundGuard.js  the NIC_ALLOW_OUTBOUND interlock
 │       │   ├── mailbox/nicBrowserMailbox.js       sync + store the NICeMail inbox in MongoDB
+│       │   ├── mailbox/messageView.js             the API view: status, read state, linked case
 │       │   └── transports/nicBrowserTransport.js  per-case sends through the browser
 │       ├── scripts/
-│       │   └── nicBrowserDiscover.js read-only discovery CLI
+│       │   └── nicBrowserDiscover.js read-only inspector CLI (over browser/inspect.js)
 │       └── test/
+│           ├── mailboxIngestion.test.js
+│           ├── mailboxMessageApi.test.js
 │           ├── nicBrowserAttach.test.js
+│           ├── nicBrowserCdp.test.js
+│           ├── nicBrowserInspect.test.js
 │           ├── nicBrowserMailbox.test.js
+│           ├── nicBrowserPage.test.js
+│           ├── nicBrowserReadInbox.test.js
+│           ├── nicBrowserSelectors.test.js
 │           └── nicBrowserSendMail.test.js
 └── docs/
 ```
@@ -150,18 +165,19 @@ cd backend
 npm install          # use `npm ci` on a deployment host
 ```
 
-The browser agent's only automation dependency is **`playwright-core`** (`^1.63.0`), already in
-`backend/package.json`.
+The browser agent has **no** automation dependency. It speaks the DevTools Protocol itself
+(`browser/cdp.js`) over Node's global `WebSocket`. `playwright-core` has been removed from
+`backend/package.json` and `package-lock.json`.
 
 | Package | Used? | Notes |
 |---|---|---|
-| `playwright-core` | **yes** | Driver library only. Downloads no browsers. |
-| `playwright` | no | Not a dependency. Do not add it. |
-| Playwright-bundled Chromium | no | **Do not** run `npx playwright install`. The agent never launches a browser. |
+| `playwright-core`, `playwright` | no | Removed. Do not add either back. |
+| Playwright-bundled Chromium | no | Not for the agent: it never launches a browser. (The frontend's end-to-end suite installs its own, which is unrelated.) |
+| `jsdom` | tests only | A backend **devDependency**, used only by `src/test/nicBrowserPage.test.js` to run the page-side resolver against a real DOM. Nothing at runtime loads it. |
 | Locally installed Google Chrome | **yes** | The agent attaches to it over CDP. |
 
-This is the "existing Chrome + CDP" architecture, not "Playwright launches its own Chromium". A
-freshly launched browser would not be signed in, so it would be useless here.
+This is the "existing Chrome + CDP" architecture, not "an automation library launches its own
+Chromium". A freshly launched browser would not be signed in, so it would be useless here.
 
 ## 6. Environment Configuration
 
@@ -181,13 +197,14 @@ Browser-agent variables. All are optional, and the defaults come from
 | `NIC_CDP_ENDPOINT` | `http://localhost:9222` | Where Chrome exposes CDP | yes |
 | `NIC_WEBMAIL_URL_PATTERNS` | `mail.gov.in,mgovcloud.in` | Comma-separated URL fragments that identify a NICeMail tab | yes |
 | `NIC_WEBMAIL_TITLE_PATTERNS` | `mail,inbox,nic` | Comma-separated title fragments, a secondary signal | yes |
+| `NIC_WEBMAIL_APP_URL` | `https://mail.mgovcloud.in/zm/` | The URL the agent opens in **its own** background tab. Not the operator's URL: on the workplace front door the mail UI is a cross-origin iframe with a debugging target of its own, which one session cannot drive; this URL serves the same mailbox as a single top-level document | yes |
 | `NIC_BROWSER_TIMEOUT_MS` | `20000` | The CDP connect, loading the work tab, and every wait inside a read or send — including how long a send waits for the compose form to close before it is reported **unconfirmed** (§17) | yes |
 | `NIC_BROWSER_TEST_RECIPIENT` | falls back to `NIC_TEST_RECIPIENT`, then `NIC_EMAIL` | The only address browser sends may reach until `NIC_ALLOW_OUTBOUND=true` | yes |
 | `NIC_BROWSER_MAILBOX` | `false` | `true` makes NICeMail a second Front Office mailbox (§17). Only the exact string `true` enables it | yes |
 | `NIC_FRONT_OFFICE_NAME` | `NICeMail Front Office` | A display **name**, not an address: the second Front Office user's name and the name on the From line of its mail. Empty falls back to the default | yes |
 | `NIC_BROWSER_SYNC_TTL_MS` | `30000` | Minimum gap between inbox syncs | yes |
-| `NIC_BROWSER_SYNC_MAX` | `20` | Newest inbox rows inspected per sync. Rows already stored count against it (§17, open items) | yes |
-| `NIC_BROWSER_ARTIFACT_DIR` | code: `storage/browser-artifacts` (`.env.example` sets `storage/nic-browser`) | Reserved for failure screenshots | **not yet** |
+| `NIC_BROWSER_SYNC_MAX` | `20` | At most this many **new** messages opened per sync; the first sync takes the newest this many (§17, *How a sync reads the inbox*) | yes |
+| `NIC_BROWSER_ARTIFACT_DIR` | `storage/nic-browser` | Where `npm run nic:browser:discover -- --json` writes its reports; under the gitignored `backend/storage/` | yes |
 
 There is **no** password, token or cookie variable for the browser agent, and there must never be
 one.
@@ -205,8 +222,9 @@ change what the suite sees; tests that exercise it switch it on themselves.
 **Which mailbox?** The agent reads and sends as whichever account is signed in to the Chrome tab.
 With `NIC_BROWSER_MAILBOX=true`, `NIC_EMAIL` is where the QMS files that mail — the mailbox its stored
 messages belong to, the second Front Office's sign-in, the From address it records, and the last
-fallback for the test recipient — but **nothing checks that the signed-in account is `NIC_EMAIL`**
-(§17, open items). Sign in to the right account. `NIC_EMAIL` also configures the IMAP/SMTP side
+fallback for the test recipient. **A send checks it**: the compose form's From must be `NIC_EMAIL`, or
+nothing is sent. **A read does not** (§17, open items). Sign in to the right account;
+`nic:browser:discover` shows the signed-in address, masked, in the tab title. `NIC_EMAIL` also configures the IMAP/SMTP side
 (mechanism 1):
 
 - current development/test mailbox: `contact.ecoclubs-edu@gov.in` (temporary)
@@ -293,9 +311,10 @@ The browser agent **never**:
 - touches the OTP field or bypasses MFA
 - launches a browser or creates its own authentication flow
 
-When it reads or sends mail, it works in a **separate tab** in the same signed-in browser context,
-pointed at the mailbox URL your tab is already on. It never drives your tab, and it closes its own
-tab afterwards. If that tab lands on anything that looks like a sign-in step, the work stops with
+When it reads or sends mail, it works in a **background tab of its own** in the same signed-in
+browser profile, pointed at `NIC_WEBMAIL_APP_URL`. It never drives your tab, and it closes its own
+tab afterwards. Reading a message marks it read in Zoho, so every message that was unread before the
+agent opened it is marked unread again before the tab closes. If that tab lands on anything that looks like a sign-in step, the work stops with
 `NICeMail session expired. Please authenticate again in Chrome.` before any field is touched. The only
 things it types are the To/Cc/Subject/body of an outgoing case email.
 
@@ -303,8 +322,12 @@ things it types are the To/Cc/Subject/body of an outgoing case email.
 
 `attachToNicemail()`:
 
-1. **Connect**: `chromium.connectOverCDP(NIC_CDP_ENDPOINT, { timeout: NIC_BROWSER_TIMEOUT_MS })`.
-2. **Enumerate** every page in every browser context (not just the first tab).
+1. **Connect**: the raw DevTools Protocol over `NIC_CDP_ENDPOINT` (`browser/cdp.js`), every request
+   bounded by `NIC_BROWSER_TIMEOUT_MS`. Playwright's `connectOverCDP` is deliberately not used: its
+   connect waits on *every* page target in the browser, so one tab sitting on its initial empty
+   document stalls the whole attach, and its driver keeps the Node process alive afterwards.
+2. **Enumerate** every page **and iframe** target (not just the first tab): on the workplace front
+   door the mailbox is an iframe with a target of its own.
 3. **Score** each tab (`scoreTab`):
    - URL must contain one of `NIC_WEBMAIL_URL_PATTERNS`, otherwise the score is 0 and the tab is ignored → **10**
    - URL contains `inbox`, `mail`, `folder` or `message` → **+5**
@@ -314,7 +337,8 @@ things it types are the To/Cc/Subject/body of an outgoing case email.
 4. **Pick** the highest score. Ties go to the order Chrome reports.
 5. **Check sign-in** (`isAuthenticated`): the tab counts as not authenticated if its URL has a login
    marker or an `input[type="password"]` is visible.
-6. **Release**: `release()` detaches Playwright. It does **not** close your Chrome or your tabs.
+6. **Release**: `release()` closes the agent's own CDP socket. It does **not** close your Chrome or
+   your tabs.
 
 Outcomes:
 
@@ -386,56 +410,187 @@ signed in. The discover script loads `backend/.env` itself.
 8. **Verify the inbox** is visible. Keep the tab open.
 9. **Run discovery**: `cd backend; npm run nic:browser:discover` (terminal 5).
 10. **"Start the browser agent"**: today this *is* step 9. There is no separate agent process.
-11. **Verify mailbox access**: discovery prints the NICeMail URL/title and ends with
+11. **Verify mailbox access**: discovery shows a document with `Mail list / rows  present / N`, ends
+    its **Diagnosis** with `Verdict: OK` (or `WARN`), and prints
     `Discovery complete. No page state was modified.`
 
 ## 12. Verification
 
-### Successful discovery output (illustrative)
+### The inspector: `npm run nic:browser:discover`
+
+A read-only inspection of the signed-in session (`browser/inspect.js`; the script is a thin CLI over
+it). Against your tabs it uses only `Browser.getVersion`, `Target.getTargets`,
+`Target.getBrowserContexts`, `Target.attachToTarget`/`detachFromTarget`, `Runtime.evaluate` of
+read-only functions, `Page.getFrameTree` and `Accessibility.getFullAXTree`: no navigation, no input,
+no `*.enable`, no auto-attach, nothing injected. Addresses are masked and URL query values stripped
+by default, because these reports get pasted into chats and a query string can carry a session id.
+
+| Flag (after `--`) | Effect |
+|---|---|
+| none | inspect every NICeMail page and iframe target Chrome exposes |
+| `--json` | also write the full report to `NIC_BROWSER_ARTIFACT_DIR` (default `backend/storage/nic-browser/nic-inspect-<timestamp>.json`, gitignored) |
+| `--rows=N` | show N mail rows (default 5) |
+| `--show-addresses` | do not mask addresses; query values are still stripped |
+| `--agent-tab` | also open the agent's own background tab at `NIC_WEBMAIL_APP_URL`, inspect it and close it, exactly as a sync does. The only flag that opens anything |
+
+For each candidate document the report gives its frame tree, element, shadow-root and frame counts,
+the cross-origin frames it could not search, `document.hidden`, a role and landmark census, the named
+controls in the accessibility tree, an inventory of interactive elements (the cells of mail rows
+collapsed to one line with a count, their text left out), and a census of build-hashed class names.
+Where the mail list is present it adds the registry resolution of every key in `selectors.js`, the
+first mail rows (id, unread, list date, size, sender, subject) and, when a message is open, what was
+extracted from it plus a probe of attachment-like elements.
+
+### Sample output (live, abridged)
+
+From the operator's Chrome, signed in on the Workplace front door, 2026-09-22, with a compose form
+opened by hand (**New Mail**, nothing typed). Addresses are masked as the tool masks them; message ids,
+senders and subjects are placeholders.
 
 ```text
 NICeMail browser discovery — READ ONLY.
-Nothing is clicked, typed, navigated or sent.
+Nothing in your tabs is clicked, typed, navigated, opened or sent.
 
-── Configuration
-  CDP endpoint                      http://localhost:9222
-  URL patterns                      mail.gov.in, mgovcloud.in
-  Title patterns                    mail, inbox, nic
+── CDP
+  Endpoint                          http://localhost:9222/
+  Browser                           Chrome/152.0.7977.83 (protocol 1.3)
+  Browser contexts                  default <id>, +0 other
 
-── Tabs Chrome is exposing
-  [match(17)  ] Inbox - ...                                https://mail.mgovcloud.in/zm/#mail/folder/inbox
-  [no match   ] New Tab                                    chrome://newtab/
+── Pages and iframes Chrome exposes
+  [match(17) ] page    6C4C38FF https://workplace.mgovcloud.in/#mail_app/compose
+  [match(17) ] iframe  7B2EE154 https://mail.mgovcloud.in/zm/?fromService&wpVersion&canAddOACHeader&frameorigin&  in 6C4C38FF
+  [match(10) ] iframe  52ABA1B1 https://nrc2-wms.mgovcloud.in/v2/wmsconnector.html?tabid&wmsid&nocache&frameorig  in 6C4C38FF
+  …
+  Other targets: 1 service_worker, 1 worker, 2 browser_ui
 
-── Attaching to the NICeMail tab
-  URL                               https://mail.mgovcloud.in/zm/#mail/folder/inbox
-  Title                             Inbox - ...
+── Document 6C4C38FF (page)
+  URL                               https://workplace.mgovcloud.in/#mail_app/compose
+  Ready / hidden                    complete / hidden
+  Elements                          130 (0 shadow roots, 1 same-origin frames)
+  Cross-origin frames               https://mail.mgovcloud.in/zm?fromService&wpVersion&canAddOACHeader&frameorigin&wpLibraryIn
+  Mail list / rows                  absent / 0
+  Generated classes                 60 hashed (e.g. zmbtn__rhuj3, zmbtn--mbtn__rhuj3, zmbtn--filled__rhuj3), 5 legacy zm*
+  …
 
-── Frames
-  (main) https://mail.mgovcloud.in/...
+── Document 7B2EE154 (iframe)
+  URL                               https://mail.mgovcloud.in/zm/#compose
+  Title                             New Mail - Mail (c***@gov.in)
+  Ready / hidden                    complete / hidden
+  Elements                          6011 (0 shadow roots, 3 same-origin frames)
+  Mail list / rows                  present / 179
+  Roles                             button 741, checkbox 180, option 179, treeitem 20, group 10, …
+  Row-like elements                 179 option in listbox "Email listing"
+  Accessibility tree                691 nodes
+      button "New Mail"
+      tab "No Subject"
+      treeitem "Inbox"
+      …
+  Interactive elements (120 kinds, first 60):
+      ×1  button "New Mail" testid=new-btn-opt
+      ×1  treeitem "Sent" testid=lhs-tree-node
+      …
+  Registry (browser/selectors.js):
+      listRow                         #0 → 179
+      listRowSender                   #0 → 179
+      listRowSubject                  #0 → 179
+      listRowAttachment               #0 → 1          UNCALIBRATED
+      previewMessage                  none (raw 0)    MISSING
+      attachmentEntry                 #3 → 1          FALLBACK UNCALIBRATED
+      composeButton                   #0 → 1
+      toInput                         #0 → 1
+      ccInput                         #0 → 1
+      ccToggle                        none (raw 3)    HIDDEN UNCALIBRATED
+      subjectInput                    #0 → 1
+      bodyEditor                      #0 → 1
+      fileInput                       #0 → 1
+      sendButton                      #0 → 1
+      discardButton                   #0 → 1
+      fromAddress                     #0 → 1
+      recipientChip                   none (raw 0)    MISSING
+      composeAttachmentRow            none (raw 0)    MISSING
+      folderSent                      #0 → 1
+      folderDrafts                    #0 → 1
+      …
+  Mail rows (inbox, 179 loaded):
+      1790000000000000001  unread  11:21 AM   3 KB    e***@example.org               <subject>
+      …
 
-── Accessibility tree (interesting nodes)
-  - button "New Mail"
-  - link "Inbox"
-  ...
+── Diagnosis
+  ✓ Connected to Chrome/152.0.7977.83 at http://localhost:9222/
+  ✓ NICeMail tab: https://workplace.mgovcloud.in/#mail_app/compose
+  ✓ Signed in (no sign-in step or password field on any NICeMail document)
+  i The mailbox is a cross-origin iframe with a CDP target of its own (https://mail.mgovcloud.in/zm/#compose), inside https://workplace.mgovcloud.in/#mail_app/compose, whose own document shows 0 mail rows. Anything that reads the tab's main page sees only that shell. The agent is unaffected: it opens https://mail.mgovcloud.in/zm/ as a top-level document of its own.
+  ✓ No shadow DOM in the mail document.
+  i The document is hidden (a background tab): the agent dispatches DOM events, not mouse input.
+  ✓ Mail list rendered: 179 row(s) loaded.
+  ✓ Compose form open: all 8 of its controls resolve.
+  ✓ 26 of 41 calibrated entries resolve here; 3 are uncalibrated.
 
-── Candidate compose / message controls
-  compose button                    1 candidate(s) by role
-  ...
+  Verdict: OK
 
 Discovery complete. No page state was modified.
 ```
 
+A registry line reads `#<strategy> → <count>` — which strategy of the entry matched, counted from 0,
+and how many elements passed its checks — or `none (raw N)` with the count before the checks.
+`MISSING` on the open-message keys (`previewMessage`, `senderAddr`, `body`, …) is expected with no
+message open, and on the compose keys with no compose form open; what must resolve on the Inbox is the
+folder tree, the list, the row cells and the preview pane. With a form open, its eight controls
+(`fromAddress`, `toInput`, `ccInput`, `subjectInput`, `bodyEditor`, `fileInput`, `sendButton`,
+`discardButton`) must all resolve. `recipientChip` and `composeAttachmentRow` stay `MISSING` on an
+empty form — there is no recipient or attachment yet. `ccToggle` is hidden whenever Cc is already
+shown, as it is by default. `listRowAttachment` and `attachmentEntry` (by its last, CSS strategy —
+the same selector) each match one element, and what that element is has not been established:
+exactly why they are still `UNCALIBRATED`.
+
+| Registry warning | Meaning |
+|---|---|
+| `MISSING` | nothing matched, by any strategy, even before the checks |
+| `FALLBACK` | resolved, but not by the first (most semantic) strategy |
+| `HIDDEN` | matched only elements that are not visible |
+| `NAME_MISMATCH` | matched visible elements whose accessible name is not the one expected |
+| `AMBIGUOUS` | more than one match where the entry demands `unique` |
+| `UNCALIBRATED` | a marker, not a warning: the key is in `UNCALIBRATED` and the agent will not use it (§17) |
+
+| Diagnosis | Status | Meaning |
+|---|---|---|
+| `NO_CDP` | FAIL | the CDP connection failed: nothing answers on `NIC_CDP_ENDPOINT`, or something that is not Chrome's DevTools endpoint does — the bracketed error says which (§8, §13) |
+| `NO_TAB` | FAIL | no page or iframe target matches `NIC_WEBMAIL_URL_PATTERNS` |
+| `NOT_SIGNED_IN` | FAIL | a sign-in step or a password field on a NICeMail document; sign in by hand |
+| `NO_MAILBOX` | FAIL | no NICeMail document shows the mail list; open the Inbox and let it render |
+| `INSPECTION` | FAIL | the inspection itself stopped; the message says where |
+| `MAILBOX_IN_OOPIF` | info | the mailbox is a cross-origin iframe inside the Workplace shell; the agent is unaffected (§13) |
+| `SHADOW_DOM` | ok / info, or FAIL | shadow roots are searched by the resolver; FAIL only when the mail list itself sits inside one, where the reader's page code does not look |
+| `HIDDEN_DOCUMENT` | info | a background tab: the agent dispatches DOM events, not mouse input |
+| `SELECTORS_DRIFTED` | FAIL | the list shows rows and none matches `listRow`, a key expected on the Inbox found nothing, or a compose form is open and one of its eight controls found nothing |
+| `COMPOSE` | ok / info | ok: a compose form is open and all eight of its controls resolve; info: no form is open, so they were not checked |
+| `REGISTRY` | WARN | a calibrated entry carries a warning other than `MISSING` (`FALLBACK`, `HIDDEN`, `NAME_MISMATCH`, `AMBIGUOUS`), or `composeButton` does not resolve |
+
+The terminal prints each check as its message behind a mark — `✓` ok, `i` info, `!` warning, `✗`
+failure — as in the sample above; the codes are in the `--json` report, under `diagnosis.checks`.
+The verdict is `OK` when there is nothing worse than information, `WARN` with a warning, `FAIL` with a
+failure; the exit code is 1 only on `FAIL`.
+
 What to check:
 
-- the NICeMail tab shows `match(n)` with n > 0
-- the "Attaching" section prints a URL and title rather than an error
-- the run ends with `Discovery complete.` and exit code 0 (`$LASTEXITCODE`)
+- a NICeMail target shows `match(n)` with n > 0
+- one document shows `Mail list / rows  present / N`, and the row, sender and subject counts in the
+  registry are equal
+- `composeButton` resolves by strategy `#0` (`button "New Mail"`)
+- with a compose form opened by hand (**New Mail**, nothing typed), the diagnosis reads
+  `Compose form open: all 8 of its controls resolve.`, each of them by strategy `#0`. Close the form
+  by hand afterwards without sending
+- no `✗` line in the diagnosis, and the run ends with `Verdict: OK`, `Discovery complete.` and exit code 0
+  (`$LASTEXITCODE`)
+- run `npm run nic:browser:discover -- --agent-tab` once: the agent's own tab is one top-level
+  document with the list present and the same registry resolving, and exactly one tab is opened and
+  closed
 
 ### Checklist
 
 **Environment**
-- [ ] `node --version` ≥ 20.19, `npm --version` works
-- [ ] `npm install` done in `backend/` (`playwright-core` in `node_modules`)
+- [ ] `node --version` ≥ 22 (the agent's CDP client needs Node's global `WebSocket`), `npm --version` works
+- [ ] `npm install` done in `backend/` (no browser-automation package is needed)
 - [ ] Google Chrome ≥ 136 installed
 - [ ] `backend/.env` exists (browser-agent variables optional; defaults shown above)
 
@@ -454,15 +609,52 @@ What to check:
 
 **Browser agent**
 - [ ] `npm run nic:browser:discover` lists the tab as `match(n)`
-- [ ] attach succeeds (URL/title printed)
-- [ ] accessibility nodes and candidate controls printed
-- [ ] ends with `Discovery complete.`
+- [ ] "The tab the agent would attach to" prints a URL and title rather than an error
+- [ ] a document shows the mail list present, with its rows and the registry resolution
+- [ ] ends with `Verdict: OK` (or `WARN`) and `Discovery complete.`
 
 ## 13. Troubleshooting
 
-### `Could not connect.` … `Nothing is listening on the CDP endpoint.`
+### Why an agent cannot see the NICeMail elements
 
-(Attach-level message: `Chrome is not available for browser automation.`)
+**Symptom.** A tool or agent attached to the operator's NICeMail tab finds no mail rows, no
+**New Mail** button, a handful of controls and class names such as `zmbtn__rhuj3`, and
+`[role="option"]` matches nothing.
+
+**Cause, measured live** (Chrome 152, 2026-09-21). The operator's tab is the **Zoho Workplace
+shell**, `workplace.mgovcloud.in/#mail_app/…`. The mailbox is not in that document: it is a
+**cross-origin, out-of-process iframe** (`mail.mgovcloud.in/zm/…`) with a **CDP target of its own**.
+Anything that evaluates in, or locates on, the tab's main page sees only the shell: about 120
+elements, a strip of app tabs, generated CSS-module classes (`zmbtn__<hash>`) that change on every
+Zoho deploy, and zero mail rows. Script in the shell cannot read a cross-origin frame, and a CDP
+session on the page target cannot evaluate in the iframe's target. It is **not** shadow DOM: both
+documents have 0 shadow roots. The mail frame is also `document.hidden`, so mouse input sent to
+coordinates does nothing there; the agent dispatches DOM events instead.
+
+**The QMS agent is unaffected.** It never reads the operator's tab. It opens `NIC_WEBMAIL_APP_URL`
+(`https://mail.mgovcloud.in/zm/`) as a top-level document in a background tab of its own, where the
+mailbox is the whole page (§9, §10).
+
+**How the inspector reports it.** `npm run nic:browser:discover` lists the iframe target with its
+parent (`iframe 1A6D58D6 https://mail.mgovcloud.in/zm/… in 6C4C38FF`), inspects each target as its
+own document — the shell shows `Mail list / rows  absent / 0`, the frame `present / 400` — and the
+diagnosis reports `MAILBOX_IN_OOPIF` as information, not a failure (§12):
+
+```text
+  i The mailbox is a cross-origin iframe with a CDP target of its own (https://mail.mgovcloud.in/zm/#mail/folder/inbox), inside https://workplace.mgovcloud.in/#mail_app/mail/folder/inbox, whose own document shows 0 mail rows. …
+```
+
+`npm run nic:browser:discover -- --agent-tab` shows the agent's own view: one top-level document with
+the list and the registry. Any other tool has two options: attach to the iframe target
+(`mail.mgovcloud.in/zm/…`) rather than the page, or open `https://mail.mgovcloud.in/zm/` in a tab of
+its own. Either way, match by role and accessible name, `aria-label`, `data-testid` and
+`data-action`, never by the hashed classes.
+
+### `Chrome is not available for browser automation.` … `(fetch failed: ECONNREFUSED)`
+
+The inspector's diagnosis is `NO_CDP`, with the raw error in brackets and on the `CDP` section's
+`Error` line; a refused connection or a timeout there means nothing is listening. The agent's own
+attach reports the same sentence.
 
 This means the Chrome/CDP session is unavailable. It is **not** a NICeMail login problem. Causes:
 
@@ -472,12 +664,14 @@ This means the Chrome/CDP session is unavailable. It is **not** a NICeMail login
 - `--user-data-dir` was omitted, and Chrome 136+ ignores the flag on the default profile.
 - `NIC_CDP_ENDPOINT` points at a different port than the one Chrome was started with.
 
-Confirm with `Invoke-RestMethod http://localhost:9222/json/version`.
+Confirm with `Invoke-RestMethod http://localhost:9222/json/version`. If that succeeds and the bracket
+says `WebSocket is not defined`, Node is older than 22 (§3).
 
-### `The port answered, but not as a Chrome DevTools endpoint.`
+### `Chrome is not available for browser automation.` … `(CDP endpoint answered HTTP 404)`
 
-Typically shown with `Unexpected status 404 when connecting to http://localhost:9222/json/version/`.
-Another program (Brave, Edge, a second Chrome profile, some other tool) holds port 9222, and Chrome
+The inspector prints the same sentence as above (diagnosis `NO_CDP`), but the bracket shows that
+something did answer on the port. The agent's own attach reports this as `Something is listening on
+the CDP port, but it is not a Chrome DevTools endpoint. …`. Another program (Brave, Edge, a second Chrome profile, some other tool) holds port 9222, and Chrome
 cannot bind it while that program runs. Find it:
 
 ```powershell
@@ -512,49 +706,77 @@ persistent, NICeMail may still be signed in; if not, sign in again.
 
 ### `Unexpected error: …`
 
-Something failed after attaching, for example the page navigated mid-run. Re-run once. If it
-persists, note the message and the NICeMail URL for whoever maintains `nicBrowserDiscover.js`.
+The CLI failed outside the inspection, for example while writing the `--json` report. Re-run once. If
+it persists, note the message and the NICeMail URL for whoever maintains `browser/inspect.js`.
+Failures inside the inspection do not end up here: a part that fails on one document — a page that
+navigated mid-run, say — is printed as `(could not read …)` under that document, and an inspection
+that stops altogether is the diagnosis `INSPECTION`.
 
 The entries below apply with `NIC_BROWSER_MAILBOX=true`, when the backend reads and sends through the
 agent (§17).
 
-### `NICeMail could not be read — this list may be out of date` (IPC Mailbox page)
+### `The mailbox could not be read — this list may be out of date` (IPC Mailbox page)
 
 The last inbox sync failed. The inbox request still answers 200 with the mail already stored and
 reports the failure in the response's `sync` field (`ok: false`, `stage`, `error`); the notice prints
-both. Nothing new is stored until a sync succeeds.
+both. Messages the failed sync read before it stopped are kept (`stored` counts them); nothing more
+is stored until a sync succeeds.
 
 | `stage` in the notice | Fix |
 |---|---|
 | `connect_browser` | Chrome/CDP is not reachable — the entries above |
 | `find_tab` | open NICeMail in the dedicated Chrome |
 | `verify_session` | sign in again by hand; the tab, or the agent's work tab, is on a sign-in step |
-| `ui` | a selector matched nothing — calibrate (§17) |
-| none | something else failed; the error text says what |
+| `ui` | a selector matched nothing, the list shows rows that no row selector matches, or every message opened failed — run `nic:browser:discover` and calibrate (§17) |
+| none | something else failed — including a failure to store in MongoDB; the error text says what |
+
+A message that could not be read is not a failed sync: it is counted in `sync.failed`, listed in
+`sync.failedMessages` and tried again next time (§17, *How a sync reads the inbox*).
 
 The notice goes once the page reloads the list after a successful sync (**Check IPC Mailbox**, or
 Auto-refresh).
 
 ### `NICeMail UI element "<key>" was not found. Recalibrate browser/selectors.js.`
 
-Stage `ui`: the selector `<key>` in `selectors.js` matched nothing on the live page. During a send
-this is always raised **before** Send is pressed, so nothing went out and a retry is safe once the
-selector is fixed. Calibrate (§17).
+Stage `ui`: the selector `<key>` in `selectors.js` matched nothing on the live page — or matched only
+elements that failed its checks (hidden, the wrong accessible name, more than one where one is
+required). `details.tried` gives the counts per strategy. When the message adds
+`N cross-origin frame(s) could not be searched`, the element may be inside one (see the first entry
+of this section). During a send this is always raised **before** Send is pressed, so nothing went
+out and a retry is safe once the selector is fixed. Calibrate (§17).
+
+### `NICeMail UI element "<key>" has never been calibrated against the live NICeMail mailbox, so the agent will not use it.`
+
+Stage `ui`, flagged `uncalibrated: true`. The key is in `UNCALIBRATED` and the agent refuses it before
+the page is asked anything about it, so nothing was sent. Since the compose form was calibrated
+(2026-09-22, §17 runbook C) the set is `ccToggle`, `attachmentEntry` and `listRowAttachment`. A send
+meets it only when a message has Cc recipients and the Cc line is hidden, which it is not by default.
+It is not a fault to retry: calibrate the key (§17) first.
 
 ### `NICeMail may have sent this message but did not confirm it in time. Check the NICeMail Sent folder before retrying …`
 
-Stage `confirm_send`, flagged `unconfirmed`. Send was pressed and the compose form did not close
-within `NIC_BROWSER_TIMEOUT_MS`. The message may or may not have left, and the agent cannot tell.
-Nothing was recorded, so any retry sends it again.
+Stage `confirm_send`, flagged `unconfirmed`. Send was pressed and the message did not appear in the
+Sent folder within `NIC_BROWSER_TIMEOUT_MS`. Either the compose form never closed, or it closed and
+the message still did not show up (the message then reads *…the compose form closed, but the message
+did not appear in the Sent folder in time.*). The message may or may not have left, and the agent
+cannot tell.
+
+The bracket at the end of the error says which step and what the page showed. For example,
+`[stage: await_compose_close; cause: Timeout …; seen: dialog open: "…"; Send button still visible]`
+means the form stayed open with a dialog over it. The backend log has the full
+`ACK VERIFICATION {"step":"compose_not_closed", …}` snapshot (§17, *Every send is logged*).
+
+The dispatch is recorded `UNCERTAIN` in `outboundemails`, and that state **blocks the retry**: a
+retry could put a second copy in the recipient's inbox, which is the one outcome worse than the
+email not arriving. NICeMail cannot be searched the way Gmail's Sent folder can, so the answer has
+to come from a person.
 
 1. Open the **Sent** folder in the dedicated Chrome and look for the message.
-2. If it is there, **do not retry** — the recipient has it. The QMS has no control to record a send
-   it did not see complete: the acknowledgement stays unrecorded, or the case stays at
-   `READY_FOR_DISPATCH`.
-3. If it is not there, retry: ✓ again in the IPC Mailbox for an acknowledgement, **Retry sending
-   response** on the Dispatch page for a final response. If the forward to the Officer-in-Charge also
-   failed, use **Retry forwarding** on the case page instead of ✓ — ✓ re-attempts the
-   acknowledgement too.
+2. **If it is there**, press **It was sent**. The QMS records the email exactly as a successful send
+   would — the acknowledgement appears on the case, a final response closes it — and **sends
+   nothing**. The answer is audited as `EMAIL_DELIVERY_CONFIRMED` against your account.
+3. **If it is not there**, press **It was not sent — send it**. That marks the dispatch `FAILED`
+   (audited `EMAIL_DELIVERY_DENIED`), which unlocks the retry, and sends it once.
 
 Where the warning appears:
 
@@ -567,10 +789,12 @@ Where the warning appears:
   page's notice then reads **Acknowledgement may already have been sent**; the Dispatch page shows
   the message in its error banner. Each such retry is audited as `EMAIL_SEND_FAILED`.
 
-The flag is not stored on the case. After an unconfirmed accept or approval, the case page's
-**Acknowledgement email not sent** notice and the Dispatch page's **Retry sending response** still
-read "not sent" and offer a retry until one is attempted. Check the Sent folder before pressing
-either; the case's audit history shows which failures were unconfirmed.
+**The state is stored on the case, not remembered from the click.** It is a row in
+`outboundemails`, so it survives a reload and is still there hours later — which matters, because
+the person who has to look in the Sent folder is often not the one who pressed the button. Both
+pages read it: the case page's notice reads **Acknowledgement may already have been sent** with the
+two answers beneath it, and the Dispatch page replaces **Retry sending response** with the same
+pair. Neither offers a plain retry while the dispatch is `UNCERTAIN`.
 
 ### `NICeMail browser transport refused to send to …`
 
@@ -626,7 +850,7 @@ With `NIC_BROWSER_MAILBOX=true` a QMS account can read the live mailbox and make
   `POST /emails/acknowledgement` and `POST /emails/response`, take the mailbox from the stored case
   but the recipient — and for a response, the subject, body and attachments — from the request body;
   they are limited to Front Office and Super Admin. Both pre-date the NICeMail mailbox.
-- **Mailbox isolation covers the NICeMail Front Office's own requests only** — see §17, open items.
+- **Mailbox isolation does not cover accept or the decision routes** — see §17, open items.
 
 ## 15. Production Considerations
 
@@ -646,8 +870,10 @@ With `NIC_BROWSER_MAILBOX=true` a QMS account can read the live mailbox and make
   supervised, operator-attended tool.
 - Run the dedicated Chrome under the operator's own Windows account, on the same machine as the agent,
   with CDP on localhost only.
-- `NIC_BROWSER_ARTIFACT_DIR` is reserved for failure screenshots and read by no code yet. Its default
-  disagrees between `.env.example` and code, so set it explicitly once it is used.
+- `NIC_BROWSER_ARTIFACT_DIR` (default `storage/nic-browser`, under the gitignored `backend/storage/`)
+  is where `nic:browser:discover -- --json` writes its reports. They are masked unless
+  `--show-addresses` was given, but they still describe a live government mailbox: keep them out of
+  the repository.
 
 ## 16. Quick Reference
 
@@ -662,10 +888,16 @@ With `NIC_BROWSER_MAILBOX=true` a QMS account can read the live mailbox and make
 | Start dedicated Chrome + CDP | `& "C:\Program Files\Google\Chrome\Application\chrome.exe" --remote-debugging-port=9222 --user-data-dir="C:\qms-chrome"` |
 | Verify CDP | `Invoke-RestMethod http://localhost:9222/json/version` |
 | Who holds 9222 | `Get-NetTCPConnection -LocalPort 9222 -State Listen \| ForEach-Object { Get-Process -Id $_.OwningProcess }` |
-| Run browser agent (discovery) | `cd backend; npm run nic:browser:discover` |
+| Inspect the session (read-only) | `cd backend; npm run nic:browser:discover` |
+| … and save the report | `cd backend; npm run nic:browser:discover -- --json` |
+| … and the agent's own tab | `cd backend; npm run nic:browser:discover -- --agent-tab` |
+| Calibrate the compose form (types into one draft, discards it, never sends) | `cd backend; npm run nic:browser:calibrate` (`-- --attach` also attaches a small PDF) |
 | Unit tests for attach logic | `cd backend; npx vitest run src/test/nicBrowserAttach.test.js` |
+| Unit tests for the resolver and the registry | `cd backend; npx vitest run src/test/nicBrowserPage.test.js src/test/nicBrowserSelectors.test.js` |
+| Unit tests for the inspector | `cd backend; npx vitest run src/test/nicBrowserInspect.test.js` |
+| Unit tests for reading and syncing | `cd backend; npx vitest run src/test/nicBrowserReadInbox.test.js src/test/mailboxIngestion.test.js` |
 | Unit tests for the NICeMail mailbox | `cd backend; npx vitest run src/test/nicBrowserMailbox.test.js` |
-| Unit tests for send confirmation | `cd backend; npx vitest run src/test/nicBrowserSendMail.test.js` |
+| Unit tests for composing and send confirmation | `cd backend; npx vitest run src/test/nicBrowserSendMail.test.js` |
 
 ## 17. Two Front Office Mailboxes
 
@@ -674,7 +906,7 @@ With `NIC_BROWSER_MAILBOX=true`, IPC-QMS runs two Front Office mailboxes at once
 
 ```text
 Gmail mailbox (FRONT_OFFICE_EMAIL)            NICeMail mailbox (NIC_EMAIL)
-   │ gmailInboxReader (MAILBOX_SOURCE)           │ browser agent → Playwright → CDP
+   │ gmailInboxReader (MAILBOX_SOURCE)           │ browser agent → raw CDP (cdp.js)
    │                                             │ nicBrowserMailbox: stored in MongoDB, once
    ↓                                             ↓
  FRONT_OFFICE_* user's inbox                  NICeMail Front Office user's inbox
@@ -704,63 +936,321 @@ Gmail mailbox (FRONT_OFFICE_EMAIL)            NICeMail mailbox (NIC_EMAIL)
 - **Division of work.** The agent only reads mail and hands back plain message data, or types and
   sends one message it is given. Validation, case creation, the Case ID, AI summary, the workflow
   and closure all stay in the QMS, unchanged.
-- **No duplicates.** Each NICeMail message is stored under an id derived from the id the reader takes
-  off its inbox row (the first of `data-msgid`, `data-entityid`, `data-id`, `id`, or a hash of the
-  row's text when there is none), with a unique index and insert-only writes. However often the inbox
-  is polled, a message is stored once. A message the Front Office already ingested or removed is never
-  reset or brought back while its stored row exists. Accepting it twice reuses the same case, as for
-  Gmail. Whether that row id is NICeMail's own message id is unverified — see the open items below.
+- **No duplicates.** Each NICeMail message is stored under an id derived from its inbox row's `id`:
+  Zoho's own message id, the one its route (`#mail/folder/inbox/p/<id>`) and the open message's
+  container (`zm_Container_m<id>`) carry, measured live. A row whose id is not such an id is skipped,
+  never hashed. The index is unique and the writes insert-only. However often the inbox is polled, a
+  message is stored once. A message the Front Office already ingested or removed is never reset or
+  brought back while its stored row exists. Accepting it twice reuses the same case, as for Gmail.
 - **When reading happens.** The NICeMail Front Officer's inbox poll (every 30 s) starts a background
-  sync at most every `NIC_BROWSER_SYNC_TTL_MS`; nobody signed in as that user, no sync. A new message
-  appears on the poll after the sync that found it. A failed sync (Chrome closed, signed out,
-  selectors not matching) is reported in the inbox response's `sync` field
-  (`{ ok, at, stored, stage, error, running }`), and the IPC Mailbox page shows it as **NICeMail could
-  not be read — this list may be out of date** (§13). Stored mail still lists and the backend stays up.
+  sync at most every `NIC_BROWSER_SYNC_TTL_MS`; nobody signed in as that user, no sync. **Sync now**
+  on the IPC Mailbox page (`POST /mailbox/sync`) starts one at once, unless one is running or the
+  last ended less than 15 s ago. A new message appears on the poll after the sync that found it. A
+  failed sync (Chrome closed, signed out, selectors not matching) is reported in the inbox response's
+  `sync` field (*How a sync reads the inbox*, below), and the IPC Mailbox page shows it as **NICeMail
+  could not be read — this list may be out of date** (§13). Stored mail still lists and the backend
+  stays up.
+- **In the dashboard.** The IPC Mailbox lists the stored messages with search, an All / Awaiting
+  validation filter, pages of 50, a snippet of each body, and an unread dot for a message nobody has
+  opened in the QMS. Opening one (`/front-officer/inbox/:messageId`) shows its headers, the body as
+  plain text or — when there is HTML — a **Formatted** view inside `<iframe sandbox="">` with a
+  `default-src 'none'` CSP, its attachments with a download scoped to the message, and the case it
+  became with that case's status. Opening it marks it read **in the QMS only**; NICeMail's own read
+  state is never touched.
 - **Sending guard.** Browser sends are confined to `NIC_BROWSER_TEST_RECIPIENT` until
   `NIC_ALLOW_OUTBOUND=true`, the same two-key interlock as NIC SMTP. The transport refuses Bcc rather
-  than dropping it. A send that fails before Send is pressed — a refused recipient, a selector not
-  found — has sent nothing: the ACK stays unsent (✓ again, or the case page's retry) or the case stays
-  at `READY_FOR_DISPATCH`, never falsely closed.
-- **How a send is confirmed.** After pressing Send, the agent waits for the compose form to close,
-  watching the Send button it pressed — the locator captured before the click. It never looks the
-  button up again: a successful send removes it, so a fresh lookup would report the ordinary success
-  as "`sendButton` was not found", nothing would be recorded, and the next retry would mail the
-  inquirer again. The form closing is the **only** signal accepted as "sent". There is deliberately
-  no `sentConfirmation` selector: a generic `[role=alert]` / `[role=status]` match is satisfied by
-  error alerts and permanent status regions too, so it would record a failed send as sent and let
-  final approval close the case on it. One may be added back only with a text match proven against
-  the live mailbox by `npm run nic:browser:discover`.
-- **Unconfirmed sends.** If Send was pressed but the form has not closed within
-  `NIC_BROWSER_TIMEOUT_MS`, the send throws with `unconfirmed: true`: the message may or may not have
-  left. Accept answers `errors: [{ step: 'acknowledgement', unconfirmed: true, … }]` and records
-  no acknowledgement, writes an `EMAIL_SEND_FAILED` audit row saying it may have been sent, and its
-  toast says to check the NICeMail Sent folder before retrying instead of "retry from the case
-  page". The case page's and Dispatch page's retries answer **504** with the same warning and
-  `unconfirmed: true`. Final approval answers
-  `errors: [{ step: 'dispatch', unconfirmed: true, … }]`, keeps the case at `READY_FOR_DISPATCH`,
-  and writes an `EMAIL_SEND_FAILED` audit row and a Front Office notification that say to check the
-  Sent folder before retrying. What to do: §13.
+  than dropping it. A send that fails before Send is pressed — a refused recipient, an uncalibrated
+  control, a selector not found — has sent nothing: the ACK stays unsent (✓ again, or the case
+  page's retry) or the case stays at `READY_FOR_DISPATCH`, never falsely closed.
+- **What is checked before Send** (`composeEmail`, `browser/sendMail.js`). Before a tab is opened:
+  there is a recipient, every address is well-formed, and an attachment is only sent through a
+  calibrated attach control. In the form, each of these must hold, or the draft is discarded and
+  nothing is sent:
+  - the From address is `NIC_EMAIL`;
+  - the To (and Cc) line holds exactly the intended recipients, read back from its chips — an
+    autocomplete that picked someone else, or a leftover chip, stops the send;
+  - the subject field holds the subject;
+  - the editor holds the body (read back for up to 2 s while the editor lays it out);
+  - each attachment is listed with its upload and virus scan finished;
+  - **no dialog is open over the form** (below).
+- **The survey pop-up, and other dialogs.** Every newly opened NICeMail tab shows, within a second or
+  so, a dialog: *Email Satisfaction Survey for the new NICeMail Services. Participate now!*, with the
+  buttons **Close** and **Participate now!**. Left open, it sits over the whole compose flow and can
+  take the focus while the body is typed (one early acknowledgement lost its body that way). So the
+  agent closes it:
+  - as soon as the mailbox has loaded (it waits up to 5 s for it), and again just before Send if it
+    has reappeared, after which the recipients, subject and body are checked again;
+  - with its own **Close** button only (`surveyCloseButton`: a button inside a `role=dialog`, exact
+    name "Close", visible and unique), and only when the survey is the one dialog open;
+  - **"Participate now!" is never pressed.**
 
-### Calibrating the selectors — do this first
+  Any other visible dialog stops the send before Send is pressed: the draft is discarded and the
+  error names the dialog. What it asks is unknown, and a click on Send might answer it instead. The
+  dialogs are listed once more straight before Send, after the survey is closed. A dialog that holds
+  the compose form itself (its To field) is the form, not a pop-up, and does not count. Closing
+  the survey in the agent's tab may also dismiss it for the operator's own tab.
+- **The follow-up reminder prompt, after Send.** When the body reads like it expects a reply — the
+  acknowledgement's "as soon as possible" does — Zoho answers Send with *Add follow-up reminder? You
+  can add follow-up reminder, as your message has below text …* and the buttons **Close**,
+  **10 minutes**, **Add Reminder and Send** and **Skip and Send**. **The message is held until one is
+  pressed**; Close leaves it unsent. This, not the survey, is why every acknowledgement through
+  Accept on 2026-09-22 ended *may have been sent* while nothing reached Sent. When that prompt is the
+  one dialog open, the agent presses **Skip and Send** (`followUpSkipButton`: exact name, unique,
+  inside a dialog) — once — so the message goes as written with no reminder added, and then looks for
+  it in Sent as for any send. With any other dialog beside it, nothing is pressed and the send is
+  reported unconfirmed, naming both.
+- **How a send is confirmed.** Pressing Send is never taken as sending. What proves it is the Sent
+  folder:
+  1. **The form closing.** The agent watches the Send button it pressed — the locator captured
+     before the click — until it is gone. It never looks the button up again: a successful send
+     removes it, so a fresh lookup would report the ordinary success as "`sendButton` was not found",
+     nothing would be recorded, and the next retry would mail the inquirer again. If the form has not
+     closed within `NIC_BROWSER_TIMEOUT_MS`, the agent records what the page shows (dialogs, the
+     Send button, notices) and **still looks in Sent**: a form that stayed open does not prove the
+     message stayed with it.
+  2. **The message is in Sent.** The agent opens the Sent folder and polls it until
+     `NIC_BROWSER_TIMEOUT_MS` for a row with the exact subject, the recipient on it, and an id newer
+     than the press of Send. Zoho's message ids start with the send time in milliseconds, so an older
+     message with the same subject can never confirm this one. The agent then goes back to the Inbox.
 
-**The selectors are uncalibrated.** Nobody has yet run the agent against the real NICeMail page.
-Every element it clicks, reads or types into is listed in
+  Found in Sent means sent, and the Sent row's id is returned as `providerMessageId` and stored on the
+  outbound record. **From the press of Send on, every failure is unconfirmed** — the click itself
+  failing, the form not closing, the Sent folder not answering — because each could follow a message
+  that did go out. The only exception is a click that found no Send button at all, which dispatched
+  nothing. There is
+  deliberately no `sentConfirmation` selector: a generic `[role=alert]` / `[role=status]` match is
+  satisfied by error alerts and permanent status regions too, so it would record a failed send as
+  sent and let final approval close the case on it. One may be added back only with a text match
+  proven against the live mailbox by `npm run nic:browser:discover`.
+- **Every send is logged, step by step.** One line per stage, from the Accept or retry down to the
+  Sent folder, in the backend's console. The tag is `ACK`, `RESPONSE` or `FORWARD`:
+
+  ```text
+  ACK START {"caseId":"QRY-…","inquirerEmail":"…","recipients":["…"],"subject":"…","transport":"nic-browser"}
+  ACK RESOLUTION {"caseId":"QRY-…","recipient":["…"],"provider":"nic-browser","guard":"test-recipient"}
+  ACK NIC BROWSER {"caseId":"QRY-…","step":"outbound_guard","result":"allowed","mode":"test-recipient"}
+  ACK NIC BROWSER {"caseId":"QRY-…","step":"compose_started" | "browser_ready" | "survey_closed" | "survey_absent" | "compose_opened" | "from_verified" | "recipient_entered" | "recipients_verified" | "subject_verified" | "body_verified" | "pre_send_clear" | "send_clicked"}
+  ACK VERIFICATION {"caseId":"QRY-…","step":"compose_closed" | "compose_not_closed" (with a page snapshot) | "sent_found" (with providerMessageId) | "sent_not_found"}
+  ACK RESULT {"caseId":"QRY-…","status":"SENT","ledgerStatus":"SENT","attempts":1,"providerMessageId":"…","stage":null,"error":null}
+  ```
+
+  A repeat of a send that already went logs only `START` and `RESULT {"status":"ALREADY_SENT"}`: the
+  browser is not touched. A failure before Send logs `NIC BROWSER {"step":"failed", …}` with a page
+  snapshot (visible dialogs and their buttons, the Send button's state, notices, the focused element,
+  and the body's length, never its text). Addresses and subjects are logged; credentials never are.
+- **A failure names its step.** The error carries the step the agent stopped at, what that step ran
+  into, and what the page showed, e.g. `… [stage: await_compose_close; cause: Timeout 20000ms …;
+  seen: dialog open: "…"; Send button still visible]`. That one line is the outbound record's
+  `lastError`, the audit row, and the `error` of the HTTP answer (which also carries `stage`), and the
+  case page and the Accept toast show it.
+- **Unconfirmed sends.** If Send was pressed and the message has not appeared in Sent within
+  `NIC_BROWSER_TIMEOUT_MS` (whether or not the form closed), the send throws with
+  `unconfirmed: true`: the message may or may not have left. The dispatch is recorded **`UNCERTAIN`** in `outboundemails`, which is a stored state on the
+  case rather than a flag on one response. Accept answers
+  `errors: [{ step: 'acknowledgement', outcome: 'UNCERTAIN', unconfirmed: true, … }]` and records no
+  acknowledgement; final approval answers the same for `step: 'dispatch'` and keeps the case at
+  `READY_FOR_DISPATCH`. Both write an `EMAIL_SEND_FAILED` audit row saying the message may have been
+  sent, and the retry endpoints answer **409** — not 504 — for a dispatch that is already
+  `UNCERTAIN`, because retrying is exactly what must not happen next. The case page and the Dispatch
+  page replace their retry buttons with **It was sent** / **It was not sent — send it**, which
+  settle the dispatch through `POST /queries/:queryId/outbound/resolve` and are audited as
+  `EMAIL_DELIVERY_CONFIRMED` / `EMAIL_DELIVERY_DENIED`. What to do: §13.
+- **NICeMail cannot be reconciled automatically; Gmail can.** A Gmail `UNCERTAIN` dispatch is
+  checked against the Sent folder before anyone is asked — `in:sent rfc822msgid:<id>`, with a
+  recipient-and-date fallback compared on the exact `Subject` and `Message-ID` — and settles itself
+  where the answer is unambiguous. For NICeMail the agent looks in Sent once, straight after pressing
+  Send; once a dispatch is `UNCERTAIN` nothing looks again, so the human answer is the mechanism, not
+  a fallback.
+
+### How a sync reads the inbox
+
+A sync — `nicBrowserMailbox.sync`, the Mail Ingestion Service — opens one agent tab, reads what the
+inbox is showing as data (`inboxView`: the page, the folder, and each loaded row by its message id,
+with its unread state, list date, size, sender and subject), decides which rows are new, and opens
+each one by its route (`openMessage(id)`), waiting for **that** message's container rather than for
+any open pane.
+
+- **Which rows.** The list is newest first, and the deepest row still loaded that is either stored or
+  waiting to be tried again (it failed before) is the cut-off: only rows above it that are not stored
+  yet are new. They are opened **oldest first**, rows not tried yet before rows that failed before, at
+  most `NIC_BROWSER_SYNC_MAX` per sync; the rest are counted in `remaining` and stay above the cut-off
+  for the next sync. On the first sync, with nothing stored, the newest `NIC_BROWSER_SYNC_MAX` are
+  taken, also oldest first — so a first read cut short leaves what it did not reach above what it
+  stored. The backlog below the cut-off — what was already in the mailbox before the first sync — is
+  never opened.
+- **What is kept.** From, To (the labelled To row, else every recipient on the message), Cc, Bcc
+  (shown only on mail this mailbox sent), the subject from the list row, the body as text and as
+  HTML (`bodyHtml`, dropped rather than cut when it is over 1,000,000 characters), whether Zoho showed
+  it unread before the agent opened it, and `receivedAt` — the message's own timestamp
+  (`receivedAtSource: 'message'`) or, when that cannot be parsed, the time it was read (`'sync'`).
+  `providerThreadId` stays null until runbook B below.
+- **Attachments.** Name, type and the size the message shows are kept whether or not the file can
+  be fetched. The type and the shown size are checked against the attachment policy **before** any
+  download; a download whose `Content-Length` is over the limit is refused before its body is read;
+  a file that could not be saved is kept with `attachmentId: null` and a `materializeError`, which
+  the dashboard shows as *Unavailable: <reason>*. One failed attachment never fails its message.
+- **Stored as read.** Each message is written as soon as it is read, before the next one is opened —
+  insert-only, so a later read never rewrites it.
+- **Failures.** A message that cannot be read — including one with no readable sender address
+  (`no_sender`, checked before any attachment is downloaded) — is recorded, and the read goes on. It
+  is tried again by the next sync, after the rows not tried yet, so it cannot hold up newer mail;
+  after 3 failures in this process it is quarantined, and skipped until the backend restarts. Only a
+  read that completed counts a failure: a read that stopped may be the page's fault, and must not
+  quarantine good mail. The read stops when the first 3 messages opened all fail and one more,
+  taken from the other end of the batch, fails too; when every message opened fails; when the
+  session is lost; or when storing fails. What was stored before it stopped is kept, and the unread
+  restore still runs.
+- **Status.** The inbox response's `sync` field is
+  `{ ok, at, stored, stage, error, running, failed, failedMessages, quarantined, remaining }`;
+  `failedMessages` lists at most five `{ providerMessageId, stage, error }`.
+- **Audit.** `SYNC_FAILED` when a run of failed syncs begins (and for every failed manual sync),
+  `SYNC_RECOVERED` when it ends, and `SYNC_COMPLETED` — with the stored provider ids and the failed,
+  quarantined and remaining counts — only when something was stored or failed, or the sync was
+  manual. A manual start writes `SYNC_STARTED` with the person who asked for it. There is no row per
+  message and none for a quiet poll.
+
+**No scrolling.** A fresh agent tab loads only the newest ~50 rows, and the agent does not scroll the
+list to load more. After a long downtime, mail that arrived beyond that window is never ingested.
+Scrolling in a background tab is deferred until it has been proven live.
+
+### Calibrating the selectors
+
+**Reading and composing are calibrated and verified live.** Every element the agent reads — the
+folder tree, the list rows and their cells, the open message, the read/unread control — was matched
+and counted against the live NICeMail mailbox. Every control it composes with was driven in the
+agent's own tab and proven by a real test send (runbook C).
 [`backend/src/services/email/nic/browser/selectors.js`](../backend/src/services/email/nic/browser/selectors.js)
-as a role- and label-based guess, and stays a guess until the steps below have been done. Test 2
-cannot work before this.
+records what each one resolved to. Still to do: the attachment keys for reading (no received message
+with an attachment has been seen yet), `ccToggle` (hidden while Cc is shown, as it is by default, so
+never pressed live) and the thread id.
 
-1. Start Chrome with CDP (§8) and sign in to NICeMail (§9).
-2. Run `npm run nic:browser:discover` with the **inbox** open, then again with a **message** open,
-   then again with a **compose window** open (opened by hand; discovery never opens one).
-3. Read the `Agent selectors` section. Every reading selector needs matches on the inbox/message
-   views, and every compose selector on the compose view. `First message rows` should show a stable
-   id attribute. If it shows `(no id attribute …)`, a content hash is used instead, which is weaker.
-4. Edit only `selectors.js` until they match, re-running discovery each time.
+**The registry.** `selectors.js` is the one place the agent's view of the page is described. A spec
+is one of:
+
+- a CSS string, or an array of CSS strings tried in order — the structural keys the reader's page
+  code queries directly;
+- an `(id) => string` builder, called with a message id (`rowById`, `previewMessageById`, …);
+- a literal that is compared or navigated to rather than queried (`folderRoute`, `messageRoute`, …);
+- an **element entry**, `element([...strategies], { name, visible, unique })`, for every control the
+  agent clicks or types into.
+
+An element entry lists its strategies most semantic first, and they are tried in the order listed:
+role and accessible name (`{ role: 'button', name: 'New Mail' }`), `aria-label`, `title`, a stable
+attribute (`data-testid`, another `data-*`, `id`), visible text, and CSS last. The first strategy
+whose matches pass the entry's checks wins; the checks, each set per entry, are that the element is
+visible, carries the expected accessible name, and is the only match. There is no visual or coordinate fallback: the agent's tab is never composited, so there
+is nothing to look at. `pageKit.js` resolves entries inside the page, searching open shadow roots and
+same-origin iframes and reporting the cross-origin frames it could not search.
+
+**The interlock.** A key in `UNCALIBRATED` is never used: `requireElement` refuses it before the page
+is asked anything, and `locate` returns null for its spec. Today that set is `ccToggle`,
+`attachmentEntry` and `listRowAttachment` (§13). The checks exist because of what happened before
+them: `composeButton` used to name `tpbr-snd-nw-btn`, the hidden toolbar button *Send selected email
+conversations in outbox immediately*, and because it existed it counted as found. It is now
+`button "New Mail"` (`data-testid="new-btn-opt"`), name-checked, visible and unique. A key leaves
+`UNCALIBRATED` only after a live calibration, and the test pinning the set
+(`nicBrowserSelectors.test.js`) makes each removal a deliberate change.
+
+The two attachment keys are refused as controls, but the reader's page code queries them directly,
+so attachments are looked for with them today — an entry with neither a file name nor a link is
+dropped. Runbook A is what makes that reliable.
+
+Each runbook uses the real mailbox; run it only with the go-ahead of whoever owns it.
+
+**Runbook A — attachments.**
+1. From the test-inquirer address (`NIC_BROWSER_TEST_RECIPIENT`), mail `NIC_EMAIL` one message with a
+   PDF, a JPG and an `.xml` file.
+2. The operator opens that message by hand in the dedicated Chrome.
+3. Run `npm run nic:browser:discover -- --json`. The document holding the open message reports what
+   was extracted from it and a probe of the attachment-like elements in it (tag, classes, attribute
+   names, link, text); the JSON report in `NIC_BROWSER_ARTIFACT_DIR` has them in full.
+4. Set `attachmentEntry` (and any name, size or link keys it needs) and `listRowAttachment` in
+   `selectors.js` from that report — roles and stable attributes, never a build-hashed class — and
+   remove both from `UNCALIBRATED`.
+5. Verify with `npm run nic:browser:discover -- --agent-tab --json` (in the report the message's row
+   has `hasAttachment: true`, and `listRowAttachment` resolves with no warning; the agent's tab has no
+   message open, so `attachmentEntry` is checked by re-running step 3 and must resolve there with no
+   warning), then with one sync at `NIC_BROWSER_SYNC_MAX=1`: the stored
+   message has the PDF and the JPG saved, and the `.xml`, a type the policy refuses, kept as metadata
+   with a `materializeError`.
+
+**Runbook B — thread id.**
+1. Reply once, by hand, to the runbook-A message — to the test-inquirer address only — so that it
+   becomes a conversation.
+2. With that conversation's row loaded and one of its messages open, run
+   `npm run nic:browser:discover -- --json`.
+3. Record the attributes of the row and of the open message's container, and find the one that names
+   the conversation rather than the message. The report's registry samples give only each element's
+   `id`, `data-testid`, `data-action` and names; read the full attribute list in Chrome DevTools
+   (Elements) on the operator's tab, without changing anything. That becomes `providerThreadId`, which the reader sets
+   to null today.
+
+**Runbook C — compose.** Done 2026-09-22; repeat it when a Zoho release moves the form (discovery
+reports `SELECTORS_DRIFTED` with a compose form open, or a send fails with *was not found*).
+1. The operator opens a compose form by hand (**New Mail**) and types nothing into it.
+2. Run `npm run nic:browser:discover -- --json`. The registry section shows how each compose key
+   resolves on the live form; the accessibility tree and the interactive inventory list the form's
+   fields and buttons by role, name and test id. Set the entries from it — role and accessible name
+   first, with the `name`, `visible` and `unique` checks — and close the form by hand without
+   sending.
+3. Run `npm run nic:browser:calibrate -- --attach`. In the agent's own background tab it opens a
+   form, checks From, types `NIC_BROWSER_TEST_RECIPIENT` into To by each candidate method and
+   records which one makes a recipient chip, writes a marker subject and body, attaches a small
+   generated PDF through the file chooser, then presses **Discard Draft** and checks that no draft
+   was left. It **never presses Send**. The report (addresses masked) is written to
+   `NIC_BROWSER_ARTIFACT_DIR`.
+4. With `NIC_ALLOW_OUTBOUND=false`, send one message to `NIC_BROWSER_TEST_RECIPIENT` through the
+   transport, with a subject such as `IPC-QMS calibration test <time>`. It must return a
+   `providerMessageId`, and the message in **Sent**, opened by hand, must show exactly that recipient,
+   the subject and the body.
+5. Only keys proven by steps 3 and 4 leave `UNCALIBRATED`. Re-run step 2 with a form open: the
+   diagnosis must read `Compose form open: all 8 of its controls resolve.`
+
+What was verified on the live form (2026-09-22). Compose opens as an app tab (hash `#compose`, panel
+`#jstab-Cmp<N>`) in the same document as the inbox, with no shadow DOM:
+
+| Key | Element | Strategies, most semantic first |
+|---|---|---|
+| `composeButton` | `<button data-testid="new-btn-opt">New Mail</button>` | `button "New Mail"`, testid `new-btn-opt` |
+| `fromAddress` | `button[data-testid=com_cur_from_address]`, named `From <address>` | testid `com_cur_from_address`, name prefix `From` |
+| `toInput` | `input` role `combobox`, `To Recipients`, testid `com_To_field` | `combobox "To Recipients"`, testid |
+| `ccInput` | the same, `CC Recipients`, `com_Cc_field`; shown by default | `combobox "CC Recipients"`, testid |
+| `ccToggle` | `role=button` `Add Cc recipients`, hidden while Cc is shown | `button "Add Cc recipients"` (still `UNCALIBRATED`) |
+| `subjectInput` | `input` placeholder `Subject` in `[data-testid=com_subject_field]`; its `id` is React-generated and not used | `textbox "Subject"`, CSS in the testid |
+| `bodyEditor` | `<body class="ze_body" contenteditable="true" aria-label="Rich text editor area">` in a same-origin iframe | `textbox "Rich text editor area"`, CSS |
+| `fileInput` | there is no `<input type=file>`: `button "Attach from my computer"` opens a file chooser | `button "Attach from my computer"` |
+| `sendButton` | `button[data-testid=com_send]` `Send`, beside `Send Later` (`com_send_later`), which the exact name excludes | `button "Send"`, testid `com_send` |
+| `discardButton` | `button "Discard Draft"`, testid `com_DiscardDraft_Icon`; closes the form with no confirmation | `button "Discard Draft"`, testid |
+| `recipientChip` | `div[role=option].zmCB` with `aria-label=<address>`, in the input's `.zmCRow` | CSS |
+| `composeAttachmentRow` | `[role=row][aria-label=<file name>]` under `.zmCRAtt` | CSS |
+| `sentFolderRoute` / `folderSent` | `#mail/folder/sent`; `treeitem "Sent"` | literal; `treeitem "Sent"` |
+
+How each step is done, as the calibration proved it:
+- **Recipients:** the address goes in through the input's native value setter with an `input`
+  event, then Enter is dispatched; the form turns it into a chip within moments.
+- **Subject:** the same native setter with `input` and `change` events (`fillIn`). A plain
+  `.value =` is taken by React as its own write and the field would be sent empty.
+- **Body:** the editor's body is focused and the text inserted with CDP `Input.insertText`, so line
+  breaks become the editor's own paragraphs and nothing in the text is read as markup.
+- **Attachments:** `Page.setInterceptFileChooserDialog`, click **Attach from my computer**, and on
+  `Page.fileChooserOpened` hand the staged files to `DOM.setFileInputFiles`. Upload and virus scan
+  took about 3 s for a small PDF.
+- **Discard:** one click and the form closes, once any upload has finished scanning.
+
+The live test send (2026-09-22) went through `nicBrowserTransport.send()` with
+`NIC_ALLOW_OUTBOUND=false`. It returned the Sent row's id in 4.7 s. Opened in Sent, the message showed
+From `NIC_EMAIL`, To the test recipient alone, no Cc or Bcc, and the body exactly as sent.
+
+Every new agent tab also shows an *Email Satisfaction Survey* dialog (**Close** /
+**Participate now!**). The agent closes it with **Close** before composing, and never presses
+**Participate now!**. See *The survey pop-up, and other dialogs* above.
 
 An element that matches nothing fails loudly, in the inbox `sync` status or, for a send, before Send
 is pressed: `NICeMail UI element "<key>" was not found. Recalibrate browser/selectors.js.` An
-element that matches the **wrong** thing fails silently: the agent reads, clicks or types there.
-Calibration is what rules that out; the open items below list what depends on it.
+element entry that matches the wrong thing — hidden, wrongly named, one of several — does not resolve
+at all, which is what its checks are for. A plain CSS key has no such checks: a structural read
+selector that matched the wrong element would read there, and `nic:browser:discover` is how that is
+ruled out.
 
 ### Configuration
 
@@ -783,14 +1273,19 @@ that account in the dedicated Chrome — see §15 for what else follows `NIC_EMA
 Accept → case, AI summary, ACK from Gmail, forward to OIC → continue the workflow to closure. The
 final response goes from Gmail.
 
-**Test 2 — NICeMail.** Cannot pass until the selectors are calibrated (above).
+**Test 2 — NICeMail.** Keep `NIC_ALLOW_OUTBOUND=false` for this test, so the acknowledgement can
+only go to the test inquirer. A backend started before compose was calibrated still refuses the
+acknowledgement with the *never been calibrated* error (§13); restart it.
 1. Close Brave or any other program on port 9222. Start the dedicated Chrome and sign in to NICeMail.
 2. From the test inquirer address (`NIC_BROWSER_TEST_RECIPIENT`), mail `NIC_EMAIL`.
 3. Sign in to IPC-QMS as `NIC_EMAIL` with `QMS_SEED_PASSWORD` (dev login refuses this account). Within
-   about a minute the message appears. Reloading repeatedly shows it once. If the page shows **NICeMail
-   could not be read**, fix what its stage names (§13) before going on.
+   about a minute the message appears, or shortly after **Sync now**. Reloading repeatedly shows it
+   once. If the page shows **NICeMail could not be read**, fix what its stage names (§13) before going
+   on.
 4. Accept → one case with `sourceMailbox.source = 'nic-browser'`. The ACK appears in NICeMail's
-   **Sent** folder, addressed to the inquirer. The forward to the OIC goes out as before.
+   **Sent** folder, addressed to the inquirer, and its `outboundemails` record is `SENT` with that
+   Sent row's id as `providerMessageId`. Accepting again sends nothing. The forward to the OIC goes
+   out as before.
 5. Continue the workflow to final approval. The final response is sent from NICeMail and the case
    closes.
 6. The mail never appears in the Gmail Front Office's inbox.
@@ -803,47 +1298,41 @@ did go out reaches the inquirer twice.
 
 None of these is fixed. Each is a way the NICeMail mailbox can go wrong in operation.
 
-**Depend on calibration** — until `selectors.js` is calibrated against the live page:
+**Depend on calibration** — until the runbooks above are done:
 
-- **The reader may read the wrong message.** After clicking a row it waits for the reading pane to be
-  visible, and a pane already showing the previous message satisfies that at once. A wrong read is
-  stored permanently: stored rows are never rewritten.
-- **The dedupe key may not be NICeMail's message id.** It is a DOM attribute of the inbox row, or a
-  hash of the row's text; if that is not stable, the same message can be stored twice or a new one
-  skipped as known.
-- **Recipients are not verified.** Each address typed into compose is committed with Enter, which
-  can pick an autocomplete suggestion instead, and the chips are not checked against the intended
-  list before Send.
-- **The signed-in account is not checked against `NIC_EMAIL`.** Whatever account the Chrome tab is
-  signed in to is read and sent from.
+- **Attachments are uncalibrated for reading.** No received message with an attachment has been
+  seen live, so an attachment may be missed until runbook A is done. (Sending attachments is
+  calibrated.)
+- **Threads are not recorded.** `providerThreadId` is stored as null until runbook B.
+- **Cc behind a hidden Cc line is refused.** `ccToggle` has never been pressed live. The Cc line is
+  shown by default, so this only matters if Zoho starts hiding it.
+- **Reading does not check the signed-in account against `NIC_EMAIL`.** Whatever account the Chrome
+  tab is signed in to is read from. Sending does check it: the compose form's From must be
+  `NIC_EMAIL`. `nic:browser:discover` shows the account, masked, in the tab title.
 
 **Ingestion:**
 
-- Each sync inspects at most `NIC_BROWSER_SYNC_MAX` rows from the top, and rows already stored count
-  against that budget. A backlog larger than that — Chrome closed for a busy morning — can be missed
-  for good.
-- Nothing is stored until the whole sync finishes; a failure partway stores nothing from that sync.
-- A message whose sender cannot be read is dropped without a trace — not stored, not logged. Its
-  attachments are downloaded before that check, so they still land in the attachment store,
-  referenced by nothing.
+- **Only the loaded rows are seen.** A fresh agent tab loads the newest ~50 rows and nothing scrolls,
+  so after a long downtime mail beyond that window is never ingested (*How a sync reads the inbox*).
+- **Quarantine is per process.** A message that failed 3 times is skipped until the backend
+  restarts; after a restart it is tried again if it is still above the cut-off.
 - A failed attachment download is stored with a null `attachmentId`, and the fail-closed forward
   refuses it — permanently, for that message.
 
 **Isolation and state:**
 
-- **Mailbox isolation is inbox-only.** Only the NICeMail Front Office's own requests are pinned to
-  its mailbox. In Mongo mode (`MAILBOX_SOURCE=auto` with MongoDB connected) the primary Front Office
-  or `SUPER_ADMIN` can list, mark ingested or hard-delete NICeMail messages by passing `?recipient=`
-  set to `NIC_EMAIL`. In any mode they can accept a NICeMail message by its id: the primary
+- **Mailbox isolation covers the mailbox routes, not accept or decisions.** The NICeMail Front
+  Office's requests are pinned to its mailbox, and the primary mailbox's MongoDB store no longer
+  lists, marks, deletes or clears NICeMail rows, whatever `?recipient=` says. But in any mode the
+  primary Front Office or `SUPER_ADMIN` can accept a NICeMail message by its id: the primary
   mailbox's accept takes the message from the request body and records a non-NICeMail
   `sourceMailbox`, so that case is answered through `EMAIL_TRANSPORT`.
   `POST /mailbox/messages/:id/decision` and `GET /mailbox/decisions` are not scoped to a mailbox at
   all.
 - **The "already handled" memory is the MongoDB row.** A removed message is hidden, not deleted, and
-  that row is all that stops the next sync storing it again. `DELETE /api/v1/mailbox` (while the
-  primary mailbox is the Mongo store), a hard delete through the route above, or `npm run db:reset`
-  removes it, and the next sync that reaches the message stores it again — after `db:reset`, which
-  also clears the decisions, as a new, undecided message.
+  that row is all that stops the next sync storing it again. `npm run db:reset` removes it, and the
+  next sync that reaches the message stores it again — as a new, undecided message, since the reset
+  also clears the decisions.
 - **Two concurrent accepts can acknowledge twice.** Both can pass the "already acknowledged?" check
   before either records one — the browser queue makes that window long — and both send.
 - **Any signed-in role can edit a case's inquirer and response text** through `/queries/persist`.

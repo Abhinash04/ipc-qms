@@ -100,14 +100,26 @@ export function useMailboxIngestion() {
   const checkMailbox = useCallback(async () => {
     setState((prev) => ({ ...prev, running: true, error: null }));
     try {
-      const { messages = [] } = await fetchMailboxMessages({ unreadOnly: true });
-      const result = { fetched: messages.length, messages };
+      // One row is enough: the count is `total`. A mailbox whose answer has no
+      // `total` still sends the whole list, and is counted as before.
+      const { messages = [], sync = null, total } = await fetchMailboxMessages({
+        unreadOnly: true,
+        limit: 1,
+      });
+      const result = { fetched: total ?? messages.length, messages, sync };
       setState({ running: false, error: null, lastResult: result });
       return result;
     } catch (error) {
-      const detail = error?.message || String(error);
+      /**
+       * The server's reason — "the gmail mailbox could not be reached: …
+       * ENOTFOUND … the poll keeps retrying" — rather than axios's "Request
+       * failed with status code 503", which tells the Front Officer nothing
+       * about whether anyone needs to do something.
+       */
+      const data = error?.response?.data;
+      const detail = data?.error || error?.message || String(error);
       setState({ running: false, error: detail, lastResult: null });
-      return { fetched: 0, messages: [], error: detail };
+      return { fetched: 0, messages: [], error: detail, retryable: Boolean(data?.retryable) };
     }
   }, []);
 
@@ -126,7 +138,9 @@ export function useMailboxIngestion() {
  */
 export function notifyMailboxCheck(result, { announceIdle = true } = {}) {
   if (result.error) {
-    notify.error("Could not check the IPC mailbox", result.error);
+    // One toast, replaced rather than stacked: error toasts stay until they are
+    // dismissed, and a mailbox that is down is down for every check.
+    notify.error("Could not check the IPC mailbox", result.error, { id: "mailbox-unreachable" });
     return;
   }
 

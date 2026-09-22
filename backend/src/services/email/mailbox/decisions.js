@@ -51,7 +51,7 @@ async function recordDecision({
         receivedAt: message.receivedAt || null,
       },
     },
-    { upsert: true, new: true },
+    { upsert: true, returnDocument: 'after' },
   ).lean();
 
   // The read above is not a lock: two concurrent requests can both miss it. The
@@ -73,4 +73,10 @@ async function findDecision(mailboxMessageId) {
   return toPlain(await MailboxDecision.findOne({ mailboxMessageId }).lean());
 }
 
-export { recordDecision, listDecisions, findDecision, DECISIONS };
+/** The decisions on these messages, by message id — one query for a whole inbox page. */
+async function findDecisions(mailboxMessageIds) {
+  const rows = await MailboxDecision.find({ mailboxMessageId: { $in: mailboxMessageIds } }).lean();
+  return new Map(rows.map((row) => [row.mailboxMessageId, toPlain(row)]));
+}
+
+export { recordDecision, listDecisions, findDecision, findDecisions, DECISIONS };

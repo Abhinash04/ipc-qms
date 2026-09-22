@@ -2,8 +2,13 @@ import express from 'express';
 import verifyToken from '../middleware/verifyToken.js';
 import { verifyRole } from '../middleware/verifyRole.js';
 import validateBody from '../middleware/validateBody.js';
+import validateQuery from '../middleware/validateQuery.js';
 import { ROLES } from '../constants/roles.js';
-import { mailboxDecisionSchema, acceptMessageSchema } from '../validators/mailboxSchemas.js';
+import {
+  mailboxDecisionSchema,
+  acceptMessageSchema,
+  listMessagesQuerySchema,
+} from '../validators/mailboxSchemas.js';
 import {
   listMessages,
   receiveMessage,
@@ -13,6 +18,10 @@ import {
   decideMessage,
   acceptMessage,
   listDecisions,
+  getMessage,
+  downloadMessageAttachment,
+  markRead,
+  syncMailbox,
 } from '../controllers/mailboxController.js';
 
 const router = express.Router();
@@ -24,7 +33,29 @@ const router = express.Router();
  */
 const FRONT_OFFICE_ONLY = [ROLES.FRONT_OFFICE, ROLES.SUPER_ADMIN];
 
-router.get('/mailbox/messages', verifyToken, verifyRole(FRONT_OFFICE_ONLY), listMessages);
+// `?q=` searches, `?limit=&offset=` pages; without `limit` the whole list, as before.
+router.get(
+  '/mailbox/messages',
+  verifyToken,
+  verifyRole(FRONT_OFFICE_ONLY),
+  validateQuery(listMessagesQuerySchema),
+  listMessages,
+);
+
+// One message in full, with its case; and its attachments, only through it.
+router.get('/mailbox/messages/:messageId', verifyToken, verifyRole(FRONT_OFFICE_ONLY), getMessage);
+router.get(
+  '/mailbox/messages/:messageId/attachments/:attachmentId',
+  verifyToken,
+  verifyRole(FRONT_OFFICE_ONLY),
+  downloadMessageAttachment,
+);
+
+// The Front Office opened it. QMS state only: NICeMail's own is never changed.
+router.post('/mailbox/messages/:messageId/read', verifyToken, verifyRole(FRONT_OFFICE_ONLY), markRead);
+
+// Read the NICeMail inbox now rather than on the next poll. Background; 202.
+router.post('/mailbox/sync', verifyToken, verifyRole(FRONT_OFFICE_ONLY), syncMailbox);
 
 // Injects a message into the store — a development/testing affordance.
 router.post('/mailbox/receive', verifyToken, verifyRole(ROLES.SUPER_ADMIN), receiveMessage);

@@ -17,8 +17,21 @@ export function DispatchDetailPage() {
   const paths = useRoutePaths();
   const { queryId, query, latestVersion, messages, currentUser, can } = useQueryCase();
   const dispatched = messages.find((m) => m.emailType === EMAIL_TYPE.OUTGOING_RESPONSE);
-  const { run, error, clearError } = useWorkflowAction();
+  const { run, running, error, clearError } = useWorkflowAction();
   const dispatchResponse = useWorkflowStore((state) => state.dispatchResponse);
+  const resolveOutboundEmail = useWorkflowStore((state) => state.resolveOutboundEmail);
+
+  /**
+   * What the server knows about this case's response. `UNCERTAIN` means the
+   * mailbox was asked to send and never confirmed it: the inquirer may already
+   * have the answer, so this page must not offer a plain "send it again".
+   */
+  const outbound = useWorkflowStore((state) =>
+    state.outboundEmails.find(
+      (row) => row.queryId === queryId && row.emailType === EMAIL_TYPE.OUTGOING_RESPONSE,
+    ),
+  );
+  const uncertain = outbound?.status === 'UNCERTAIN';
 
   if (!query) return <EmptyState title="Query not found" />;
 
@@ -110,14 +123,64 @@ export function DispatchDetailPage() {
                   </p>
                   {isClosed && <p className="mt-0.5">Query closed.</p>}
                 </div>
+              ) : canDispatch && uncertain ? (
+                /**
+                 * Send was asked for and never confirmed. Retrying could put a
+                 * second copy in the inquirer's inbox, so the only way on is to
+                 * look in the Sent folder and record what is there.
+                 */
+                <>
+                  <p className="rounded-md border border-status-amber-line bg-status-amber-bg px-3 py-2 text-sm text-status-amber-fg">
+                    The response may already have been sent — the mailbox never confirmed it.
+                    Check the Sent folder before doing anything else. {outbound?.lastError}
+                  </p>
+                  <Button
+                    className="w-full"
+                    disabled={running}
+                    onClick={() =>
+                      run(() =>
+                        resolveOutboundEmail(queryId, {
+                          emailType: EMAIL_TYPE.OUTGOING_RESPONSE,
+                          outcome: 'SENT',
+                        }),
+                      )
+                    }
+                  >
+                    It was sent — record it and close the case
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    className="w-full"
+                    disabled={running}
+                    onClick={() =>
+                      run(async () => {
+                        await resolveOutboundEmail(queryId, {
+                          emailType: EMAIL_TYPE.OUTGOING_RESPONSE,
+                          outcome: 'NOT_SENT',
+                        });
+                        return dispatchResponse(queryId, currentUser);
+                      })
+                    }
+                  >
+                    <SendIcon className="h-4 w-4" aria-hidden="true" />
+                    It was not sent — send it
+                  </Button>
+                </>
               ) : canDispatch ? (
                 <>
                   <p className="rounded-md border border-status-amber-line bg-status-amber-bg px-3 py-2 text-sm text-status-amber-fg">
                     The automatic dispatch did not complete. The response is approved and locked — retrying sends it without creating a second response.
                   </p>
-                  <Button className="w-full" onClick={() => run(() => dispatchResponse(queryId, currentUser))}>
+                  {/* Disabled while it runs: a send can take twenty seconds on a
+                      bad network, and a second press is how an inquirer ends up
+                      with two copies of the same answer. */}
+                  <Button
+                    className="w-full"
+                    disabled={running}
+                    onClick={() => run(() => dispatchResponse(queryId, currentUser))}
+                  >
                     <SendIcon className="h-4 w-4" aria-hidden="true" />
-                    Retry sending response
+                    {running ? 'Sending…' : 'Retry sending response'}
                   </Button>
                 </>
               ) : (

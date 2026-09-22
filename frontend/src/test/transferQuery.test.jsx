@@ -9,6 +9,7 @@ import { useAuthStore } from '@/store/useAuthStore';
 import { useWorkflowStore } from '@/store/useWorkflowStore';
 import { findUserById } from '@/constants/mockUsers';
 import { WORKFLOW_STATE, AUDIT_EVENT } from '@/constants/statusEnums';
+import { fakeCaseMail } from '@/test/fakeCaseMail';
 
 vi.mock('@/services/api/healthService', () => ({
   fetchHealth: vi.fn().mockResolvedValue({ status: 'healthy' }),
@@ -36,16 +37,13 @@ const OIC = findUserById('USR-0003');
 const OFFICIAL_A = findUserById('USR-0004'); // Neha Singh
 const OFFICIAL_B = findUserById('USR-0009'); // Rawat Jatin
 
-const fakeForward = (payload) =>
-  Promise.resolve({
-    from: 'Test Front Officer <front-office@test.invalid>',
-    to: ['officer@test.invalid'],
-    subject: `Fwd: ${payload.subject}`,
-    body: payload.body,
-    providerMessageId: 'mock-msg-forward',
-    providerThreadId: payload.providerThreadId || 'mock-thread-1',
-    sentAt: '2026-08-18T10:00:00.000Z',
-  });
+/**
+ * The forward is a server call now: the record of it, the audit row and the
+ * move to PENDING_ASSIGNMENT all come back from the endpoint rather than being
+ * written here. See src/test/fakeCaseMail.js.
+ */
+const caseMail = fakeCaseMail();
+const fakeForward = caseMail.forwardQuery;
 
 const enquiry = () => ({
   mailboxMessageId: 'MSG-TRF-00001',

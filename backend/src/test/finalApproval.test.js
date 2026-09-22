@@ -19,95 +19,42 @@ import request from 'supertest';
  * up — the same harness as acceptMessage.test.js.
  */
 
-const db = vi.hoisted(() => {
-  const read = (doc, path) => path.split('.').reduce((node, key) => node?.[key], doc);
-
-  const write = (doc, path, value) => {
-    const keys = path.split('.');
-    const leaf = keys.pop();
-    keys.reduce((node, key) => (node[key] ??= {}), doc)[leaf] = value;
-  };
-
-  const clone = (doc) => (doc ? JSON.parse(JSON.stringify(doc)) : null);
-
-  const apply = (doc, update, inserted) => {
-    for (const [path, by] of Object.entries(update.$inc ?? {})) {
-      write(doc, path, (read(doc, path) ?? 0) + by);
-    }
-    for (const [path, value] of Object.entries(update.$set ?? {})) write(doc, path, value);
-    if (!inserted) return;
-    for (const [path, value] of Object.entries(update.$setOnInsert ?? {})) write(doc, path, value);
-  };
-
-  const collections = new Map();
-
-  const model = (name) => {
-    const rows = [];
-    collections.set(name, rows);
-
-    const matches = (row, filter) =>
-      Object.entries(filter).every(([path, value]) => {
-        // Only the one operator this path uses — `{ status: { $ne: 'COMPLETED' } }`.
-        if (value && typeof value === 'object' && '$ne' in value) return read(row, path) !== value.$ne;
-        return read(row, path) === value;
-      });
-
-    const matching = (filter) => rows.filter((row) => matches(row, filter));
-
-    const upsert = (filter, update, options) => {
-      let doc = matching(filter)[0];
-      const inserted = !doc;
-      if (inserted) {
-        if (!options.upsert) return null;
-        doc = { ...filter };
-        rows.push(doc);
-      }
-      apply(doc, update, inserted);
-      return doc;
-    };
-
-    const sortable = (list) => ({
-      lean: async () => list.map(clone),
-      sort: () => sortable(list),
-    });
-
-    return {
-      create: async (doc) => {
-        rows.push(clone(doc));
-        return clone(doc);
-      },
-      findOne: (filter) => ({ lean: async () => clone(matching(filter)[0]) }),
-      find: (filter = {}) => sortable(matching(filter)),
-      updateOne: async (filter, update, options = {}) => {
-        upsert(filter, update, options);
-        return { acknowledged: true };
-      },
-      updateMany: async (filter, update) => {
-        for (const doc of matching(filter)) apply(doc, update, false);
-        return { acknowledged: true };
-      },
-      findOneAndUpdate: (filter, update, options = {}) => ({
-        lean: async () => clone(upsert(filter, update, options)),
-      }),
-    };
-  };
-
-  return { model, reset: () => collections.forEach((rows) => rows.splice(0)) };
-});
-
 vi.mock('../config/db.js', async (importOriginal) => ({
   ...(await importOriginal()),
   isConnected: () => true,
 }));
 
-vi.mock('../models/QueryCase.js', () => ({ QueryCase: db.model('QueryCase') }));
-vi.mock('../models/QueryCounter.js', () => ({ QueryCounter: db.model('QueryCounter') }));
-vi.mock('../models/ResponseVersion.js', () => ({ ResponseVersion: db.model('ResponseVersion') }));
-vi.mock('../models/WorkflowStep.js', () => ({ WorkflowStep: db.model('WorkflowStep') }));
-vi.mock('../models/EmailMessage.js', () => ({ EmailMessage: db.model('EmailMessage') }));
-vi.mock('../models/Notification.js', () => ({ Notification: db.model('Notification') }));
-vi.mock('../models/AuditEvent.js', () => ({ AuditEvent: db.model('AuditEvent') }));
+// The in-memory stand-in (support/memoryDb.js) enforces the unique keys the
+// once-only send rests on — above all `dispatchKey` on the outbox ledger.
+vi.mock('../models/QueryCase.js', async () => ({
+  QueryCase: (await import('./support/memoryDb.js')).memoryDb.model('QueryCase', { unique: ['queryId'] }),
+}));
+vi.mock('../models/QueryCounter.js', async () => ({
+  QueryCounter: (await import('./support/memoryDb.js')).memoryDb.model('QueryCounter'),
+}));
+vi.mock('../models/ResponseVersion.js', async () => ({
+  ResponseVersion: (await import('./support/memoryDb.js')).memoryDb.model('ResponseVersion'),
+}));
+vi.mock('../models/WorkflowStep.js', async () => ({
+  WorkflowStep: (await import('./support/memoryDb.js')).memoryDb.model('WorkflowStep'),
+}));
+vi.mock('../models/EmailMessage.js', async () => ({
+  EmailMessage: (await import('./support/memoryDb.js')).memoryDb.model('EmailMessage', { unique: ['messageId'] }),
+}));
+vi.mock('../models/Notification.js', async () => ({
+  Notification: (await import('./support/memoryDb.js')).memoryDb.model('Notification'),
+}));
+vi.mock('../models/AuditEvent.js', async () => ({
+  AuditEvent: (await import('./support/memoryDb.js')).memoryDb.model('AuditEvent'),
+}));
+vi.mock('../models/OutboundEmail.js', async (importOriginal) => ({
+  ...(await importOriginal()),
+  OutboundEmail: (await import('./support/memoryDb.js')).memoryDb.model('OutboundEmail', {
+    unique: ['dispatchKey'],
+  }),
+}));
 
+import { memoryDb as db } from './support/memoryDb.js';
 import app from '../app.js';
 import { authHeader } from './helpers/auth.js';
 import { ROLES } from '../constants/roles.js';
@@ -303,6 +250,78 @@ describe('when the send is unconfirmed', () => {
   });
 });
 
+/**
+ * The failure this whole path was rebuilt for.
+ *
+ * In a live test the Officer-in-Charge pressed Approve four times while the
+ * first send hung for 22 seconds on a failing DNS lookup. Each request read
+ * "no response recorded yet" and sent; the inquirer received the same answer
+ * three times. Overlapping requests are the normal case for a slow send, not an
+ * exotic one, so they are what these tests do.
+ */
+describe('when approve is pressed more than once', () => {
+  it('sends one response for three overlapping requests', async () => {
+    const [first, second, third] = await Promise.all([approve(), approve(), approve()]);
+
+    expect(sendSpy).toHaveBeenCalledTimes(1);
+    expect(await messagesOfType('OUTGOING_RESPONSE')).toHaveLength(1);
+
+    // One decision, one send, one closure — however many times it was asked for.
+    const history = await actions();
+    expect(history.filter((action) => action === 'FINAL_APPROVAL_GRANTED')).toHaveLength(1);
+    expect(history.filter((action) => action === 'RESPONSE_DISPATCHED')).toHaveLength(1);
+    expect(history.filter((action) => action === 'QUERY_CLOSED')).toHaveLength(1);
+
+    // And none of the three is told the case failed.
+    for (const res of [first, second, third]) {
+      expect(res.status).toBe(200);
+      expect(res.body.approved).toBe(true);
+      expect(res.body.errors).toEqual([]);
+    }
+    expect([first, second, third].filter((res) => res.body.dispatched)).toHaveLength(1);
+  });
+
+  it('answers a later press from the record, without sending again', async () => {
+    await approve();
+
+    const again = await approve();
+
+    expect(again.body).toMatchObject({ approved: true, alreadyDispatched: true, workflowState: 'CLOSED' });
+    expect(sendSpy).toHaveBeenCalledTimes(1);
+    expect(await messagesOfType('OUTGOING_RESPONSE')).toHaveLength(1);
+  });
+
+  /**
+   * The send that failed finished last, so its "not emailed" answer was what
+   * the officer saw for a case that had in fact been answered and closed. The
+   * ledger is what the reply is read from now, so a losing request reports the
+   * state of the email rather than the fate of its own attempt.
+   */
+  it('does not report a failure for a response another request sent', async () => {
+    let attempt = 0;
+    sendSpy.mockImplementation(async () => {
+      attempt += 1;
+      if (attempt > 1) throw Object.assign(new Error('getaddrinfo ENOTFOUND'), { code: 'ENOTFOUND' });
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      return {
+        from: 'Front Office <front-office@test.invalid>',
+        to: [INQUIRER_EMAIL],
+        subject: `Re: Dissolution limits for a modified-release tablet [${QUERY_ID}]`,
+        body: 'The applicable limit is stated in the current monograph.',
+        transport: 'mock',
+        sentAt: '2026-09-18T10:00:00.000Z',
+        providerMessageId: 'mock-1',
+      };
+    });
+
+    const [a, b] = await Promise.all([approve(), approve()]);
+
+    expect(sendSpy).toHaveBeenCalledTimes(1);
+    expect(await messagesOfType('OUTGOING_RESPONSE')).toHaveLength(1);
+    for (const res of [a, b]) expect(res.body.errors).toEqual([]);
+  });
+});
+
 describe('when the response cannot be sent', () => {
   beforeEach(() => {
     sendSpy.mockRejectedValue(new Error('SMTP unavailable'));
@@ -317,7 +336,9 @@ describe('when the response cannot be sent', () => {
       dispatched: false,
       workflowState: 'READY_FOR_DISPATCH',
     });
-    expect(res.body.errors).toContainEqual({ step: 'dispatch', error: 'SMTP unavailable' });
+    expect(res.body.errors).toContainEqual(
+      expect.objectContaining({ step: 'dispatch', error: 'SMTP unavailable', outcome: 'FAILED', retryable: true }),
+    );
 
     const stored = await QueryCase.findOne({ queryId: QUERY_ID }).lean();
     expect(stored.workflowState).toBe('READY_FOR_DISPATCH');

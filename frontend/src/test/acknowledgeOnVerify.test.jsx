@@ -11,6 +11,7 @@ import { WORKFLOW_STATE, AUDIT_EVENT } from '@/constants/statusEnums';
 import { EMAIL_TYPE } from '@/constants/emailModel';
 import * as mailboxService from '@/services/api/mailboxService';
 import { notify } from '@/services/notify';
+import { installFakeCaseMail } from '@/test/fakeCaseMail';
 
 vi.mock('@/services/api/mailboxService');
 
@@ -19,23 +20,17 @@ const FRONT_OFFICE = findUserById('USR-0002');
 
 const s = () => useWorkflowStore.getState();
 
-const ACK_RESULT = {
-  from: 'Bhumika Makker <bhoomikamakker@gmail.com>',
-  to: [INQUIRER.email],
-  subject: 'Acknowledgement of Query Received',
-  body: 'We have received your enquiry.',
-  sentAt: '2026-08-26T10:00:00.000Z',
-  providerMessageId: 'ack-msg-1',
-};
+/**
+ * The endpoints that send a case's email. Both take a case and nothing else:
+ * the recipient, the wording and the "has this already gone?" decision are the
+ * server's, so a test can no longer hand them a reply to return — it asks the
+ * stand-in endpoint what the server would have done. See src/test/fakeCaseMail.js.
+ */
+let caseMail;
 
-const FORWARD_RESULT = {
-  from: 'Bhumika Makker <bhoomikamakker@gmail.com>',
-  to: ['rawatjatin436@gmail.com'],
-  subject: 'Fwd: enquiry',
-  body: 'forwarded',
-  sentAt: '2026-08-26T10:05:00.000Z',
-  providerMessageId: 'fwd-msg-1',
-  providerThreadId: 'thread-1',
+/** Put the endpoints back after a test has made one fail. */
+const restoreMail = () => {
+  vi.mocked(mailboxService.sendAcknowledgement).mockImplementation(caseMail.sendAcknowledgement);
 };
 
 /**
@@ -43,15 +38,14 @@ const FORWARD_RESULT = {
  * gone out: its own message is the status line, and the server's reason — the
  * instruction to check the Sent folder — is in the response body.
  */
+const UNCONFIRMED_REASON =
+  'NICeMail may have sent this message but did not confirm it in time. Check the NICeMail Sent folder before retrying.';
+
 const unconfirmedFailure = () =>
   Object.assign(new Error('Request failed with status code 504'), {
     response: {
       status: 504,
-      data: {
-        error:
-          'NICeMail may have sent this message but did not confirm it in time. Check the NICeMail Sent folder before retrying.',
-        unconfirmed: true,
-      },
+      data: { error: UNCONFIRMED_REASON, unconfirmed: true },
     },
   });
 
@@ -91,8 +85,7 @@ beforeEach(async () => {
   vi.mocked(mailboxService.fetchEmailConfig).mockResolvedValue({});
   vi.mocked(mailboxService.fetchMailboxMessages).mockResolvedValue({ messages: [] });
   vi.mocked(mailboxService.markMessageIngested).mockResolvedValue({ ingested: true });
-  vi.mocked(mailboxService.sendAcknowledgement).mockResolvedValue(ACK_RESULT);
-  vi.mocked(mailboxService.forwardQuery).mockResolvedValue(FORWARD_RESULT);
+  caseMail = installFakeCaseMail(mailboxService);
 
   await s().hydrate();
   await s().resetDemo();
@@ -106,10 +99,10 @@ describe('Validate acknowledges the inquirer', () => {
     const result = await s().verifyQuery(queryId, FRONT_OFFICE);
 
     expect(result.acknowledged).toBe(true);
-    expect(mailboxService.sendAcknowledgement).toHaveBeenCalledWith({
-      to: INQUIRER.email,
-      queryId,
-    });
+    // The case, and nothing else. A `to` in the request used to decide who was
+    // emailed, which made the recipient the browser's to choose — and a stale
+    // tab's choice could be the wrong inquirer.
+    expect(mailboxService.sendAcknowledgement).toHaveBeenCalledWith({ queryId });
   });
 
   it('records the acknowledgement on the case, not just in the mail server', async () => {
@@ -138,22 +131,28 @@ describe('the inquirer is never emailed twice', () => {
   it('does not re-send when the query is already acknowledged', async () => {
     const queryId = receivedQuery();
     // Stand in for the ingestion chain, which acknowledges before verifying.
-    s().recordAcknowledgement({ queryId, ...ACK_RESULT, timestamp: ACK_RESULT.sentAt });
+    // Straight to the endpoint, so the spy below counts only Validate's own
+    // request.
+    await caseMail.sendAcknowledgement({ queryId });
+    await s().refreshFromServer();
     expect(ackMessages(queryId)).toHaveLength(1);
 
     const result = await s().verifyQuery(queryId, FRONT_OFFICE);
 
-    expect(result).toEqual({ acknowledged: true, alreadySent: true });
-    expect(mailboxService.sendAcknowledgement).not.toHaveBeenCalled();
+    // The request is made — the browser cannot know what another tab or
+    // officer has already sent — and is answered "already sent".
+    expect(result).toMatchObject({ acknowledged: true, alreadySent: true });
+    expect(mailboxService.sendAcknowledgement).toHaveBeenCalledTimes(1);
     expect(ackMessages(queryId)).toHaveLength(1);
   });
 
   it('sends once even if acknowledgeInquirer is called again', async () => {
     const queryId = receivedQuery();
     await s().verifyQuery(queryId, FRONT_OFFICE);
-    await s().acknowledgeInquirer(queryId, FRONT_OFFICE);
+    const second = await s().acknowledgeInquirer(queryId, FRONT_OFFICE);
 
-    expect(mailboxService.sendAcknowledgement).toHaveBeenCalledTimes(1);
+    expect(second.alreadySent).toBe(true);
+    expect(mailboxService.sendAcknowledgement).toHaveBeenCalledTimes(2);
     expect(ackMessages(queryId)).toHaveLength(1);
   });
 });
@@ -183,7 +182,6 @@ describe('a failed acknowledgement never blocks the workflow', () => {
     const queryId = receivedQuery();
     await s().verifyQuery(queryId, FRONT_OFFICE);
 
-    vi.mocked(mailboxService.sendAcknowledgement).mockResolvedValue(ACK_RESULT);
     const retry = await s().acknowledgeInquirer(queryId, FRONT_OFFICE);
 
     expect(retry.acknowledged).toBe(true);
@@ -234,7 +232,7 @@ describe('the Front Office sees when the email did not go out', () => {
       WORKFLOW_STATE.FRONT_OFFICE_VERIFICATION,
     );
 
-    vi.mocked(mailboxService.sendAcknowledgement).mockResolvedValue(ACK_RESULT);
+    restoreMail();
     fireEvent.click(screen.getByRole('button', { name: /Retry sending/ }));
 
     await waitFor(() =>
@@ -256,7 +254,13 @@ describe('the Front Office sees when the email did not go out', () => {
     await screen.findByText('Acknowledgement email not sent');
 
     const warning = vi.spyOn(notify, 'warning');
-    vi.mocked(mailboxService.sendAcknowledgement).mockRejectedValue(unconfirmedFailure());
+    // An unconfirmed send leaves the case saying so, which is what the notice
+    // below is read from. Remembering it from this click would lose it on the
+    // next page load, and the person who has to check the Sent folder is often
+    // not the one who pressed the button.
+    installFakeCaseMail(mailboxService, {
+      acknowledgement: { outcome: 'UNCERTAIN', error: UNCONFIRMED_REASON },
+    });
     fireEvent.click(screen.getByRole('button', { name: /Retry sending/ }));
 
     expect(await screen.findByText('Acknowledgement may already have been sent')).toBeInTheDocument();
@@ -286,9 +290,7 @@ describe('Forward to OIC still forwards the enquiry', () => {
     await s().forwardToOic(queryId, FRONT_OFFICE);
 
     expect(mailboxService.forwardQuery).toHaveBeenCalledTimes(1);
-    expect(mailboxService.forwardQuery).toHaveBeenCalledWith(
-      expect.objectContaining({ queryId, subject: enquiry().subject }),
-    );
+    expect(mailboxService.forwardQuery).toHaveBeenCalledWith({ queryId });
     expect(s().getQuery(queryId).workflowState).toBe(WORKFLOW_STATE.PENDING_ASSIGNMENT);
     expect(
       s().emailMessages.some(

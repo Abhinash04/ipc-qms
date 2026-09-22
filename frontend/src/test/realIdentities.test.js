@@ -11,6 +11,7 @@ import { findUserById, MOCK_USERS } from '@/constants/mockUsers';
 import { ROLES } from '@/constants/roles';
 import { WORKFLOW_STATE, AUDIT_EVENT } from '@/constants/statusEnums';
 import { EMAIL_DIRECTION, EMAIL_TYPE } from '@/constants/emailModel';
+import { fakeCaseMail } from '@/test/fakeCaseMail';
 
 vi.mock('@/services/api/mailboxService');
 
@@ -36,26 +37,30 @@ function gmailEnquiry(overrides = {}) {
   };
 }
 
-const fakeForward = (payload) =>
-  Promise.resolve({
-    from: `${BHUMIKA.name} <${BHUMIKA.email}>`,
-    to: [JATIN.email],
-    subject: `Fwd: ${payload.subject} [${payload.queryId}]`,
-    body: payload.body,
-    providerMessageId: 'gmail-forward-1',
-    providerThreadId: payload.providerThreadId,
-    sentAt: '2026-08-18T09:10:00.000Z',
-  });
+/**
+ * The forward is a server call now: the record of it, the audit row and the
+ * move to PENDING_ASSIGNMENT all come back from the endpoint rather than being
+ * written here. See src/test/fakeCaseMail.js.
+ */
+const caseMail = fakeCaseMail();
+const fakeForward = caseMail.forwardQuery;
 
-const fakeResponse = (payload) =>
+/**
+ * The Front Office's retry is `POST /emails/response` — the whole send, named
+ * by case. Final approval's send is the mail leg *inside* the endpoint, which
+ * is handed a composed message. They are different seams and take different
+ * arguments; this is the retry one.
+ */
+const fakeResponse = caseMail.sendResponse;
+
+const fakeMailLeg = ({ to, subject, body }) =>
   Promise.resolve({
-    from: `${BHUMIKA.name} <${BHUMIKA.email}>`,
-    to: [payload.to],
-    subject: payload.subject,
-    body: payload.body,
-    providerMessageId: 'gmail-response-1',
-    providerThreadId: '18f2a1b2c3d4e5f6',
-    sentAt: '2026-08-18T12:00:00.000Z',
+    from: BHUMIKA.email,
+    to: [to].flat(),
+    subject,
+    body,
+    providerMessageId: 'fake-response-id',
+    sentAt: '2026-08-19T10:00:00.000Z',
   });
 
 /**
@@ -64,28 +69,19 @@ const fakeResponse = (payload) =>
  * Jatin is the approver on this path, and the server reads that actor off the
  * session rather than taking it from the client.
  */
-const finalApproval = (send = fakeResponse) =>
+const finalApproval = (send = fakeMailLeg) =>
   fakeFinalApprovalEndpoint({ send, actor: JATIN.name });
 
-const ACK = {
-  from: `${BHUMIKA.name} <${BHUMIKA.email}>`,
-  to: [ABHINASH.email],
-  subject: 'Acknowledgement of Query Received – Indian Pharmacopoeia Commission [QRY-2026-00001]',
-  body: 'Dear Sir/Madam,\n\nThis is to acknowledge that we have received your email/query.',
-  providerMessageId: 'gmail-ack-1',
-  sentAt: '2026-08-18T09:05:00.000Z',
-};
-
-function acknowledge(queryId) {
-  return s().recordAcknowledgement({
-    queryId,
-    from: ACK.from,
-    to: ACK.to,
-    subject: ACK.subject,
-    body: ACK.body,
-    timestamp: ACK.sentAt,
-    providerMessageId: ACK.providerMessageId,
-  });
+/**
+ * Bhumika's mailbox acknowledges Abhinash — a server call now, so this asks the
+ * endpoint and re-reads the case exactly as the store does. The addresses the
+ * assertions check are the server's choice: the Front Office mailbox it sends
+ * from, and the inquirer stored on the case at intake.
+ */
+async function acknowledge(queryId) {
+  const result = await caseMail.sendAcknowledgement({ queryId });
+  await s().refreshFromServer();
+  return result;
 }
 
 beforeEach(async () => {
@@ -192,13 +188,13 @@ describe('1–3. Abhinash → Bhumika creates one stable Query Case', () => {
 });
 
 describe('4. Bhumika acknowledges Abhinash on the same thread', () => {
-  it('records the acknowledgement as sent by Bhumika, to Abhinash', () => {
+  it('records the acknowledgement as sent by Bhumika, to Abhinash', async () => {
     const { queryId, threadId } = s().ingestEmail(gmailEnquiry());
-    const outcome = acknowledge(queryId);
+    const outcome = await acknowledge(queryId);
 
     const ack = s().emailMessages.find((m) => m.emailType === EMAIL_TYPE.ACKNOWLEDGEMENT);
 
-    expect(outcome.created).toBe(true);
+    expect(outcome.outcome).toBe('SENT');
     expect(ack.from).toContain(BHUMIKA.email);
     expect(ack.to).toEqual([ABHINASH.email]);
     expect(ack.direction).toBe(EMAIL_DIRECTION.OUTBOUND);
@@ -206,10 +202,10 @@ describe('4. Bhumika acknowledges Abhinash on the same thread', () => {
     expect(ack.queryId).toBe(queryId);
   });
 
-  it('does not create another Query Case', () => {
+  it('does not create another Query Case', async () => {
     const { queryId } = s().ingestEmail(gmailEnquiry());
-    acknowledge(queryId);
-    acknowledge(queryId);
+    await acknowledge(queryId);
+    await acknowledge(queryId);
 
     expect(s().queries).toHaveLength(1);
     expect(s().emailMessages.filter((m) => m.emailType === EMAIL_TYPE.ACKNOWLEDGEMENT)).toHaveLength(1);
@@ -219,7 +215,7 @@ describe('4. Bhumika acknowledges Abhinash on the same thread', () => {
 describe('5–6. Bhumika forwards to Jatin, same case throughout', () => {
   it('sends the forward from Bhumika to Jatin on the same thread', async () => {
     const { queryId, threadId } = s().ingestEmail(gmailEnquiry());
-    acknowledge(queryId);
+    await acknowledge(queryId);
     s().verifyQuery(queryId, BHUMIKA);
 
     await s().forwardToOic(queryId, BHUMIKA, fakeForward);
@@ -229,7 +225,7 @@ describe('5–6. Bhumika forwards to Jatin, same case throughout', () => {
     expect(forward.to).toEqual([JATIN.email]);
     expect(forward.threadId).toBe(threadId);
     expect(forward.subject).toContain(queryId);
-    expect(forward.body).toContain('Original enquiry');
+    expect(forward.body).toContain('monograph');
     expect(s().getQuery(queryId).workflowState).toBe(WORKFLOW_STATE.PENDING_ASSIGNMENT);
   });
 
@@ -242,9 +238,19 @@ describe('5–6. Bhumika forwards to Jatin, same case throughout', () => {
       .getAudit(queryId)
       .find((a) => a.event === AUDIT_EVENT.QUERY_FORWARDED);
 
+    /**
+     * Who forwarded is the audit actor; to whom is the address on the email the
+     * server actually sent. The details line no longer repeats either, because
+     * the server writes it and a name copied into prose can disagree with the
+     * row it describes.
+     */
     expect(entry.actor).toBe(BHUMIKA.name);
-    expect(entry.details).toContain(BHUMIKA.name);
-    expect(entry.details).toContain(JATIN.email);
+    expect(entry.details).toContain('Officer-in-Charge');
+
+    const forwarded = s().emailMessages.find(
+      (m) => m.queryId === queryId && m.emailType === EMAIL_TYPE.FORWARD,
+    );
+    expect(forwarded.to).toEqual([JATIN.email]);
   });
 
   it('7. forwarding never creates a second Query Case', async () => {
@@ -341,7 +347,7 @@ describe('9–10. Jatin assigns a mock official and the mocked tail completes', 
 
   it('runs to CLOSED with the mocked tail, keeping one Query ID and the real identities', async () => {
     const { queryId } = s().ingestEmail(gmailEnquiry());
-    acknowledge(queryId);
+    await acknowledge(queryId);
 
     s().verifyQuery(queryId, BHUMIKA);
     await s().forwardToOic(queryId, BHUMIKA, fakeForward);
@@ -405,7 +411,7 @@ describe('intake — mail waits for the Front Officer', () => {
     });
     vi.mocked(mailboxService.markMessageIngested).mockResolvedValue({ ingested: true });
     vi.mocked(mailboxService.recordMailboxDecision).mockResolvedValue({ alreadyDecided: false });
-    vi.mocked(mailboxService.sendAcknowledgement).mockResolvedValue(ACK);
+    vi.mocked(mailboxService.sendAcknowledgement).mockImplementation(caseMail.sendAcknowledgement);
     // The whole intake sequence lives behind this one endpoint now. With Gmail
     // down its forward step fails on its own: the case is still created and
     // acknowledged, and is left at FRONT_OFFICE_VERIFICATION for a retry.
@@ -625,7 +631,7 @@ describe('final approval dispatches automatically', () => {
 
   async function readyForApproval() {
     const { queryId } = s().ingestEmail(gmailEnquiry());
-    acknowledge(queryId);
+    await acknowledge(queryId);
     s().verifyQuery(queryId, BHUMIKA);
     await s().forwardToOic(queryId, BHUMIKA, fakeForward);
     s().assignQuery(queryId, NEHA.id, JATIN);
@@ -706,13 +712,19 @@ describe('final approval dispatches automatically', () => {
     const queryId = await readyForApproval();
     await s().grantFinalApproval(queryId, JATIN, finalApproval());
 
+    /**
+     * The guard moved to the server, so these presses do reach it — and are
+     * answered "already sent" rather than sending again. That answer is the
+     * point: the browser no longer decides, and cannot decide wrongly from a
+     * stale copy of the case.
+     */
     const sendAgain = vi.fn(fakeResponse);
     const second = await s().dispatchResponse(queryId, null, sendAgain);
     const third = await s().dispatchResponse(queryId, null, sendAgain);
 
-    expect(second).toMatchObject({ dispatched: false, reason: 'already-dispatched' });
-    expect(third.reason).toBe('already-dispatched');
-    expect(sendAgain).not.toHaveBeenCalled();
+    expect(second).toMatchObject({ dispatched: false, alreadyDispatched: true, outcome: 'ALREADY_SENT' });
+    expect(third.outcome).toBe('ALREADY_SENT');
+    expect(sendAgain).toHaveBeenCalledTimes(2);
     expect(s().emailMessages.filter((m) => m.emailType === EMAIL_TYPE.OUTGOING_RESPONSE)).toHaveLength(1);
   });
 
@@ -731,8 +743,8 @@ describe('final approval dispatches automatically', () => {
     const sendAgain = vi.fn(fakeResponse);
     const retry = await s().dispatchResponse(queryId, null, sendAgain);
 
-    expect(retry.reason).toBe('already-dispatched');
-    expect(sendAgain).not.toHaveBeenCalled();
+    expect(retry.outcome).toBe('ALREADY_SENT');
+    expect(s().emailMessages.filter((m) => m.emailType === EMAIL_TYPE.OUTGOING_RESPONSE)).toHaveLength(1);
   });
 
   it('10. the response appears in the thread and the audit trail', async () => {
@@ -760,7 +772,7 @@ describe('final approval dispatches automatically', () => {
     const queryId = await readyForApproval();
 
     await expect(s().dispatchResponse(queryId, null, fakeResponse)).rejects.toThrow(
-      /not READY_FOR_DISPATCH/,
+      /a response is sent only after final approval/,
     );
     expect(s().emailMessages.filter((m) => m.emailType === EMAIL_TYPE.OUTGOING_RESPONSE)).toHaveLength(0);
   });

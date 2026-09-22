@@ -37,6 +37,20 @@ const browserConfig = {
       .filter(Boolean);
   },
 
+  /**
+   * The mailbox URL the agent opens in its OWN tab.
+   *
+   * Not the operator's URL. On the workplace front door the mail UI is a
+   * cross-origin iframe with a debugging target of its own, which a session on
+   * the host page cannot reach; `mail.mgovcloud.in/zm/` serves the same mailbox
+   * as a single top-level document — verified: zero iframes, one frame in the
+   * frame tree — so one session can drive all of it. Same browser profile, so
+   * the same sign-in cookies.
+   */
+  get appUrl() {
+    return (process.env.NIC_WEBMAIL_APP_URL || 'https://mail.mgovcloud.in/zm/').trim();
+  },
+
   /** Title fragments used as a secondary signal when the URL is ambiguous. */
   get titlePatterns() {
     const raw = (process.env.NIC_WEBMAIL_TITLE_PATTERNS || 'mail,inbox,nic').trim();
@@ -63,9 +77,10 @@ const browserConfig = {
     return parseInt(process.env.NIC_BROWSER_TIMEOUT_MS || '20000', 10);
   },
 
-  /** Where failure screenshots go. Diagnostics only; never on the happy path. */
+  /** Where `nic:browser:discover --json` writes its inspection reports.
+   *  Diagnostics only; never on the happy path. */
   get artifactDir() {
-    return (process.env.NIC_BROWSER_ARTIFACT_DIR || 'storage/browser-artifacts').trim();
+    return (process.env.NIC_BROWSER_ARTIFACT_DIR || 'storage/nic-browser').trim();
   },
 
   /**
@@ -94,9 +109,11 @@ const browserConfig = {
     return parseInt(process.env.NIC_BROWSER_SYNC_TTL_MS || '30000', 10);
   },
 
-  /** How many of the newest inbox rows one sync inspects. */
+  /** At most this many new messages are opened per sync. Anything but a
+   *  positive whole number falls back to 20 — 0 or a typo must not mean "all". */
   get syncMax() {
-    return parseInt(process.env.NIC_BROWSER_SYNC_MAX || '20', 10);
+    const max = Number(process.env.NIC_BROWSER_SYNC_MAX || '20');
+    return Number.isInteger(max) && max > 0 ? max : 20;
   },
 };
 

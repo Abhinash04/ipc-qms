@@ -201,9 +201,13 @@ the response to the inquirer and closes the case, writing
   decision a person made has to survive a mail server being down. The case becomes `CLOSED` only
   *after* a send that actually happened — a case reading `CLOSED` while the inquirer received
   nothing is the worst state this workflow can reach, because nobody goes looking for it.
-- **Idempotent by artefact check**, like the accept: the stored `OUTGOING_RESPONSE` message is the
-  guard, so a double click, a retry or a second officer cannot email the inquirer twice, and the
-  approval row is skipped on a retry so one decision is recorded once.
+- **Idempotent by two atomic writes, not by a check.** The approval itself is a
+  `findOneAndUpdate` out of the approvable states into `READY_FOR_DISPATCH`, so exactly one request
+  writes `FINAL_APPROVAL_GRANTED` and every other is told the decision was already taken. The send
+  then goes through the dispatch ledger (below), whose unique key means the second request is
+  answered `ALREADY_SENT` rather than sending. The previous design read "does an `OUTGOING_RESPONSE`
+  exist?" and then sent, which is a check with a window: four Approve clicks during one
+  twenty-two-second send all read "no" and all proceeded, and the inquirer received three copies.
 - **A degraded transport is a failure, not a delivery.** `getTransport` falls back to the mock when
   a role holds no usable credential and the mock returns an ordinary success. Under
   `EMAIL_TRANSPORT=gmail` or `nic` a mock result therefore means the Front Office credential is
@@ -216,12 +220,69 @@ the response to the inquirer and closes the case, writing
   transport's own failure rows carry none and so cannot be traced back to a case — and the case
   waits at `READY_FOR_DISPATCH`, which is exactly the state the Front Office **Retry sending
   response** control operates on. No dispatch-failure state was invented.
-- **An unconfirmed send gets opposite advice.** When the NICeMail browser pressed Send but saw no
-  confirmation in time, the response may already be with the inquirer. The error carries
-  `unconfirmed: true`, the case still waits at `READY_FOR_DISPATCH`, and the `EMAIL_SEND_FAILED` row
-  and the Front Office notification say to check the NICeMail Sent folder before retrying rather
-  than to retry.
+- **An unconfirmed send gets opposite advice.** When the mailbox was asked to send and never
+  confirmed it, the response may already be with the inquirer. The dispatch is recorded `UNCERTAIN`,
+  which **blocks** the retry; the case still waits at `READY_FOR_DISPATCH`, and the
+  `EMAIL_SEND_FAILED` row and the Front Office notification say to check the Sent folder. The
+  Dispatch page then offers *It was sent* / *It was not sent* in place of a retry.
 - **The response goes out through the case's mailbox** — `transportFor(query.sourceMailbox)`, below.
+
+## One email per case
+
+`services/email/caseMail.js` sends every outbound case email — acknowledgement, forward, final
+response — and `services/email/outbox.js` decides whether it may. Intake, final approval and the
+three retry endpoints all come through here, so there is **one guard per email rather than one per
+path**, which is what made the previous per-path checks so easy to get past.
+
+Three properties, in the order they matter:
+
+1. **Nothing about the email comes from the request.** Recipients, subject and body are read from
+   the stored case: `inquirer.email` (set at intake from the `From` header, and `$setOnInsert` so a
+   later delta cannot change it), the configured Officer-in-Charge, the `FINAL_APPROVED`
+   `ResponseVersion`. `POST /emails/{acknowledgement,forward,response}` take `{ queryId }` and
+   ignore a body `to`. A caller names *which case*; never who is written to.
+2. **The claim is a unique insert, not a check.** `dispatchOnce` inserts an `OutboundEmail` keyed on
+   `"${emailType}:${queryId}"`. The winner sends; everyone else is answered from the row —
+   `ALREADY_SENT`, `IN_PROGRESS` while a 3-minute lease is live, or `UNCERTAIN` for a lease that
+   expired mid-send. A `FAILED` row is re-claimable by an atomic `FAILED → SENDING` flip.
+3. **A failure is classified before anything is decided about it.**
+   `services/email/delivery.js` sorts errors into `NOT_SENT` — DNS, `ECONNREFUSED`,
+   `EHOSTUNREACH`, TLS, any HTTP 4xx, a NICeMail failure before Send — and `UNCERTAIN` — HTTP 5xx,
+   `ECONNRESET`, `ETIMEDOUT`, a client timeout, a NICeMail send pressed but unconfirmed. Only
+   `NOT_SENT` is retried, and only the transient network cases get one automatic quick retry inside
+   the same request. **`UNCERTAIN` is never retried automatically**, because a retry can deliver a
+   second copy.
+
+An `UNCERTAIN` Gmail dispatch is reconciled against the Sent folder before anyone is asked
+(`in:sent rfc822msgid:<id>`, falling back to a recipient-and-date search compared on the exact
+`Subject` and `Message-ID`), and is only called `NOT_SENT` after a 60-second settle window.
+NICeMail and the mock have no such read path, so a person settles it:
+`POST /queries/:queryId/outbound/resolve` records `SENT` (bookkeeping runs as though it had sent; a
+final response closes the case) or `NOT_SENT` (unlocks the retry), audited as
+`EMAIL_DELIVERY_CONFIRMED` / `EMAIL_DELIVERY_DENIED`.
+
+Bookkeeping is separated from delivery and is idempotent: the `EmailMessage` ids are deterministic
+(`MSG-ACK-`/`MSG-FWD-`/`MSG-RESP-` + `queryId`), so a crash between sending and recording self-heals
+rather than duplicating, and a bookkeeping error never turns a sent email into a reported failure.
+
+The client is prevented from writing any of it: `POST /queries/persist` refuses (409) a delta that
+moves a case to `DISPATCHED`/`CLOSED` or that writes an outbound `ACKNOWLEDGEMENT`, `FORWARD` or
+`OUTGOING_RESPONSE` `EmailMessage`. Those rows exist only where the email is actually sent.
+
+## Surviving a provider outage
+
+`services/email/mailbox/health.js` holds one piece of state — whether the mailbox is currently
+readable — and that turns a stream of identical failures into an outage with a start and an end.
+The first failure logs once and audits `SYNC_FAILED`; repeats are counted and logged at most once
+every five minutes; recovery logs and audits `SYNC_RECOVERED` with the duration and the attempt
+count. `GET /mailbox/messages` answers **503** `{ error, retryable: true, sync }` with
+`Retry-After: 30` for a transient failure and **502** for an authentication failure, rather than a
+bare 500, and the same state appears on `GET /health`.
+
+The read path was also made cheap enough to fail safely: a steady-state Gmail poll is two list calls
+plus a `messages.get` only for ids not already in a 500-entry cache, at most four in flight,
+concurrent identical polls coalesced, and a 30-second client timeout. It was previously one list
+plus up to 25 parallel gets with no timeout — during a DNS outage, 26 ten-second lookups per poll.
 
 ## Swap seams
 

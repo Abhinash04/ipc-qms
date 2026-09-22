@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
@@ -10,6 +10,7 @@ import { findUserById } from '@/constants/mockUsers';
 import { WORKFLOW_STATE } from '@/constants/statusEnums';
 import { EMAIL_TYPE } from '@/constants/emailModel';
 import * as mailboxService from '@/services/api/mailboxService';
+import { installFakeCaseMail } from '@/test/fakeCaseMail';
 
 vi.mock('@/services/api/mailboxService');
 
@@ -47,32 +48,25 @@ beforeEach(async () => {
   vi.mocked(mailboxService.fetchEmailConfig).mockResolvedValue({});
   vi.mocked(mailboxService.fetchMailboxMessages).mockResolvedValue({ messages: [] });
   vi.mocked(mailboxService.markMessageIngested).mockResolvedValue({ ingested: true });
-  vi.mocked(mailboxService.sendAcknowledgement).mockResolvedValue({});
-  vi.mocked(mailboxService.sendResponse).mockResolvedValue({});
+  installFakeCaseMail(mailboxService);
 
   await s().hydrate();
   await s().resetDemo();
 });
 
 describe('forwarding a query with attachments', () => {
-  it('sends the query attachments in the forwardQuery payload', async () => {
-    vi.mocked(mailboxService.forwardQuery).mockResolvedValue({
-      from: 'fo@test.invalid',
-      to: ['oic@test.invalid'],
-      subject: 'Fwd',
-      body: 'x',
-      sentAt: '2026-08-26T10:00:00.000Z',
-      providerMessageId: 'fwd-1',
-      attachments: ATTACHMENTS,
-    });
-
+  /**
+   * The browser no longer carries the files. It names the case; the server
+   * attaches whatever the enquiry arrived with, which is the only copy anyone
+   * should be forwarding — a tab that had gone stale used to be able to send a
+   * different set, or none.
+   */
+  it('forwards the files the enquiry arrived with, named only by case', async () => {
     const { queryId } = s().ingestEmail(enquiry(), async () => null);
-    s().verifyQuery(queryId, FRONT_OFFICE);
+    await s().verifyQuery(queryId, FRONT_OFFICE);
     await s().forwardToOic(queryId, FRONT_OFFICE);
 
-    expect(mailboxService.forwardQuery).toHaveBeenCalledWith(
-      expect.objectContaining({ attachments: ATTACHMENTS }),
-    );
+    expect(mailboxService.forwardQuery).toHaveBeenCalledWith({ queryId });
 
     const forwardMessage = s().emailMessages.find(
       (m) => m.queryId === queryId && m.emailType === EMAIL_TYPE.FORWARD,
@@ -80,36 +74,33 @@ describe('forwarding a query with attachments', () => {
     expect(forwardMessage.attachments).toEqual(ATTACHMENTS);
   });
 
-  it('a forward with no attachments sends an empty array, unchanged behaviour', async () => {
-    vi.mocked(mailboxService.forwardQuery).mockResolvedValue({
-      from: 'fo@test.invalid',
-      to: ['oic@test.invalid'],
-      subject: 'Fwd',
-      body: 'x',
-      sentAt: '2026-08-26T10:00:00.000Z',
-      providerMessageId: 'fwd-1',
-    });
-
+  it('records no attachments for an enquiry that carried none', async () => {
     const { queryId } = s().ingestEmail(enquiry({ mailboxMessageId: 'MSG-FWD-ATT-2', attachments: [] }), async () => null);
-    s().verifyQuery(queryId, FRONT_OFFICE);
+    await s().verifyQuery(queryId, FRONT_OFFICE);
     await s().forwardToOic(queryId, FRONT_OFFICE);
 
-    expect(mailboxService.forwardQuery).toHaveBeenCalledWith(expect.objectContaining({ attachments: [] }));
+    const forwardMessage = s().emailMessages.find(
+      (m) => m.queryId === queryId && m.emailType === EMAIL_TYPE.FORWARD,
+    );
+    expect(forwardMessage.attachments).toEqual([]);
   });
 
   it('a fail-closed rejection from the backend leaves the query un-forwarded and reports the missing file', async () => {
-    vi.mocked(mailboxService.forwardQuery).mockRejectedValue(
-      new Error('Missing attachment(s): spec.pdf'),
-    );
+    installFakeCaseMail(mailboxService, {
+      forward: { outcome: 'FAILED', error: 'Missing attachment(s): spec.pdf' },
+    });
 
     const { queryId } = s().ingestEmail(enquiry({ mailboxMessageId: 'MSG-FWD-ATT-3' }), async () => null);
-    s().verifyQuery(queryId, FRONT_OFFICE);
+    await s().verifyQuery(queryId, FRONT_OFFICE);
 
     renderAs(FRONT_OFFICE, `/front-officer/queries/${queryId}`);
 
     fireEvent.click(await screen.findByRole('button', { name: /Forward to Officer-in-Charge/ }));
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('Missing attachment(s): spec.pdf');
+    // The notice appears first with the generic "not forwarded" text, and the
+    // server's reason is added when the forward's answer arrives — so wait for
+    // the reason, not for the first alert.
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Missing attachment(s): spec.pdf'));
     expect(s().getQuery(queryId).workflowState).toBe(WORKFLOW_STATE.FRONT_OFFICE_VERIFICATION);
     expect(
       s().emailMessages.some((m) => m.queryId === queryId && m.emailType === EMAIL_TYPE.FORWARD),

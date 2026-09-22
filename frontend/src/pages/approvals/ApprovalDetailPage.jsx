@@ -16,6 +16,7 @@ import { findUserById } from "@/constants/mockUsers";
 import { useRoutePaths } from "@/hooks/useRoutePaths";
 import { useWorkflowAction } from "@/hooks/useWorkflowAction";
 import { ActionError } from "@/components/workflow/ActionError";
+import { notify } from "@/services/notify";
 
 export function ApprovalDetailPage() {
   const paths = useRoutePaths();
@@ -31,7 +32,7 @@ export function ApprovalDetailPage() {
     currentUser,
     can,
   } = useQueryCase();
-  const { run, error, clearError } = useWorkflowAction();
+  const { run, running, error, clearError } = useWorkflowAction();
   const grantFinalApproval = useWorkflowStore(
     (state) => state.grantFinalApproval,
   );
@@ -153,8 +154,14 @@ export function ApprovalDetailPage() {
                       rows={3}
                     />
                   </div>
+                  {/* Disabled while it runs. A send can take twenty seconds on
+                      a bad network, and a button that still looks ready is an
+                      invitation to press it again: four presses during one slow
+                      send is how an inquirer received the same response three
+                      times. */}
                   <Button
                     className="w-full"
+                    disabled={running}
                     onClick={() =>
                       run(async () => {
                         const result = await grantFinalApproval(
@@ -170,16 +177,30 @@ export function ApprovalDetailPage() {
                          * outcomes, and the second can fail on its own. Saying
                          * only "approved" when the inquirer was never emailed
                          * is the state this whole change exists to prevent, so
-                         * a failed send is raised here — the approval stands
-                         * either way, and the case waits at READY_FOR_DISPATCH
-                         * for the Front Office to retry.
+                         * anything short of a send is raised here — the
+                         * approval stands either way, and the case waits at
+                         * READY_FOR_DISPATCH for the Front Office to retry.
                          */
+                        if (result?.inProgress) {
+                          notify.info(
+                            "Already being sent",
+                            `${queryId} is being sent by another request. This page will show the result shortly.`,
+                          );
+                          return result;
+                        }
+
                         if (!result?.dispatched && !result?.alreadyDispatched) {
+                          const failure = result?.errors?.[0];
                           const reason =
-                            result?.errors?.[0]?.error ||
-                            "the response could not be sent";
+                            failure?.error || "the response could not be sent";
+
+                          // "May have been sent" and "was not sent" need
+                          // opposite instructions: one says check before you
+                          // retry, the other says retry.
                           throw new Error(
-                            `Approved, but the inquirer was not emailed: ${reason}`,
+                            failure?.unconfirmed
+                              ? `Approved, and the response may already have been sent: ${reason}`
+                              : `Approved, but the inquirer was not emailed: ${reason}`,
                           );
                         }
 
@@ -187,12 +208,12 @@ export function ApprovalDetailPage() {
                       })
                     }
                   >
-                    Approve
+                    {running ? "Approving and sending…" : "Approve"}
                   </Button>
                   <Button
                     variant="secondary"
                     className="w-full"
-                    disabled={!comment.trim()}
+                    disabled={running || !comment.trim()}
                     onClick={() => {
                       run(() =>
                         returnForRevision(queryId, comment, currentUser),
@@ -210,6 +231,7 @@ export function ApprovalDetailPage() {
                   <Button
                     variant="destructive"
                     className="w-full"
+                    disabled={running}
                     onClick={() => {
                       run(() =>
                         rejectFinalApproval(queryId, comment, currentUser),

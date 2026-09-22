@@ -106,14 +106,32 @@ function useEmailDeliveryRetries(queryId, currentUser, query) {
   const acknowledgeInquirer = useWorkflowStore(
     (state) => state.acknowledgeInquirer,
   );
+  const resolveOutboundEmail = useWorkflowStore(
+    (state) => state.resolveOutboundEmail,
+  );
   const emailMessages = useWorkflowStore((state) => state.emailMessages);
+  const outboundEmails = useWorkflowStore((state) => state.outboundEmails);
 
   const [retryError, setRetryError] = useState(null);
-  // The last retry's send may have gone out: NICeMail pressed Send and never
-  // confirmed. Only ever true alongside `retryError`, which it qualifies.
-  const [retryUnconfirmed, setRetryUnconfirmed] = useState(false);
   const [forwardFailure, setForwardFailure] = useState(null);
   const [retrying, setRetrying] = useState(false);
+
+  /**
+   * What the server knows about each of this case's emails.
+   *
+   * `UNCERTAIN` is the one that changes what may be offered: the mailbox was
+   * asked to send and never confirmed, so the message may already be in the
+   * recipient's inbox and "try again" could deliver it twice. Read from the
+   * case rather than remembered from a click, so it survives a reload — the
+   * person who has to act on it is often not the one who pressed the button.
+   */
+  const statusOf = (emailType) =>
+    outboundEmails.find((row) => row.queryId === queryId && row.emailType === emailType) || null;
+
+  const ackDispatch = statusOf(EMAIL_TYPE.ACKNOWLEDGEMENT);
+  const forwardDispatch = statusOf(EMAIL_TYPE.FORWARD);
+  const ackUncertain = ackDispatch?.status === 'UNCERTAIN';
+  const forwardUncertain = forwardDispatch?.status === 'UNCERTAIN';
 
   const acknowledged = emailMessages.some(
     (m) => m.queryId === queryId && m.emailType === EMAIL_TYPE.ACKNOWLEDGEMENT,
@@ -123,6 +141,8 @@ function useEmailDeliveryRetries(queryId, currentUser, query) {
   const registered = query && query.workflowState !== WORKFLOW_STATE.RECEIVED;
   const ackError =
     retryError ||
+    // The recorded reason, which names the step a failed send stopped at.
+    (ackUncertain || ackDispatch?.status === 'FAILED' ? ackDispatch.lastError : null) ||
     (registered && !acknowledged
       ? "The inquirer has not been told their query was received."
       : null);
@@ -143,21 +163,63 @@ function useEmailDeliveryRetries(queryId, currentUser, query) {
   );
   const forwardError =
     forwardFailure ||
+    (forwardUncertain ? forwardDispatch.lastError : null) ||
     (query?.workflowState === WORKFLOW_STATE.FRONT_OFFICE_VERIFICATION && !forwarded
       ? "The Officer-in-Charge has not received this case."
       : null);
 
-  const retryAcknowledgement = async () => {
-    setRetrying(true);
+  const askForAcknowledgement = async () => {
     const result = await acknowledgeInquirer(queryId, currentUser);
-    setRetrying(false);
     setRetryError(result.acknowledged ? null : result.error);
-    setRetryUnconfirmed(!result.acknowledged && Boolean(result.unconfirmed));
+
     if (!result.acknowledged) {
       notify.warning(
         result.unconfirmed ? "Acknowledgement not confirmed" : "Acknowledgement email still not sent",
         result.error,
       );
+    }
+    return result;
+  };
+
+  const retryAcknowledgement = async () => {
+    setRetrying(true);
+    try {
+      await askForAcknowledgement();
+    } finally {
+      setRetrying(false);
+    }
+  };
+
+  /**
+   * What the Front Officer found in the Sent folder, recorded.
+   *
+   * "It was sent" records the email against the case exactly as a send would —
+   * nothing is emailed. "It was not sent" clears the doubt and then sends,
+   * which is the only route back for a mailbox the server cannot check itself.
+   */
+  const resolveAcknowledgement = async (outcome) => {
+    setRetrying(true);
+    try {
+      await resolveOutboundEmail(queryId, { emailType: EMAIL_TYPE.ACKNOWLEDGEMENT, outcome });
+      setRetryError(null);
+      if (outcome === "NOT_SENT") await askForAcknowledgement();
+    } catch (caught) {
+      notify.error("Could not record what happened to the acknowledgement", caught);
+    } finally {
+      setRetrying(false);
+    }
+  };
+
+  const resolveForward = async (outcome) => {
+    setRetrying(true);
+    try {
+      await resolveOutboundEmail(queryId, { emailType: EMAIL_TYPE.FORWARD, outcome });
+      setForwardFailure(null);
+      if (outcome === "NOT_SENT") await forwardToOic(queryId, currentUser);
+    } catch (caught) {
+      notify.error("Could not record what happened to the forward", caught);
+    } finally {
+      setRetrying(false);
     }
   };
 
@@ -195,12 +257,15 @@ function useEmailDeliveryRetries(queryId, currentUser, query) {
 
   return {
     ackError,
-    ackUnconfirmed: Boolean(retryError) && retryUnconfirmed,
+    ackUncertain,
     forwardError,
+    forwardUncertain,
     retrying,
     forward,
     retryAcknowledgement,
+    resolveAcknowledgement,
     retryForward,
+    resolveForward,
   };
 }
 
@@ -215,11 +280,22 @@ function EmailRetryNotice({
   busyLabel,
   idleLabel,
   onRetry,
+  /**
+   * The mailbox was asked to send and never confirmed it, so the message may
+   * already be in the recipient's inbox. Offering "try again" here is how a
+   * member of the public receives the same email twice, so the only actions
+   * offered are the two answers a look in the Sent folder produces.
+   */
+  uncertain = false,
+  onResolve = null,
   // A forward that failed closed means the Officer-in-Charge never received the
   // case and does not know it exists — that interrupts. A missing
   // acknowledgement is worth saying but not worth interrupting for.
   urgent = false,
 }) {
+  const action =
+    "rounded-xl px-3.5 py-1.5 text-[12.5px] font-extrabold transition-colors cursor-pointer disabled:opacity-60";
+
   return (
     <div
       role={urgent ? "alert" : "status"}
@@ -229,14 +305,36 @@ function EmailRetryNotice({
       <p className="m-0 mt-0.5 text-[13px] font-medium text-amber-800">
         {description}
       </p>
-      <button
-        type="button"
-        onClick={onRetry}
-        disabled={retrying}
-        className="mt-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white px-3.5 py-1.5 text-[12.5px] font-extrabold transition-colors cursor-pointer disabled:opacity-60"
-      >
-        {retrying ? busyLabel : idleLabel}
-      </button>
+
+      {uncertain && onResolve ? (
+        <div className="mt-2 flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => onResolve("SENT")}
+            disabled={retrying}
+            className={`${action} bg-amber-600 hover:bg-amber-700 text-white`}
+          >
+            It was sent
+          </button>
+          <button
+            type="button"
+            onClick={() => onResolve("NOT_SENT")}
+            disabled={retrying}
+            className={`${action} border border-amber-300 bg-white hover:bg-amber-100 text-amber-900`}
+          >
+            {retrying ? busyLabel : "It was not sent — send it"}
+          </button>
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={onRetry}
+          disabled={retrying}
+          className={`mt-2 ${action} bg-amber-600 hover:bg-amber-700 text-white`}
+        >
+          {retrying ? busyLabel : idleLabel}
+        </button>
+      )}
     </div>
   );
 }
@@ -371,12 +469,15 @@ export function WorkflowActionsCard() {
   const paths = useRoutePaths();
   const {
     ackError,
-    ackUnconfirmed,
+    ackUncertain,
     forwardError,
+    forwardUncertain,
     retrying,
     forward,
     retryAcknowledgement,
+    resolveAcknowledgement,
     retryForward,
+    resolveForward,
   } = useEmailDeliveryRetries(queryId, currentUser, query);
 
   const [showClarification, setShowClarification] = useState(null);
@@ -408,31 +509,43 @@ export function WorkflowActionsCard() {
         {ackError && (
           <EmailRetryNotice
             title={
-              ackUnconfirmed
+              ackUncertain
                 ? "Acknowledgement may already have been sent"
                 : "Acknowledgement email not sent"
             }
             description={
-              ackUnconfirmed
-                ? `The case is registered. The inquirer may or may not have been emailed. ${ackError}`
+              ackUncertain
+                ? `The case is registered. The inquirer may or may not have been emailed — check the Sent folder and say what is there. ${ackError}`
                 : `The case is registered, but the inquirer was not emailed. ${ackError}`
             }
             retrying={retrying}
             busyLabel="Sending…"
             idleLabel="Retry sending"
             onRetry={retryAcknowledgement}
+            uncertain={ackUncertain}
+            onResolve={resolveAcknowledgement}
           />
         )}
 
         {forwardError && (
           <EmailRetryNotice
             urgent
-            title="Not forwarded to the Officer-in-Charge"
-            description={`The query is registered, but the enquiry was not forwarded on. ${forwardError}`}
+            title={
+              forwardUncertain
+                ? "The forward may already have been sent"
+                : "Not forwarded to the Officer-in-Charge"
+            }
+            description={
+              forwardUncertain
+                ? `The Officer-in-Charge may or may not have received this case — check the Sent folder and say what is there. ${forwardError}`
+                : `The query is registered, but the enquiry was not forwarded on. ${forwardError}`
+            }
             retrying={retrying}
             busyLabel="Forwarding…"
             idleLabel="Retry forwarding"
             onRetry={retryForward}
+            uncertain={forwardUncertain}
+            onResolve={resolveForward}
           />
         )}
 

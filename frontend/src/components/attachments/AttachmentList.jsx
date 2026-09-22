@@ -30,7 +30,12 @@ function normalise(raw) {
 const describesAFile = (raw) =>
   Boolean(raw) && Boolean(raw.attachmentId || raw.id || raw.filename || raw.name);
 
-export function AttachmentList({ attachments = [] }) {
+/**
+ * `urlFor(attachmentId)`, when given, builds the Download link — the mailbox
+ * message page passes its message-scoped route. Preview always uses the global
+ * attachment route.
+ */
+export function AttachmentList({ attachments = [], urlFor }) {
   const [previewing, setPreviewing] = useState(null);
   const real = attachments.filter(describesAFile);
 
@@ -68,11 +73,21 @@ export function AttachmentList({ attachments = [] }) {
                     <EyeIcon className="h-3.5 w-3.5" aria-hidden="true" /> Preview
                   </button>
                   <a
-                    href={attachmentUrl(att.attachmentId, { download: true })}
+                    href={
+                      urlFor
+                        ? urlFor(att.attachmentId)
+                        : attachmentUrl(att.attachmentId, { download: true })
+                    }
                     className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-bold text-slate-600 hover:bg-slate-100 flex items-center gap-1"
                   >
                     <DownloadIcon className="h-3.5 w-3.5" aria-hidden="true" /> Download
                   </a>
+                </span>
+              ) : raw.materializeError ? (
+                // A file the mail carried but the reader could not save: its
+                // name is known, its bytes are not.
+                <span className="text-[11px] font-medium text-rose-600 shrink-0">
+                  Unavailable: {raw.materializeError}
                 </span>
               ) : (
                 <span className="text-[11px] font-medium text-slate-400 shrink-0">Preview unavailable</span>

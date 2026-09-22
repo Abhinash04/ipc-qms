@@ -26,6 +26,10 @@ const defaultRecipient = () =>
 import * as mailbox from '../services/email/mailbox/index.js';
 import * as decisions from '../services/email/mailbox/decisions.js';
 import * as accept from '../services/email/mailbox/acceptMessage.js';
+import * as health from '../services/email/mailbox/health.js';
+import { matchesSearch, toMessageViews } from '../services/email/mailbox/messageView.js';
+import { sendAttachment } from './attachmentController.js';
+import { describeError, isUnreachable, isAuthFailure } from '../services/email/delivery.js';
 import { isConnected } from '../config/db.js';
 
 /**
@@ -50,23 +54,95 @@ function requireDb(next) {
  * The NICeMail mailbox's Front Officer always gets that mailbox — a query
  * parameter cannot point them anywhere else. Everyone else gets the primary
  * mailbox, where `?recipient=` still selects the address as it always has.
+ *
+ * `own` marks the user's own mailbox store (today only NICeMail's): it lives
+ * in MongoDB, so it pages and counts there, and it keeps a QMS read state.
  */
 async function resolveMailbox(req) {
   const own = await mailbox.forUser(req.user);
-  if (own) return { ...own, describe: own.store.describe };
+  if (own) return { ...own, describe: own.store.describe, own: true };
 
   const address = req.query.recipient || defaultRecipient();
   return { source: mailbox.describe().backend, address, store: mailbox, describe: mailbox.describe };
 }
 
+/**
+ * A mailbox that cannot be reached is not a server fault.
+ *
+ * A DNS failure, a refused connection, a 5xx or a rate limit from the provider
+ * used to surface as 500 — which reads as "this application is broken", and in
+ * a live test filled the Front Office screen with never-dismissed error toasts
+ * every thirty seconds. 503 says what is true: the dependency is down, it is
+ * worth trying again, and the poll already is. A rejected credential is
+ * different in kind: retrying will not fix it, and someone must act.
+ */
+function mailboxUnavailable(error, { source, label }) {
+  if (isAuthFailure(error)) {
+    return Object.assign(
+      new Error(
+        `The ${label} rejected the Front Office credential: ${describeError(error)}. ` +
+          (source === 'gmail' ? 'Run `npm run gmail:preflight` to check it.' : 'Re-authenticate the mailbox.'),
+      ),
+      { status: HTTP_STATUS.BAD_GATEWAY, details: { retryable: false, sync: health.snapshot() } },
+    );
+  }
+
+  if (isUnreachable(error)) {
+    return Object.assign(
+      new Error(`The ${label} could not be reached: ${describeError(error)}. The poll keeps retrying.`),
+      { status: HTTP_STATUS.SERVICE_UNAVAILABLE, details: { retryable: true, sync: health.snapshot() } },
+    );
+  }
+
+  return error;
+}
+
+const newestFirst = (a, b) => String(b.receivedAt ?? '').localeCompare(String(a.receivedAt ?? ''));
+
+/**
+ * One page of the mailbox, searched. The user's own (NICeMail) store searches
+ * and pages in MongoDB; the primary mailboxes are small or remote, and are
+ * searched and paged here after the store has listed them.
+ */
+async function listPage(box, { unreadOnly, q, limit, offset }) {
+  if (box.own) {
+    const messages = await box.store.list(box.address, { unreadOnly, q, limit, offset });
+    const total = limit ? await box.store.count(box.address, { unreadOnly, q }) : messages.length;
+    return { messages, total };
+  }
+
+  const all = (await box.store.list(box.address, { unreadOnly })).filter((message) => matchesSearch(message, q));
+  const messages = limit ? [...all].sort(newestFirst).slice(offset, offset + limit) : all;
+  return { messages, total: all.length };
+}
+
 async function listMessages(req, res, next) {
+  let box;
+
   try {
-    const box = await resolveMailbox(req);
-    const unreadOnly = req.query.unreadOnly === 'true';
-    const messages = await box.store.list(box.address, { unreadOnly });
-    res.status(HTTP_STATUS.OK).json({ recipient: box.address, ...box.describe(), messages });
+    box = await resolveMailbox(req);
+    const { unreadOnly, q, limit, offset } = req.validatedQuery;
+    const { messages, total } = await listPage(box, { unreadOnly, q, limit, offset });
+
+    health.recordSuccess({ source: box.source, address: box.address });
+
+    const described = box.describe();
+    res.status(HTTP_STATUS.OK).json({
+      recipient: box.address,
+      ...described,
+      messages: await toMessageViews(messages, { keepsReadState: Boolean(box.own) }),
+      ...(limit ? { total, limit, offset } : {}),
+      // The NICeMail store reports its own sync; every other mailbox reports
+      // whether this poll reached the provider.
+      sync: described.sync ?? health.snapshot(),
+    });
   } catch (error) {
-    next(error);
+    if (!box) return next(error);
+
+    health.recordFailure({ source: box.source, address: box.address, error });
+    const unavailable = mailboxUnavailable(error, { source: box.source, label: `${box.source} mailbox` });
+    if (unavailable !== error) res.set('Retry-After', '30');
+    return next(unavailable);
   }
 }
 
@@ -117,6 +193,107 @@ async function deleteMessage(req, res, next) {
     }
     await recordMailbox(req, AUDIT_ACTIONS.EMAIL_DELETED, message);
     return res.status(HTTP_STATUS.OK).json({ deleted: true, message });
+  } catch (error) {
+    return next(error);
+  }
+}
+
+const messageNotFound = (res, messageId) =>
+  res.status(HTTP_STATUS.NOT_FOUND).json({ error: 'Message not found', messageId });
+
+/** Errors reaching a mailbox are the mailbox's, reported as such (see mailboxUnavailable). */
+const mailboxError = (box, error) =>
+  box ? mailboxUnavailable(error, { source: box.source, label: `${box.source} mailbox` }) : error;
+
+/** One message in full — the HTML body included — with its case and status. */
+async function getMessage(req, res, next) {
+  let box;
+  try {
+    box = await resolveMailbox(req);
+    const message = await box.store.get(box.address, req.params.messageId);
+    if (!message) return messageNotFound(res, req.params.messageId);
+
+    const [view] = await toMessageViews([message], { keepsReadState: Boolean(box.own) });
+    return res.status(HTTP_STATUS.OK).json({ ...view, bodyHtml: message.bodyHtml ?? null });
+  } catch (error) {
+    return next(mailboxError(box, error));
+  }
+}
+
+/**
+ * An attachment, only as part of the message it came with: the id must be
+ * on that message, in the caller's own mailbox, before a byte is read.
+ */
+async function downloadMessageAttachment(req, res, next) {
+  let box;
+  try {
+    box = await resolveMailbox(req);
+    const { messageId, attachmentId } = req.params;
+    const message = await box.store.get(box.address, messageId);
+    const entry = message?.attachments?.find((attachment) => attachment?.attachmentId === attachmentId);
+    if (!entry) {
+      return res
+        .status(HTTP_STATUS.NOT_FOUND)
+        .json({ error: 'Attachment not found on this message', messageId, attachmentId });
+    }
+    return await sendAttachment(req, res, entry.attachmentId, { messageId: message.mailboxMessageId });
+  } catch (error) {
+    return next(mailboxError(box, error));
+  }
+}
+
+/**
+ * The Front Office has opened this message. QMS state only — it never reaches
+ * the provider — and only the NICeMail mailbox keeps it; the others have no
+ * QMS record of a message to write it to.
+ */
+async function markRead(req, res, next) {
+  let box;
+  try {
+    box = await resolveMailbox(req);
+    const { messageId } = req.params;
+    if (!box.own) {
+      return res
+        .status(HTTP_STATUS.CONFLICT)
+        .json({ error: `The ${box.source} mailbox keeps no QMS read state.`, messageId });
+    }
+
+    const result = await box.store.markRead(box.address, messageId, req.user);
+    if (!result) return messageNotFound(res, messageId);
+    if (result.changed) await recordMailbox(req, AUDIT_ACTIONS.EMAIL_MARKED_READ, result.message);
+
+    const [view] = await toMessageViews([result.message], { keepsReadState: true });
+    return res.status(HTTP_STATUS.OK).json(view);
+  } catch (error) {
+    return next(mailboxError(box, error));
+  }
+}
+
+/**
+ * Read the NICeMail inbox now, in the background. The list's `sync` field
+ * shows it running and how it ended. The primary mailboxes are read by every
+ * poll already, so for them there is nothing to start.
+ */
+async function syncMailbox(req, res, next) {
+  try {
+    const box = await resolveMailbox(req);
+    if (!box.own) {
+      return res
+        .status(HTTP_STATUS.OK)
+        .json({ supported: false, started: false, sync: box.describe().sync ?? health.snapshot() });
+    }
+
+    const result = box.store.requestSync(box.address);
+    if (result.started) {
+      await audit.record({
+        action: AUDIT_ACTIONS.SYNC_STARTED,
+        actorType: ACTOR_TYPES.HUMAN,
+        actorId: req.user?.id ?? null,
+        actorRole: req.user?.role ?? null,
+        details: { source: box.source, address: box.address },
+      });
+    }
+    return res.status(HTTP_STATUS.ACCEPTED).json({ supported: true, ...result });
   } catch (error) {
     return next(error);
   }
@@ -254,4 +431,8 @@ export {
   decideMessage,
   acceptMessage,
   listDecisions,
+  getMessage,
+  downloadMessageAttachment,
+  markRead,
+  syncMailbox,
 };

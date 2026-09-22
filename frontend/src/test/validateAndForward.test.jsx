@@ -11,6 +11,7 @@ import { WORKFLOW_STATE } from '@/constants/statusEnums';
 import { EMAIL_TYPE } from '@/constants/emailModel';
 import * as mailboxService from '@/services/api/mailboxService';
 import { fakeAcceptEndpoint } from '@/test/fakeAcceptEndpoint';
+import { installFakeCaseMail } from '@/test/fakeCaseMail';
 
 vi.mock('@/services/api/mailboxService');
 
@@ -20,24 +21,14 @@ const OIC = findUserById('USR-0003');
 
 const s = () => useWorkflowStore.getState();
 
-const ACK_RESULT = {
-  from: 'Bhumika Makker <bhoomikamakker@gmail.com>',
-  to: [INQUIRER.email],
-  subject: 'Acknowledgement of Query Received',
-  body: 'Received.',
-  sentAt: '2026-08-26T10:00:00.000Z',
-  providerMessageId: 'ack-1',
-};
-
-const FORWARD_RESULT = {
-  from: 'Bhumika Makker <bhoomikamakker@gmail.com>',
-  to: ['rawatjatin436@gmail.com'],
-  subject: 'Fwd: enquiry',
-  body: 'forwarded',
-  sentAt: '2026-08-26T10:05:00.000Z',
-  providerMessageId: 'fwd-1',
-  providerThreadId: 'thread-fo',
-};
+/**
+ * The two endpoints that send a case's email. Each takes a case and nothing
+ * else — the recipient, the wording and whether it has already gone are the
+ * server's to decide — so a test makes one fail by planning the outcome rather
+ * than by handing back a reply. See src/test/fakeCaseMail.js.
+ */
+/** Re-install the endpoints, optionally with a planned failure for one. */
+const installMail = (plan) => installFakeCaseMail(mailboxService, plan);
 
 const enquiry = () => ({
   mailboxMessageId: 'MSG-VF-0001',
@@ -85,8 +76,7 @@ beforeEach(async () => {
   vi.mocked(mailboxService.fetchEmailConfig).mockResolvedValue({});
   vi.mocked(mailboxService.fetchMailboxMessages).mockResolvedValue({ messages: [] });
   vi.mocked(mailboxService.markMessageIngested).mockResolvedValue({ ingested: true });
-  vi.mocked(mailboxService.sendAcknowledgement).mockResolvedValue(ACK_RESULT);
-  vi.mocked(mailboxService.forwardQuery).mockResolvedValue(FORWARD_RESULT);
+  installMail();
 
   await s().hydrate();
   await s().resetDemo();
@@ -138,7 +128,7 @@ describe('one action registers, acknowledges and forwards', () => {
 
 describe('the two emails are independent obligations', () => {
   it('still forwards when the acknowledgement fails', async () => {
-    vi.mocked(mailboxService.sendAcknowledgement).mockRejectedValue(new Error('SMTP down'));
+    installMail({ acknowledgement: { outcome: 'FAILED', error: 'SMTP down' } });
     const queryId = received();
 
     const result = await s().validateAndForward(queryId, FRONT_OFFICE);
@@ -151,7 +141,7 @@ describe('the two emails are independent obligations', () => {
   });
 
   it('still acknowledges when the forward fails', async () => {
-    vi.mocked(mailboxService.forwardQuery).mockRejectedValue(new Error('Request failed 404'));
+    installMail({ forward: { outcome: 'FAILED', error: 'Request failed 404' } });
     const queryId = received();
 
     const result = await s().validateAndForward(queryId, FRONT_OFFICE);
@@ -163,7 +153,7 @@ describe('the two emails are independent obligations', () => {
   });
 
   it('holds the query at verification when the forward fails, so it can be retried', async () => {
-    vi.mocked(mailboxService.forwardQuery).mockRejectedValueOnce(new Error('Request failed 404'));
+    installMail({ forward: { outcome: 'FAILED', error: 'Request failed 404' } });
     const queryId = received();
     await s().validateAndForward(queryId, FRONT_OFFICE);
 
@@ -171,6 +161,7 @@ describe('the two emails are independent obligations', () => {
       WORKFLOW_STATE.FRONT_OFFICE_VERIFICATION,
     );
 
+    installMail();
     await s().forwardToOic(queryId, FRONT_OFFICE);
     expect(s().getQuery(queryId).workflowState).toBe(WORKFLOW_STATE.PENDING_ASSIGNMENT);
   });
@@ -223,7 +214,7 @@ describe('the case page forwards an already-accepted case', () => {
     // the accept could not forward. So it is already on screen when the page
     // opens, long after the mailbox tab that failed has gone.
     const queryId = await accepted({ forwarded: false });
-    vi.mocked(mailboxService.forwardQuery).mockRejectedValue(new Error('Request failed 404'));
+    installMail({ forward: { outcome: 'FAILED', error: 'Request failed 404' } });
 
     renderAt(`/front-officer/queries/${queryId}`);
 
@@ -238,7 +229,7 @@ describe('the case page forwards an already-accepted case', () => {
     // A retry that fails leaves the warning standing.
     expect(screen.getByText('Not forwarded to the Officer-in-Charge')).toBeInTheDocument();
 
-    vi.mocked(mailboxService.forwardQuery).mockResolvedValue(FORWARD_RESULT);
+    installMail();
     fireEvent.click(await screen.findByRole('button', { name: /Retry forwarding/ }));
 
     await waitFor(() =>
@@ -269,10 +260,7 @@ describe('the case page forwards an already-accepted case', () => {
     await waitFor(() =>
       expect(screen.queryByText('Acknowledgement email not sent')).toBeNull(),
     );
-    expect(mailboxService.sendAcknowledgement).toHaveBeenCalledWith({
-      to: INQUIRER.email,
-      queryId,
-    });
+    expect(mailboxService.sendAcknowledgement).toHaveBeenCalledWith({ queryId });
   });
 });
 
@@ -294,9 +282,15 @@ describe('a portal enquiry carries no foreign thread id', () => {
     const incoming = messagesOfType(queryId, EMAIL_TYPE.INCOMING_QUERY)[0];
     expect(incoming.providerThreadId).toBeNull();
 
+    /**
+     * The request names the case and nothing else, so a thread id the browser
+     * held can no longer reach the send at all. The server replies into the
+     * thread it stored at intake — which for a portal enquiry is none.
+     */
     await s().validateAndForward(queryId, FRONT_OFFICE);
-    expect(mailboxService.forwardQuery).toHaveBeenCalledWith(
-      expect.objectContaining({ providerThreadId: null }),
-    );
+    expect(mailboxService.forwardQuery).toHaveBeenCalledWith({ queryId });
+
+    const forwarded = messagesOfType(queryId, EMAIL_TYPE.FORWARD)[0];
+    expect(forwarded.providerThreadId).toBeNull();
   });
 });

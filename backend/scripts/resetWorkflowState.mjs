@@ -31,6 +31,9 @@ const COLLECTIONS = [
   // The email record
   'emailmessages',
   'emailthreads',
+  // The send ledger — Case IDs restart, so it must go with the cases, or the
+  // next case 00001 would read as already answered.
+  'outboundemails',
   'mailboxmessages',
   'mailboxdecisions',
   // Sequence state and history

@@ -9,93 +9,62 @@ import request from 'supertest';
  * hands it — routing to the right Front Officer, storing each message once,
  * and answering the inquirer through the mailbox the enquiry came in on.
  *
- * Models are replaced with the same kind of in-memory stand-in
- * acceptMessage.test.js uses.
+ * Models are replaced with the in-memory stand-in in support/memoryDb.js, as
+ * acceptMessage.test.js does.
  */
-
-const db = vi.hoisted(() => {
-  const read = (doc, path) => path.split('.').reduce((node, key) => node?.[key], doc);
-  const write = (doc, path, value) => {
-    const keys = path.split('.');
-    const leaf = keys.pop();
-    keys.reduce((node, key) => (node[key] ??= {}), doc)[leaf] = value;
-  };
-  const clone = (doc) => (doc ? JSON.parse(JSON.stringify(doc)) : null);
-
-  const apply = (doc, update, inserted) => {
-    for (const [path, by] of Object.entries(update.$inc ?? {})) write(doc, path, (read(doc, path) ?? 0) + by);
-    for (const [path, value] of Object.entries(update.$set ?? {})) write(doc, path, value);
-    if (inserted) for (const [path, value] of Object.entries(update.$setOnInsert ?? {})) write(doc, path, value);
-  };
-
-  const collections = new Map();
-
-  const model = (name) => {
-    const rows = [];
-    collections.set(name, rows);
-
-    const matching = (filter) =>
-      rows.filter((row) => Object.entries(filter).every(([path, value]) => (read(row, path) ?? null) === value));
-
-    const upsert = (filter, update, options) => {
-      let doc = matching(filter)[0];
-      const inserted = !doc;
-      if (inserted) {
-        if (!options.upsert) return { doc: null, inserted };
-        doc = { ...filter };
-        rows.push(doc);
-      }
-      apply(doc, update, inserted);
-      return { doc, inserted };
-    };
-
-    const query = (docs) => {
-      const chain = {
-        sort: () => chain,
-        select: () => chain,
-        limit: () => chain,
-        lean: async () => docs.map(clone),
-      };
-      return chain;
-    };
-
-    return {
-      create: async (doc) => {
-        rows.push(clone(doc));
-        return clone(doc);
-      },
-      findOne: (filter) => ({ lean: async () => clone(matching(filter)[0]) }),
-      find: (filter = {}) => query(matching(filter)),
-      countDocuments: async (filter = {}) => matching(filter).length,
-      updateOne: async (filter, update, options = {}) => {
-        const { inserted, doc } = upsert(filter, update, options);
-        return { acknowledged: true, upsertedCount: inserted && doc ? 1 : 0 };
-      },
-      findOneAndUpdate: (filter, update, options = {}) => ({
-        lean: async () => clone(upsert(filter, update, options).doc),
-      }),
-    };
-  };
-
-  return { model, rows: (name) => collections.get(name), reset: () => collections.forEach((r) => r.splice(0)) };
-});
 
 vi.mock('../config/db.js', async (importOriginal) => ({
   ...(await importOriginal()),
   isConnected: () => true,
 }));
-vi.mock('../models/QueryCase.js', () => ({ QueryCase: db.model('QueryCase') }));
-vi.mock('../models/QueryCounter.js', () => ({ QueryCounter: db.model('QueryCounter') }));
-vi.mock('../models/EmailMessage.js', () => ({ EmailMessage: db.model('EmailMessage') }));
-vi.mock('../models/EmailThread.js', () => ({ EmailThread: db.model('EmailThread') }));
-vi.mock('../models/AuditEvent.js', () => ({ AuditEvent: db.model('AuditEvent') }));
-vi.mock('../models/MailboxMessage.js', () => ({
-  MailboxMessage: db.model('MailboxMessage'),
-  Counter: db.model('Counter'),
+vi.mock('../models/QueryCase.js', async () => ({
+  QueryCase: (await import('./support/memoryDb.js')).memoryDb.model('QueryCase', {
+    unique: ['queryId'],
+    uniqueWhenString: ['sourceMailboxMessageId'],
+  }),
 }));
-vi.mock('../models/MailboxDecision.js', () => ({
-  MailboxDecision: db.model('MailboxDecision'),
+vi.mock('../models/QueryCounter.js', async () => ({
+  QueryCounter: (await import('./support/memoryDb.js')).memoryDb.model('QueryCounter'),
+}));
+vi.mock('../models/EmailMessage.js', async () => ({
+  EmailMessage: (await import('./support/memoryDb.js')).memoryDb.model('EmailMessage', {
+    unique: ['messageId'],
+    uniqueWhenString: ['sourceMessageId'],
+  }),
+}));
+vi.mock('../models/EmailThread.js', async () => ({
+  EmailThread: (await import('./support/memoryDb.js')).memoryDb.model('EmailThread'),
+}));
+vi.mock('../models/AuditEvent.js', async () => ({
+  AuditEvent: (await import('./support/memoryDb.js')).memoryDb.model('AuditEvent'),
+}));
+vi.mock('../models/MailboxMessage.js', async () => {
+  const { memoryDb } = await import('./support/memoryDb.js');
+  return {
+    MailboxMessage: memoryDb.model('MailboxMessage', {
+      unique: ['mailboxMessageId'],
+      uniqueWhenString: ['providerMessageId'],
+    }),
+    Counter: memoryDb.model('Counter'),
+  };
+});
+vi.mock('../models/MailboxDecision.js', async () => ({
+  MailboxDecision: (await import('./support/memoryDb.js')).memoryDb.model('MailboxDecision', {
+    unique: ['mailboxMessageId'],
+  }),
   DECISIONS: { ACCEPTED: 'ACCEPTED', REJECTED: 'REJECTED' },
+}));
+vi.mock('../models/OutboundEmail.js', async (importOriginal) => ({
+  ...(await importOriginal()),
+  OutboundEmail: (await import('./support/memoryDb.js')).memoryDb.model('OutboundEmail', {
+    unique: ['dispatchKey'],
+  }),
+}));
+vi.mock('../models/ResponseVersion.js', async () => ({
+  ResponseVersion: (await import('./support/memoryDb.js')).memoryDb.model('ResponseVersion'),
+}));
+vi.mock('../models/Notification.js', async () => ({
+  Notification: (await import('./support/memoryDb.js')).memoryDb.model('Notification'),
 }));
 
 // The browser itself. Nothing here may reach Chrome.
@@ -104,6 +73,7 @@ vi.mock('../services/email/nic/browser/sendMail.js', () => ({
   sendMail: (...args) => browser.sendMail(...args),
 }));
 
+import { memoryDb as db } from './support/memoryDb.js';
 import app from '../app.js';
 import authConfig from '../config/authConfig.js';
 import { signToken } from '../services/auth/tokenService.js';
@@ -115,7 +85,8 @@ import * as mailbox from '../services/email/mailbox/index.js';
 import * as nicMailbox from '../services/email/mailbox/nicBrowserMailbox.js';
 import * as emailService from '../services/email/emailService.js';
 import * as nicBrowserTransport from '../services/email/transports/nicBrowserTransport.js';
-import { QueryCase } from '../models/index.js';
+import { QueryCase, ResponseVersion } from '../models/index.js';
+import { traceSink } from '../services/email/sendTrace.js';
 
 const NIC_ADDRESS = 'nic-mailbox@test.invalid';
 // USR-0014's own password, from src/test/fixtures/passwords.json. The NIC
@@ -343,6 +314,22 @@ describe('accepting a NICeMail message', () => {
     expect(browser.sendMail).toHaveBeenCalledTimes(1);
   });
 
+  it('answers a repeat Accept with the acknowledgement that already went, and its NICeMail id', async () => {
+    browser.sendMail = vi.fn(async () => ({ ok: true, providerMessageId: '1790056208843134900' }));
+    await nicMailbox.sync(NIC_ADDRESS, { reader: async () => [read('row-2')] });
+    const [stored] = await nicMailbox.list(NIC_ADDRESS);
+
+    const first = await acceptAs(nicFrontOfficeUser(), stored.mailboxMessageId);
+    const again = await acceptAs(nicFrontOfficeUser(), stored.mailboxMessageId);
+
+    expect(first.body.acknowledgement).toMatchObject({ outcome: 'SENT', providerMessageId: '1790056208843134900' });
+    expect(again.body).toMatchObject({
+      acknowledged: true,
+      acknowledgement: { outcome: 'ALREADY_SENT', providerMessageId: '1790056208843134900' },
+    });
+    expect(browser.sendMail).toHaveBeenCalledTimes(1);
+  });
+
   it('answers 404 for a message that is not in the NICeMail mailbox', async () => {
     const res = await acceptAs(nicFrontOfficeUser(), 'NICB-doesnotexist', { from: INQUIRER });
     expect(res.status).toBe(404);
@@ -408,10 +395,43 @@ describe('outbound mail follows the case mailbox', () => {
    * interlock, to a member of the public.
    */
   describe('the case page retry buttons', () => {
-    // Through the model the app itself holds. `db.model(name)` would build a
-    // second, empty collection that the controller never reads.
-    const storeCase = (queryId, sourceMailbox) =>
-      QueryCase.create({ queryId, workflowState: 'READY_FOR_DISPATCH', sourceMailbox });
+    /**
+     * An approved case, as the retry finds it. Everything the retry sends comes
+     * from here — the inquirer, the subject, the approved text — because the
+     * request may name only which case, never who is written to or what with.
+     */
+    const storeCase = async (queryId, sourceMailbox) => {
+      await QueryCase.create({
+        queryId,
+        subject: 'Dissolution limits',
+        inquirer: { id: null, name: 'Ravi Kumar', email: 'ravi@pharma.example' },
+        workflowState: 'READY_FOR_DISPATCH',
+        sourceMailbox,
+      });
+      await ResponseVersion.create({
+        responseId: `RESP-${queryId}`,
+        queryId,
+        version: 'v1',
+        content: 'The limit is stated in the current monograph.',
+        status: 'FINAL_APPROVED',
+        createdAt: '2026-09-18T09:00:00.000Z',
+      });
+    };
+
+    /** The retry goes to the inquirer stored on the case — the body cannot redirect it. */
+    it('sends to the inquirer on the case, whatever the request names', async () => {
+      await storeCase('QRY-2026-00012', nicCase);
+
+      await request(app)
+        .post('/api/v1/emails/response')
+        .set(cookieFor(primaryFrontOffice()))
+        .send({ to: 'someone-else@elsewhere.example', subject: 'x', body: 'y', queryId: 'QRY-2026-00012' });
+
+      expect(browser.sendMail).toHaveBeenCalledTimes(1);
+      const sent = browser.sendMail.mock.calls[0][0];
+      expect(sent.to).toEqual(['ravi@pharma.example']);
+      expect(sent.body).toBe('The limit is stated in the current monograph.');
+    });
 
     it('retries a NICeMail acknowledgement through the browser', async () => {
       await storeCase('QRY-2026-00007', nicCase);
@@ -493,6 +513,89 @@ describe('outbound mail follows the case mailbox', () => {
       expect(res.status).toBe(504);
       expect(res.body.error).toMatch(/Sent folder/);
       expect(res.body.unconfirmed).toBe(true);
+    });
+
+    /**
+     * "504" alone sent the last investigation to the database. The step the
+     * browser stopped at, what it ran into and what the page showed now travel
+     * with the error — to the page, and onto the case's outbound record.
+     */
+    it('names the step a NICeMail send stopped at, in the answer and on the record', async () => {
+      await storeCase('QRY-2026-00013', nicCase);
+      browser.sendMail = vi.fn(async () => {
+        throw Object.assign(new Error('NICeMail may have sent this message but did not confirm it in time.'), {
+          unconfirmed: true,
+          failedStep: 'await_compose_close',
+          cause: new Error('Timeout 20000ms exceeded waiting for role="button" name="Send" → detached'),
+          seen: 'dialog open: "Email Satisfaction Survey"; Send button still visible',
+        });
+      });
+
+      const res = await request(app)
+        .post('/api/v1/emails/acknowledgement')
+        .set(cookieFor(primaryFrontOffice()))
+        .send({ queryId: 'QRY-2026-00013' });
+
+      expect(res.status).toBe(504);
+      expect(res.body.stage).toBe('await_compose_close');
+      expect(res.body.error).toMatch(/\[stage: await_compose_close; cause: Timeout 20000ms .*; seen: .*Send button still visible\]/);
+      const [row] = db.rows('OutboundEmail');
+      expect(row.lastError).toMatch(/stage: await_compose_close/);
+    });
+
+    it('stops an inquirer other than the test recipient at the outbound guard, before the browser', async () => {
+      await QueryCase.create({
+        queryId: 'QRY-2026-00014',
+        subject: 'Dissolution limits',
+        inquirer: { id: null, name: 'Someone', email: 'someone.else@example.com' },
+        workflowState: 'PENDING_ASSIGNMENT',
+        sourceMailbox: nicCase,
+      });
+
+      const res = await request(app)
+        .post('/api/v1/emails/acknowledgement')
+        .set(cookieFor(primaryFrontOffice()))
+        .send({ queryId: 'QRY-2026-00014' });
+
+      expect(res.status).toBe(503);
+      expect(res.body.stage).toBe('outbound_guard');
+      expect(res.body.error).toMatch(/NIC_ALLOW_OUTBOUND/);
+      expect(browser.sendMail).not.toHaveBeenCalled();
+    });
+
+    it('answers a repeat with the send that already happened, and sends nothing', async () => {
+      await storeCase('QRY-2026-00015', nicCase);
+      browser.sendMail = vi.fn(async () => ({ ok: true, providerMessageId: '1790056208843134900' }));
+      const retry = () =>
+        request(app).post('/api/v1/emails/acknowledgement').set(cookieFor(primaryFrontOffice())).send({ queryId: 'QRY-2026-00015' });
+
+      const first = await retry();
+      const second = await retry();
+
+      expect(first.status).toBe(201);
+      expect(second.status).toBe(200);
+      expect(second.body).toMatchObject({ outcome: 'ALREADY_SENT', providerMessageId: '1790056208843134900' });
+      expect(browser.sendMail).toHaveBeenCalledTimes(1);
+      // The browser hears every step, so they can be logged.
+      expect(browser.sendMail.mock.calls[0][1].onStage).toEqual(expect.any(Function));
+    });
+
+    it('logs each send from START to RESULT — and a repeat without touching the browser', async () => {
+      await storeCase('QRY-2026-00016', nicCase);
+      browser.sendMail = vi.fn(async () => ({ ok: true, providerMessageId: '1790056208843134900' }));
+      const lines = [];
+      vi.spyOn(traceSink, 'write').mockImplementation((line) => lines.push(line));
+      const retry = () =>
+        request(app).post('/api/v1/emails/acknowledgement').set(cookieFor(primaryFrontOffice())).send({ queryId: 'QRY-2026-00016' });
+
+      await retry();
+      const firstRun = lines.splice(0).map((line) => line.split(' {')[0]);
+      await retry();
+      const secondRun = lines.map((line) => line.split(' {')[0]);
+
+      expect(firstRun).toEqual(['ACK START', 'ACK RESOLUTION', 'ACK NIC BROWSER', 'ACK RESULT']);
+      expect(secondRun).toEqual(['ACK START', 'ACK RESULT']);
+      expect(lines.at(-1)).toMatch(/"status":"ALREADY_SENT".*"providerMessageId":"1790056208843134900"/);
     });
   });
 

@@ -1,5 +1,6 @@
 import nicConfig from '../../../config/nicConfig.js';
 import { sendMessage } from '../nic/nicSmtp.js';
+import { DELIVERY, labelDelivery } from '../delivery.js';
 
 /**
  * Sending through NICeMail SMTP as a QMS transport.
@@ -41,10 +42,26 @@ function assertRecipientAllowed(recipients) {
   const blocked = recipients.filter((address) => !sameAddress(address, nicConfig.testRecipient));
   if (!blocked.length) return;
 
-  throw new Error(
-    `NICeMail transport refused to send to ${blocked.join(', ')}. ` +
-      'Outbound mail is confined to NIC_TEST_RECIPIENT until NIC_ALLOW_OUTBOUND=true.',
+  throw labelDelivery(
+    new Error(
+      `NICeMail transport refused to send to ${blocked.join(', ')}. ` +
+        'Outbound mail is confined to NIC_TEST_RECIPIENT until NIC_ALLOW_OUTBOUND=true.',
+    ),
+    DELIVERY.NOT_SENT,
   );
+}
+
+/**
+ * Whether a failed SMTP send could have been delivered.
+ *
+ * `connect` and `authenticate` fail before a message is handed over. At
+ * `submit`, a reply code (`550 …`, `452 …`) is the server refusing the message;
+ * anything else — a dropped socket, a timeout mid-DATA — may have happened after
+ * the server took it.
+ */
+function deliveryForStage(stage, error) {
+  if (stage !== 'submit') return DELIVERY.NOT_SENT;
+  return /^\s*[45]\d\d\b/.test(String(error || '')) ? DELIVERY.NOT_SENT : DELIVERY.UNCERTAIN;
 }
 
 export async function send(message, { asRole = null, sender = null } = {}) {
@@ -61,6 +78,7 @@ export async function send(message, { asRole = null, sender = null } = {}) {
     from: message.fromName || null,
     subject: message.subject,
     text: message.body,
+    messageId: message.messageIdHeader || null,
     // Attachment bytes come from attachmentStore, already resolved by
     // emailService — the same records the Gmail transport MIME-encodes.
     attachments: (message.attachments || []).map((att) => ({
@@ -76,6 +94,7 @@ export async function send(message, { asRole = null, sender = null } = {}) {
   if (!result.ok) {
     throw Object.assign(new Error(`NICeMail send failed at ${result.stage}: ${result.error}`), {
       stage: result.stage,
+      delivery: deliveryForStage(result.stage, result.error),
     });
   }
 

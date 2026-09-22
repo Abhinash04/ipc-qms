@@ -2,8 +2,10 @@ import app from './app.js';
 import env, { assertValidEmailConfig, EMAIL_TRANSPORTS } from './config/env.js';
 import { assertValidAuthConfig } from './config/authConfig.js';
 import { connectDb, disconnectDb } from './config/db.js';
+import browserConfig from './config/browserConfig.js';
 import { IDENTITY_ROLES, identityForRole } from './config/identities.js';
 import * as mailbox from './services/email/mailbox/index.js';
+import { outboundAllowed } from './services/email/nic/outboundGuard.js';
 
 // All imports are hoisted in ESM, so they are grouped here rather than being
 // interleaved with the startup checks below as the CommonJS version was. The
@@ -20,9 +22,6 @@ try {
   process.exit(1);
 }
 
-/** Mirrors the interlock in transports/nicTransport.js — reported, not enforced, here. */
-const nicOutboundAllowed = () => String(process.env.NIC_ALLOW_OUTBOUND || '').trim() === 'true';
-
 /**
  * Report the configuration that is actually in force.
  *
@@ -38,7 +37,7 @@ function describeConfiguration() {
   // reads this to confirm what a restart actually changed.
   const TRANSPORT_LABELS = {
     [EMAIL_TRANSPORTS.GMAIL]: 'Gmail (real sends)',
-    [EMAIL_TRANSPORTS.NIC]: nicOutboundAllowed()
+    [EMAIL_TRANSPORTS.NIC]: outboundAllowed()
       ? 'NICeMail SMTP (real sends)'
       : `NICeMail SMTP — confined to NIC_TEST_RECIPIENT (set NIC_ALLOW_OUTBOUND=true to release)`,
     [EMAIL_TRANSPORTS.MOCK]: 'mock (nothing leaves this machine)',
@@ -57,7 +56,24 @@ function describeConfiguration() {
       ? `${frontOffice?.name || 'Front Officer'}'s Gmail inbox`
       : store.persistence;
 
-  return { transport, recipient, source };
+  // The NICeMail browser agent sends the acknowledgement and final response of
+  // every case from the NICeMail mailbox, whatever EMAIL_TRANSPORT says, so it
+  // is reported on its own line. Read from config only: the agent itself is
+  // never loaded at boot, and Chrome is not contacted.
+  const nicAgent = browserConfig.mailboxEnabled
+    ? `on — ${browserConfig.mailboxAddress} via CDP ${browserConfig.cdpEndpoint}; sends the acknowledgement ` +
+      `and final response of NICeMail cases (timeout ${browserConfig.timeoutMs} ms)`
+    : null;
+
+  // The browser agent's side of the NIC_ALLOW_OUTBOUND interlock. (NICeMail
+  // SMTP reports its own, with its own test recipient, in the transport label.)
+  const guard = !browserConfig.mailboxEnabled
+    ? null
+    : outboundAllowed()
+      ? 'OPEN — NIC_ALLOW_OUTBOUND=true: NICeMail browser sends may reach any recipient'
+      : `closed — NICeMail browser sends confined to ${browserConfig.testRecipient || '(no test recipient set)'}`;
+
+  return { transport, recipient, source, nicAgent, guard };
 }
 
 /**
@@ -76,13 +92,18 @@ try {
   process.exit(1);
 }
 
-const server = app.listen(env.PORT, () => {
-  const { transport, recipient, source } = describeConfiguration();
+// Express 5 calls this on a failed bind too, with the error — which the
+// 'error' handler below reports. The banner is for a server that is listening.
+const server = app.listen(env.PORT, (error) => {
+  if (error) return;
+  const { transport, recipient, source, nicAgent, guard } = describeConfiguration();
 
-  console.log(`QMS backend listening on port ${env.PORT} (${env.NODE_ENV})`);
+  console.log(`QMS backend listening on port ${env.PORT} (${env.NODE_ENV}), pid ${process.pid}`);
   console.log(`Email transport: ${transport}`);
   console.log(`Query recipient: ${recipient}`);
   console.log(`Mailbox source:  ${source}`);
+  console.log(`NICeMail agent:  ${nicAgent || 'off (NIC_BROWSER_MAILBOX is not "true")'}`);
+  if (guard) console.log(`Outbound guard:  ${guard}`);
 
   /**
    * What authorization does and does not cover, stated at boot.
@@ -100,6 +121,29 @@ const server = app.listen(env.PORT, () => {
       'Front Office, Officer-in-Charge, Admin and Super Admin reach every case. ' +
       'Do not expose this server outside a trusted network.',
   );
+});
+
+/**
+ * A server that could not bind never started, and says so with exit code 1.
+ * A port already taken means another backend is still serving it — often the
+ * one this start was meant to replace. Left to the uncaught-exception path it
+ * shut down with exit code 0, and the old process, with its old code, went on
+ * answering every request.
+ */
+server.on('error', (error) => {
+  if (server.listening) {
+    console.error('[qms] server error:', error);
+    void shutdown('server error');
+    return;
+  }
+  console.error(
+    error.code === 'EADDRINUSE'
+      ? `\n[qms] port ${env.PORT} is already in use — another backend is still running; not starting.\n`
+      : `\n[qms] could not listen on port ${env.PORT}: ${error.message}\n`,
+  );
+  disconnectDb()
+    .catch(() => {})
+    .finally(() => process.exit(1));
 });
 
 /**

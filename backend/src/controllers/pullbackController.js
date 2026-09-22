@@ -35,7 +35,7 @@ async function pullBackQuery(req, res, next) {
     const updated = await QueryCase.findOneAndUpdate(
       { queryId },
       { $set: { workflowState: targetStage, updatedAt: new Date().toISOString() } },
-      { new: true },
+      { returnDocument: 'after' },
     ).lean();
 
     if (!updated) {

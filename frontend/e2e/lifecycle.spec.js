@@ -5,9 +5,6 @@ import {
   FRONT_OFFICE_USER,
   OFFICER_IN_CHARGE_USER,
   REVIEWER_USER,
-  SUPER_ADMIN_USER,
-  devSignIn,
-  injectInboundMessage,
   signInAs,
 } from './helpers/api.js';
 import {
@@ -22,6 +19,21 @@ import {
   resetDatabase,
   unblockMailboxDelivery,
 } from './helpers/db.js';
+import {
+  POLL,
+  REVIEW_COMMENT,
+  approvalPath,
+  assign,
+  auditTrail,
+  caseById,
+  currentYear,
+  dispatchPath,
+  draftAndSubmit,
+  driveToFinalApproval,
+  intake,
+  only,
+  review,
+} from './helpers/workflow.js';
 
 /**
  * One enquiry, from the mail arriving to the case closing — driven through the
@@ -60,165 +72,12 @@ const BODY = [
   'and medium apply for the 500 mg strength.',
 ].join(' ');
 
-/** ROLE_SLUG + SECTIONS[...].segment — frontend/src/constants/{permissions,routeSections}.js. */
-const INBOX_PATH = '/front-officer/inbox';
-const assignmentPath = (queryId) => `/officer-in-charge/assignments/${queryId}`;
-const draftingPath = (queryId) => `/assigned-official/drafting/${queryId}`;
-const reviewPath = (queryId) => `/reviewer/reviews/${queryId}`;
-const approvalPath = (queryId) => `/officer-in-charge/approvals/${queryId}`;
-const dispatchPath = (queryId) => `/front-officer/dispatch/${queryId}`;
-
-/** mintIds() in acceptMessage.js labels the id with the UTC year. */
-const currentYear = () => new Date().getUTCFullYear();
-
-/** Generous: a stage is a sign-in, a cold route chunk and a fire-and-forget write. */
-const POLL = { timeout: 60_000 };
+/** The enquiry these tests carry through the workflow. */
+const ENQUIRY = { from: SENDER, subject: SUBJECT, body: BODY };
 
 /** The single case these tests work on. */
-const theCase = async () => (await readQueryCases())[0] ?? null;
+const theCase = () => caseById();
 
-const workflowState = async () => (await theCase())?.workflowState ?? null;
-
-/**
- * Every audit action recorded against one case, in the order it was written.
- *
- * Sorted by `_id` rather than by `timestamp`: several of these rows are written
- * inside the same millisecond, and every one of them comes from the same
- * backend process — both the rows the server writes itself and the rows the
- * client sends through /queries/persist — so ObjectId order is creation order
- * and ISO timestamps are not fine-grained enough to distinguish them.
- */
-async function auditTrail(queryId) {
-  const rows = await readAuditEvents({ queryId });
-  return rows
-    .sort((a, b) => String(a._id).localeCompare(String(b._id)))
-    .map((row) => row.action);
-}
-
-/** The subsequence of `trail` made of the actions in `expected`. */
-const only = (trail, expected) => trail.filter((action) => expected.includes(action));
-
-
-// ── The stages ───────────────────────────────────────────────────────────────
-//
-// Each drives one role through one screen and then waits on the database. They
-// are shared by both tests below, which differ only in what happens at the very
-// end, once the case is sitting at PENDING_FINAL_APPROVAL.
-
-/** Mail arrives; the Front Officer presses ✓. */
-async function intake(page, request) {
-  await devSignIn(request, SUPER_ADMIN_USER.email);
-  const message = await injectInboundMessage(request, {
-    from: SENDER,
-    subject: SUBJECT,
-    body: BODY,
-  });
-
-  await signInAs(page, FRONT_OFFICE_USER.email);
-  await page.goto(INBOX_PATH);
-
-  await page
-    .getByRole('button', { name: `Accept message ${message.mailboxMessageId}`, exact: true })
-    .click();
-  await page.getByRole('button', { name: 'Yes', exact: true }).click();
-
-  await expect.poll(workflowState, POLL).toBe('PENDING_ASSIGNMENT');
-
-  return message;
-}
-
-/** The Officer-in-Charge picks an official from the full directory. */
-async function assign(page, queryId) {
-  await signInAs(page, OFFICER_IN_CHARGE_USER.email);
-  await page.goto(assignmentPath(queryId));
-
-  // The "Or Manual Assignment" picker. Reached by role because its <Label
-  // htmlFor="override-assignee"> points at an id nothing renders — see the
-  // note at the foot of this file.
-  await page.getByRole('combobox').click();
-  await page
-    .getByRole('option', { name: new RegExp(`^${ASSIGNED_OFFICIAL_USER.name}`) })
-    .click();
-  await page.getByRole('button', { name: 'Assign Selected Official', exact: true }).click();
-
-  await expect
-    .poll(async () => {
-      const row = await theCase();
-      return row && { state: row.workflowState, assignee: row.currentAssigneeId };
-    }, POLL)
-    .toEqual({ state: 'ASSIGNED', assignee: ASSIGNED_OFFICIAL_USER.id });
-}
-
-/**
- * The assigned official drafts, names a reviewer, and sends it on.
- *
- * The first version has to come from "Generate AI draft": with no versions yet
- * the editor renders an empty state rather than a textarea, so there is nothing
- * to type into until one exists. GEMMA_API_URL is empty under .env.e2e, so the
- * server returns its deterministic draft — which is the point, not a shortcut.
- */
-async function draftAndSubmit(page, queryId) {
-  await signInAs(page, ASSIGNED_OFFICIAL_USER.email);
-  await page.goto(draftingPath(queryId));
-
-  await page.getByRole('button', { name: 'Generate AI draft', exact: true }).click();
-  await expect
-    .poll(async () => (await readResponseVersions({ queryId })).length, POLL)
-    .toBe(1);
-
-  // Adding a review level only becomes available at DRAFTING, which the draft
-  // above is what produced.
-  await page.getByRole('combobox').click();
-  await page.getByRole('option', { name: REVIEWER_USER.name, exact: true }).click();
-  await page.getByRole('button', { name: 'Add', exact: true }).click();
-
-  await expect
-    .poll(async () => {
-      const [step] = await readWorkflowSteps({ queryId, stepType: 'REVIEW' });
-      return step?.assignedUserId ?? null;
-    }, POLL)
-    .toBe(REVIEWER_USER.id);
-
-  await page.getByRole('button', { name: 'Submit for review', exact: true }).click();
-  await expect.poll(workflowState, POLL).toBe('UNDER_REVIEW');
-}
-
-/**
- * The reviewer the draft was addressed to approves it.
- *
- * The comment is typed rather than left blank, and that is not decoration: an
- * approval with an empty comment is currently **lost**. `approveReview` writes
- * `comment: comment || null`, and `reviewSchema.comment` in
- * backend/src/validators/queryStateSchemas.js is `z.string().optional()`, which
- * rejects an explicit null — so the whole delta 400s, and because `persistDelta`
- * is fire-and-forget the tab shows the case as approved while the database
- * still reads UNDER_REVIEW. Typing a comment is a real reviewer action and gets
- * the lifecycle past it; the defect is reported rather than asserted here,
- * because fixing it means changing `src/`.
- */
-const REVIEW_COMMENT = 'Checked against the monograph; the cited limits are correct.';
-
-async function review(page, queryId) {
-  await signInAs(page, REVIEWER_USER.email);
-  await page.goto(reviewPath(queryId));
-
-  await page.getByLabel('Comments', { exact: true }).fill(REVIEW_COMMENT);
-  await page.getByRole('button', { name: 'Approve', exact: true }).click();
-
-  await expect.poll(workflowState, POLL).toBe('PENDING_FINAL_APPROVAL');
-}
-
-/** Everything up to the Officer-in-Charge's final decision. */
-async function driveToFinalApproval(page, request) {
-  const message = await intake(page, request);
-  const { queryId } = await theCase();
-
-  await assign(page, queryId);
-  await draftAndSubmit(page, queryId);
-  await review(page, queryId);
-
-  return { message, queryId };
-}
 
 test.beforeEach(async () => {
   await resetDatabase();
@@ -235,7 +94,7 @@ test('an enquiry runs the full lifecycle and closes only once the answer was sen
   // Five sign-ins and five cold route chunks — well past the 90s default.
   test.setTimeout(300_000);
 
-  const message = await intake(page, request);
+  const { message } = await intake(page, request, ENQUIRY);
 
   // ── Intake ────────────────────────────────────────────────────────────────
   const registered = await theCase();
@@ -385,7 +244,7 @@ test('a final response that cannot be sent leaves the case open, and the retry c
 }) => {
   test.setTimeout(300_000);
 
-  const { queryId } = await driveToFinalApproval(page, request);
+  const { queryId } = await driveToFinalApproval(page, request, ENQUIRY);
 
   // The next outgoing email will fail at the transport. See
   // blockNextMailboxDelivery in helpers/db.js for why it has to be injected

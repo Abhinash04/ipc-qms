@@ -13,6 +13,7 @@
     "nic:preflight": "node src/scripts/nicPreflight.js",
     "nic:verify": "node src/scripts/nicVerify.js",
     "nic:browser:discover": "node src/scripts/nicBrowserDiscover.js",
+    "nic:browser:calibrate": "node src/scripts/nicBrowserCalibrate.js",
     "ingest:ipc": "node scripts/ingestIpcDocs.mjs",
     "db:reset": "node scripts/resetWorkflowState.mjs",
     "draft:trace": "node src/scripts/testDraftLive.js",
@@ -39,13 +40,13 @@
     "morgan": "^1.11.0",
     "multer": "^2.2.0",
     "nodemailer": "^10.0.1",
-    "playwright-core": "^1.63.0",
     "zod": "^4.6.5"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "eslint": "^10.8.1",
     "globals": "^17.11.0",
+    "jsdom": "^30.1.0",
     "nodemon": "^3.1.14",
     "supertest": "^7.2.2",
     "vitest": "^4.1.10"

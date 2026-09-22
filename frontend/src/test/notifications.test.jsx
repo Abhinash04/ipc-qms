@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 
 import { NotificationHost } from '@/components/notifications/NotificationHost';
 import { useWorkflowStore } from '@/store/useWorkflowStore';
@@ -10,6 +10,7 @@ import { notifyMailboxCheck } from '@/hooks/useMailboxIngestion';
 import { findUserById } from '@/constants/mockUsers';
 import { AUDIT_EVENT } from '@/constants/statusEnums';
 import * as mailboxService from '@/services/api/mailboxService';
+import { installFakeCaseMail } from '@/test/fakeCaseMail';
 
 vi.mock('@/services/api/mailboxService');
 
@@ -20,24 +21,12 @@ const OFFICIAL = findUserById('USR-0004');
 
 const s = () => useWorkflowStore.getState();
 
-const ACK_RESULT = {
-  from: 'Front Office <front@ipc.example>',
-  to: [INQUIRER.email],
-  subject: 'Acknowledgement of Query Received',
-  body: 'Received.',
-  sentAt: '2026-08-26T10:00:00.000Z',
-  providerMessageId: 'ack-1',
-};
-
-const FORWARD_RESULT = {
-  from: 'Front Office <front@ipc.example>',
-  to: [OIC.email],
-  subject: 'Fwd: enquiry',
-  body: 'forwarded',
-  sentAt: '2026-08-26T10:05:00.000Z',
-  providerMessageId: 'fwd-1',
-  providerThreadId: 'thread-fo',
-};
+/**
+ * The acknowledgement and the forward are server calls. A toast follows what
+ * the server did with the case, so these tests need a server that does it —
+ * a canned reply would leave the case where it was and the toast would be
+ * announcing nothing. See src/test/fakeCaseMail.js.
+ */
 
 const enquiry = (id = 'MSG-NOTIF-0001') => ({
   mailboxMessageId: id,
@@ -50,10 +39,17 @@ const enquiry = (id = 'MSG-NOTIF-0001') => ({
 
 const received = (id) => s().ingestEmail(enquiry(id), async () => null).queryId;
 
-/** A committed forward requires the query to be verified first. */
-const verified = async (queryId) => {
-  await s().verifyQuery(queryId, FRONT_OFFICE);
-};
+/**
+ * A committed forward requires the query to be verified first.
+ *
+ * Both of these reach the server and come back through `refreshFromServer()`,
+ * which is a React state update — so they are wrapped in `act`. Without it the
+ * toast arrives after the assertion, and React says so on the console, which
+ * the shared setup treats as a failure.
+ */
+const verified = (queryId) => act(() => s().verifyQuery(queryId, FRONT_OFFICE));
+
+const forwarded = (queryId) => act(() => s().forwardToOic(queryId, FRONT_OFFICE));
 
 const originalAdapter = axiosClient.defaults.adapter;
 
@@ -62,8 +58,7 @@ beforeEach(async () => {
   vi.mocked(mailboxService.fetchEmailConfig).mockResolvedValue({});
   vi.mocked(mailboxService.fetchMailboxMessages).mockResolvedValue({ messages: [] });
   vi.mocked(mailboxService.markMessageIngested).mockResolvedValue({ ingested: true });
-  vi.mocked(mailboxService.sendAcknowledgement).mockResolvedValue(ACK_RESULT);
-  vi.mocked(mailboxService.forwardQuery).mockResolvedValue(FORWARD_RESULT);
+  installFakeCaseMail(mailboxService);
 
   await s().hydrate();
   await s().resetDemo();
@@ -81,12 +76,12 @@ afterEach(() => {
 
 describe('toasts follow committed transitions, not clicks', () => {
   it('raises no success toast when the forward actually fails', async () => {
-    vi.mocked(mailboxService.forwardQuery).mockRejectedValue(new Error('SMTP down'));
+    installFakeCaseMail(mailboxService, { forward: { outcome: 'FAILED', error: 'SMTP down' } });
     render(<NotificationHost />);
 
     const queryId = received();
     await verified(queryId);
-    await expect(s().forwardToOic(queryId, FRONT_OFFICE)).rejects.toThrow(/SMTP down/);
+    await expect(forwarded(queryId)).rejects.toThrow(/SMTP down/);
 
     // Nothing was committed, so nothing may be announced. A toast wired to the
     // button rather than the operation would have fired here.
@@ -105,7 +100,7 @@ describe('toasts follow committed transitions, not clicks', () => {
 
     const queryId = received();
     await verified(queryId);
-    await s().forwardToOic(queryId, FRONT_OFFICE);
+    await forwarded(queryId);
 
     expect(
       s().getAudit(queryId).some((e) => e.event === AUDIT_EVENT.QUERY_FORWARDED),
@@ -118,11 +113,11 @@ describe('toasts follow committed transitions, not clicks', () => {
 
     const queryId = received();
     await verified(queryId);
-    await s().forwardToOic(queryId, FRONT_OFFICE);
-    s().assignQuery(queryId, OFFICIAL.id, OIC);
+    await forwarded(queryId);
+    act(() => s().assignQuery(queryId, OFFICIAL.id, OIC));
     await screen.findByText('Query assigned');
 
-    s().saveDraftVersion(queryId, 'A revised draft body.', OFFICIAL);
+    act(() => s().saveDraftVersion(queryId, 'A revised draft body.', OFFICIAL));
 
     // DRAFT_UPDATED is recorded but never toasted — the audit trail keeps it.
     expect(
@@ -138,18 +133,18 @@ describe('history is never replayed as news', () => {
 
     const queryId = received();
     await verified(queryId);
-    await s().forwardToOic(queryId, FRONT_OFFICE);
+    await forwarded(queryId);
     await screen.findByText('Forwarded to the Officer-in-Charge');
 
-    await s().resetDemo();
+    await act(() => s().resetDemo());
     expect(s().auditEvents).toHaveLength(0);
 
     // The subscriber survives the reset without mistaking the shrink for
     // activity, and a genuinely new transition still announces itself once.
     const next = received('MSG-NOTIF-0002');
     await verified(next);
-    await s().forwardToOic(next, FRONT_OFFICE);
-    s().assignQuery(next, OFFICIAL.id, OIC);
+    await forwarded(next);
+    act(() => s().assignQuery(next, OFFICIAL.id, OIC));
 
     await screen.findByText('Query assigned');
     expect(screen.getAllByText('Query assigned')).toHaveLength(1);
@@ -158,7 +153,7 @@ describe('history is never replayed as news', () => {
   it('emits nothing for the events already present when it mounts', async () => {
     const queryId = received();
     await verified(queryId);
-    await s().forwardToOic(queryId, FRONT_OFFICE);
+    await forwarded(queryId);
 
     // Mounting after the fact must not announce what already happened.
     render(<NotificationHost />);
@@ -179,7 +174,7 @@ describe('a mailbox sweep reports itself once', () => {
     try {
       const queryId = received();
       await verified(queryId);
-      await s().forwardToOic(queryId, FRONT_OFFICE);
+      await forwarded(queryId);
     } finally {
       endBatch();
     }
@@ -261,8 +256,8 @@ describe('failures that used to be invisible', () => {
 
     const queryId = received();
     await verified(queryId);
-    await s().forwardToOic(queryId, FRONT_OFFICE);
-    s().assignQuery(queryId, OFFICIAL.id, OIC);
+    await forwarded(queryId);
+    act(() => s().assignQuery(queryId, OFFICIAL.id, OIC));
 
     await s().generateAiDraft(queryId, OFFICIAL, async () => null);
 
@@ -274,8 +269,8 @@ describe('failures that used to be invisible', () => {
 
     const queryId = received();
     await verified(queryId);
-    await s().forwardToOic(queryId, FRONT_OFFICE);
-    s().assignQuery(queryId, OFFICIAL.id, OIC);
+    await forwarded(queryId);
+    act(() => s().assignQuery(queryId, OFFICIAL.id, OIC));
 
     await s().generateAiDraft(queryId, OFFICIAL, async () => ({
       subject: 'Response regarding endotoxin limits',

@@ -76,6 +76,7 @@ export default defineConfig({
       NIC_BROWSER_ARTIFACT_DIR: '',
       NIC_WEBMAIL_URL_PATTERNS: '',
       NIC_WEBMAIL_TITLE_PATTERNS: '',
+      NIC_WEBMAIL_APP_URL: '',
       // The outbound interlock, pinned to its safe default. A developer who has
       // enabled real outbound mail locally must not run the suite with the
       // two-key check switched off.

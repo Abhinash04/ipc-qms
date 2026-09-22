@@ -36,7 +36,15 @@ export async function resolveAttachmentCase(meta) {
   if (meta?.queryId) return meta.queryId;
   if (!meta?.providerMessageId || !isConnected()) return null;
 
-  const message = await EmailMessage.findOne({ sourceMessageId: meta.providerMessageId })
+  // Gmail's message id is the incoming message's sourceMessageId. A NICeMail
+  // message is stored under its mailbox id (NICB-…), with the NICeMail id —
+  // the one its attachments are saved against — as its providerMessageId.
+  const message = await EmailMessage.findOne({
+    $or: [
+      { sourceMessageId: meta.providerMessageId },
+      { providerMessageId: meta.providerMessageId, direction: 'INBOUND' },
+    ],
+  })
     .select('queryId')
     .lean();
   return message?.queryId || null;

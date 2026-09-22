@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { act, render, screen, fireEvent, waitFor } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, Route, Routes, useParams } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 import { MailboxInboxPage } from '@/pages/frontOffice/MailboxInboxPage';
@@ -17,12 +17,17 @@ import {
   markMessageIngested,
   sendAcknowledgement,
   forwardQuery,
+  syncMailbox,
 } from '@/services/api/mailboxService';
 import { fakeAcceptEndpoint } from '@/test/fakeAcceptEndpoint';
 
 vi.mock('@/services/api/mailboxService', () => ({
   fetchEmailConfig: vi.fn().mockResolvedValue({}),
   fetchMailboxMessages: vi.fn(),
+  fetchMailboxMessage: vi.fn().mockResolvedValue(null),
+  markMailboxMessageRead: vi.fn().mockResolvedValue({}),
+  syncMailbox: vi.fn(),
+  mailboxAttachmentUrl: vi.fn(),
   fetchMailboxDecisions: vi.fn(),
   recordMailboxDecision: vi.fn(),
   acceptMailboxMessage: vi.fn(),
@@ -468,7 +473,7 @@ describe('a NICeMail mailbox that could not be read', () => {
 
     renderInbox();
 
-    const notice = await screen.findByText(/NICeMail could not be read/);
+    const notice = await screen.findByText(/The mailbox could not be read/);
     expect(notice.closest('[role="alert"]')).toHaveTextContent('Chrome is not available');
     expect(notice.closest('[role="alert"]')).toHaveTextContent('connect_browser');
   });
@@ -479,7 +484,7 @@ describe('a NICeMail mailbox that could not be read', () => {
     renderInbox();
     await screen.findByText(/No Mail in the IPC Mailbox/);
 
-    expect(screen.queryByText(/NICeMail could not be read/)).toBeNull();
+    expect(screen.queryByText(/The mailbox could not be read/)).toBeNull();
   });
 
   // Every other mailbox's response has no `sync` field at all.
@@ -487,6 +492,315 @@ describe('a NICeMail mailbox that could not be read', () => {
     renderInbox();
     await screen.findByText('Keep this one');
 
-    expect(screen.queryByText(/NICeMail could not be read/)).toBeNull();
+    expect(screen.queryByText(/The mailbox could not be read/)).toBeNull();
+  });
+});
+
+describe('finding mail', () => {
+  const searchBox = () => screen.getByRole('searchbox', { name: 'Search mail' });
+
+  it('shows that the mailbox is loading, not that it is empty', async () => {
+    let answer;
+    fetchMailboxMessages.mockReturnValue(new Promise((resolve) => { answer = resolve; }));
+    renderInbox();
+
+    expect(screen.getByRole('status', { name: 'Loading mail' })).toBeInTheDocument();
+    expect(screen.queryByText('No Mail in the IPC Mailbox')).toBeNull();
+
+    await act(async () => answer({ messages: [] }));
+    expect(await screen.findByText('No Mail in the IPC Mailbox')).toBeInTheDocument();
+  });
+
+  it('searches on the server once typing pauses, not on every keystroke', async () => {
+    renderInbox();
+    await screen.findByText('Keep this one');
+
+    fireEvent.change(searchBox(), { target: { value: 'mono' } });
+    fireEvent.change(searchBox(), { target: { value: 'monograph' } });
+
+    await waitFor(() =>
+      expect(fetchMailboxMessages).toHaveBeenLastCalledWith(
+        expect.objectContaining({ q: 'monograph', limit: 50, offset: 0 }),
+      ),
+    );
+    expect(fetchMailboxMessages.mock.calls.map(([args]) => args.q)).not.toContain('mono');
+  });
+
+  it('says nothing matches, rather than that the mailbox is empty', async () => {
+    renderInbox();
+    await screen.findByText('Keep this one');
+
+    fetchMailboxMessages.mockResolvedValue({ messages: [], total: 0, limit: 50, offset: 0 });
+    fireEvent.change(searchBox(), { target: { value: 'nothing like this' } });
+
+    expect(await screen.findByText('No messages match')).toBeInTheDocument();
+    expect(screen.queryByText('No Mail in the IPC Mailbox')).toBeNull();
+  });
+
+  // Awaiting is `unreadOnly`: not yet accepted or rejected, whether or not opened.
+  it('narrows to mail awaiting validation', async () => {
+    renderInbox();
+    await screen.findByText('Keep this one');
+    expect(fetchMailboxMessages).toHaveBeenLastCalledWith(expect.objectContaining({ unreadOnly: false }));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Awaiting' }));
+
+    expect(screen.getByRole('button', { name: 'Awaiting' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: 'All mail' })).toHaveAttribute('aria-pressed', 'false');
+    await waitFor(() =>
+      expect(fetchMailboxMessages).toHaveBeenLastCalledWith(
+        expect.objectContaining({ unreadOnly: true, offset: 0 }),
+      ),
+    );
+  });
+
+  it('pages through the list 50 at a time', async () => {
+    fetchMailboxMessages.mockResolvedValue({
+      messages: [
+        message(1, 'First of many', 'First Sender <first@pharma.example>'),
+        message(2, 'Second of many', 'Second Sender <second@pharma.example>'),
+      ],
+      total: 120,
+      limit: 50,
+      offset: 0,
+    });
+    renderInbox();
+
+    const pages = await screen.findByRole('navigation', { name: 'Mailbox pages' });
+    expect(pages).toHaveTextContent('Showing 1–2 of 120');
+    expect(screen.getByText('120 Messages Total')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Previous' })).toBeDisabled();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+
+    await waitFor(() =>
+      expect(fetchMailboxMessages).toHaveBeenLastCalledWith(
+        expect.objectContaining({ limit: 50, offset: 50 }),
+      ),
+    );
+    await waitFor(() => expect(pages).toHaveTextContent('Showing 51–52 of 120'));
+    expect(screen.getByRole('button', { name: 'Previous' })).toBeEnabled();
+  });
+
+  it('steps back a page when the last row on this one goes', async () => {
+    const page = (total, rows) => ({ messages: rows, total, limit: 50 });
+    fetchMailboxMessages.mockImplementation(async ({ offset }) =>
+      offset === 0
+        ? page(51, [message(1, 'First page mail')])
+        : page(51, [message(2, 'Only mail on page two')]),
+    );
+    renderInbox();
+    fireEvent.click(await screen.findByRole('button', { name: 'Next' }));
+    await screen.findByText('Only mail on page two');
+
+    // Deleted, so page two is now past the end.
+    fetchMailboxMessages.mockImplementation(async ({ offset }) =>
+      offset === 0 ? page(50, [message(1, 'First page mail')]) : page(50, []),
+    );
+    fireEvent.click(trashFor('MSG-00002'));
+    fireEvent.click(screen.getByRole('button', { name: 'Yes' }));
+
+    expect(await screen.findByText('First page mail')).toBeInTheDocument();
+    expect(screen.queryByText('No Mail in the IPC Mailbox')).toBeNull();
+    expect(fetchMailboxMessages).toHaveBeenLastCalledWith(expect.objectContaining({ offset: 0 }));
+  });
+});
+
+describe('what each row shows', () => {
+  it('marks only mail not yet opened here, and shows the start of each body', async () => {
+    fetchMailboxMessages.mockResolvedValue({
+      messages: [
+        { ...message(1, 'Opened already', 'Read Sender <read@pharma.example>'), isRead: true },
+        {
+          ...message(2, 'Not yet opened', 'Ravi Kumar <ravi@pharma.example>'),
+          isRead: false,
+          body: 'Please confirm the\n\n   impurity limit.',
+        },
+        // A mailbox that keeps no read state is not "unread".
+        { ...message(3, 'No read state', 'Other Sender <other@pharma.example>'), isRead: null },
+      ],
+    });
+    renderInbox();
+    await screen.findByText('Not yet opened');
+
+    expect(screen.getAllByText('Unread')).toHaveLength(1);
+    expect(screen.getByText('Unread').parentElement).toHaveTextContent('Ravi Kumar');
+    expect(screen.getByText('Please confirm the impurity limit.')).toBeInTheDocument();
+  });
+
+  it('links the case the server reports, even one this tab has never loaded', async () => {
+    fetchMailboxMessages.mockResolvedValue({
+      messages: [
+        {
+          ...message(1, 'Already accepted', 'Ravi Kumar <ravi@pharma.example>'),
+          ingested: true,
+          status: 'ACCEPTED',
+          linkedCase: { queryId: 'QRY-2026-00042', workflowState: 'PENDING_ASSIGNMENT', businessStatus: 'OPEN' },
+        },
+      ],
+    });
+    renderInbox();
+
+    expect(await screen.findByRole('link', { name: 'QRY-2026-00042' })).toHaveAttribute(
+      'href',
+      '/front-officer/queries/QRY-2026-00042',
+    );
+    expect(useWorkflowStore.getState().queries).toHaveLength(0);
+  });
+});
+
+describe('opening a message', () => {
+  function Opened() {
+    const { messageId } = useParams();
+    return <p>Opened {messageId}</p>;
+  }
+
+  function renderInboxRoutes() {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    return render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter initialEntries={['/front-officer/inbox']}>
+          <Routes>
+            <Route path="/front-officer/inbox" element={<MailboxInboxPage />} />
+            <Route path="/front-officer/inbox/:messageId" element={<Opened />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+  }
+
+  it('opens from the subject, which is a real link', async () => {
+    renderInboxRoutes();
+
+    const subject = await screen.findByRole('link', { name: 'Doomed enquiry' });
+    expect(subject).toHaveAttribute('href', '/front-officer/inbox/MSG-00002');
+
+    fireEvent.click(subject);
+    expect(await screen.findByText('Opened MSG-00002')).toBeInTheDocument();
+  });
+
+  it('opens from anywhere else on the row, but not from a control on it', async () => {
+    fetchMailboxMessages.mockResolvedValue({
+      messages: [
+        { ...message(2, 'Doomed enquiry', 'Ravi Kumar <ravi@pharma.example>'), body: 'Row body to click.' },
+      ],
+    });
+    renderInboxRoutes();
+    await screen.findByText('Doomed enquiry');
+
+    fireEvent.click(trashFor('MSG-00002'));
+    expect(screen.getByText('Delete?')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel delete' }));
+    expect(screen.queryByText(/^Opened/)).toBeNull();
+
+    fireEvent.click(screen.getByText('Row body to click.'));
+    expect(await screen.findByText('Opened MSG-00002')).toBeInTheDocument();
+  });
+
+  // Tooltip content is portaled out of the row, but React bubbles its clicks
+  // up to the row all the same.
+  it('does not open from a click on a tooltip', async () => {
+    renderInboxRoutes();
+    await screen.findByText('Doomed enquiry');
+
+    act(() => rejectFor('MSG-00002').focus());
+    fireEvent.click(await screen.findByRole('tooltip'));
+
+    expect(screen.queryByText(/^Opened/)).toBeNull();
+  });
+});
+
+describe('Sync now', () => {
+  const nicInbox = (running) => ({
+    backend: 'nic-browser',
+    messages: [message(1, 'Keep this one', 'Ravi Kumar <ravi@pharma.example>')],
+    sync: { ok: true, at: '2026-09-21T09:00:00.000Z', stored: 0, stage: null, error: null, running },
+  });
+
+  it('is offered only for the NICeMail mailbox', async () => {
+    renderInbox();
+    await screen.findByText('Keep this one');
+
+    expect(screen.queryByRole('button', { name: 'Sync now' })).toBeNull();
+  });
+
+  it('starts one NICeMail sync and says so', async () => {
+    const info = vi.spyOn(notify, 'info').mockImplementation(() => {});
+    fetchMailboxMessages.mockResolvedValue(nicInbox(false));
+    syncMailbox.mockResolvedValue({ supported: true, started: true, sync: nicInbox(true).sync });
+    renderInbox();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Sync now' }));
+
+    await waitFor(() =>
+      expect(info).toHaveBeenCalledWith('NICeMail sync started', expect.any(String), { id: 'mailbox-sync' }),
+    );
+    expect(syncMailbox).toHaveBeenCalledTimes(1);
+    info.mockRestore();
+  });
+
+  it('polls every 3 s while a sync runs, and stops when it ends', async () => {
+    vi.useFakeTimers();
+    try {
+      fetchMailboxMessages.mockResolvedValue(nicInbox(true));
+      renderInbox();
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+
+      expect(screen.getByRole('button', { name: 'Syncing…' })).toBeDisabled();
+      expect(fetchMailboxMessages).toHaveBeenCalledTimes(1);
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(3000);
+      });
+      expect(fetchMailboxMessages).toHaveBeenCalledTimes(2);
+
+      fetchMailboxMessages.mockResolvedValue(nicInbox(false));
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(3000);
+      });
+      expect(fetchMailboxMessages).toHaveBeenCalledTimes(3);
+
+      // Back to the ordinary 15 s refresh.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(3000);
+      });
+      expect(fetchMailboxMessages).toHaveBeenCalledTimes(3);
+      expect(screen.getByRole('button', { name: 'Sync now' })).toBeEnabled();
+    } finally {
+      vi.clearAllTimers();
+      vi.useRealTimers();
+    }
+  });
+
+  // The failed read keeps the last good answer, which still says `running`.
+  it('stops polling every 3 s once the list cannot be read', async () => {
+    vi.useFakeTimers();
+    try {
+      fetchMailboxMessages.mockResolvedValue(nicInbox(true));
+      renderInbox();
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+
+      fetchMailboxMessages.mockRejectedValue(
+        Object.assign(new Error('Request failed with status code 503'), {
+          response: { status: 503, data: { error: 'The mailbox is unreachable' } },
+        }),
+      );
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(3000);
+      });
+      expect(fetchMailboxMessages).toHaveBeenCalledTimes(2);
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(3000);
+      });
+      expect(fetchMailboxMessages).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.clearAllTimers();
+      vi.useRealTimers();
+    }
   });
 });

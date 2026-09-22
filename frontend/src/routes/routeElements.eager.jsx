@@ -13,6 +13,7 @@ export { LoginPage } from '@/pages/auth/LoginPage';
 import { DashboardPage } from '@/pages/dashboard/DashboardPage';
 import { ComposeEnquiryPage } from '@/pages/inquirer/ComposeEnquiryPage';
 import { MailboxInboxPage } from '@/pages/frontOffice/MailboxInboxPage';
+import { MailboxMessagePage } from '@/pages/frontOffice/MailboxMessagePage';
 import { QueriesListPage } from '@/pages/queries/QueriesListPage';
 import { QueryDetailPage } from '@/pages/queries/QueryDetailPage';
 import { MyWorkPage } from '@/pages/myWork/MyWorkPage';
@@ -43,6 +44,7 @@ export const SECTION_ELEMENT = {
   [SECTION.DASHBOARD]: <DashboardPage />,
   [SECTION.COMPOSE]: <ComposeEnquiryPage />,
   [SECTION.INBOX]: <MailboxInboxPage />,
+  [SECTION.INBOX_DETAIL]: <MailboxMessagePage />,
   [SECTION.QUERIES]: <QueriesListPage />,
   [SECTION.QUERY_DETAIL]: <QueryDetailPage />,
   [SECTION.MY_WORK]: <MyWorkPage />,

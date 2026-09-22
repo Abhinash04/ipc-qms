@@ -7,7 +7,7 @@ import { AUDIT_ACTIONS } from '../constants/auditActions.js';
 import { ACTOR_TYPES } from '../constants/roles.js';
 
 /** Who touched which document, and when. Never the bytes or the content. */
-const recordAttachment = (req, action, meta) =>
+const recordAttachment = (req, action, meta, { messageId = null } = {}) =>
   audit.record({
     action,
     actorType: ACTOR_TYPES.HUMAN,
@@ -15,6 +15,7 @@ const recordAttachment = (req, action, meta) =>
     actorRole: req.user?.role ?? null,
     attachmentId: meta.attachmentId,
     queryId: meta.queryId ?? null,
+    messageId,
     details: { filename: meta.filename, mimeType: meta.mimeType, size: meta.size },
   });
 
@@ -108,40 +109,45 @@ async function getMeta(req, res, next) {
  * origin (5173) from loading bytes served from here (5000). This route opts
  * itself out of both — it is the one place in the API meant to be embedded
  * cross-origin by the app's own frontend.
+ *
+ * Shared by this route and the mailbox's message-scoped one, which checks
+ * first that the attachment belongs to the message and passes its id on.
  */
+async function sendAttachment(req, res, attachmentId, { messageId = null } = {}) {
+  const meta = await store.getMetadata(attachmentId);
+  if (!meta) {
+    return res.status(HTTP_STATUS.NOT_FOUND).json({ error: 'Attachment not found', attachmentId });
+  }
+
+  let buffer;
+  try {
+    buffer = await store.readBytes(attachmentId);
+  } catch {
+    return res.status(HTTP_STATUS.NOT_FOUND).json({ error: 'Attachment bytes are unavailable', attachmentId });
+  }
+
+  const disposition = req.query.download ? 'attachment' : 'inline';
+  const asciiName = (meta.filename || 'attachment').replace(/[^\x20-\x7E]/g, '_').replace(/"/g, "'");
+
+  res.setHeader('Content-Type', meta.mimeType || 'application/octet-stream');
+  res.setHeader('Content-Length', String(buffer.length));
+  res.setHeader(
+    'Content-Disposition',
+    `${disposition}; filename="${asciiName}"; filename*=UTF-8''${encodeURIComponent(meta.filename || 'attachment')}`,
+  );
+  res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+  res.removeHeader('X-Frame-Options');
+
+  await recordAttachment(req, AUDIT_ACTIONS.ATTACHMENT_DOWNLOADED, meta, { messageId });
+  return res.send(buffer);
+}
+
 async function serveFile(req, res, next) {
   try {
-    const meta = await store.getMetadata(req.params.id);
-    if (!meta) {
-      return res.status(HTTP_STATUS.NOT_FOUND).json({ error: 'Attachment not found', attachmentId: req.params.id });
-    }
-
-    let buffer;
-    try {
-      buffer = await store.readBytes(req.params.id);
-    } catch {
-      return res
-        .status(HTTP_STATUS.NOT_FOUND)
-        .json({ error: 'Attachment bytes are unavailable', attachmentId: req.params.id });
-    }
-
-    const disposition = req.query.download ? 'attachment' : 'inline';
-    const asciiName = (meta.filename || 'attachment').replace(/[^\x20-\x7E]/g, '_').replace(/"/g, "'");
-
-    res.setHeader('Content-Type', meta.mimeType || 'application/octet-stream');
-    res.setHeader('Content-Length', String(buffer.length));
-    res.setHeader(
-      'Content-Disposition',
-      `${disposition}; filename="${asciiName}"; filename*=UTF-8''${encodeURIComponent(meta.filename || 'attachment')}`,
-    );
-    res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
-    res.removeHeader('X-Frame-Options');
-
-    await recordAttachment(req, AUDIT_ACTIONS.ATTACHMENT_DOWNLOADED, meta);
-    res.send(buffer);
+    await sendAttachment(req, res, req.params.id);
   } catch (error) {
     next(error);
   }
 }
 
-export { uploadMiddleware, uploadFiles, getMeta, serveFile };
+export { uploadMiddleware, uploadFiles, getMeta, serveFile, sendAttachment };

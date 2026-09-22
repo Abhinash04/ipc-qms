@@ -1,6 +1,11 @@
-import { useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Link } from "react-router-dom";
+import { useEffect, useState } from "react";
+import {
+  useQuery,
+  useMutation,
+  useQueryClient,
+  keepPreviousData,
+} from "@tanstack/react-query";
+import { Link, useNavigate } from "react-router-dom";
 import {
   MailIcon,
   RefreshCwIcon,
@@ -12,12 +17,15 @@ import {
   X,
   Ban,
   PaperclipIcon,
+  Search,
+  CloudDownload,
 } from "lucide-react";
 
 import { Breadcrumb } from "@/components/common/Breadcrumb";
 import { PageHeader } from "@/components/common/PageHeader";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Tooltip,
   TooltipProvider,
@@ -35,52 +43,46 @@ import {
   fetchMailboxMessages,
   fetchMailboxDecisions,
   deleteMailboxMessage,
+  syncMailbox,
 } from "@/services/api/mailboxService";
 import { notify } from "@/services/notify";
+import {
+  parseSender,
+  formatReceived,
+  toSnippet,
+} from "@/utils/mailboxFormat";
 import { buildPath } from "@/constants/routePaths";
 import { useAuthStore } from "@/store/useAuthStore";
 import { ROLE_SLUG } from "@/constants/permissions";
+import { cn } from "@/utils/cn";
 
 const AUTO_REFRESH_MS = 15000;
+/** While a NICeMail sync is reading the live inbox, its mail appears as it lands. */
+const SYNC_POLL_MS = 3000;
+const PAGE_SIZE = 50;
+const SEARCH_DEBOUNCE_MS = 300;
+
+/** `awaiting` is the list's `unreadOnly`: not yet accepted or rejected. */
+const MAIL_FILTERS = [
+  { awaiting: false, label: "All mail" },
+  { awaiting: true, label: "Awaiting" },
+];
+
+/** `value`, once it has stopped changing for `ms`. No timer runs until it changes. */
+function useDebouncedValue(value, ms) {
+  const [debounced, setDebounced] = useState(value);
+
+  useEffect(() => {
+    if (value === debounced) return undefined;
+    const timer = setTimeout(() => setDebounced(value), ms);
+    return () => clearTimeout(timer);
+  }, [value, debounced, ms]);
+
+  return debounced;
+}
 
 /** Column template shared by the header strip and every row. */
 const ROW_GRID = "xl:grid-cols-[60px_220px_1fr_200px_160px_150px]";
-
-/** "Jane Doe <jane@x.gov>" split into its display name and address. */
-function parseSender(from) {
-  if (!from) return { name: "Unknown Sender", email: "", initials: "M" };
-
-  const name = from.split("<")[0].trim() || "Unknown Sender";
-  const email = from.includes("<")
-    ? from.split("<")[1].replace(">", "").trim()
-    : "";
-  const initials =
-    name
-      .split(" ")
-      .map((n) => n[0])
-      .join("")
-      .slice(0, 2)
-      .toUpperCase() || "M";
-
-  return { name, email, initials };
-}
-
-function formatReceived(receivedAt) {
-  const date = receivedAt ? new Date(receivedAt) : new Date();
-  return {
-    date: date.toLocaleDateString("en-GB", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-    }),
-    time: date.toLocaleTimeString("en-US", {
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-      hour12: true,
-    }),
-  };
-}
 
 /**
  * One line summarising the last mailbox check.
@@ -126,6 +128,9 @@ function describeAccept(result, message) {
   const ackUnconfirmed = (result.errors || []).some(
     (entry) => entry.step === "acknowledgement" && entry.unconfirmed,
   );
+  // The server's own reason, which names the step the send stopped at.
+  const ackError = (result.errors || []).find((entry) => entry.step === "acknowledgement")?.error;
+  const reason = ackError ? ` Acknowledgement: ${ackError}` : "";
 
   if (result.acknowledged) done.push(`acknowledgement sent to ${sender}`);
   else failed.push(ackUnconfirmed ? "acknowledgement may already have been sent" : "acknowledgement not sent");
@@ -140,21 +145,26 @@ function describeAccept(result, message) {
   if (!failed.length) return `${sentence}.`;
 
   return ackUnconfirmed
-    ? `${sentence}. The case is saved — check the NICeMail Sent folder before retrying, or ${sender} may receive the acknowledgement twice.`
-    : `${sentence}. The case is saved — retry from the case page.`;
+    ? `${sentence}. The case is saved — check the NICeMail Sent folder before retrying, or ${sender} may receive the acknowledgement twice.${reason}`
+    : `${sentence}. The case is saved — retry from the case page.${reason}`;
 }
 
 /**
- * The NICeMail browser mailbox could not be read.
+ * The mailbox could not be read — the list is whatever was last seen.
  *
- * That mailbox is filled by an agent reading a signed-in NICeMail tab, and a
- * failed read does not fail the inbox request — the server answers 200 with
- * whatever it already stored and reports the failure in `sync`. Nothing showed
- * it, so a closed Chrome, an expired session or uncalibrated selectors all
- * looked exactly like an empty inbox. Only the NICeMail Front Office's
- * response carries `sync`, so this never appears for any other mailbox.
+ * Two mailboxes report this. The NICeMail one is filled by an agent reading a
+ * signed-in Chrome tab, and a failed read is answered 200 with whatever was
+ * already stored plus a `sync` that says why. A Gmail poll that cannot reach
+ * Google answers 503 and reports the outage the same way, since the last
+ * listing is still on screen and still worth showing.
+ *
+ * Standing here rather than in a toast is the point: an outage lasts as long as
+ * it lasts, and one banner that clears itself beats a toast every thirty
+ * seconds that does not.
  */
-function NicemailSyncNotice({ sync }) {
+function MailboxSyncNotice({ sync }) {
+  const since = sync.since ? new Date(sync.since).toLocaleTimeString() : null;
+
   return (
     <div
       role="alert"
@@ -163,19 +173,22 @@ function NicemailSyncNotice({ sync }) {
       <ShieldAlert className="h-6 w-6 text-amber-600 shrink-0 mt-0.5" />
       <div>
         <p className="font-bold text-[14px] text-amber-900">
-          NICeMail could not be read — this list may be out of date
+          The mailbox could not be read — this list may be out of date
         </p>
         <p className="mt-1 text-[12.5px] font-medium text-amber-800 leading-relaxed">
-          {sync.error || "The last NICeMail sync failed."}
-          {sync.stage ? ` (stage: ${sync.stage})` : ""} Check that the dedicated Chrome
-          is running with NICeMail signed in — see docs/NIC_BROWSER_AGENT.md.
+          {sync.error || "The last mailbox sync failed."}
+          {sync.stage ? ` (stage: ${sync.stage})` : ""}
+          {since ? ` Failing since ${since}` : ""}
+          {sync.failures > 1 ? `, ${sync.failures} attempts` : ""}. Checks continue
+          automatically; for NICeMail, confirm the dedicated Chrome is running and
+          signed in — see docs/NIC_BROWSER_AGENT.md.
         </p>
       </div>
     </div>
   );
 }
 
-function MailboxOfflineNotice() {
+function MailboxOfflineNotice({ reason }) {
   return (
     <div
       role="alert"
@@ -187,8 +200,11 @@ function MailboxOfflineNotice() {
           Mailbox server offline / unreachable
         </p>
         <p className="mt-1 text-[12.5px] font-medium text-rose-700 leading-relaxed">
-          Could not connect to the backend mailbox service. Please verify backend
-          is running (`npm start` in `/backend`).
+          {/* The server's own reason when it gave one — a credential Gmail
+              refused says something quite different from a backend that is not
+              running, and the Front Officer can act on only one of them. */}
+          {reason ||
+            'Could not connect to the backend mailbox service. Please verify backend is running (`npm start` in `/backend`).'}
         </p>
       </div>
     </div>
@@ -204,7 +220,15 @@ function MailboxCheckSummary({ result }) {
   );
 }
 
-function InboxActions({ autoRefresh, onAutoRefreshChange, running, onCheck }) {
+function InboxActions({
+  autoRefresh,
+  onAutoRefreshChange,
+  running,
+  onCheck,
+  canSync,
+  syncing,
+  onSync,
+}) {
   return (
     <div className="flex items-center gap-3">
       <div className="flex items-center gap-2 bg-[#f1f5fa] border border-white px-3.5 py-2 rounded-2xl shadow-[inset_2px_2px_4px_#d0d7e5,inset_-2px_-2px_4px_#ffffff]">
@@ -230,7 +254,131 @@ function InboxActions({ autoRefresh, onAutoRefreshChange, running, onCheck }) {
         <RefreshCwIcon className={`h-4 w-4 ${running ? "animate-spin" : ""}`} />
         <span>{running ? "Checking Mailbox…" : "Check IPC Mailbox"}</span>
       </button>
+
+      {/* NICeMail only: every other mailbox is read live on each listing. */}
+      {canSync && (
+        <button
+          type="button"
+          onClick={onSync}
+          disabled={syncing}
+          className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 px-4 py-2.5 text-[13.5px] font-bold shadow-sm active:scale-95 transition-transform cursor-pointer disabled:opacity-60"
+        >
+          <CloudDownload
+            className={`h-4 w-4 ${syncing ? "animate-pulse" : ""}`}
+            aria-hidden="true"
+          />
+          <span>{syncing ? "Syncing…" : "Sync now"}</span>
+        </button>
+      )}
     </div>
+  );
+}
+
+/** Search and the awaiting filter, both answered by the server. */
+function InboxToolbar({ search, onSearchChange, awaiting, onAwaitingChange }) {
+  return (
+    <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-5">
+      <div role="search" className="relative flex-1">
+        <label htmlFor="mailbox-search" className="sr-only">
+          Search mail
+        </label>
+        <Search
+          className="absolute left-4 top-1/2 -translate-y-1/2 h-4.5 w-4.5 text-slate-400"
+          aria-hidden="true"
+        />
+        <input
+          id="mailbox-search"
+          type="search"
+          maxLength={200}
+          value={search}
+          onChange={(e) => onSearchChange(e.target.value)}
+          placeholder="Search sender, subject or message text…"
+          className="w-full rounded-2xl bg-slate-50/70 border border-slate-200/70 pl-11 pr-4 py-3 text-[13.5px] font-medium text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors"
+        />
+      </div>
+
+      <div
+        role="group"
+        aria-label="Filter mail"
+        className="flex self-start sm:self-auto bg-slate-100/80 p-1 rounded-xl shrink-0"
+      >
+        {MAIL_FILTERS.map((filter) => (
+          <button
+            key={filter.label}
+            type="button"
+            aria-pressed={awaiting === filter.awaiting}
+            onClick={() => onAwaitingChange(filter.awaiting)}
+            className={cn(
+              "px-3 py-1.5 text-[12px] font-bold rounded-lg transition-colors cursor-pointer",
+              awaiting === filter.awaiting
+                ? "bg-white text-slate-800 shadow-sm"
+                : "text-slate-500 hover:text-slate-700",
+            )}
+          >
+            {filter.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** Shown until the first answer, so an inbox still loading never reads as empty. */
+function InboxSkeleton() {
+  return (
+    <div role="status" aria-label="Loading mail" className="space-y-3">
+      {[0, 1, 2].map((n) => (
+        <Skeleton key={n} className="h-19 w-full rounded-2xl" />
+      ))}
+    </div>
+  );
+}
+
+function NoMatchingMail() {
+  return (
+    <div className="py-12 px-4 text-center rounded-2xl border border-dashed border-slate-200/90 bg-slate-50/50">
+      <h3 className="font-heading text-[16px] font-extrabold text-slate-800 m-0">
+        No messages match
+      </h3>
+      <p className="text-[13px] font-medium text-slate-400 m-0 mt-1">
+        Try another search, or show all mail.
+      </p>
+    </div>
+  );
+}
+
+function InboxPager({ offset, shown, total, onPage }) {
+  if (!(total > PAGE_SIZE || offset > 0)) return null;
+
+  return (
+    <nav
+      aria-label="Mailbox pages"
+      className="mt-5 flex flex-wrap items-center justify-between gap-3"
+    >
+      <p className="m-0 text-[12.5px] font-bold text-slate-500">
+        {shown
+          ? `Showing ${offset + 1}–${offset + shown} of ${total}`
+          : "No messages on this page"}
+      </p>
+      <div className="flex items-center gap-2">
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={offset === 0}
+          onClick={() => onPage(Math.max(0, offset - PAGE_SIZE))}
+        >
+          Previous
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={offset + PAGE_SIZE >= total}
+          onClick={() => onPage(offset + PAGE_SIZE)}
+        >
+          Next
+        </Button>
+      </div>
+    </nav>
   );
 }
 
@@ -481,6 +629,7 @@ const railColour = (known, rejected) => {
 function MailboxRow({
   message,
   index,
+  openPath,
   known,
   queryId,
   detailPath,
@@ -495,13 +644,34 @@ function MailboxRow({
   onCancelDecision,
   onConfirmDecision,
 }) {
+  const navigate = useNavigate();
   const sender = parseSender(message.from);
   const received = formatReceived(message.receivedAt);
   const rejected = decision?.decision === "REJECTED";
+  // `null` is a mailbox that keeps no read state, which is not the same as unread.
+  const unread = message.isRead === false;
+
+  /**
+   * Anywhere on the row opens the message, except a click meant for a control
+   * inside it, one that ends a text selection, or one on a tooltip, which
+   * React bubbles here out of its portal. The subject link is the keyboard
+   * way in.
+   */
+  const openFromRow = (event) => {
+    if (
+      !event.currentTarget.contains(event.target) ||
+      event.target.closest('a, button, input, [role="button"]') ||
+      window.getSelection()?.toString()
+    ) {
+      return;
+    }
+    navigate(openPath);
+  };
 
   return (
     <div
-      className={`group relative flex flex-col xl:grid ${ROW_GRID} items-start xl:items-center gap-3 xl:gap-4 bg-white rounded-2xl border border-slate-200/70 p-4 shadow-2xs hover:shadow-md hover:border-purple-300 transition-[border-color,box-shadow] duration-200`}
+      onClick={openFromRow}
+      className={`group relative flex flex-col xl:grid ${ROW_GRID} items-start xl:items-center gap-3 xl:gap-4 ${unread ? "bg-blue-50/40" : "bg-white"} rounded-2xl border border-slate-200/70 p-4 shadow-2xs hover:shadow-md hover:border-purple-300 transition-[border-color,box-shadow] duration-200 cursor-pointer`}
     >
       <div
         className={`absolute left-0 top-0 bottom-0 w-1.5 rounded-l-2xl ${railColour(known, rejected)}`}
@@ -515,11 +685,18 @@ function MailboxRow({
 
       <div className="flex items-center justify-between xl:justify-start w-full xl:w-auto gap-3 min-w-0">
         <div className="flex items-center gap-3 min-w-0">
-          <div className="flex h-9.5 w-9.5 shrink-0 items-center justify-center rounded-xl bg-purple-50 text-purple-700 font-extrabold text-[12px] border border-purple-100">
+          <div className="relative flex h-9.5 w-9.5 shrink-0 items-center justify-center rounded-xl bg-purple-50 text-purple-700 font-extrabold text-[12px] border border-purple-100">
             {sender.initials}
+            {unread && (
+              <span
+                className="absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full bg-blue-600 ring-2 ring-white"
+                aria-hidden="true"
+              />
+            )}
           </div>
           <div className="min-w-0">
             <div className="text-[13.5px] font-extrabold text-slate-900 truncate">
+              {unread && <span className="sr-only">Unread </span>}
               {sender.name}
             </div>
             {sender.email && (
@@ -544,9 +721,12 @@ function MailboxRow({
         <TooltipProvider>
           <Tooltip>
             <TooltipTrigger asChild>
-              <div className="text-[14px] font-extrabold text-slate-900 truncate group-hover:text-purple-700 transition-colors cursor-pointer">
+              <Link
+                to={openPath}
+                className="block text-[14px] font-extrabold text-slate-900 truncate group-hover:text-purple-700 transition-colors"
+              >
                 {message.subject || "(No Subject)"}
-              </div>
+              </Link>
             </TooltipTrigger>
             <TooltipContent className="max-w-100 wrap-break-word">
               {message.subject}
@@ -555,7 +735,9 @@ function MailboxRow({
         </TooltipProvider>
         <div className="flex items-center gap-1.5 text-[11.5px] font-medium text-slate-400 mt-0.5">
           <MailIcon className="h-3.5 w-3.5 text-purple-500 shrink-0" />
-          <span className="truncate">Email Enquiry</span>
+          <span className="truncate">
+            {toSnippet(message.body) || "Email Enquiry"}
+          </span>
           {message.attachments?.length > 0 && (
             <span className="ml-1 inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[10.5px] font-bold text-slate-500">
               <PaperclipIcon className="h-3 w-3" aria-hidden="true" />
@@ -613,7 +795,7 @@ function MailboxRow({
   );
 }
 
-function MailboxFeedCard({ messages, deleteMessage, children }) {
+function MailboxFeedCard({ count, deleteMessage, children }) {
   return (
     <div className="glass-panel aurora-panel bento-card rounded-[30px] border border-white/80 p-6 sm:p-7 shadow-lg bg-white/95 backdrop-blur-xl">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 mb-5 border-b border-slate-100/80">
@@ -635,7 +817,7 @@ function MailboxFeedCard({ messages, deleteMessage, children }) {
         <div className="flex items-center gap-2 self-start sm:self-center shrink-0">
           <span className="inline-flex items-center gap-2 rounded-full bg-blue-50 px-4 py-1.5 text-[12.5px] font-extrabold text-blue-700 border border-blue-200/60 shadow-2xs">
             <span className="h-2 w-2 rounded-full bg-blue-600 animate-pulse" />
-            {messages.length} Message{messages.length === 1 ? "" : "s"} Total
+            {count} Message{count === 1 ? "" : "s"} Total
           </span>
         </div>
       </div>
@@ -665,19 +847,69 @@ export function MailboxInboxPage() {
   const { running, error, lastResult, accept, reject, checkMailbox } =
     useMailboxIngestion();
 
-  const [autoRefresh, setAutoRefresh] = useState(false);
+  /**
+   * On by default, because the NICeMail mailbox fills itself in the background.
+   * A listing kicks off the sync that reads the live inbox and answers with
+   * what was already stored — so the messages that sync finds appear on the
+   * NEXT poll. With auto-refresh off there is no next poll: the page showed
+   * "No Mail in the IPC Mailbox" beside a toast saying three were waiting,
+   * until someone pressed Check twice.
+   */
+  const [autoRefresh, setAutoRefresh] = useState(true);
   // `{ id, action }`, not a bare id: accept, reject and delete each confirm, and
   // a single id would let one row's confirmation open another's.
   const [confirming, setConfirming] = useState(null);
   const [deciding, setDeciding] = useState(false);
+  const [search, setSearch] = useState("");
+  const [awaiting, setAwaiting] = useState(false);
+  const [offset, setOffset] = useState(0);
+  const q = useDebouncedValue(search.trim(), SEARCH_DEBOUNCE_MS);
 
   const queryClient = useQueryClient();
 
+  /**
+   * One page at a time, searched and filtered by the server: the NICeMail
+   * store only grows, and filtering one page here would miss the rest.
+   * The previous page stays on screen while the next one loads.
+   */
   const inbox = useQuery({
-    queryKey: ["mailbox", "all"],
-    queryFn: () => fetchMailboxMessages({ unreadOnly: false }),
+    queryKey: ["mailbox", "list", { q, awaiting, offset }],
+    queryFn: () =>
+      fetchMailboxMessages({ unreadOnly: awaiting, q, limit: PAGE_SIZE, offset }),
+    placeholderData: keepPreviousData,
     retry: false,
-    refetchInterval: autoRefresh ? AUTO_REFRESH_MS : false,
+    refetchInterval: (query) => {
+      // A failed read keeps the last answer, which may still say `running`.
+      if (query.state.status !== "error" && query.state.data?.sync?.running) {
+        return SYNC_POLL_MS;
+      }
+      return autoRefresh ? AUTO_REFRESH_MS : false;
+    },
+  });
+
+  /**
+   * NICeMail is read in the background (202), so the answer only says whether
+   * a sync started; the list then polls while `sync.running` is true.
+   */
+  const syncNow = useMutation({
+    mutationFn: () => syncMailbox(),
+    onSuccess: ({ started }) => {
+      notify.info(
+        started ? "NICeMail sync started" : "NICeMail is already syncing",
+        started
+          ? "New mail appears here as it is read."
+          : "A sync is running or has just finished.",
+        { id: "mailbox-sync" },
+      );
+      queryClient.invalidateQueries({ queryKey: ["mailbox", "list"] });
+    },
+    onError: (failure) => {
+      notify.error(
+        "Could not start a NICeMail sync",
+        failure?.response?.data?.error || failure?.message,
+        { id: "mailbox-sync" },
+      );
+    },
   });
 
   /**
@@ -700,7 +932,27 @@ export function MailboxInboxPage() {
   });
 
   const messages = inbox.data?.messages || [];
-  const loadError = inbox.isError ? inbox.error?.message : null;
+
+  /**
+   * The last row on a later page went — accepted, rejected or deleted — so
+   * step back to a page that has some, rather than show an empty inbox. Set
+   * while rendering, as React advises for state that follows other state.
+   */
+  if (!inbox.isPlaceholderData && inbox.data && !messages.length && offset > 0) {
+    setOffset(Math.max(0, offset - PAGE_SIZE));
+  }
+
+  /**
+   * A failed read still has something to say. The server answers a mailbox it
+   * cannot reach with 503 and the reason, and react-query keeps the last good
+   * listing on screen — so the page shows that listing with a banner saying it
+   * may be stale, rather than an empty inbox and a toast.
+   */
+  const loadFailure = inbox.isError
+    ? (inbox.error?.response?.data ?? { error: inbox.error?.message })
+    : null;
+  const loadError = loadFailure?.error || null;
+  const syncFailure = [inbox.data?.sync, loadFailure?.sync].find((sync) => sync?.ok === false) || null;
 
   const decisionFor = (mailboxMessageId) =>
     (decisions.data?.decisions || []).find(
@@ -765,6 +1017,18 @@ export function MailboxInboxPage() {
     emailMessages.find((m) => m.sourceMessageId === mailboxMessageId)
       ?.queryId || null;
 
+  const onSearchChange = (value) => {
+    setSearch(value);
+    setOffset(0);
+  };
+
+  const onAwaitingChange = (value) => {
+    setAwaiting(value);
+    setOffset(0);
+  };
+
+  const filtered = Boolean(q) || awaiting;
+
   const getQueryDetailPath = (queryId) => {
     if (paths.QUERY_DETAIL) {
       return buildPath(paths.QUERY_DETAIL, { queryId });
@@ -792,36 +1056,62 @@ export function MailboxInboxPage() {
             onAutoRefreshChange={setAutoRefresh}
             running={running}
             onCheck={checkNow}
+            canSync={inbox.data?.backend === "nic-browser"}
+            syncing={syncNow.isPending || Boolean(inbox.data?.sync?.running)}
+            onSync={() => syncNow.mutate()}
           />
         }
       />
 
-      {(error || loadError) && <MailboxOfflineNotice />}
+      {(error || loadError) && !syncFailure && <MailboxOfflineNotice reason={loadError} />}
 
-      {inbox.data?.sync?.ok === false && <NicemailSyncNotice sync={inbox.data.sync} />}
+      {syncFailure && <MailboxSyncNotice sync={syncFailure} />}
 
       {lastResult?.fetched !== undefined && !error && (
         <MailboxCheckSummary result={lastResult} />
       )}
 
-      <MailboxFeedCard messages={messages} deleteMessage={deleteMessage}>
-        {messages.length === 0 ? (
-          <EmptyInbox />
+      <MailboxFeedCard
+        count={inbox.data?.total ?? messages.length}
+        deleteMessage={deleteMessage}
+      >
+        <InboxToolbar
+          search={search}
+          onSearchChange={onSearchChange}
+          awaiting={awaiting}
+          onAwaitingChange={onAwaitingChange}
+        />
+
+        {inbox.isPending ? (
+          <InboxSkeleton />
+        ) : messages.length === 0 ? (
+          filtered ? <NoMatchingMail /> : <EmptyInbox />
         ) : (
-          <div>
+          <div
+            aria-busy={inbox.isPlaceholderData}
+            className={inbox.isPlaceholderData ? "opacity-60" : undefined}
+          >
             <MailboxColumnHeader />
 
             <div className="space-y-3">
               {messages.map((message, index) => {
-                const queryId = queryIdFor(message.mailboxMessageId);
+                // The server's link wins; the store lookup covers a mailbox
+                // whose answer does not carry one.
+                const queryId =
+                  message.linkedCase?.queryId ||
+                  queryIdFor(message.mailboxMessageId);
                 const known =
-                  queryId && queries.some((q) => q.queryId === queryId);
+                  Boolean(message.linkedCase) ||
+                  (queryId && queries.some((q) => q.queryId === queryId));
 
                 return (
                   <MailboxRow
                     key={message.mailboxMessageId}
                     message={message}
-                    index={index}
+                    index={offset + index}
+                    openPath={buildPath(paths.INBOX_DETAIL, {
+                      messageId: encodeURIComponent(message.mailboxMessageId),
+                    })}
                     known={known}
                     queryId={queryId}
                     detailPath={
@@ -862,6 +1152,13 @@ export function MailboxInboxPage() {
             </div>
           </div>
         )}
+
+        <InboxPager
+          offset={offset}
+          shown={messages.length}
+          total={inbox.data?.total}
+          onPage={setOffset}
+        />
       </MailboxFeedCard>
     </div>
   );

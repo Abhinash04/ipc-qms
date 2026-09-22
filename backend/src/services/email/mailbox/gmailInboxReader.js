@@ -256,43 +256,142 @@ async function deliver() {
 }
 
 /**
+ * A parsed message, kept so the next poll need not fetch it again.
+ *
+ * A Gmail message's content never changes; only its labels do, and read/unread
+ * is taken from a search below rather than from the message. Polling used to
+ * cost one search plus one fetch per message plus a re-download of every
+ * attachment — 26 requests and a re-fetch of the same bytes every 30 seconds,
+ * which on a flaky DNS took 30-46 s and failed far more often than one request
+ * would. A steady-state poll now costs two searches.
+ *
+ * Bounded, oldest evicted first, and process-local: losing it costs one refetch.
+ */
+const MESSAGE_CACHE_LIMIT = 500;
+const messageCache = new Map();
+
+function cachedMessage(id) {
+  const hit = messageCache.get(id);
+  if (!hit) return null;
+  // Re-inserting makes the map least-recently-used ordered.
+  messageCache.delete(id);
+  messageCache.set(id, hit);
+  return hit;
+}
+
+function rememberMessage(id, message) {
+  messageCache.set(id, message);
+  if (messageCache.size > MESSAGE_CACHE_LIMIT) {
+    messageCache.delete(messageCache.keys().next().value);
+  }
+}
+
+/** Forget what is cached — for tests, and for a mailbox switch. */
+export function resetCache() {
+  messageCache.clear();
+  inFlight.clear();
+}
+
+/**
+ * How many message fetches may be in the air at once.
+ *
+ * Unbounded `Promise.all` over 25 ids opens 25 sockets, each needing its own
+ * DNS lookup, through libuv's four-thread resolver pool. That is how one slow
+ * resolver turned a poll into 46 seconds.
+ */
+const FETCH_CONCURRENCY = 4;
+
+async function mapWithLimit(items, limit, worker) {
+  const results = new Array(items.length);
+  let next = 0;
+
+  const runners = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (next < items.length) {
+      const index = next++;
+      results[index] = await worker(items[index]);
+    }
+  });
+
+  await Promise.all(runners);
+  return results;
+}
+
+/**
+ * One read at a time per query.
+ *
+ * Two pollers watch this mailbox — the background count and the inbox page —
+ * and both land on the same searches. Sharing one in-flight read halves the
+ * Gmail calls and stops two slow reads queueing behind each other.
+ */
+const inFlight = new Map();
+
+/**
  * `client` is the test seam — the same injection pattern used for the dispatch
  * and forward senders. Production callers never pass it.
  */
 async function list(recipient, { unreadOnly = false, max = 25, client = null } = {}) {
+  const key = `${String(recipient || '').toLowerCase()}|${unreadOnly}|${max}`;
+  const running = inFlight.get(key);
+  if (running) return running;
+
+  const work = readInbox(recipient, { unreadOnly, max, client }).finally(() => inFlight.delete(key));
+  inFlight.set(key, work);
+  return work;
+}
+
+async function readInbox(recipient, { unreadOnly, max, client }) {
   const gmail = client || getGmailClient(ROLE);
   const address = recipient || identityForRole(ROLE)?.email;
 
-  const listed = await gmail.users.messages.list({
-    userId: 'me',
-    q: inboxQuery({ unreadOnly }),
-    maxResults: max,
-  });
+  /**
+   * Two searches, not one fetch per message: which messages are in the inbox,
+   * and which of them are unread. Read/unread is the only thing about a message
+   * that changes, so it is the only thing worth asking for every time.
+   */
+  const [listed, unreadListed] = await Promise.all([
+    gmail.users.messages.list({ userId: 'me', q: inboxQuery({ unreadOnly }), maxResults: max }),
+    unreadOnly
+      ? null
+      : gmail.users.messages.list({ userId: 'me', q: inboxQuery({ unreadOnly: true }), maxResults: max }),
+  ]);
 
-  const ids = listed.data.messages || [];
-  const messages = await Promise.all(
-    ids.map(async ({ id }) => {
-      const full = await gmail.users.messages.get({ userId: 'me', id, format: 'full' });
-      return toMailboxMessage(full.data, address);
-    }),
+  const ids = (listed.data.messages || []).map(({ id }) => id);
+  const unread = new Set(
+    unreadOnly ? ids : (unreadListed?.data.messages || []).map(({ id }) => id),
   );
 
-  const eligible = messages
-    // Never hand back mail that was not addressed to the Front Officer,
-    // whatever the search returned. The Gmail query is the first filter, this
-    // is the binding one.
-    .filter(isEligibleEnquiry)
-    // Oldest first, matching the other stores' insertion ordering.
-    .sort((a, b) => new Date(a.receivedAt) - new Date(b.receivedAt));
+  const messages = await mapWithLimit(ids, FETCH_CONCURRENCY, async (id) => {
+    const hit = cachedMessage(id);
+    if (hit) return hit;
 
-  // Bytes are only downloaded for mail that may actually open a case — after
-  // eligibility filtering, not before.
-  return Promise.all(
-    eligible.map(async (message) => {
-      if (!message.attachments?.length) return message;
-      const materialised = await materialiseAttachments(gmail, message.providerMessageId, message.attachments);
-      return { ...message, attachments: materialised };
-    }),
+    const full = await gmail.users.messages.get({ userId: 'me', id, format: 'full' });
+    const message = toMailboxMessage(full.data, address);
+
+    // Bytes are downloaded once per message, and only for mail that may
+    // actually open a case — after the eligibility gate, not before.
+    const stored =
+      isEligibleEnquiry(message) && message.attachments?.length
+        ? {
+            ...message,
+            attachments: await materialiseAttachments(gmail, message.providerMessageId, message.attachments),
+          }
+        : message;
+
+    rememberMessage(id, stored);
+    return stored;
+  });
+
+  return (
+    messages
+      // Never hand back mail that was not addressed to the Front Officer,
+      // whatever the search returned. The Gmail query is the first filter, this
+      // is the binding one.
+      .filter(isEligibleEnquiry)
+      // Read/unread comes from the search, so a cached message is never stale
+      // about the one thing that moves.
+      .map((message) => ({ ...message, ingested: !unread.has(message.providerMessageId) }))
+      // Oldest first, matching the other stores' insertion ordering.
+      .sort((a, b) => new Date(a.receivedAt) - new Date(b.receivedAt))
   );
 }
 

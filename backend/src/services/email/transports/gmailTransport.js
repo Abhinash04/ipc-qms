@@ -2,8 +2,25 @@ import { google } from 'googleapis';
 import { randomBytes } from 'crypto';
 import env from '../../../config/env.js';
 import { identityForRole, IDENTITY_ROLES } from '../../../config/identities.js';
+import { DELIVERY, errorCode, errorStatus, labelDelivery } from '../delivery.js';
 
 const clients = new Map();
+
+/**
+ * Every Gmail call gives up after this long. Without a ceiling a request stalls
+ * for as long as the operating system's DNS retries last — the live test showed
+ * 22.9 s sends and 46 s inbox reads while a Wi-Fi resolver was failing. A send
+ * that times out is treated as UNCERTAIN by the outbox and checked against the
+ * Sent folder before anything is sent again; the outbox's lease is longer than
+ * this so a slow send can never be mistaken for a dead one.
+ */
+export const GMAIL_TIMEOUT_MS = 30000;
+
+/**
+ * An absent message in the Sent folder proves nothing until Gmail's search
+ * index has caught up, which can take a few seconds after a send.
+ */
+const SENT_SEARCH_SETTLE_MS = 60000;
 
 export function getGmailClient(role = IDENTITY_ROLES.INQUIRER) {
   if (clients.has(role)) return clients.get(role);
@@ -35,7 +52,7 @@ export function getGmailClient(role = IDENTITY_ROLES.INQUIRER) {
   );
   auth.setCredentials({ refresh_token: identity.refreshToken });
 
-  const client = google.gmail({ version: 'v1', auth });
+  const client = google.gmail({ version: 'v1', auth, timeout: GMAIL_TIMEOUT_MS });
   clients.set(role, client);
   return client;
 }
@@ -64,6 +81,9 @@ function baseHeaders(message) {
     message.cc?.length ? `Cc: ${asList(message.cc)}` : null,
     message.bcc?.length ? `Bcc: ${asList(message.bcc)}` : null,
     `Subject: ${message.subject || '(no subject)'}`,
+    // Set by the outbox, one per attempt, so a send whose outcome is unknown
+    // can be looked up in the Sent folder — see `reconcile` below.
+    message.messageIdHeader ? `Message-ID: <${message.messageIdHeader}>` : null,
     'MIME-Version: 1.0',
   ].filter(Boolean);
 }
@@ -128,6 +148,19 @@ function isUnusableThread(error) {
   return status === 400 || status === 404;
 }
 
+/**
+ * gaxios attaches the request `config` to every error it raises. Such an error
+ * came from the network, where an error with no code and no status proves
+ * nothing about delivery — so it is labelled UNCERTAIN rather than left to be
+ * read as a local failure. Codes and statuses are classified in delivery.js.
+ */
+function labelHttpFailure(error) {
+  if (error && typeof error === 'object' && 'config' in error && !errorCode(error) && errorStatus(error) === null) {
+    return labelDelivery(error, DELIVERY.UNCERTAIN);
+  }
+  return error;
+}
+
 export async function send(
   message,
   { asRole = IDENTITY_ROLES.INQUIRER, client = null } = {},
@@ -146,10 +179,15 @@ export async function send(
     res = await attempt(message.providerThreadId);
   } catch (error) {
     // Threading is a presentation nicety; delivery is the job. Fall back to an
-    // unthreaded send rather than losing the message. Anything else is a real
-    // failure and stays loud.
-    if (!message.providerThreadId || !isUnusableThread(error)) throw error;
-    res = await attempt(null);
+    // unthreaded send rather than losing the message — the first attempt was
+    // refused outright, so nothing went out. Anything else is a real failure
+    // and stays loud.
+    if (!message.providerThreadId || !isUnusableThread(error)) throw labelHttpFailure(error);
+    try {
+      res = await attempt(null);
+    } catch (retryError) {
+      throw labelHttpFailure(retryError);
+    }
   }
 
   return {
@@ -158,6 +196,65 @@ export async function send(
     transport: 'gmail',
     sentAsRole: asRole,
   };
+}
+
+const headerOf = (payload, name) =>
+  (payload?.headers || []).find((h) => h.name.toLowerCase() === name.toLowerCase())?.value || '';
+
+/**
+ * Did an UNCERTAIN send actually go out? Asks the Front Office's own Sent folder.
+ *
+ * First by the Message-ID the outbox put on that attempt. Then, in case Gmail
+ * replaced the header, by recipient and time window, comparing each candidate's
+ * exact Subject — the case id is in every subject, and each case sends each
+ * kind of email once. Uses the read scope the inbox poll already needs.
+ *
+ * @returns {{ verdict: 'SENT'|'NOT_SENT'|'UNKNOWN', providerMessageId?, providerThreadId? }}
+ */
+export async function reconcile(
+  dispatch,
+  { asRole = IDENTITY_ROLES.FRONT_OFFICE, client = null, now = Date.now() } = {},
+) {
+  const gmail = client || getGmailClient(asRole);
+  const found = (message) => ({ verdict: 'SENT', providerMessageId: message.id, providerThreadId: message.threadId || null });
+
+  if (dispatch.rfcMessageId) {
+    const byId = await gmail.users.messages.list({
+      userId: 'me',
+      q: `in:sent rfc822msgid:${dispatch.rfcMessageId}`,
+      maxResults: 1,
+    });
+    const hit = byId.data.messages?.[0];
+    if (hit) return found(hit);
+  }
+
+  const startedAt = Date.parse(dispatch.attemptedAt || dispatch.createdAt || '') || now;
+  const recipient = dispatch.recipients?.[0];
+
+  if (recipient && dispatch.subject) {
+    const after = Math.floor((startedAt - 60000) / 1000);
+    const candidates = await gmail.users.messages.list({
+      userId: 'me',
+      q: `in:sent to:${recipient} after:${after}`,
+      maxResults: 10,
+    });
+
+    for (const candidate of candidates.data.messages || []) {
+      const meta = await gmail.users.messages.get({
+        userId: 'me',
+        id: candidate.id,
+        format: 'metadata',
+        metadataHeaders: ['Subject', 'Message-ID'],
+      });
+      const subject = headerOf(meta.data.payload, 'Subject');
+      const messageId = headerOf(meta.data.payload, 'Message-ID');
+      if (subject === dispatch.subject || (dispatch.rfcMessageId && messageId.includes(dispatch.rfcMessageId))) {
+        return found(candidate);
+      }
+    }
+  }
+
+  return { verdict: now - startedAt >= SENT_SEARCH_SETTLE_MS ? 'NOT_SENT' : 'UNKNOWN' };
 }
 
 export function reset() {

@@ -13,35 +13,40 @@ Intake is **N:1 with a human gate**. Anyone may write to the Front Office mailbo
 arriving mail is only *listed*. Nothing is registered until a Front Officer accepts it in the IPC
 Mailbox — and only the Front Office mailbox is authenticated, because it is the one account the
 system reads from and sends as. With `NIC_BROWSER_MAILBOX=true` a **second Front Office mailbox**,
-NICeMail, is read and sent from through a Chrome session the operator signs in to by hand; its
-selectors have never been calibrated against the live page, so that path is not yet usable — see
-the NIC browser-agent row and [Known Gaps](#known-gaps).
+NICeMail, is read and sent from through a Chrome session the operator signs in to by hand. Reading
+and composing are calibrated and verified against the live mailbox, and a send counts only once the
+message is found in NICeMail's Sent folder — see the NIC browser-agent row and
+[Known Gaps](#known-gaps).
 
 | Area | Status | Notes |
 |---|---|---|
 | Frontend shell & routing | ✅ Done | Role-namespaced routes (`/<role-slug>/<section>`) generated from the RBAC grant table; nav derived from the same table. |
 | Authentication | ✅ Done | `POST /auth/login` → JWT in an httpOnly cookie. `verifyToken` → `verifyRole`/`verifyAction` on the server; `ProtectedRoute` on the client. |
-| Backend API | ✅ Done | 36 route registrations across ten routers: health, auth, emails, mailbox, AI, attachments, NIC, audit, queries, pullback. |
+| Backend API | ✅ Done | 41 route registrations across ten routers: health, auth, emails, mailbox, AI, attachments, NIC, audit, queries, pullback. |
 | Persistence — server | ✅ Done | MongoDB via Mongoose. **Required in production** — the server exits rather than start unable to store anything. Degrades to memory in development for the mailbox and audit trail only. |
-| Persistence — cases | ✅ Done | 13 Mongoose models; the store syncs through `/api/v1/queries`. Cases are shared across users and browsers. |
+| Persistence — cases | ✅ Done | 14 Mongoose models; the store syncs through `/api/v1/queries`. Cases are shared across users and browsers. The `inquirer` on a case is write-once, and closure and outbound mail records are server-owned: a client delta that writes them is refused with 409. |
 | Request validation | ✅ Done | Zod schemas on `/queries/*`, `/queries/:id/pullback` and the mailbox decision/accept routes; unknown keys are stripped rather than written. |
 | Workflow state-transition engine | ✅ Done | Single-writer `applyTransition` guarantees one audit event per transition; dynamic review levels. |
 | Workflow validation | 🟡 Client-side | Role + state enforced centrally in the store. The server enforces the **role** half only — see [Known Gaps](#known-gaps). |
 | Email integration | ✅ Done | Enquiry from any external sender → Front Office mailbox → acknowledgement → forward → response dispatched automatically on final approval, on one thread. Three transports selectable by `EMAIL_TRANSPORT`: mock, Gmail, NICeMail SMTP — plus the NICeMail browser transport, chosen per case for cases from the NICeMail mailbox. Only the Front Office mailbox is authenticated. |
-| Final approval & dispatch | ✅ Done | **Granting final approval sends the response** — `POST /queries/:queryId/final-approval`, gated `verifyAction(FINAL_APPROVE)`, records the approval, emails the inquirer and closes the case (`FINAL_APPROVAL_GRANTED → RESPONSE_DISPATCHED → QUERY_CLOSED`). The server sends under the Front Office identity it already holds, so **no role gained `DISPATCH`**. The approval is written before any mail is attempted and the case closes only after a send that happened; a failed send stays at `READY_FOR_DISPATCH` with an `EMAIL_SEND_FAILED` row against the case, which the Front Office **Retry sending response** control recovers. A NICeMail send that was pressed but not confirmed is reported `unconfirmed`, and its audit row and Front Office notification say to check the NICeMail Sent folder before retrying. The Dispatch page is otherwise a status view. |
+| Final approval & dispatch | ✅ Done | **Granting final approval sends the response** — `POST /queries/:queryId/final-approval`, gated `verifyAction(FINAL_APPROVE)`, records the approval, emails the inquirer and closes the case (`FINAL_APPROVAL_GRANTED → RESPONSE_DISPATCHED → QUERY_CLOSED`). The server sends under the Front Office identity it already holds, so **no role gained `DISPATCH`**. The approval is an atomic state flip, so exactly one request records the decision; the send goes through the dispatch ledger, so exactly one email leaves. The approval is written before any mail is attempted and the case closes only after a send that happened; a failed send stays at `READY_FOR_DISPATCH` with an `EMAIL_SEND_FAILED` row, which **Retry sending response** recovers. An unconfirmed send is recorded `UNCERTAIN` and **blocks** the retry in favour of *It was sent* / *It was not sent*. |
 | Intake validation gate | ✅ Done | Arriving mail is listed, never registered. The Front Officer accepts (✓) or rejects (×) each message; reject creates nothing. **Accept is one server call** — `POST /mailbox/messages/:messageId/accept` mints the Case ID atomically, creates the case, records the decision, summarises the enquiry onto the case, acknowledges the sender **and forwards to the Officer-in-Charge**, landing at `PENDING_ASSIGNMENT`. Recorded in `MailboxDecision`; the first decision on a message wins. |
 | Attachments | ✅ Done | Upload, preview, download; **fail-closed** forwarding refuses to send if any file cannot be read. |
 | AI integration | ✅ Done | Pravah Gemma for summary/recommendation/drafting, grounded in an indexed IPC corpus, with a deterministic fallback the user is told about. The enquiry summary is generated once on accept and **stored** on the case with a `GENERATED` / `FALLBACK` / `FAILED` status, so the covering note and the case say the same thing. |
 | Audit trail | ✅ Done | Server-side, queryable, backing the Admin console. The actor is taken from the session, not the request body. Degrades to a bounded in-memory buffer without Mongo. |
 | Admin / Super Admin console | ✅ Done | Overview, audit trail, email activity, AI activity, roles; System Settings is Super-Admin-only. |
-| Notifications | ✅ Done | Sonner toasts wired to committed outcomes, never to button clicks. |
+| Notifications | ✅ Done | Sonner toasts wired to committed outcomes, never to button clicks. A provider outage produces **one** standing banner and one toast, not one per poll, and the poll backs off 1 → 2 → 5 minutes while it lasts. |
+| Outbound email idempotency | ✅ Done | Every case email — acknowledgement, forward, final response — is claimed in the `outboundemails` ledger under a unique `"${emailType}:${queryId}"` key before it is attempted, from intake, final approval and the retry buttons alike. A failure is classified `NOT_SENT` (safe to retry; one quick automatic retry for transient network errors) or `UNCERTAIN` (never retried automatically). Gmail reconciles `UNCERTAIN` against its Sent folder; anything it cannot settle is answered by a person through `POST /queries/:queryId/outbound/resolve`, audited either way. |
 | Case-level authorization | ❌ Not done | Role-level only. The records to check against now exist — this is unimplemented, no longer blocked. See [Known Gaps](#known-gaps). |
 | NIC email — IMAP/SMTP | 🟡 Credential | Endpoints reachable, transport implemented and selectable. Awaiting an application-specific password — see [NIC_EMAIL_PHASE0.md](./NIC_EMAIL_PHASE0.md). |
-| NIC email — browser agent | 🟡 Uncalibrated | Attaches to a Chrome session the operator signs in to by hand; lazily loaded, never blocks startup. With `NIC_BROWSER_MAILBOX=true` it is a **second Front Office mailbox**: a Front Office account (`USR-0014`) that signs in as `NIC_EMAIL` with `QMS_SEED_PASSWORD` (dev login refuses it) sees the NICeMail inbox, synced into MongoDB; each case records `sourceMailbox` at accept, server-side, and its acknowledgement, final response and their retries go out through the NICeMail tab, confined to the test recipient until `NIC_ALLOW_OUTBOUND=true`. **The selectors have never been run against the real NICeMail page**, so reading and sending cannot be relied on until `npm run nic:browser:discover` has been used to calibrate them. Open items: [Known Gaps](#known-gaps) 10; runbook [§17](./NIC_BROWSER_AGENT.md#17-two-front-office-mailboxes). |
+| NIC email — browser agent | 🟡 Attachments & threads uncalibrated | Attaches over raw CDP to a Chrome session the operator signs in to by hand, and works in a background tab of its own; lazily loaded, never blocks startup. With `NIC_BROWSER_MAILBOX=true` it is a **second Front Office mailbox**: a Front Office account (`USR-0014`) that signs in as `NIC_EMAIL` with `QMS_SEED_PASSWORD` (dev login refuses it) sees the NICeMail inbox, synced into MongoDB a message at a time, with search, paging, a message page (sandboxed HTML, attachments, linked case), QMS-local read state and **Sync now**; each case records `sourceMailbox` at accept, server-side, and its acknowledgement, final response and their retries go out through the NICeMail session, confined to the test recipient until `NIC_ALLOW_OUTBOUND=true`. **Reading is calibrated and verified live** with the read-only inspector `npm run nic:browser:discover`. **Composing is calibrated and verified live** (`npm run nic:browser:calibrate` plus one real test send, 2026-09-22). `composeEmail` checks the From account, the recipient chips, the subject and the body before Send. It counts a send only when the form has closed and the message is in the Sent folder. The attachment-reading keys and `ccToggle` stay in `UNCALIBRATED`, which the agent will not use until a live calibration takes them out. Open items: [Known Gaps](#known-gaps) 10; runbooks [§17](./NIC_BROWSER_AGENT.md#17-two-front-office-mailboxes). |
 | Transfer / pullback | 🟡 Gated off | Implemented in the store but disabled pending client answers — see below. |
 
-**Tests:** backend 589 across 44 files, frontend 787 across 42 files, plus a Playwright end-to-end
-suite in `frontend/e2e/`. Both unit suites lint-clean; the frontend build passes its bundle budget.
+**Tests:** backend 660 across 50 files, frontend 804 across 44 files, plus a Playwright end-to-end
+suite in `frontend/e2e/` — `lifecycle`, `mailboxAccept`, `twoInquirers` (two external inquirers
+carried through one mailbox, interleaved, to separate closures) and `dispatchIdempotency` (a held
+approval request, three concurrent API approvals, and a blocked delivery with its retry). Both unit
+suites lint-clean; the frontend build passes its bundle budget.
 
 ## Getting Started
 
@@ -96,7 +101,7 @@ Things that must be configured outside this repository. None of them can be fixe
 | A NICeMail application-specific password | `EMAIL_TRANSPORT=nic`, `nic:verify` | IMAP `Invalid credentials`, SMTP `535`. A webmail password is rejected under MFA by design |
 | Network reach to `*.mgovcloud.in:993/465` | NICeMail IMAP/SMTP | `nic:preflight` reports the endpoint as unreachable |
 | `NIC_ALLOW_OUTBOUND=true` | NICeMail mail to anyone but the test recipient | the transport refuses the send and names the variable |
-| A manually authenticated Chrome exposing CDP on `9222` | the NICeMail browser agent only | `nic:browser:discover` cannot connect; with `NIC_BROWSER_MAILBOX=true` the NICeMail Front Office's inbox shows **NICeMail could not be read**, and sends on NICeMail cases fail before anything is typed. **Never blocks the backend** |
+| A manually authenticated Chrome exposing CDP on `9222` | the NICeMail browser agent only | `nic:browser:discover` cannot connect; with `NIC_BROWSER_MAILBOX=true` the NICeMail Front Office's inbox shows **The mailbox could not be read**, and sends on NICeMail cases fail before anything is typed. **Never blocks the backend** |
 
 Verify each with the commands in [Verification](#verification).
 
@@ -146,8 +151,9 @@ cd frontend && npm run build:check
 # Specs live in frontend/e2e/, the config is frontend/playwright.config.js, and
 # the backend settings come from backend/.env.e2e (credential-free and committed
 # on purpose; JWT_SECRET and QMS_SEED_PASSWORD still come from backend/.env).
-# Playwright starts both servers itself — stop a hand-started backend first, or
-# it reuses that one along with whatever database and mail transport it holds.
+# Playwright starts both servers itself and refuses to adopt one it did not
+# start: a backend already on :5000 fails the run. Stop it first — that server
+# is usually pointed at the real database and a real mailbox.
 cd frontend && npx playwright test           # or: npm run test:e2e
 
 # IPC knowledge base — expect "412 chunks from 22 documents (238142 chars)".
@@ -188,6 +194,9 @@ docs/        This file, plus SRS, architecture, workflow, API — docs/README.md
 3. **The mailbox is a duck-typed seam** — mock, Mongo, Gmail-inbox and NICeMail IMAP implementations
    share one interface, selected at call time, so the same pipeline runs against a real inbox or a
    fake one; the NICeMail browser mailbox implements it too, and is chosen by who is signed in.
+   Going the other way, **every outbound case email is claimed in a ledger before it is sent** — a
+   unique key per case and email type — so however many tabs, officers or retries ask for it, the
+   inquirer is written to once.
 4. **AI answers are grounded** — enquiries are decomposed into questions, each matched against an
    indexed corpus of IPC guidance, and the model is given only that evidence; when it is unreachable
    a deterministic draft is produced and the user is told.
@@ -244,24 +253,22 @@ docs/        This file, plus SRS, architecture, workflow, API — docs/README.md
    and 16 unreferenced shadcn scaffold files.
 10. **The NICeMail browser mailbox has open items.** None is fixed; details in
     [NIC_BROWSER_AGENT.md §17](./NIC_BROWSER_AGENT.md#known-limitations--open).
-    - **Selectors are uncalibrated.** Nobody has run the agent against the real NICeMail page, so
-      every selector in `selectors.js` is a guess until `npm run nic:browser:discover` has been run
-      with the inbox open, a message open and a hand-opened compose window, and `selectors.js`
-      adjusted. Until then: the reader may not wait for the clicked message before reading it, and a
-      wrong read is stored permanently; the dedupe key is a DOM attribute of the inbox row, which may
-      not be NICeMail's own message id; recipients typed into compose are committed with Enter
-      (autocomplete) and not checked against the intended list; and the signed-in NICeMail account is
-      not checked against `NIC_EMAIL`.
-    - **Ingestion.** Each sync inspects at most `NIC_BROWSER_SYNC_MAX` rows and known rows count
-      against that budget, so a larger backlog can be missed. Nothing is stored until the whole sync
-      finishes. A message whose sender cannot be read is dropped without a trace, though its
-      attachments are already in the attachment store, unreferenced. A failed attachment
-      download is stored as a null id, and the forward refuses it permanently for that message.
-    - **Mailbox isolation is inbox-only.** In Mongo mode the primary Front Office or `SUPER_ADMIN` can
-      reach NICeMail messages by id with `?recipient=`, and the decision routes
-      (`/mailbox/messages/:id/decision`, `/mailbox/decisions`) are not scoped to a mailbox.
+    - **Attachments (reading) and threads are uncalibrated.** Reading the folder tree, the list rows,
+      the open message and the read/unread control is calibrated and verified against the live page.
+      So is the compose form: runbook C was done on 2026-09-22. The attachment-reading keys and
+      `ccToggle` are in `UNCALIBRATED`, and no received attachment has been seen live yet.
+      `providerThreadId` is stored as null. Each has a live runbook in §17 (A attachments, B thread
+      id). Also open: a read does not check the signed-in NICeMail account against `NIC_EMAIL`
+      (a send does).
+    - **Ingestion.** A fresh agent tab loads only the newest ~50 rows and nothing scrolls, so mail
+      beyond that window after a long downtime is never ingested. A message that fails three times is
+      quarantined until the backend restarts. A failed attachment download is stored as a null id,
+      and the forward refuses it permanently for that message.
+    - **Mailbox isolation does not cover accept or decisions.** The primary Front Office or
+      `SUPER_ADMIN` can accept a NICeMail message by id through the primary mailbox, and the decision
+      routes (`/mailbox/messages/:id/decision`, `/mailbox/decisions`) are not scoped to a mailbox.
+      (`?recipient=` no longer reaches NICeMail rows: the Mongo primary store excludes them.)
     - **Tombstones.** A NICeMail message's "already handled" memory is its MongoDB row;
-      `DELETE /api/v1/mailbox` (when the primary mailbox is the Mongo store), a hard delete or
       `npm run db:reset` removes it, and the next sync reads the message again.
     - **Duplicate acknowledgements.** Two concurrent accepts of the same NICeMail message can both
       pass the acknowledgement check before either records it — the browser queue makes that window
@@ -296,10 +303,12 @@ docs/        This file, plus SRS, architecture, workflow, API — docs/README.md
   rules and SLA definitions.
 - **NIC Phase 0** — generate a NICeMail application-specific password and re-run
   `npm run nic:preflight` **from the deployment host**.
-- **Calibrate the NICeMail browser selectors** — run `npm run nic:browser:discover` against the live
-  mailbox (inbox, open message, hand-opened compose window) and adjust `selectors.js`; then run Test 2
-  in [NIC_BROWSER_AGENT.md §17](./NIC_BROWSER_AGENT.md#testing-both-paths). The other open items in
-  gap 10 follow from there.
+- **Finish calibrating the NICeMail browser agent** — the live runbooks in
+  [NIC_BROWSER_AGENT.md §17](./NIC_BROWSER_AGENT.md#calibrating-the-selectors):
+  A (a test mail with a PDF, a JPG and an `.xml`, for the attachment keys) and B (one reply, for the
+  thread id). C (compose) is done. Run Test 2 in [§17](./NIC_BROWSER_AGENT.md#testing-both-paths)
+  end to end. The other open items in gap 10 follow
+  from there.
 
 ## Project History
 

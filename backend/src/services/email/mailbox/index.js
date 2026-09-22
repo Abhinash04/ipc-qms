@@ -113,6 +113,21 @@ const list = async (recipient, options) => {
   return promise;
 };
 
+/**
+ * One message by id. A store with no lookup of its own is listed and searched
+ * — both of its lists, because for Gmail each is only the newest few, and an
+ * older unread message shows in the "awaiting" list but not in the full one.
+ */
+const get = async (recipient, id) => {
+  const impl = active();
+  if (typeof impl.get === 'function') return impl.get(recipient, id);
+  for (const unreadOnly of [true, false]) {
+    const found = (await list(recipient, { unreadOnly })).find((message) => message.mailboxMessageId === id);
+    if (found) return found;
+  }
+  return null;
+};
+
 const markIngested = async (recipient, id) => {
   invalidateListCache();
   return active().markIngested(recipient, id);
@@ -142,9 +157,9 @@ const stats = async () => active().stats();
  * Resolves to `{ source, address, store }` for the NICeMail mailbox, or null
  * to mean "the primary mailbox".
  *
- * The store is imported on demand: it reaches playwright-core through the
- * browser reader, and nothing on the boot path may load that — a backend
- * without Chrome must start exactly as before.
+ * The store is imported on demand: it reaches the browser agent through the
+ * reader, and nothing on the boot path may load that — a backend without
+ * Chrome must start exactly as before.
  */
 async function forUser(user) {
   if (!browserConfig.mailboxEnabled || !browserConfig.mailboxAddress) return null;
@@ -156,6 +171,7 @@ async function forUser(user) {
 export {
   deliver,
   list,
+  get,
   markIngested,
   remove,
   reset,

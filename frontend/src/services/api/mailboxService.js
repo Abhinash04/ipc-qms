@@ -5,11 +5,51 @@ export async function fetchEmailConfig() {
   return data;
 }
 
-export async function fetchMailboxMessages({ recipient, unreadOnly = true } = {}) {
+/**
+ * `unreadOnly` means awaiting validation — not yet accepted or rejected — and
+ * never "not yet opened", which is each message's `isRead`. `q` searches the
+ * sender, subject and body. With `limit` the list is one page and the answer
+ * adds `total`; without it the whole list comes back, as it always has.
+ */
+export async function fetchMailboxMessages({ recipient, unreadOnly = true, q, limit, offset } = {}) {
   const { data } = await axiosClient.get('/mailbox/messages', {
-    params: { ...(recipient ? { recipient } : {}), unreadOnly: String(unreadOnly) },
+    params: {
+      ...(recipient ? { recipient } : {}),
+      unreadOnly: String(unreadOnly),
+      ...(q ? { q } : {}),
+      ...(limit ? { limit, offset: offset ?? 0 } : {}),
+    },
   });
   return data;
+}
+
+/** One message, with its HTML body. `null`, never undefined, so react-query can cache it. */
+export async function fetchMailboxMessage(mailboxMessageId) {
+  const { data } = await axiosClient.get(`/mailbox/messages/${encodeURIComponent(mailboxMessageId)}`);
+  return data ?? null;
+}
+
+/**
+ * Read state kept by QMS alone: opening a message here never marks it read in
+ * NICeMail. The server answers 409 for a mailbox that keeps no read state.
+ */
+export async function markMailboxMessageRead(mailboxMessageId) {
+  const { data } = await axiosClient.post(
+    `/mailbox/messages/${encodeURIComponent(mailboxMessageId)}/read`,
+  );
+  return data;
+}
+
+/** Starts a NICeMail sync in the background; `{ supported: false }` for any other mailbox. */
+export async function syncMailbox() {
+  const { data } = await axiosClient.post('/mailbox/sync');
+  return data;
+}
+
+/** Download URL for one attachment, checked by the server against the message it came with. */
+export function mailboxAttachmentUrl(mailboxMessageId, attachmentId) {
+  const base = (axiosClient.defaults.baseURL || '').replace(/\/$/, '');
+  return `${base}/mailbox/messages/${encodeURIComponent(mailboxMessageId)}/attachments/${encodeURIComponent(attachmentId)}?download=1`;
 }
 
 export async function markMessageIngested(mailboxMessageId, { recipient } = {}) {
@@ -79,39 +119,32 @@ export async function sendEnquiry({ subject, body, attachments = [], cc = [] }) 
   return data;
 }
 
-export async function sendAcknowledgement({ to, queryId }) {
-  const { data } = await axiosClient.post('/emails/acknowledgement', { to, queryId });
-  return data;
-}
-
 /**
- * `queryId` is what lets the server answer through the mailbox the case came
- * from. The server reads that mailbox off the stored case — this only names
- * the case — so a NICeMail enquiry is answered from NICeMail, not from the
- * default transport.
+ * The three case emails — the acknowledgement, the forward, the final response.
+ *
+ * Each names a case and nothing else. The server reads who is written to and
+ * what they are told from the stored case, and sends each at most once: two
+ * presses of a retry button, or two officers on the same case, produce one
+ * email. The answers are
+ * `{ outcome: SENT | ALREADY_SENT | IN_PROGRESS | FAILED | UNCERTAIN | BLOCKED_UNCERTAIN, dispatch }`,
+ * and everything but the first two arrives as an HTTP error.
+ *
+ * They used to carry the recipient and the text from this browser, with no
+ * guard anywhere: a retry could address anyone, and a double click sent twice.
  */
-export async function sendResponse({ to, subject, body, attachments = [], cc = [], providerThreadId, queryId }) {
-  const { data } = await axiosClient.post('/emails/response', {
-    to,
-    subject,
-    body,
-    attachments,
-    cc,
-    providerThreadId,
-    ...(queryId ? { queryId } : {}),
-  });
+export async function sendAcknowledgement({ queryId }) {
+  const { data } = await axiosClient.post('/emails/acknowledgement', { queryId });
   return data;
 }
 
-export async function forwardQuery({ queryId, subject, body, providerThreadId, attachments = [] }) {
+export async function sendResponse({ queryId }) {
+  const { data } = await axiosClient.post('/emails/response', { queryId });
+  return data;
+}
+
+export async function forwardQuery({ queryId }) {
   try {
-    const { data } = await axiosClient.post('/emails/forward', {
-      queryId,
-      subject,
-      body,
-      providerThreadId,
-      attachments,
-    });
+    const { data } = await axiosClient.post('/emails/forward', { queryId });
     return data;
   } catch (error) {
     // The backend fails a forward closed (409) when an attachment cannot be

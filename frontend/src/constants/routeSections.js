@@ -27,6 +27,7 @@ export const SECTION = {
   DASHBOARD: "DASHBOARD",
   COMPOSE: "COMPOSE",
   INBOX: "INBOX",
+  INBOX_DETAIL: "INBOX_DETAIL",
   QUERIES: "QUERIES",
   QUERY_DETAIL: "QUERY_DETAIL",
   MY_WORK: "MY_WORK",
@@ -73,6 +74,7 @@ export const SECTIONS = {
     icon: Mail,
     nav: true,
   },
+  [SECTION.INBOX_DETAIL]: { segment: "inbox/:messageId" },
   [SECTION.QUERIES]: {
     segment: "queries",
     label: "Queries",

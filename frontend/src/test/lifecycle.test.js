@@ -13,6 +13,8 @@ import {
 import { WORKFLOW_ACTION, canPerform } from '@/constants/workflowRules';
 import { EMAIL_DIRECTION, EMAIL_TYPE } from '@/constants/emailModel';
 import { fakeFinalApprovalEndpoint } from '@/test/fakeFinalApprovalEndpoint';
+import { installFakeCaseMail } from '@/test/fakeCaseMail';
+import * as mailboxService from '@/services/api/mailboxService';
 
 vi.mock('@/services/api/mailboxService');
 
@@ -25,17 +27,6 @@ const REVIEWER_A = findUserById('USR-0005');
 const REVIEWER_B = findUserById('USR-0006');
 const INQUIRER = findUserById('USR-0001');
 const ADMIN = findUserById('USR-0007');
-
-const fakeForward = (payload) =>
-  Promise.resolve({
-    from: 'Test Front Officer <front-office@test.invalid>',
-    to: ['officer@test.invalid'],
-    subject: `Fwd: ${payload.subject} [${payload.queryId}]`,
-    body: payload.body,
-    providerMessageId: 'mock-msg-forward',
-    providerThreadId: payload.providerThreadId || 'mock-thread-1',
-    sentAt: '2026-08-18T10:00:00.000Z',
-  });
 
 const fakeSend = (payload) =>
   Promise.resolve({
@@ -80,7 +71,7 @@ async function runTo(stopAt, { reviewers = [REVIEWER_A], message } = {}) {
   s().verifyQuery(queryId, FRONT_OFFICE);
   if (stopAt === WORKFLOW_STATE.FRONT_OFFICE_VERIFICATION) return queryId;
 
-  await s().forwardToOic(queryId, FRONT_OFFICE, fakeForward);
+  await s().forwardToOic(queryId, FRONT_OFFICE);
   if (stopAt === WORKFLOW_STATE.PENDING_ASSIGNMENT) return queryId;
 
   s().assignQuery(queryId, OFFICIAL.id, OIC);
@@ -117,6 +108,9 @@ const stateOf = (queryId) => s().getQuery(queryId).workflowState;
 beforeEach(async () => {
   await s().hydrate();
   await s().resetDemo();
+  // The acknowledgement and the forward are server calls now — their records,
+  // audit rows and state moves come back from the endpoint. See fakeCaseMail.js.
+  installFakeCaseMail(mailboxService);
 });
 
 describe('the complete lifecycle, end to end', () => {
@@ -161,11 +155,17 @@ describe('the complete lifecycle, end to end', () => {
     const query = s().getQuery(queryId);
     const messages = s().emailMessages.filter((m) => m.queryId === queryId);
 
-    expect(messages.map((m) => m.emailType)).toEqual([
-      EMAIL_TYPE.INCOMING_QUERY,
-      EMAIL_TYPE.FORWARD,
-      EMAIL_TYPE.OUTGOING_RESPONSE,
-    ]);
+    // Four emails, all on the case's own thread: the enquiry, the
+    // acknowledgement to whoever sent it, the forward to the Officer-in-Charge,
+    // and the answer.
+    expect(new Set(messages.map((m) => m.emailType))).toEqual(
+      new Set([
+        EMAIL_TYPE.INCOMING_QUERY,
+        EMAIL_TYPE.ACKNOWLEDGEMENT,
+        EMAIL_TYPE.FORWARD,
+        EMAIL_TYPE.OUTGOING_RESPONSE,
+      ]),
+    );
     expect(new Set(messages.map((m) => m.threadId))).toEqual(new Set([query.threadId]));
 
     const thread = s().emailThreads.find((t) => t.threadId === query.threadId);
@@ -217,7 +217,7 @@ describe('the complete lifecycle, end to end', () => {
 
     expect(stateOf(queryId)).toBe(WORKFLOW_STATE.CLOSED);
     expect(s().getVersions(queryId).length).toBeGreaterThan(0);
-    expect(s().emailMessages.filter((m) => m.queryId === queryId)).toHaveLength(3);
+    expect(s().emailMessages.filter((m) => m.queryId === queryId)).toHaveLength(4);
 
     expect(s().ingestEmail(mailboxMessage()).created).toBe(false);
     expect(s().queries).toHaveLength(1);

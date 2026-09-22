@@ -71,6 +71,66 @@ function parseSummaryJson(jsonStr, fallbackData) {
   return null;
 }
 
+/**
+ * Whether the model has been answering — reported by `GET /health`.
+ *
+ * The fallback keeps the workflow moving when Gemma cannot be reached, which is
+ * right, but it must not be silent: a deployment can run for days on
+ * deterministic stand-in text with nothing but a `console.warn` per call to say
+ * so. This is the record an operator can actually look at.
+ */
+const ai = { lastSuccessAt: null, lastFailureAt: null, lastError: null };
+
+export function status() {
+  let endpoint;
+  try {
+    endpoint = env.GEMMA_API_URL ? new URL(env.GEMMA_API_URL).host : null;
+  } catch {
+    endpoint = 'invalid URL';
+  }
+
+  return {
+    configured: Boolean(env.GEMMA_API_URL),
+    endpoint,
+    timeoutMs: env.GEMMA_TIMEOUT_MS,
+    lastSuccessAt: ai.lastSuccessAt,
+    lastFailureAt: ai.lastFailureAt,
+    lastError: ai.lastError,
+  };
+}
+
+const noteSuccess = () => {
+  ai.lastSuccessAt = new Date().toISOString();
+  ai.lastError = null;
+};
+
+const noteFailure = (reason) => {
+  ai.lastFailureAt = new Date().toISOString();
+  ai.lastError = reason;
+};
+
+/**
+ * What actually went wrong.
+ *
+ * `fetch failed` on its own says nothing — and it was all the log carried
+ * through a real outage, where the cause was a DNS resolver timing out
+ * (`ENOTFOUND`) rather than anything about the model. undici puts the reason in
+ * `error.cause`.
+ */
+function aiFailureReason(error, timeoutMs) {
+  if (error?.name === 'AbortError') return `timed out after ${timeoutMs}ms`;
+  const code = error?.cause?.code || error?.cause?.name || null;
+  const message = String(error?.message || error);
+  return code && !message.includes(code) ? `${message} (${code})` : message;
+}
+
+/** One place to report a failed call: the log line, and the health record. */
+function reportAiFailure(label, error, timeoutMs) {
+  const reason = aiFailureReason(error, timeoutMs);
+  noteFailure(`${label}: ${reason}`);
+  console.warn(`[Gemma AI] ${label} failed: ${reason}. Using fallback.`);
+}
+
 export async function generateSummary({ subject = '', body = '', inquirerName = '' }) {
   const fallback = generateFallbackSummary({ subject, body, inquirerName });
 
@@ -117,10 +177,12 @@ IPC JSON Summary:`;
     clearTimeout(timeoutId);
 
     if (!response.ok) {
+      noteFailure(`summary: the API answered ${response.status}`);
       console.warn(`[Gemma AI] API returned status ${response.status}. Using fallback.`);
       return fallback;
     }
 
+    noteSuccess();
     const data = await response.json();
     const rawAnswer = data?.answer || data?.response || data?.text || null;
 
@@ -136,11 +198,7 @@ IPC JSON Summary:`;
     return fallback;
   } catch (error) {
     clearTimeout(timeoutId);
-    if (error.name === 'AbortError') {
-      console.warn(`[Gemma AI] Request timed out after ${env.GEMMA_TIMEOUT_MS}ms. Using fallback.`);
-    } else {
-      console.warn(`[Gemma AI] API call failed: ${error.message}. Using fallback.`);
-    }
+    reportAiFailure('summary', error, env.GEMMA_TIMEOUT_MS);
     return fallback;
   }
 }
@@ -264,10 +322,12 @@ IPC AI Recommendations:`;
     clearTimeout(timeoutId);
 
     if (!response.ok) {
+      noteFailure(`recommendation: the API answered ${response.status}`);
       console.warn(`[Gemma AI] Recommendation API returned ${response.status}. Using fallback.`);
       return fallbackRecs;
     }
 
+    noteSuccess();
     const data = await response.json();
     const rawAnswer = data?.answer || data?.response || data?.text || null;
 
@@ -302,14 +362,7 @@ IPC AI Recommendations:`;
     return fallbackRecs;
   } catch (error) {
     clearTimeout(timeoutId);
-    if (error.name === 'AbortError') {
-      console.warn(
-        `[Gemma AI] Recommendation timed out after ` +
-          `${env.GEMMA_TIMEOUT_MS * RECOMMENDATION_TIMEOUT_FACTOR}ms. Using fallback.`,
-      );
-    } else {
-      console.warn(`[Gemma AI] Recommendation call failed: ${error.message}. Using fallback.`);
-    }
+    reportAiFailure('recommendation', error, env.GEMMA_TIMEOUT_MS * RECOMMENDATION_TIMEOUT_FACTOR);
     return fallbackRecs;
   }
 }
@@ -400,19 +453,17 @@ async function askGemma(prompt, { timeoutMs, label }) {
     clearTimeout(timeoutId);
 
     if (!response.ok) {
+      noteFailure(`${label}: the API answered ${response.status}`);
       console.warn(`[Gemma AI] ${label} returned status ${response.status}. Using fallback.`);
       return null;
     }
 
+    noteSuccess();
     const data = await response.json();
     return data?.answer || data?.response || data?.text || null;
   } catch (error) {
     clearTimeout(timeoutId);
-    if (error.name === 'AbortError') {
-      console.warn(`[Gemma AI] ${label} timed out after ${timeoutMs}ms. Using fallback.`);
-    } else {
-      console.warn(`[Gemma AI] ${label} failed: ${error.message}. Using fallback.`);
-    }
+    reportAiFailure(label, error, timeoutMs);
     return null;
   }
 }
