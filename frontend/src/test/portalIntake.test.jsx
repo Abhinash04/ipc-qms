@@ -10,6 +10,7 @@ import { findUserById } from "@/constants/mockUsers";
 import { ROLES } from "@/constants/roles";
 import { WORKFLOW_STATE } from "@/constants/statusEnums";
 import * as mailboxService from "@/services/api/mailboxService";
+import { installFakeCaseMail } from "@/test/fakeCaseMail";
 
 vi.mock("@/services/api/mailboxService");
 
@@ -254,16 +255,11 @@ describe("the case stays visible as it moves through the workflow", () => {
   it("reaches the OIC once Front Office verifies and forwards it", async () => {
     const raised = await raiseThroughPortal();
 
-    s().verifyQuery(raised.queryId, FRONT_OFFICE);
-    await s().forwardToOic(raised.queryId, FRONT_OFFICE, async () => ({
-      providerMessageId: "fwd-1",
-      providerThreadId: "fwd-thread",
-      sentAt: new Date().toISOString(),
-      from: "fo@test.invalid",
-      to: ["oic@test.invalid"],
-      subject: "Fwd",
-      body: "x",
-    }));
+    // Both are server calls: the case reaches PENDING_ASSIGNMENT because the
+    // forward endpoint put it there, after the email went out.
+    installFakeCaseMail(mailboxService);
+    await s().verifyQuery(raised.queryId, FRONT_OFFICE);
+    await s().forwardToOic(raised.queryId, FRONT_OFFICE);
 
     signIn(findUserById("USR-0003"));
     renderAt("/officer-in-charge/dashboard");

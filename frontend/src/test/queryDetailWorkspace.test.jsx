@@ -7,6 +7,8 @@ import { AppRoutes } from '@/routes/AppRoutes';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useWorkflowStore } from '@/store/useWorkflowStore';
 import { findUserById } from '@/constants/mockUsers';
+import * as mailboxService from '@/services/api/mailboxService';
+import { installFakeCaseMail } from '@/test/fakeCaseMail';
 
 vi.mock('@/services/api/mailboxService', () => ({
   fetchEmailConfig: vi.fn().mockResolvedValue({}),
@@ -104,6 +106,10 @@ async function underReview() {
 
 beforeEach(async () => {
   vi.clearAllMocks();
+  // The acknowledgement and the forward are server calls, and the case only
+  // reaches PENDING_ASSIGNMENT because the server put it there. A canned reply
+  // moves nothing, so the chain below would stall at the forward.
+  installFakeCaseMail(mailboxService);
   await s().hydrate();
   await s().resetDemo();
 });

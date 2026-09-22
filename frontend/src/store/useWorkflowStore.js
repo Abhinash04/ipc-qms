@@ -26,7 +26,10 @@ import {
 } from '@/services/api/mailboxService';
 // Final approval is a server operation, not a state mirror, so it is imported
 // directly like the mail commands above rather than through `dbModule()`.
-import { grantFinalApproval as approveOnServer } from '@/services/api/queryCaseService';
+import {
+  grantFinalApproval as approveOnServer,
+  resolveOutboundEmail as resolveOutboundOnServer,
+} from '@/services/api/queryCaseService';
 import { fetchGemmaAiSummary, fetchGemmaAiDraft } from '@/services/api/aiService';
 import { assembleDraftEmail } from '@/services/ai/draftComposer';
 import { notify } from '@/services/notify';
@@ -295,6 +298,45 @@ async function persistDelta(prev, next, queryId, auditEvent, notification) {
   });
 }
 
+/**
+ * What a failed case email means, in the words the server used.
+ *
+ * Axios stringifies a rejection as "Request failed with status code 504", while
+ * the reason — "this may already have been sent; check the Sent folder" — is in
+ * the body. `unconfirmed` is what stops a page offering a blind retry.
+ */
+function describeSendFailure(error) {
+  const data = error?.response?.data;
+  return {
+    outcome: data?.outcome ?? null,
+    error: data?.error || error?.message || String(error),
+    ...(data?.unconfirmed ? { unconfirmed: true } : {}),
+    ...(data?.retryable ? { retryable: true } : {}),
+  };
+}
+
+/** The same, as a throwable — `useWorkflowAction` raises the message it carries. */
+function sendFailure(error) {
+  const described = describeSendFailure(error);
+  if (!error?.response?.data?.error) return error;
+  return Object.assign(new Error(described.error), {
+    outcome: described.outcome,
+    unconfirmed: Boolean(described.unconfirmed),
+    retryable: Boolean(described.retryable),
+    cause: error,
+  });
+}
+
+/**
+ * One approval in flight per case.
+ *
+ * The button is disabled while it runs, but the store is shared by every
+ * component and tab, and overlapping approvals are precisely what produced
+ * three copies of one response in a live test. The server refuses duplicates
+ * on its own; this keeps the page from asking twice in the first place.
+ */
+const approvalsInFlight = new Map();
+
 export const useWorkflowStore = create((set, get) => ({
   ...buildSeedState(),
 
@@ -302,6 +344,14 @@ export const useWorkflowStore = create((set, get) => ({
   persistenceError: null,
 
   getQuery: (queryId) => get().queries.find((q) => q.queryId === queryId) || null,
+
+  /**
+   * What the server has done about this case's emails — sent, failed, or sent
+   * but unverifiable. The retry controls read it: an email that may already
+   * have arrived must not be offered a plain "try again".
+   */
+  getOutbound: (queryId, emailType) =>
+    get().outboundEmails.find((row) => row.queryId === queryId && row.emailType === emailType) || null,
 
   getSteps: (queryId) =>
     get()
@@ -561,90 +611,34 @@ export const useWorkflowStore = create((set, get) => ({
     };
   },
 
-  recordAcknowledgement: ({ queryId, from, to, subject, body, timestamp, providerMessageId }) => {
-    const state = get();
-    const query = state.queries.find((q) => q.queryId === queryId);
-    if (!query) return { messageId: null, created: false, reason: 'unknown-query' };
-
-    const already = state.emailMessages.find(
-      (m) => m.queryId === queryId && m.emailType === EMAIL_TYPE.ACKNOWLEDGEMENT,
-    );
-    if (already) {
-      return { messageId: already.messageId, created: false, reason: 'already-acknowledged' };
-    }
-
-    const at = timestamp || now();
-    const messageMint = mintId(state.counters, 'MSG');
-    const message = createEmailMessage({
-      messageId: messageMint.id,
-      threadId: query.threadId,
-      queryId,
-      direction: EMAIL_DIRECTION.OUTBOUND,
-      emailType: EMAIL_TYPE.ACKNOWLEDGEMENT,
-      from,
-      to,
-      subject,
-      body,
-      timestamp: at,
-      providerMessageId: providerMessageId || null,
-    });
-
-    get().applyTransition({
-      queryId,
-      actor: null,
-      actorLabel: 'System',
-      event: AUDIT_EVENT.ACKNOWLEDGEMENT_SENT,
-      details: `Acknowledgement email sent to ${message.to.join(', ')}.`,
-      mutate: (base) => ({
-        counters: { ...base.counters, ...messageMint.bump },
-        emailMessages: [...base.emailMessages, message],
-      }),
-    });
-
-    return { messageId: message.messageId, created: true };
-  },
-
   /**
-   * The one place an acknowledgement is sent. Never rejects — callers such as
+   * Ask the server to acknowledge the inquirer. Never rejects — callers such as
    * verifyQuery hand the promise on to code that does not await it, so a
    * rejection would surface as an unhandled rejection.
+   *
+   * The send, the record of it and the audit row all happen on the server,
+   * because that is the only place that can promise one email per case however
+   * many tabs, officers or retries ask for it. This reports what became of it
+   * and re-reads the case.
    */
   acknowledgeInquirer: async (queryId, actor, send = sendAcknowledgement) => {
-    const state = get();
-    const query = state.queries.find((q) => q.queryId === queryId);
-    if (!query) return { acknowledged: false, error: `${queryId} does not exist` };
-
-    // Ingestion may already have acknowledged this one. recordAcknowledgement
-    // guards the store; this guards the mail, so the inquirer is never emailed
-    // twice for the same query.
-    const already = state.emailMessages.find(
-      (m) => m.queryId === queryId && m.emailType === EMAIL_TYPE.ACKNOWLEDGEMENT,
-    );
-    if (already) return { acknowledged: true, alreadySent: true };
+    if (!get().queries.some((q) => q.queryId === queryId)) {
+      return { acknowledged: false, error: `${queryId} does not exist` };
+    }
 
     try {
-      const sent = await send({ to: query.inquirer?.email, queryId });
-      get().recordAcknowledgement({
-        queryId,
-        from: sent.from,
-        to: sent.to,
-        subject: sent.subject,
-        body: sent.body,
-        timestamp: sent.sentAt,
-        providerMessageId: sent.providerMessageId,
-      });
-      return { acknowledged: true };
-    } catch (error) {
-      // The server's reason, not axios's "Request failed with status code …".
-      // For a NICeMail send that may already have gone out, the reason is the
-      // instruction to check the Sent folder before retrying, and `unconfirmed`
-      // is what lets the page stop calling it "not sent".
-      const data = error?.response?.data;
+      const result = await send({ queryId });
+      await get().refreshFromServer();
       return {
-        acknowledged: false,
-        error: data?.error || error?.message || String(error),
-        ...(data?.unconfirmed ? { unconfirmed: true } : {}),
+        acknowledged: true,
+        alreadySent: result?.outcome === 'ALREADY_SENT',
+        outcome: result?.outcome ?? null,
       };
+    } catch (error) {
+      // Read back anyway: a send that failed still moved the case's record of
+      // it, and the page shows that rather than remembering this one attempt.
+      await get().refreshFromServer();
+      return { acknowledged: false, ...describeSendFailure(error) };
     }
   },
 
@@ -744,101 +738,34 @@ export const useWorkflowStore = create((set, get) => ({
     };
   },
 
+  /**
+   * Forward a case to the Officer-in-Charge — the manual recovery for an
+   * intake whose forward did not go out.
+   *
+   * The covering note, the record of the send and the move to
+   * PENDING_ASSIGNMENT are the server's: it builds the note from the stored
+   * enquiry and the summary on the case, and sends it at most once. This browser
+   * used to compose the note and record the send itself, which is how one case
+   * reached the Officer-in-Charge three times.
+   */
   forwardToOic: async (queryId, actor, forward = forwardQuery) => {
-    const query = assertCan(get(), WORKFLOW_ACTION.FORWARD, queryId, actor);
+    assertCan(get(), WORKFLOW_ACTION.FORWARD, queryId, actor);
 
-    /**
-     * Already forwarded — a retry, a double click, or a second Front Officer
-     * on the same case. Modelled on `dispatchResponse`, which has had this
-     * guard from the start; this one did not, and the workflow-state check
-     * alone does not cover it: a send that succeeds and then fails to record
-     * leaves the case forwardable and the OIC receives the mail twice. It
-     * happened — three EMAIL_FORWARDED rows for one case.
-     *
-     * Returns rather than throws, for the same reason: a duplicate trigger is
-     * a no-op, not a failure, and `validateAndForward` must not report an
-     * error for work that was already done.
-     */
-    const alreadyForwarded = get().emailMessages.find(
-      (m) => m.queryId === queryId && m.emailType === EMAIL_TYPE.FORWARD,
-    );
-    if (alreadyForwarded) {
+    try {
+      const result = await forward({ queryId });
+      await get().refreshFromServer();
+
+      // A duplicate trigger is a no-op, not a failure: `validateAndForward`
+      // must not report an error for work that was already done.
       return {
         queryId,
-        messageId: alreadyForwarded.messageId,
-        forwarded: false,
-        reason: 'already-forwarded',
+        forwarded: result?.outcome === 'SENT',
+        ...(result?.outcome === 'ALREADY_SENT' ? { reason: 'already-forwarded' } : {}),
       };
+    } catch (error) {
+      await get().refreshFromServer();
+      throw sendFailure(error);
     }
-
-    const original = get().emailMessages.find(
-      (m) => m.queryId === queryId && m.emailType === EMAIL_TYPE.INCOMING_QUERY,
-    );
-
-    const attachments = query.attachments || [];
-
-    const body = [
-      `Forwarded by ${actorName(actor)} for assignment.`,
-      '',
-      `Query: ${queryId}`,
-      `Received from: ${query.inquirer?.name || ''} <${query.inquirer?.email || ''}>`,
-      '',
-      attachments.length > 0
-        ? `Attachments (${attachments.length}): ${attachments.map((a) => a.filename || a.name).join(', ')}`
-        : null,
-      attachments.length > 0 ? '' : null,
-      '---------- Original enquiry ----------',
-      `Subject: ${query.subject}`,
-      '',
-      original?.body || query.description || '',
-    ]
-      .filter((line) => line !== null)
-      .join('\n');
-
-    const sent = await forward({
-      queryId,
-      subject: query.subject,
-      body,
-      providerThreadId: original?.providerThreadId || null,
-      attachments,
-    });
-
-    const timestamp = sent?.sentAt || now();
-    const messageMint = mintId(get().counters, 'MSG');
-
-    const message = createEmailMessage({
-      messageId: messageMint.id,
-      threadId: query.threadId,
-      queryId,
-      direction: EMAIL_DIRECTION.OUTBOUND,
-      emailType: EMAIL_TYPE.FORWARD,
-      from: sent?.from || actorName(actor),
-      to: sent?.to || [],
-      subject: sent?.subject || `Fwd: ${query.subject} [${queryId}]`,
-      body: sent?.body || body,
-      attachments: sent?.attachments || attachments,
-      timestamp,
-      providerMessageId: sent?.providerMessageId || null,
-      providerThreadId: sent?.providerThreadId || null,
-    });
-
-    get().applyTransition({
-      queryId,
-      actor,
-      event: AUDIT_EVENT.QUERY_FORWARDED,
-      patch: { workflowState: WORKFLOW_STATE.PENDING_ASSIGNMENT },
-      details: `Forwarded by ${actorName(actor)} to ${message.to.join(', ')} for assignment.`,
-      notify: {
-        recipientRole: 'OFFICER_IN_CHARGE',
-        message: `${queryId} is awaiting assignment.`,
-      },
-      mutate: (base) => ({
-        counters: { ...base.counters, ...messageMint.bump },
-        emailMessages: [...base.emailMessages, message],
-      }),
-    });
-
-    return { queryId, messageId: message.messageId, forwarded: true };
   },
 
   recommendAssigneeFor: (queryId) => {
@@ -1277,13 +1204,32 @@ export const useWorkflowStore = create((set, get) => ({
   grantFinalApproval: async (queryId, actor, approve = approveOnServer, { comment } = {}) => {
     assertCan(get(), WORKFLOW_ACTION.FINAL_APPROVE, queryId, actor);
 
-    const result = await approve(queryId, { comment });
+    const running = approvalsInFlight.get(queryId);
+    if (running) return running;
 
-    // The server is the only holder of what just happened — the locked version,
-    // the outbound response, the closing audit rows. Read it back rather than
-    // reconstructing it here and hoping the two agree.
+    const work = (async () => {
+      const result = await approve(queryId, { comment });
+
+      // The server is the only holder of what just happened — the locked
+      // version, the outbound response, the closing audit rows. Read it back
+      // rather than reconstructing it here and hoping the two agree.
+      await get().refreshFromServer();
+      return result;
+    })().finally(() => approvalsInFlight.delete(queryId));
+
+    approvalsInFlight.set(queryId, work);
+    return work;
+  },
+
+  /**
+   * Record what the Front Office found in the Sent folder, for an email whose
+   * send could not be verified. `SENT` records it as a successful send would —
+   * for a final response, that closes the case — and `NOT_SENT` unlocks the
+   * retry. Nothing is emailed by this.
+   */
+  resolveOutboundEmail: async (queryId, { emailType, outcome }, resolve = resolveOutboundOnServer) => {
+    const result = await resolve(queryId, { emailType, outcome });
     await get().refreshFromServer();
-
     return result;
   },
 
@@ -1350,109 +1296,40 @@ export const useWorkflowStore = create((set, get) => ({
     });
   },
 
+  /**
+   * Send the approved response — the Front Office's retry, on the Dispatch page,
+   * for an approval whose send did not go out.
+   *
+   * Every part of this is the server's now: the recipient (the inquirer stored
+   * on the case), the text (the approved version), the record of the send, and
+   * the closing of the case once it has actually gone. This used to be done
+   * here, which meant the browser could close a case on a send it had made and
+   * a second press could send a second copy.
+   */
   dispatchResponse: async (queryId, actor, send = sendResponse) => {
     const state = get();
-    const query = state.queries.find((q) => q.queryId === queryId);
-    if (!query) throw new Error(`DISPATCH: query ${queryId} does not exist`);
-
-    // Order matters, and each step guards something different.
-    //
-    /**
-     * 1. PERMISSION first, so an unauthorised caller is refused outright and
-     *    never receives the benign "already dispatched" shape instead.
-     *
-     *    Every remaining caller is a human retry from the Dispatch page, and is
-     *    gated. The actorless branch is a remnant: final approval used to call
-     *    this with `actor: null` on the theory that an automatic send is "the
-     *    system acting", which skipped only this check — the request still went
-     *    out on the approving officer's session, and sending is a Front Office
-     *    permission, so it 403ed every time. That path is now a server endpoint
-     *    (services/workflow/finalApproval.js) and does not come through here.
-     */
-    if (actor) {
-      assertCan(state, WORKFLOW_ACTION.DISPATCH, queryId, actor);
+    if (!state.queries.some((q) => q.queryId === queryId)) {
+      throw new Error(`DISPATCH: query ${queryId} does not exist`);
     }
 
-    // 2. IDEMPOTENCY next, so a duplicate trigger is a harmless no-op rather
-    //    than an error — a refresh, a retry or a double click must not send a
-    //    second response, and must not look like a failure either. The guard is
-    //    the stored OUTGOING_RESPONSE message, which lives in IndexedDB and so
-    //    survives a reload and a backend restart.
-    const already = state.emailMessages.find(
-      (m) => m.queryId === queryId && m.emailType === EMAIL_TYPE.OUTGOING_RESPONSE,
-    );
-    if (already) {
-      return { queryId, messageId: already.messageId, dispatched: false, reason: 'already-dispatched' };
+    // Permission first, so an unauthorised caller is refused outright rather
+    // than receiving the benign "already sent" answer.
+    if (actor) assertCan(state, WORKFLOW_ACTION.DISPATCH, queryId, actor);
+
+    try {
+      const result = await send({ queryId });
+      await get().refreshFromServer();
+
+      return {
+        queryId,
+        dispatched: result?.outcome === 'SENT',
+        alreadyDispatched: result?.outcome === 'ALREADY_SENT',
+        outcome: result?.outcome ?? null,
+      };
+    } catch (error) {
+      await get().refreshFromServer();
+      throw sendFailure(error);
     }
-
-    // 3. STATE last, for the system path: nothing may be sent before the
-    //    Officer-in-Charge has granted final approval.
-    if (!actor && query.workflowState !== WORKFLOW_STATE.READY_FOR_DISPATCH) {
-      throw new Error(
-        `DISPATCH refused: ${queryId} is ${query.workflowState}, not ${WORKFLOW_STATE.READY_FOR_DISPATCH}`,
-      );
-    }
-
-    const approved = get().getLatestVersion(queryId);
-    if (!approved) {
-      throw new Error(`${queryId}: there is no approved response to dispatch`);
-    }
-
-    const subject = `Re: ${query.subject} [${queryId}]`;
-    const sent = await send({
-      to: query.inquirer.email,
-      subject,
-      body: approved.content,
-      attachments: [],
-      providerThreadId: query.providerThreadId || null,
-      // Names the case, so the server answers through the mailbox it arrived
-      // in. This is the Front Office retry path; without it a NICeMail case
-      // was retried through the default transport.
-      queryId,
-    });
-
-    const timestamp = sent?.sentAt || now();
-    const messageMint = mintId(get().counters, 'MSG');
-    const message = createEmailMessage({
-      messageId: messageMint.id,
-      threadId: query.threadId,
-      queryId,
-      direction: EMAIL_DIRECTION.OUTBOUND,
-      emailType: EMAIL_TYPE.OUTGOING_RESPONSE,
-      from: sent?.from || 'Indian Pharmacopoeia Commission',
-      to: sent?.to || [query.inquirer.email],
-      subject: sent?.subject || subject,
-      body: sent?.body || approved.content,
-      timestamp,
-      providerMessageId: sent?.providerMessageId || null,
-      providerThreadId: sent?.providerThreadId || null,
-    });
-
-    get().applyTransition({
-      queryId,
-      actor,
-      event: AUDIT_EVENT.RESPONSE_DISPATCHED,
-      patch: { workflowState: WORKFLOW_STATE.DISPATCHED },
-      details: `Approved response ${approved.version} emailed to ${query.inquirer.email}.`,
-      mutate: (base) => ({
-        counters: { ...base.counters, ...messageMint.bump },
-        emailMessages: [...base.emailMessages, message],
-      }),
-    });
-
-    get().applyTransition({
-      queryId,
-      actor,
-      event: AUDIT_EVENT.QUERY_CLOSED,
-      patch: { workflowState: WORKFLOW_STATE.CLOSED },
-      details: 'Query closed following dispatch.',
-      notify: {
-        recipientRole: 'FRONT_OFFICE',
-        message: `${queryId} has been dispatched and closed.`,
-      },
-    });
-
-    return { messageId: message.messageId, dispatched: true };
   },
 
   transferQuery: (queryId, newAssigneeId, reason, actor) => {
@@ -1641,6 +1518,7 @@ export const useWorkflowStore = create((set, get) => ({
         notifications: stored.notifications,
         emailMessages: stored.emailMessages || [],
         emailThreads: stored.emailThreads || [],
+        outboundEmails: stored.outboundEmails || [],
         counters: stored.counters || buildSeedState().counters,
         hydrated: true,
         persistenceError: null,
@@ -1678,6 +1556,7 @@ export const useWorkflowStore = create((set, get) => ({
         notifications: stored.notifications || [],
         emailMessages: stored.emailMessages || [],
         emailThreads: stored.emailThreads || [],
+        outboundEmails: stored.outboundEmails || [],
         counters: stored.counters || get().counters,
         persistenceError: null,
       });

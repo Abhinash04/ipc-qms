@@ -133,6 +133,19 @@ async function writeCase({ queryId, sequence, mailboxMessageId, message, acknowl
     },
     addThreads: [{ threadId, queryId, subject, createdAt: receivedAt }],
     addMessages: messages,
+    // The in-app half of the forward: the case is at PENDING_ASSIGNMENT, and
+    // the Officer-in-Charge's queue has to say so.
+    ...(forwarded
+      ? {
+          notification: {
+            notificationId: `NOTIF-${queryId}-FWD`,
+            queryId,
+            recipientRole: 'OFFICER_IN_CHARGE',
+            message: `${queryId} is awaiting assignment.`,
+            at: plus(receivedAt, 10),
+          },
+        }
+      : {}),
     // Server and client share one counter document, so the store must come back
     // from the refresh knowing which ids are already spent — otherwise the next
     // client-minted message id collides with the one written here.

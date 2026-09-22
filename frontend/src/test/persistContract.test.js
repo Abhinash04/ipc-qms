@@ -98,15 +98,24 @@ const enquiry = () => ({
 /** Wait for the fire-and-forget persistDelta at useWorkflowStore.js:293. */
 const settled = () => new Promise((resolve) => setTimeout(resolve, 0));
 
-/** The mailbox module is auto-mocked, so the forward needs a recipient list. */
-const fakeForward = async () => ({
-  from: 'front-office@test.invalid',
-  to: ['oic@test.invalid'],
-  subject: 'Fwd: Clarification on dissolution limits',
-  body: 'Forwarded for assignment.',
-  sentAt: '2026-09-17T10:00:00.000Z',
-  providerMessageId: 'gmail-msg-contract-fwd-1',
-});
+/**
+ * The forward is a server call now, and this suite's server only captures
+ * deltas — it stores nothing. So this stands in for the one effect the chain
+ * below depends on: the case moving to PENDING_ASSIGNMENT, which the real
+ * endpoint does after the email goes out. `fetchAllQueries` echoes the store
+ * (see `beforeEach`), so the move survives the refresh that follows.
+ *
+ * Nothing is captured from it, which is itself the contract: forwarding emits
+ * no client delta any more.
+ */
+const fakeForward = async ({ queryId }) => {
+  useWorkflowStore.setState((state) => ({
+    queries: state.queries.map((q) =>
+      q.queryId === queryId ? { ...q, workflowState: WORKFLOW_STATE.PENDING_ASSIGNMENT } : q,
+    ),
+  }));
+  return { queryId, emailType: 'FORWARD', outcome: 'SENT' };
+};
 
 /**
  * One case carried by real store actions as far as its first review level.
@@ -152,6 +161,12 @@ beforeEach(async () => {
     captured.push(delta);
     return { success: true };
   });
+  /**
+   * Every server-side action re-reads `GET /queries` afterwards. Nothing here
+   * stores what it is handed, so the honest answer to that read is "exactly
+   * what you have" — anything less wipes the case the next step acts on.
+   */
+  queryCaseService.fetchAllQueries.mockImplementation(async () => serverSnapshot());
   useWorkflowStore.setState({ ...useWorkflowStore.getState(), hydrated: false });
   await s().hydrate();
 });
@@ -283,7 +298,8 @@ describe('every transition names its audit event', () => {
       expect.arrayContaining([
         AUDIT_EVENT.QUERY_RECEIVED,
         AUDIT_EVENT.QUERY_REGISTERED,
-        AUDIT_EVENT.QUERY_FORWARDED,
+        // No QUERY_FORWARDED: forwarding is a server call, and the row is
+        // written where the email is sent. The browser emits no delta for it.
         AUDIT_EVENT.QUERY_ASSIGNED,
         AUDIT_EVENT.DRAFT_GENERATED,
         AUDIT_EVENT.REVIEW_ADDED,

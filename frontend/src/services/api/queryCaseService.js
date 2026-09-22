@@ -36,6 +36,22 @@ export async function grantFinalApproval(queryId, { comment } = {}) {
   return data;
 }
 
+/**
+ * Record what a person found in the Sent folder, for an email whose send the
+ * server could not verify.
+ *
+ * `SENT` records it exactly as a successful send would — for a final response
+ * that also closes the case. `NOT_SENT` makes it an ordinary failure, which the
+ * retry buttons can send again. Nothing is emailed by this call.
+ */
+export async function resolveOutboundEmail(queryId, { emailType, outcome }) {
+  const { data } = await axiosClient.post(
+    `/queries/${encodeURIComponent(queryId)}/outbound/resolve`,
+    { emailType, outcome },
+  );
+  return data;
+}
+
 export async function resetQueries(seedState) {
   const { data } = await axiosClient.post('/queries/reset', seedState);
   return data;

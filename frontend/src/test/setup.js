@@ -40,6 +40,18 @@ let consoleWarn;
 const captured = [];
 
 beforeEach(async () => {
+  /**
+   * Let the previous test's writes land before clearing.
+   *
+   * `applyTransition` does not await `persistDelta` — the UI must not wait on
+   * the network — so a test can finish with writes still queued. `loadAll` is
+   * queued behind them (see services/persistence/queryState.js), so awaiting it
+   * drains the queue; clearing first would let those writes arrive *after* the
+   * reset and appear in the next test's state.
+   */
+  const { loadAll } = await import('@/services/persistence/queryState');
+  await loadAll().catch(() => {});
+
   const { __resetFakeQueryApi } = await import('@/test/fakeQueryApi');
   __resetFakeQueryApi();
   captured.length = 0;

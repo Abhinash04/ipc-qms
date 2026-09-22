@@ -7,6 +7,8 @@ import { AppRoutes } from '@/routes/AppRoutes';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useWorkflowStore } from '@/store/useWorkflowStore';
 import { findUserById } from '@/constants/mockUsers';
+import * as mailboxService from '@/services/api/mailboxService';
+import { installFakeCaseMail } from '@/test/fakeCaseMail';
 
 vi.mock('@/services/api/mailboxService', () => ({
   fetchEmailConfig: vi.fn().mockResolvedValue({}),
@@ -43,16 +45,6 @@ const enquiry = () => ({
   receivedAt: '2026-08-26T09:00:00.000Z',
 });
 
-const fakeForward = () =>
-  Promise.resolve({
-    from: 'fo@test.invalid',
-    to: ['oic@test.invalid'],
-    subject: 'Fwd',
-    body: 'x',
-    sentAt: '2026-08-26T10:00:00.000Z',
-    providerMessageId: 'fwd-1',
-  });
-
 function renderAs(user, path) {
   useAuthStore.setState({ currentUser: user });
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -78,7 +70,7 @@ let queryId;
 async function caseUnderReview() {
   ({ queryId } = s().ingestEmail(enquiry(), async () => null));
   await s().verifyQuery(queryId, FRONT_OFFICE);
-  await s().forwardToOic(queryId, FRONT_OFFICE, fakeForward);
+  await s().forwardToOic(queryId, FRONT_OFFICE);
   s().assignQuery(queryId, OFFICIAL.id, findUserById('USR-0003'));
   await s().generateAiDraft(queryId, OFFICIAL);
   s().addReviewLevel(queryId, REVIEWER.id, OFFICIAL);
@@ -87,6 +79,9 @@ async function caseUnderReview() {
 
 beforeEach(async () => {
   vi.clearAllMocks();
+  // The forward is a server call, and the case reaches PENDING_ASSIGNMENT only
+  // because the server put it there — a canned reply moves nothing.
+  installFakeCaseMail(mailboxService);
   await s().hydrate();
   await s().resetDemo();
   await caseUnderReview();

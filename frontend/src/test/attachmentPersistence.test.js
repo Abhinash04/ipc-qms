@@ -4,6 +4,7 @@ import { loadAll } from '@/services/persistence/queryState';
 import { findUserById } from '@/constants/mockUsers';
 import { WORKFLOW_STATE } from '@/constants/statusEnums';
 import { fakeFinalApprovalEndpoint } from '@/test/fakeFinalApprovalEndpoint';
+import { fakeCaseMail } from '@/test/fakeCaseMail';
 
 vi.mock('@/services/api/mailboxService');
 
@@ -20,17 +21,13 @@ const ATTACHMENTS = [
   { attachmentId: 'att_2', filename: 'photo.png', mimeType: 'image/png', size: 200 },
 ];
 
-const fakeForward = (payload) =>
-  Promise.resolve({
-    from: 'Test Front Officer <front-office@test.invalid>',
-    to: ['officer@test.invalid'],
-    subject: `Fwd: ${payload.subject} [${payload.queryId}]`,
-    body: payload.body,
-    providerMessageId: 'mock-msg-forward',
-    providerThreadId: 'mock-thread-1',
-    sentAt: '2026-08-18T10:00:00.000Z',
-    attachments: payload.attachments,
-  });
+/**
+ * The forward is a server call now: the record of it, the audit row and the
+ * move to PENDING_ASSIGNMENT all come back from the endpoint rather than being
+ * written here. See src/test/fakeCaseMail.js.
+ */
+const caseMail = fakeCaseMail();
+const fakeForward = caseMail.forwardQuery;
 
 const fakeSend = (payload) =>
   Promise.resolve({
