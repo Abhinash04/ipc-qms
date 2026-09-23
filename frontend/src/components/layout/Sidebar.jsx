@@ -68,9 +68,7 @@ export function Sidebar() {
     setCollapsed(next);
     try {
       localStorage.setItem(STORAGE_KEY, String(next));
-    } catch {
-      // ignore storage error
-    }
+    } catch { /* noop */ }
   };
 
   const handleLogout = () => {
@@ -78,7 +76,6 @@ export function Sidebar() {
     navigate(ROUTE_PATHS.LOGIN);
   };
 
-  // Notifications is excluded at the source now — see routeSections.js.
   const items = navItemsForRole(currentUser?.role);
 
   return (
@@ -217,10 +214,6 @@ export function Sidebar() {
               <button
                 type="button"
                 onClick={handleLogout}
-                // Collapsed, this button is icon-only and the label span below
-                // is not rendered, leaving it with no accessible name at all —
-                // the tooltip does not supply one, since it is not in the a11y
-                // tree until hover. Naming it explicitly covers both states.
                 aria-label="Sign out session"
                 className={cn(
                   "flex items-center justify-center font-black transition-colors duration-200 cursor-pointer border",

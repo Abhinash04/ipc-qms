@@ -14,19 +14,10 @@ import { styleFor } from "@/components/dashboard/dashboardTones";
 import { caseTrend, volumeByDay } from "@/components/admin/adminStats";
 import { cn } from "@/utils/cn";
 
-/** Stable empty defaults: one shared reference, so memo and dep arrays hold. */
 const NO_WORKFLOW_STEPS = [];
 const NO_REVIEWS = [];
 const NO_RECORDS = [];
 
-/**
- * What the trend actually measures.
- *
- * A bucket is a filter over a query's CURRENT state, so "this bucket grew by 3"
- * is not derivable — nothing here holds the history. What is derivable, and
- * what caseTrend computes, is how many of the cases sitting in the bucket right
- * now arrived in the last seven days against the seven before it.
- */
 const TREND_LABEL = "arrivals, 7d vs prior 7d";
 
 export function BucketDashboard({
@@ -70,11 +61,8 @@ export function BucketDashboard({
       const series = volumeByDay(records);
       const { current, previous, delta } = caseTrend(records);
       out[bucket.key] = {
-        // An aggregate bucket is always 100% of itself — a full bar says nothing.
         share: bucket.aggregate || total === 0 ? null : records.length / total,
         shareTotal: total,
-        // A flat line and a "No change" chip both assert a measurement that did
-        // not happen. Absent is the honest state.
         series: series.some((d) => d.value > 0) ? series : null,
         delta: current || previous ? delta : null,
       };

@@ -31,7 +31,6 @@ const PREDEFINED_REASONS = [
   'Other',
 ];
 
-/** The category alone, or the category plus whatever the officer typed. */
 function combineReason(category, details) {
   const trimmed = details.trim();
   if (category === 'Other') return trimmed;
@@ -39,7 +38,6 @@ function combineReason(category, details) {
   return category;
 }
 
-/** Assigned officials other than the current one, narrowed by the search box. */
 function findEligibleColleagues(query, searchQuery) {
   const term = searchQuery.trim().toLowerCase();
   return MOCK_USERS.filter((user) => {
@@ -55,10 +53,6 @@ function findEligibleColleagues(query, searchQuery) {
   });
 }
 
-/**
- * Searching shows every match (carrying an AI score where one exists);
- * otherwise the AI ranking leads, falling back to the plain eligible list.
- */
 function buildDisplayedOfficials(eligibleColleagues, aiRecommendations, searchQuery) {
   const asOption = (col) => ({ ...col, userId: col.id });
 
@@ -71,20 +65,7 @@ function buildDisplayedOfficials(eligibleColleagues, aiRecommendations, searchQu
   return eligibleColleagues.map(asOption);
 }
 
-/**
- * Ranks officials for this query once the dialog opens, after a short debounce.
- *
- * `isLoading` is derived rather than stored. Setting it synchronously in the
- * effect body was a cascading render — React rendered the dialog, the effect
- * immediately set state, and React rendered it again before the browser had
- * painted anything. `result === null` already means "the debounce has not
- * produced an answer yet", so the extra state variable only restated it.
- */
 function useAiRecommendations(query, isOpen) {
-  // Tagged with the query it was computed for, so reopening the dialog on a
-  // different case does not flash the previous case's ranking. That tag is also
-  // what makes the reset unnecessary: a stale result is recognised by its key
-  // rather than cleared by a second setState.
   const [result, setResult] = useState(null);
   const key = isOpen && query ? query.queryId : null;
 
@@ -135,7 +116,6 @@ function CurrentAssigneeRow({ name }) {
   );
 }
 
-/** A match score when the AI ranked this official, otherwise a selection tick. */
 function OfficialCardBadge({ rec, isSelected }) {
   if (rec.matchPercent) {
     return (
@@ -150,7 +130,6 @@ function OfficialCardBadge({ rec, isSelected }) {
   return null;
 }
 
-/** One selectable official, with their division, expertise and AI match score. */
 function OfficialCard({ rec, isSelected, onSelect }) {
   return (
     <div
@@ -199,7 +178,6 @@ function OfficialCard({ rec, isSelected, onSelect }) {
   );
 }
 
-/** The results area: loading, unavailable, empty, or the list of officials. */
 function OfficialResults({ isLoading, error, officials, searchQuery, selectedId, onSelect }) {
   if (isLoading) {
     return (
@@ -246,7 +224,6 @@ function OfficialResults({ isLoading, error, officials, searchQuery, selectedId,
   );
 }
 
-/** Step 1: search for and pick the receiving official. */
 function SelectColleagueSection({
   searchQuery,
   onSearchChange,
@@ -298,7 +275,6 @@ function SelectColleagueSection({
   );
 }
 
-/** Step 2: why the case is moving. */
 function TransferReasonSection({ category, onCategoryChange, details, onDetailsChange }) {
   const detailsPlaceholder =
     category === 'Other'
@@ -347,7 +323,6 @@ function SummaryRow({ label, children, valueClassName = 'font-bold text-slate-80
   );
 }
 
-/** Final read-back before the transfer is committed. */
 function TransferConfirmation({ query, fromName, toName, byName, reason }) {
   return (
     <div className="py-4 space-y-4 select-none">

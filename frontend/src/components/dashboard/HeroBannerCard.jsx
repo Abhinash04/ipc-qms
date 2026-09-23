@@ -87,7 +87,6 @@ export function HeroBannerCard() {
                   strokeWidth={2.2}
                 />
 
-                {/* Pulsing Signal Rays around Envelope */}
                 <m.span
                   animate={{ scale: [1, 1.4, 1], opacity: [0.8, 0, 0.8] }}
                   transition={{
@@ -111,14 +110,6 @@ export function HeroBannerCard() {
                 </m.div>
               </m.div>
 
-              {/*
-                Describes how enquiries reach the QMS, and claims nothing about
-                the running system. A pulsing "Live Mail Sync" dot, "Auto-synced"
-                and "SSL Active" used to sit here — decoration on every role's
-                dashboard, with no data behind any of it. The mailbox's real
-                state is reported where it is known: the Front Office inbox,
-                which holds the sync status, and the settings page.
-              */}
               <div className="space-y-1.5 min-w-0 flex-1 text-center sm:text-left mt-3 sm:mt-0">
                 <p className="text-sm font-black text-slate-900 leading-snug flex items-center justify-center sm:justify-start gap-1.5 m-0">
                   <span>Digital Query Ingestion</span>

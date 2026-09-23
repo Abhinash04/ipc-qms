@@ -24,7 +24,6 @@ import { ROLE_LABELS } from "@/constants/roles";
 import { ROLE_SLUG } from "@/constants/permissions";
 import { useAuthStore } from "@/store/useAuthStore";
 
-/** Header row and data rows must share one column template. */
 const GRID = "grid-cols-[170px_1fr_150px_220px_180px_150px_32px]";
 
 const PRIORITY_OPTIONS = [
@@ -71,7 +70,6 @@ const matchesSearch = (query, term) => {
   );
 };
 
-/** Free-text search plus the priority narrowing. */
 function QueryTableToolbar({
   searchQuery,
   onSearchChange,
@@ -134,7 +132,6 @@ function QueryTableHeaderRow() {
   );
 }
 
-/** Who the case currently sits with, as shown in the Assignee column. */
 function describeAssignee(query) {
   const assignee = query.currentAssigneeId
     ? findUserById(query.currentAssigneeId)
@@ -271,7 +268,6 @@ function QueryTableEmpty({ emptyMessage }) {
   );
 }
 
-/** One static page for now; the control is present so the count reads clearly. */
 function QueryTablePagination({ shown, total }) {
   return (
     <div className="px-6 py-4 border-t border-slate-100/80 flex items-center justify-between bg-white">

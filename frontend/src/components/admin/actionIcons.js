@@ -13,15 +13,6 @@ import {
   Activity,
 } from 'lucide-react';
 
-/**
- * The icon shown beside an audit action in the activity feed.
- *
- * Presentational only — it never changes what is counted or recorded. Actions
- * are matched by prefix rather than enumerated one by one, so an action added
- * to the backend still renders sensibly instead of falling through to the
- * generic icon, and an unknown action degrades rather than breaking the row.
- */
-
 const EXACT = {
   LOGIN_SUCCEEDED: { icon: LogIn, tint: 'bg-emerald-100 text-emerald-700' },
   LOGIN_FAILED: { icon: LogIn, tint: 'bg-rose-100 text-rose-700' },

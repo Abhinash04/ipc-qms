@@ -6,13 +6,6 @@ import { attachmentUrl } from '@/services/api/attachmentService';
 import { formatFileSize } from '@/constants/attachmentPolicy';
 import { AttachmentViewerDialog } from './AttachmentViewerDialog';
 
-/**
- * Normalises both shapes an attachment record can arrive in:
- *  - current: `{attachmentId, filename, mimeType, size}` — real bytes exist.
- *  - legacy: `{id, name, sizeKb}` — pre-existing demo data / metadata-only
- *    records from before this feature, which carry no attachmentId and so
- *    can never be previewed or downloaded.
- */
 function normalise(raw) {
   return {
     attachmentId: raw.attachmentId ?? null,
@@ -22,19 +15,9 @@ function normalise(raw) {
   };
 }
 
-/**
- * An entry with neither an id nor a name describes no file at all. The real
- * fix for phantom attachments is in the backend reader — this only stops a
- * malformed legacy record from rendering as a nameless row.
- */
 const describesAFile = (raw) =>
   Boolean(raw) && Boolean(raw.attachmentId || raw.id || raw.filename || raw.name);
 
-/**
- * `urlFor(attachmentId)`, when given, builds the Download link — the mailbox
- * message page passes its message-scoped route. Preview always uses the global
- * attachment route.
- */
 export function AttachmentList({ attachments = [], urlFor }) {
   const [previewing, setPreviewing] = useState(null);
   const real = attachments.filter(describesAFile);
@@ -84,8 +67,6 @@ export function AttachmentList({ attachments = [], urlFor }) {
                   </a>
                 </span>
               ) : raw.materializeError ? (
-                // A file the mail carried but the reader could not save: its
-                // name is known, its bytes are not.
                 <span className="text-[11px] font-medium text-rose-600 shrink-0">
                   Unavailable: {raw.materializeError}
                 </span>

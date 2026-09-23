@@ -3,28 +3,11 @@ import { Sparkles, RefreshCw, Loader2 } from 'lucide-react';
 import { fetchGemmaAiSummary } from '@/services/api/aiService';
 import { cn } from '@/utils/cn';
 
-/** The overview shows a gist; the full output is one click away. */
 const KEY_POINT_PREVIEW = 3;
 
-/**
- * Says which kind of summary this is, when it is not the model's own work.
- *
- * `generateSummary` degrades to a deterministic stand-in whenever the model is
- * unreachable, times out or answers with an error — which on a deployment whose
- * Gemma endpoint is down is *every* summary. Rendering that identically to a
- * real one invites an officer to trust a paragraph the model never wrote, so
- * the fallback says so. A genuine summary gets no badge: the absence of a
- * warning is the quiet case, not a label nobody reads.
- */
 function ProvenanceBadge({ summary }) {
   if (!summary) return null;
 
-  /**
-   * Two shapes reach here. The accept path stores an explicit `status`; the
-   * Re-generate button stores the raw generator output, which carries only
-   * `fallback`. Reading both means a stand-in summary is labelled wherever it
-   * came from, rather than only on the newer path.
-   */
   const status = summary.status ?? (summary.fallback ? 'FALLBACK' : 'GENERATED');
   if (status === 'GENERATED') return null;
 
@@ -49,12 +32,10 @@ function ProvenanceBadge({ summary }) {
   );
 }
 
-/** The loaded summary: text, key points, expand control and topic chips. */
 function SummaryBody({ summary, expanded, onToggleExpanded }) {
   const keyPoints = summary.keyPoints || [];
   const visibleKeyPoints = expanded ? keyPoints : keyPoints.slice(0, KEY_POINT_PREVIEW);
   const hasMoreKeyPoints = keyPoints.length > KEY_POINT_PREVIEW;
-  // Roughly the point at which the clamp starts hiding text.
   const hasMoreText = (summary.text?.length || 0) > 220;
 
   return (
@@ -140,15 +121,12 @@ export function AiSummaryCard({ summary: initialSummary, query, onSummaryUpdated
 
   const currentSummary = summary || initialSummary;
 
-
-
   const outerClass = variant === 'embedded'
     ? "select-none"
     : "bg-linear-to-br from-indigo-50/80 via-purple-50/30 to-white rounded-3xl border border-indigo-200/80 p-6 shadow-sm select-none";
 
   return (
     <div className={outerClass}>
-      {/* Header Row */}
       <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-indigo-100">
         <div className="flex items-center gap-2.5">
           <div className="w-8 h-8 rounded-xl bg-purple-600 text-white flex items-center justify-center shadow-2xs">
@@ -178,7 +156,6 @@ export function AiSummaryCard({ summary: initialSummary, query, onSummaryUpdated
         </div>
       </div>
 
-      {/* Body Content */}
       <div className="pt-4 space-y-4">
         {loading ? (
           <div className="flex flex-col items-center justify-center py-8 space-y-2">

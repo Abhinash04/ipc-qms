@@ -6,20 +6,6 @@ import { DIRECTION_ICON, trendTone } from '@/components/common/trendTone';
 
 const nf = new Intl.NumberFormat();
 
-/**
- * A headline figure with its period-over-period change.
- *
- * Deliberately not `common/StatTile`: that component applies its colour props
- * as inline CSS (`style={{ background: cardBg }}`) while its callers pass
- * Tailwind class names, so its tinted variants never actually render. Rather
- * than change a contract two other pages depend on, this tile owns its own
- * styling and takes classes throughout.
- *
- * `higherIsWorse` is the important prop. Colouring a trend by direction alone
- * would paint a rising failure rate green; the tile is told what the metric
- * means and colours the change accordingly.
- */
-
 export function KpiTile({
   label,
   value,
@@ -52,8 +38,6 @@ export function KpiTile({
 
   const footer = delta && (
     <span className="mt-3 flex items-center gap-1.5 text-[11.5px] font-bold">
-      {/* Direction is carried by the icon, the sign and the colour together,
-          so nothing depends on hue alone. */}
       <TrendIcon
         className={cn('h-3.5 w-3.5', trendTone(delta.direction, higherIsWorse))}
         aria-hidden="true"

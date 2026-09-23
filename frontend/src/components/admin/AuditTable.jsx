@@ -6,14 +6,6 @@ import { cn } from '@/utils/cn';
 import { stableKey } from '@/utils/stableKey';
 import { formatTime, humaniseAction } from './auditFormat';
 
-/**
- * The audit table.
- *
- * Rows are server records — `{timestamp, actorType, actorId, actorRole,
- * action, result, queryId, messageId, attachmentId, error, aiMetadata,
- * details}` — rendered as-is. Nothing is computed or inferred here.
- */
-
 const RESULT_STYLE = {
   success: { icon: CheckCircle2, className: 'text-emerald-700 bg-emerald-50 border-emerald-200' },
   failure: { icon: AlertTriangle, className: 'text-rose-700 bg-rose-50 border-rose-200' },
@@ -39,7 +31,6 @@ function ResultChip({ result }) {
   );
 }
 
-/** The expandable second row: error, ids and metadata for one event. */
 function DetailRow({ event }) {
   return (
     <tr className="border-b border-slate-100 bg-slate-50/60">
@@ -141,8 +132,6 @@ export function AuditTable({ events, loading, error, onOpenQuery, emptyTitle = '
   if (loading) {
     return (
       <div className="space-y-2" aria-busy="true" aria-label="Loading audit events">
-        {/* One header + twelve row-height bars approximates a loaded page, so
-            the pagination footer below barely moves when data arrives. */}
         <Skeleton className="h-9 w-full rounded-lg" />
         {Array.from({ length: 12 }).map((_, i) => (
           <Skeleton key={i} className="h-10 w-full rounded-lg" />
@@ -181,8 +170,6 @@ export function AuditTable({ events, loading, error, onOpenQuery, emptyTitle = '
         </thead>
         <tbody>
           {events.map((event) => (
-            // Persisted events carry Mongo's _id; buffered fallback events do
-            // not, so those get a key tied to the object itself.
             <Row key={event._id || stableKey(event)} event={event} onOpenQuery={onOpenQuery} />
           ))}
         </tbody>

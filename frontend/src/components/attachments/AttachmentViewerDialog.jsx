@@ -12,7 +12,6 @@ function previewKind(mimeType) {
   return 'none';
 }
 
-/** One early-returning branch per preview kind. */
 function AttachmentPreview({ kind, url, attachment, textContent, onUnavailable }) {
   if (kind === 'image') {
     return (
@@ -35,8 +34,6 @@ function AttachmentPreview({ kind, url, attachment, textContent, onUnavailable }
       <iframe
         src={url}
         title={attachment.filename}
-        // allow-scripts lets the browser's PDF viewer run; without
-        // allow-same-origin the (user-uploaded) document cannot touch the app.
         sandbox="allow-scripts"
         className="h-[70vh] w-full rounded-lg border border-slate-200"
       />
@@ -62,7 +59,6 @@ function AttachmentPreview({ kind, url, attachment, textContent, onUnavailable }
   );
 }
 
-/** `attachment`: `{ attachmentId, filename, mimeType }`. */
 export function AttachmentViewerDialog({ attachment, onClose }) {
   const [unavailable, setUnavailable] = useState(false);
   const [textContent, setTextContent] = useState(null);

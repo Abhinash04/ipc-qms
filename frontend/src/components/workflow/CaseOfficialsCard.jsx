@@ -24,7 +24,6 @@ const initials = (name) =>
     .slice(0, 2)
     .toUpperCase();
 
-/** Lightweight rows, not cards — this is supporting context, not the content. */
 export function CaseOfficialsCard({ query, steps, audit }) {
   const officials = buildCaseOfficials({ query, steps, audit });
   if (officials.length === 0) return null;

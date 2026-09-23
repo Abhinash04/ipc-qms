@@ -56,8 +56,8 @@ export function Header() {
     if (bellRef.current) {
       const rect = bellRef.current.getBoundingClientRect();
       const idealRight = Math.max(16, window.innerWidth - rect.right);
-      const popoverWidth = window.innerWidth < 640 ? 336 : 384; 
-      
+      const popoverWidth = window.innerWidth < 640 ? 336 : 384;
+
       const maxRight = window.innerWidth - popoverWidth - 16;
       const actualRight = Math.min(idealRight, Math.max(16, maxRight));
 
@@ -150,11 +150,6 @@ export function Header() {
             </button>
           </div>
 
-          {/* SUPER_ADMIN only. This wipes every Query Case on the server, and it
-              sat in the header for every role: the API refused the write with a
-              403, but `resetDemo` had already replaced local state and does not
-              roll back, so that tab carried on against a zeroed counter while
-              the server still held the real cases. */}
           {currentUser?.role === ROLES.SUPER_ADMIN && (
             <button
               onClick={resetDemo}
@@ -166,9 +161,6 @@ export function Header() {
             </button>
           )}
 
-          {/* Identity, not a switcher. Changing user now means signing out and
-              signing in again — the old dropdown called login(userId) directly
-              and let any signed-in user become any other with no password. */}
           <div
             className="glass-control flex items-center gap-2.5 rounded-full px-3.5 py-1.5 text-[12.5px] font-bold text-slate-800"
             aria-label={`Signed in as ${currentUser?.name}, ${ROLE_LABELS[currentUser?.role]}`}
@@ -195,7 +187,6 @@ export function Header() {
             }}
             className="w-84 sm:w-96 max-w-[calc(100vw-32px)] rounded-2xl border border-slate-200/90 bg-white/98 p-4.5 shadow-[0_25px_80px_rgba(15,23,42,0.35)] backdrop-blur-3xl animate-in fade-in zoom-in-95 duration-150 select-none"
           >
-            {/* Popover Header */}
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
               <div className="flex items-center gap-2">
                 <div className="flex h-7.5 w-7.5 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600 border border-indigo-100/80">
@@ -221,7 +212,6 @@ export function Header() {
               )}
             </div>
 
-            {/* Scrollable Notification Items List */}
             <div className="my-3 max-h-80 overflow-y-auto space-y-2.5 pr-1 text-slate-800">
               {userNotifications.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-9 text-center text-slate-400 space-y-2">
