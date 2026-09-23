@@ -328,6 +328,53 @@ agent opened it is marked unread again before the tab closes. If that tab lands 
 `NICeMail session expired. Please authenticate again in Chrome.` before any field is touched. The only
 things it types are the To/Cc/Subject/body of an outgoing case email.
 
+### The agent tab's lifecycle, and why it is tracked
+
+One tab per unit of work, opened at `about:blank`, navigated to the app URL, and closed again. It is
+not pooled: a fresh tab is a clean slate, and a half-filled compose form left over from a failed send
+is how the wrong text would go out.
+
+Closing it is best effort — it talks to a browser that may already be gone — so "we closed it" and
+"it is closed" are different facts, and the difference is held in a registry of target ids
+(`session.js`). Three things follow from that:
+
+- **A tab that would not close is closed before the next unit**, not left for the operator. The
+  sweep runs at the start of each unit, which is the one moment the agent is certainly connected and
+  certainly not mid-operation.
+- **A `Target.createTarget` that times out is adopted.** The request is bounded like every other and a
+  late answer is dropped, but Chrome may have made the tab anyway — so the target list is diffed
+  around the call and the id recovered. Before this it was lost, and the tab stayed open for the rest
+  of the session, once per failed sync.
+- **The agent's own tabs are excluded when it looks for your signed-in one.** A leaked agent tab sits
+  on the mail app's own host and scores *identically* to the operator's real tab: both earn the host
+  and title points, and neither earns the path bonus, because both put the mailbox route in the URL
+  hash. A tie breaks on Chrome's enumeration order, so without the exclusion the agent could take a
+  leaked — possibly discarded — tab as the proof of session and read its browser context.
+
+That last one is what made the final response fail while the acknowledgement and the forward
+succeeded. Chrome discards hidden background tabs, and a discarded tab answers CDP exactly as a
+healthy one does until an evaluate silently never returns. The response is simply the last of a case's
+three sends and ran against the most-degraded browser. Symptom:
+
+```
+RESPONSE RESULT  stage="open_browser_tab"
+    error="CDP Runtime.evaluate did not answer within 19719ms"
+```
+
+A value *below* `NIC_BROWSER_TIMEOUT_MS` and not a round number is the signature of a `waitFor`: it
+computes one deadline and gives each poll what is left of it, so `19719` means the page answered one
+poll quickly and then stopped answering for the whole remainder.
+
+**Recovery.** A tab that never renders the mailbox is discarded and the unit gets **one** fresh tab.
+That retry covers the setup only — opening a tab and loading the mailbox, which sends nothing. It is
+gated on whether the work had been entered, so a send that failed halfway is never attempted twice:
+from `click_send` onwards the message may already have gone.
+
+**A sync gives way to a send.** One sync of `NIC_BROWSER_SYNC_MAX` messages was measured at 91 s
+against the live mailbox, and it holds the single serialised session throughout. A sync will not start
+while browser work is pending, and one already running stops between messages; `remaining` reports
+what it left, and the next poll continues. A send is a person waiting.
+
 ## 10. How the Agent Connects (`attach.js`)
 
 `attachToNicemail()`:
