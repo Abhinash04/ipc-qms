@@ -3,20 +3,6 @@ import { AuditEvent } from '../../models/AuditEvent.js';
 import { ACTOR_TYPES } from '../../constants/roles.js';
 import { AUDIT_RESULTS } from '../../constants/auditActions.js';
 
-/**
- * The audit trail.
- *
- * Persists to Mongo when it is connected and to an in-process buffer when it
- * is not, matching how `services/email/mailbox/index.js` already degrades. The
- * buffer is a development and test convenience only — it is explicitly not a
- * durable audit trail, which is what `describe()` reports so an operator can
- * tell the difference.
- */
-
-/**
- * Bounded so a long-running dev server cannot leak memory. Oldest entries are
- * dropped first; a production deployment has Mongo and never reaches this.
- */
 const MAX_BUFFERED = 5000;
 let buffer = [];
 
@@ -39,15 +25,6 @@ function toRecord(input) {
   };
 }
 
-/**
- * Record one event.
- *
- * **Never throws.** A failed audit write must not roll back an action that
- * already happened — an email that was genuinely sent is still sent whether
- * or not Mongo accepted the record. The failure is reported on stderr and the
- * event is kept in the buffer so it is not lost outright, and the returned
- * record carries `persisted: false` for callers that want to react.
- */
 async function record(input) {
   if (!input?.action) {
     console.error('[audit] refusing to record an event with no action');
@@ -76,11 +53,6 @@ function push(event) {
   if (buffer.length > MAX_BUFFERED) buffer = buffer.slice(-MAX_BUFFERED);
 }
 
-/**
- * `timestamp` is an ISO-8601 string, and ISO-8601 sorts and compares correctly
- * as text — so the same `from`/`to` bounds work against the buffer and against
- * Mongo without converting either side to Date.
- */
 const matches = (event, { action, actorType, actorId, result, queryId, messageId, from, to }) =>
   (!action || event.action === action) &&
   (!actorType || event.actorType === actorType) &&
@@ -91,7 +63,6 @@ const matches = (event, { action, actorType, actorId, result, queryId, messageId
   (!from || String(event.timestamp) >= from) &&
   (!to || String(event.timestamp) <= to);
 
-/** The same criteria as a Mongo filter document. */
 function toMongoFilter({ action, actorType, actorId, result, queryId, messageId, from, to }) {
   const filter = {};
   if (action) filter.action = action;
@@ -108,15 +79,6 @@ function toMongoFilter({ action, actorType, actorId, result, queryId, messageId,
   return filter;
 }
 
-/**
- * Newest first, matching how an audit trail is read.
- *
- * Buffered events are always included, even when Mongo is connected. The
- * buffer then holds exactly the events whose write to Mongo *failed*, and
- * those are the ones an operator most needs to see — leaving them out would
- * make the fallback a write-only hole that silently swallows the records of
- * every action taken during an outage.
- */
 async function list(criteria = {}) {
   const { limit = 100, offset = 0 } = criteria;
   const buffered = buffer.filter((event) => matches(event, criteria));
@@ -125,8 +87,6 @@ async function list(criteria = {}) {
     return [...buffered].reverse().slice(offset, offset + limit);
   }
 
-  // `offset + limit` from Mongo, because the buffer is merged in afterwards and
-  // could contribute entries that belong on this page.
   const persisted = await AuditEvent.find(toMongoFilter(criteria))
     .sort({ timestamp: -1 })
     .limit(offset + limit)
@@ -150,13 +110,6 @@ const mergeCounts = (a, b) => {
   return merged;
 };
 
-/**
- * Aggregates that back the Administration KPI cards.
- *
- * Counted, not sampled — the numbers come from `countDocuments`/`aggregate`
- * rather than from a truncated page of `list()`, so they stay true once the
- * collection outgrows any one page.
- */
 async function summary(criteria = {}) {
   const buffered = buffer.filter((event) => matches(event, criteria));
   const durability = describe();
@@ -193,7 +146,6 @@ async function summary(criteria = {}) {
   };
 }
 
-/** Test-only. Clears the buffer; never touches persisted events. */
 function resetBuffer() {
   buffer = [];
 }
