@@ -48,6 +48,7 @@ Operational scripts:
 | Script | Purpose |
 |---|---|
 | `npm run db:reset` | Clear the workflow state from MongoDB, keeping `users`. See [Resetting the workflow state](#resetting-the-workflow-state). |
+| `npm run mailbox:purge` | Triage inbound mail and strip the content of junk past the retention window. `--dry-run` first — it destroys content. See [Junk triage and retention](#junk-triage-and-retention). |
 | `npm run ingest:ipc` | Rebuild `src/data/ipcKnowledge.json` from `docs/markdown/`. See [AI grounding](#ai-grounding-layer). |
 | `npm run gmail:preflight` | Per-identity Gmail OAuth check — verifies scopes and detects a disabled Gmail API. |
 | `npm run nic:preflight` | Read-only NICeMail IMAP/SMTP reachability + auth probe. Never marks mail read. |
@@ -505,6 +506,7 @@ incoming message, ignored by those that did not.
 | `AuditEvent` | 14 fields, indexed on timestamp/actorType/actorId/auditId/action/queryId/messageId. `action` is deliberately *not* an enum so a new action never fails to record; `auditId` is indexed but **not unique**, because the counter behind it lives in a browser |
 | `MailboxMessage` + `Counter` | the ingest mailbox and the numeric `MSG-00001` sequence. Also holds the NICeMail browser mailbox's messages: `source: 'nic-browser'`, a `providerMessageId` under a unique partial index, and `removedAt`, which hides a deleted message so the next sync cannot bring it back. Additive, insert-only and not backfilled: `toAddresses` (the To header; `to` stays the mailbox), `providerThreadId`, `bodyHtml` (null over 1,000,000 chars), `providerUnread`, `receivedAtSource` (`message`/`sync`), the QMS read state `readAt`/`readByUserId`, and `createdAt`. Compound index `{to, source, removedAt, receivedAt: -1, mailboxMessageId: -1}` for the inbox list |
 | `MailboxDecision` | the Front Officer's accept/reject on one incoming message |
+| `MailboxTriage` | the machine's verdict on one incoming message — `GENUINE`/`JUNK`, a confidence, which rule or the model decided, and `classifiedAt`, which is the retention clock. Also `rescuedAt` (a person said "not junk": terminal) and `purgedAt`, the sweep's watermark |
 | `OutboundEmail` | one row per case email — `dispatchKey` = `"${emailType}:${queryId}"`, **unique**. `status` is `SENDING`/`SENT`/`FAILED`/`UNCERTAIN`, with `claimToken`, `leaseExpiresAt`, `attempts`, `recipients`, `rfcMessageId`, `lastError`, `resolvedBy` and a capped `history`. The unique key is the idempotency guard: see *One email per case* below |
 | `User` | seeded directory; written on connect, **not yet read for authentication** |
 | `QueryCounter` | the workflow store's id counters, held as an object |
@@ -525,6 +527,68 @@ Timestamps are stored as ISO-8601 **strings**, not `Date`. That is deliberate: I
 correctly as text, so the same `from`/`to` bounds work against Mongo and against the in-memory audit
 buffer without a second code path.
 
+### Junk triage and retention
+
+The Front Office mailbox takes mail from anyone, so it also takes bounces, out-of-office replies,
+marketing, and this system's own acknowledgements looping back. All of it used to be stored whole,
+at up to 1,000,000 characters of `bodyHtml` each, on a 512MB cluster.
+
+Triage runs in two stages. **Deterministic rules** run on the intake path
+(`services/email/mailbox/triageRules.js`): a message sent from one of our own configured addresses,
+a delivery-status notification, or a `mailer-daemon`/`postmaster` sender is `hard` junk — provably
+machine-generated, and purgeable. Anything a person might plausibly have sent — a `no-reply` sender,
+an out-of-office subject, a bulk header, an empty body — is `soft`: recorded as junk so it sorts,
+but sent on to the model, which decides. **One Gemma call** then settles the soft cases, from inside
+the hourly sweep rather than on intake: a 12-second call per message inside a 30-second sync loop
+would wreck the inbox, and there it is rate-limited to one small batch an hour.
+
+**Nothing is deleted.** The sweep strips `body`, `bodyHtml` and `attachments`, unlinks the
+attachment bytes from disk, and sets `purgedAt` — leaving the id stub, because that stub is what
+stops the next sync re-ingesting the message. This is also why a MongoDB TTL index cannot do the
+job: a TTL index can only remove a whole document.
+
+Five things make a wrong verdict survivable:
+
+- **GENUINE is the default** that evidence has to overcome. `gmailInboxReader.js` records why a
+  sender filter was removed once already — "an enquiry from an unknown member of the public was
+  silently discarded before anyone saw it — the worse of the two failures" — and this feature is
+  built to respect that. ESP bounce-domain matching was considered for the rule set and rejected on
+  the same reasoning.
+- **Junk stays whole and visible for `MAILBOX_RETENTION_HOURS`** (46 by default) in the Junk filter,
+  with a `purgesAt` countdown. `POST /mailbox/messages/:id/triage/rescue` clears the verdict
+  permanently, without minting the Query Case that accepting it would.
+- **Every failure degrades to genuine, structurally.** Every failure path in `classifyMail` returns
+  GENUINE at confidence 0, and the sweep's candidate query requires `confidence >= 0.9`. A Gemma
+  outage can only reduce purging; it cannot cause a wrong one. No code enforces that — the filter
+  shape does.
+- **Absolute vetoes**, re-checked immediately before each update: an `ACCEPTED` decision, or a
+  `QueryCase` linked to the message. The re-check closes a race against `acceptMessage`, which
+  copies the body onto the case.
+- **A permanent audit row.** Every purge writes `EMAIL_PURGED` with the sender, subject and
+  received time, so once the body is gone "what was thrown away, and who sent it?" still has an
+  answer.
+
+The sweep runs hourly from `server.js`, unref'd, off under `NODE_ENV=test` and when
+`MAILBOX_RETENTION_ENABLED=false`, and purges nothing in the first two hours after boot — the
+retention window is wall-clock, but the rescue window only exists while somebody can see the inbox,
+so a server back from a long outage must not purge its backlog before anyone has looked at it.
+
+```bash
+npm run mailbox:purge -- --dry-run     # what it would destroy, destroying nothing
+npm run mailbox:purge -- --backfill    # judge rows stored before triage existed
+npm run mailbox:purge -- --hours=72    # a wider window, to drain a backlog
+npm run mailbox:purge -- --indexes     # the triage indexes, which no test can see
+```
+
+Rows stored before this existed have no verdict, so they are not purgeable and **no migration is
+required**. `--backfill` judges them on the rules alone and stamps `classifiedAt` as *now*, not the
+message's own `receivedAt`, so every backfilled row gets a full fresh window however old the mail is.
+
+> Only the NICeMail browser mailbox stores rows, so it is the only purgeable source
+> (`PURGEABLE_SOURCES`). Under `MAILBOX_SOURCE=gmail` or `nic` the inbox is a live view of a remote
+> account and nothing is stored in Mongo at all — though Gmail attachment *bytes* are written to
+> disk on every poll and are never reaped, which is a separate leak this feature does not address.
+
 ### Resetting the workflow state
 
 ```bash
@@ -535,7 +599,7 @@ npm run db:reset -- --force   # required when NODE_ENV=production
 
 `scripts/resetWorkflowState.mjs` clears `querycases`, `workflowsteps`, `reviews`,
 `responseversions`, `notifications`, `emailmessages`, `emailthreads`, `mailboxmessages`,
-`mailboxdecisions`, `querycounters`, `counters` and `auditevents`.
+`mailboxdecisions`, `mailboxtriages`, `querycounters`, `counters` and `auditevents`.
 
 It is a **maintenance tool, not a seed: it inserts nothing.** The point is to return a development
 database to the state a fresh install would have, so the next real enquiry is case `00001` rather

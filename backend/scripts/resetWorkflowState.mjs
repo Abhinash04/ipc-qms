@@ -36,6 +36,7 @@ const COLLECTIONS = [
   'outboundemails',
   'mailboxmessages',
   'mailboxdecisions',
+  'mailboxtriages',
   // Sequence state and history
   'querycounters',
   'counters',

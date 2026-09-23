@@ -50,6 +50,12 @@ export const AUDIT_ACTIONS = {
   EMAIL_MARKED_UNREAD: 'EMAIL_MARKED_UNREAD',
   EMAIL_MOVED: 'EMAIL_MOVED',
   EMAIL_DELETED: 'EMAIL_DELETED',
+  /**
+   * The retention sweep stripped a junk message's content. Not a delete: the id
+   * stub remains, because it is what stops the next sync re-ingesting the
+   * message. Deliberately absent from CLIENT_AUDIT_EVENTS — no client writes it.
+   */
+  EMAIL_PURGED: 'EMAIL_PURGED',
 
   // ── Synchronisation ──────────────────────────────────────────────────────
   SYNC_STARTED: 'SYNC_STARTED',

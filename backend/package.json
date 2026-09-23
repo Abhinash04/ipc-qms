@@ -16,6 +16,8 @@
     "nic:browser:calibrate": "node src/scripts/nicBrowserCalibrate.js",
     "ingest:ipc": "node scripts/ingestIpcDocs.mjs",
     "db:reset": "node scripts/resetWorkflowState.mjs",
+    "db:provision": "node scripts/provisionAtlas.mjs",
+    "mailbox:purge": "node scripts/purgeMailboxJunk.mjs",
     "draft:trace": "node src/scripts/testDraftLive.js",
     "draft:eval": "node src/scripts/evalDraft.js"
   },

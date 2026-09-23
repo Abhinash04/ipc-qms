@@ -22,6 +22,7 @@ import {
   downloadMessageAttachment,
   markRead,
   syncMailbox,
+  rescueMessage,
 } from '../controllers/mailboxController.js';
 
 const router = express.Router();
@@ -53,6 +54,15 @@ router.get(
 
 // The Front Office opened it. QMS state only: NICeMail's own is never changed.
 router.post('/mailbox/messages/:messageId/read', verifyToken, verifyRole(FRONT_OFFICE_ONLY), markRead);
+
+// "Not junk." Clears the machine's verdict and spares the message from the
+// retention sweep, without minting a case the way accepting it would.
+router.post(
+  '/mailbox/messages/:messageId/triage/rescue',
+  verifyToken,
+  verifyRole(FRONT_OFFICE_ONLY),
+  rescueMessage,
+);
 
 // Read the NICeMail inbox now rather than on the next poll. Background; 202.
 router.post('/mailbox/sync', verifyToken, verifyRole(FRONT_OFFICE_ONLY), syncMailbox);

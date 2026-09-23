@@ -20,6 +20,14 @@ vi.mock('../models/MailboxMessage.js', async () => {
     Counter: memoryDb.model('Counter'),
   };
 });
+vi.mock('../models/MailboxTriage.js', async () => {
+  const actual = await vi.importActual('../models/MailboxTriage.js');
+  const { memoryDb } = await import('./support/memoryDb.js');
+  return {
+    ...actual,
+    MailboxTriage: memoryDb.model('MailboxTriage', { unique: ['mailboxMessageId'] }),
+  };
+});
 vi.mock('../models/AuditEvent.js', async () => ({
   AuditEvent: (await import('./support/memoryDb.js')).memoryDb.model('AuditEvent'),
 }));

@@ -8,6 +8,7 @@ import * as audit from '../../audit/auditService.js';
 import { readInbox } from '../nic/browser/readInbox.js';
 import { normaliseAddress } from './address.js';
 import { searchFilter } from './messageView.js';
+import * as triage from './triage.js';
 
 /**
  * The NICeMail mailbox, read by the browser agent, as a QMS mailbox store.
@@ -156,7 +157,14 @@ async function sync(address = browserConfig.mailboxAddress, { reader = readInbox
         const id = message?.providerMessageId;
         if (!id || skip.has(id) || seen.has(id)) return;
         seen.add(id);
-        if (await store(wanted, message)) storedIds.push(id);
+        if (await store(wanted, message)) {
+          storedIds.push(id);
+          // The deterministic half of triage, which is cheap and needs no I/O
+          // beyond its own write. The model half runs in the retention sweep —
+          // a 12-second call per message here would wreck a 30-second poll.
+          // recordRules never throws: a throw would abort this read loop.
+          await triage.recordRules(mailboxMessageId(id), message, { source: SOURCE });
+        }
         attempts.delete(id);
       };
 
@@ -253,9 +261,18 @@ function resetSyncState() {
 
 const scope = (recipient) => ({ to: normaliseAddress(recipient), source: SOURCE, removedAt: null });
 
-function listFilter(recipient, { unreadOnly = false, q } = {}) {
+/**
+ * Async only because of `junkOnly`, which needs the verdicts, and those live in
+ * their own collection — the retention sweep must be able to scan them without
+ * touching these rows and their megabyte-scale HTML bodies.
+ *
+ * The junk id list is capped inside `junkMessageIds`. An unbounded `$in` is a
+ * real failure mode once a mailbox has seen a few years of marketing.
+ */
+async function listFilter(recipient, { unreadOnly = false, junkOnly = false, q } = {}) {
   const filter = { ...scope(recipient), ...searchFilter(q) };
   if (unreadOnly) filter.ingested = false;
+  if (junkOnly) filter.mailboxMessageId = { $in: await triage.junkMessageIds() };
   return filter;
 }
 
@@ -266,11 +283,11 @@ function listFilter(recipient, { unreadOnly = false, q } = {}) {
  * after the sync that found it. The HTML body is left out: a list is polled
  * every few seconds, and only a message's own page shows it.
  */
-async function list(recipient, { unreadOnly = false, q, limit, offset = 0 } = {}) {
+async function list(recipient, { unreadOnly = false, junkOnly = false, q, limit, offset = 0 } = {}) {
   if (!isConnected()) throw unavailable();
   syncIfDue(recipient);
 
-  let query = MailboxMessage.find(listFilter(recipient, { unreadOnly, q }))
+  let query = MailboxMessage.find(await listFilter(recipient, { unreadOnly, junkOnly, q }))
     .select('-bodyHtml')
     .sort({ receivedAt: -1, mailboxMessageId: -1 });
   if (limit) query = query.skip(offset).limit(limit);
@@ -281,7 +298,7 @@ async function list(recipient, { unreadOnly = false, q, limit, offset = 0 } = {}
 /** How many messages `list` would return without a limit. */
 async function count(recipient, options = {}) {
   if (!isConnected()) throw unavailable();
-  return MailboxMessage.countDocuments(listFilter(recipient, options));
+  return MailboxMessage.countDocuments(await listFilter(recipient, options));
 }
 
 async function get(recipient, id) {

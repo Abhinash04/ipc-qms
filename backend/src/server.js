@@ -6,6 +6,7 @@ import browserConfig from './config/browserConfig.js';
 import { IDENTITY_ROLES, identityForRole } from './config/identities.js';
 import * as mailbox from './services/email/mailbox/index.js';
 import { outboundAllowed } from './services/email/nic/outboundGuard.js';
+import { startRetentionSweeps, stopRetentionSweeps } from './services/email/mailbox/retention.js';
 
 // All imports are hoisted in ESM, so they are grouped here rather than being
 // interleaved with the startup checks below as the CommonJS version was. The
@@ -92,6 +93,18 @@ try {
   process.exit(1);
 }
 
+/**
+ * The junk retention sweep: classify what the rules could not settle, then
+ * strip the content of junk older than MAILBOX_RETENTION_HOURS.
+ *
+ * Registered after connectDb because the sweep is a no-op without a connection,
+ * and before app.listen so a failed bind leaves no timer behind. Deliberately
+ * not awaited — the first pass is five minutes out and must not delay the
+ * server listening. Silent under NODE_ENV=test and when
+ * MAILBOX_RETENTION_ENABLED=false.
+ */
+startRetentionSweeps({ bootedAt: Date.now() });
+
 // Express 5 calls this on a failed bind too, with the error — which the
 // 'error' handler below reports. The banner is for a server that is listening.
 const server = app.listen(env.PORT, (error) => {
@@ -160,6 +173,11 @@ async function shutdown(signal) {
   if (shuttingDown) return;
   shuttingDown = true;
   console.log(`[qms] ${signal} received — shutting down`);
+
+  // Before anything else: a sweep starting mid-shutdown would be cut off
+  // partway, and the one step that must not be interrupted is the gap between
+  // unlinking attachment bytes and writing the row that records it.
+  stopRetentionSweeps();
 
   const forced = setTimeout(() => {
     console.error('[qms] shutdown timed out with requests still open — exiting anyway');

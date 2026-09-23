@@ -25,6 +25,7 @@ const defaultRecipient = () =>
   identityForRole(IDENTITY_ROLES.FRONT_OFFICE)?.email || env.IPC_QUERY_EMAIL;
 import * as mailbox from '../services/email/mailbox/index.js';
 import * as decisions from '../services/email/mailbox/decisions.js';
+import * as triage from '../services/email/mailbox/triage.js';
 import * as accept from '../services/email/mailbox/acceptMessage.js';
 import * as health from '../services/email/mailbox/health.js';
 import { matchesSearch, toMessageViews } from '../services/email/mailbox/messageView.js';
@@ -104,13 +105,16 @@ const newestFirst = (a, b) => String(b.receivedAt ?? '').localeCompare(String(a.
  * and pages in MongoDB; the primary mailboxes are small or remote, and are
  * searched and paged here after the store has listed them.
  */
-async function listPage(box, { unreadOnly, q, limit, offset }) {
+async function listPage(box, { unreadOnly, junkOnly, q, limit, offset }) {
   if (box.own) {
-    const messages = await box.store.list(box.address, { unreadOnly, q, limit, offset });
-    const total = limit ? await box.store.count(box.address, { unreadOnly, q }) : messages.length;
+    const messages = await box.store.list(box.address, { unreadOnly, junkOnly, q, limit, offset });
+    const total = limit ? await box.store.count(box.address, { unreadOnly, junkOnly, q }) : messages.length;
     return { messages, total };
   }
 
+  // `junkOnly` is not offered here. Only the user's own store keeps rows, so it
+  // is the only mailbox with verdicts to filter by — and the only one the
+  // retention sweep can touch.
   const all = (await box.store.list(box.address, { unreadOnly })).filter((message) => matchesSearch(message, q));
   const messages = limit ? [...all].sort(newestFirst).slice(offset, offset + limit) : all;
   return { messages, total: all.length };
@@ -121,8 +125,8 @@ async function listMessages(req, res, next) {
 
   try {
     box = await resolveMailbox(req);
-    const { unreadOnly, q, limit, offset } = req.validatedQuery;
-    const { messages, total } = await listPage(box, { unreadOnly, q, limit, offset });
+    const { unreadOnly, junkOnly, q, limit, offset } = req.validatedQuery;
+    const { messages, total } = await listPage(box, { unreadOnly, junkOnly, q, limit, offset });
 
     health.recordSuccess({ source: box.source, address: box.address });
 
@@ -193,6 +197,30 @@ async function deleteMessage(req, res, next) {
     }
     await recordMailbox(req, AUDIT_ACTIONS.EMAIL_DELETED, message);
     return res.status(HTTP_STATUS.OK).json({ deleted: true, message });
+  } catch (error) {
+    return next(error);
+  }
+}
+
+/**
+ * "This is not junk." Clears the machine's verdict and stops the retention
+ * sweep ever purging the message.
+ *
+ * A separate action from accepting it: accepting mints a Query Case, and an
+ * officer who merely disagrees with the classifier should not have to create
+ * one to save the message.
+ */
+async function rescueMessage(req, res, next) {
+  if (!requireDb(next)) return undefined;
+  try {
+    const box = await resolveMailbox(req);
+    const message = await box.store.get?.(box.address, req.params.messageId);
+
+    const row = await triage.rescue(req.params.messageId, { userId: req.user?.id ?? null });
+    if (!row) return messageNotFound(res, req.params.messageId);
+
+    await recordMailbox(req, AUDIT_ACTIONS.EMAIL_CLASSIFIED, message ?? { mailboxMessageId: req.params.messageId });
+    return res.status(HTTP_STATUS.OK).json({ rescued: true, triage: row });
   } catch (error) {
     return next(error);
   }
@@ -435,4 +463,5 @@ export {
   downloadMessageAttachment,
   markRead,
   syncMailbox,
+  rescueMessage,
 };

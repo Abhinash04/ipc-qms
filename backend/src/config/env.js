@@ -65,6 +65,28 @@ const env = {
   // abort, so a dead endpoint delays that forward but never loses it.
   GEMMA_TIMEOUT_MS: parseInt(process.env.GEMMA_TIMEOUT_MS || '12000', 10),
 
+  // ── Mailbox retention ────────────────────────────────────────────────────
+  // Junk is kept whole for this long before its content is stripped, so a
+  // person has a named window in which to rescue it.
+  //
+  // Not a TTL index, and not for the obvious reason: a TTL index can only
+  // *delete* a document, while what is needed here is a field strip that keeps
+  // the id stub — the stub is what stops the next sync re-ingesting the message
+  // (see services/email/mailbox/nicBrowserMailbox.js).
+  // `Number`, not `parseInt`: a fractional value is how an end-to-end run
+  // exercises a whole retention cycle in seconds rather than two days.
+  MAILBOX_RETENTION_HOURS: Number(process.env.MAILBOX_RETENTION_HOURS ?? '46'),
+  // Default on with an explicit off switch, so a deployment that sets nothing
+  // still reclaims space. `=false` disables the sweep timer entirely.
+  MAILBOX_RETENTION_ENABLED: (process.env.MAILBOX_RETENTION_ENABLED ?? 'true') !== 'false',
+  // The confidence a machine JUNK verdict needs before its content may go. A
+  // hard rule scores 1; the model is clamped below that. Setting this above 1
+  // leaves the Junk filter working but makes every model verdict non-purgeable,
+  // which is the kill switch.
+  MAILBOX_JUNK_CONFIDENCE: Number(process.env.MAILBOX_JUNK_CONFIDENCE ?? '0.9'),
+  MAILBOX_TRIAGE_BATCH: parseInt(process.env.MAILBOX_TRIAGE_BATCH || '25', 10),
+  MAILBOX_PURGE_BATCH: parseInt(process.env.MAILBOX_PURGE_BATCH || '50', 10),
+
   // ── Attachments ──────────────────────────────────────────────────────────
   // Disk is the only store that works whether or not Mongo is connected
   // (Mongo is optional here — see config/db.js) and is what can feed real
@@ -137,6 +159,26 @@ function validateEmailConfig(config = env) {
   }
 
   if (!config.IPC_QUERY_EMAIL) errors.push('IPC_QUERY_EMAIL is required');
+
+  // Retention destroys content, so a nonsensical setting must fail at boot
+  // rather than at the first sweep an hour later.
+  //
+  // Only checked when the key is present. Callers pass a partial object to ask
+  // about one concern — the transport, the mailbox source — and those calls are
+  // not asking about retention. The real `env` always defines both keys, so a
+  // genuinely bad deployment value is still caught.
+  if (config.MAILBOX_RETENTION_HOURS !== undefined) {
+    if (!Number.isFinite(config.MAILBOX_RETENTION_HOURS) || config.MAILBOX_RETENTION_HOURS <= 0) {
+      errors.push(
+        `MAILBOX_RETENTION_HOURS must be a positive number of hours (got "${config.MAILBOX_RETENTION_HOURS}")`,
+      );
+    }
+  }
+  if (config.MAILBOX_JUNK_CONFIDENCE !== undefined) {
+    if (!Number.isFinite(config.MAILBOX_JUNK_CONFIDENCE) || config.MAILBOX_JUNK_CONFIDENCE < 0) {
+      errors.push(`MAILBOX_JUNK_CONFIDENCE must be a number >= 0 (got "${config.MAILBOX_JUNK_CONFIDENCE}")`);
+    }
+  }
 
   return errors;
 }
