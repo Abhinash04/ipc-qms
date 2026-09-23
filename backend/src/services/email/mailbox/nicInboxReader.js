@@ -6,8 +6,8 @@ import { normaliseAddress } from './address.js';
 /**
  * The NICeMail mailbox as a QMS mailbox provider, read over IMAP.
  *
- * Read-only for the same reason `gmailInboxReader` is: this is somebody's real
- * mailbox. `nicImap` opens the folder with `readOnly: true`, so this cannot
+ * Read-only, because this is somebody's real mailbox: `nicImap` opens the
+ * folder with `readOnly: true`, so this cannot
  * even set `\Seen`, let alone move or delete. `deliver` and `reset` therefore
  * throw rather than silently doing nothing — `mailbox/index.js` exposes
  * `supportsDelivery()` so callers check before depositing.
@@ -20,8 +20,9 @@ import { normaliseAddress } from './address.js';
  * Ids must survive re-polling: the same message read twice has to produce the
  * same id, or every sweep re-ingests the whole folder. IMAP UIDs are stable
  * within a folder but reset on UIDVALIDITY change, so the Message-ID header is
- * preferred and the UID is only the fallback. Derived the same way
- * `gmailInboxReader` derives its attachment ids.
+ * preferred and the UID is only the fallback. Derived the same way the browser
+ * agent's reader derives its ids (nic/browser/readInbox.js), so both mailboxes
+ * behave the same way across a re-poll.
  */
 function stableId(message) {
   const basis = message.messageId || `${nicConfig.mailbox}:${message.uid}`;
@@ -37,8 +38,8 @@ function toMailboxMessage(message) {
     bcc: [],
     subject: message.subject || '(no subject)',
     body: message.text || '',
-    // Metadata only — nicImap does not download attachment bytes, matching how
-    // a Gmail list read reports attachments before they are fetched by id.
+    // Metadata only — nicImap does not download attachment bytes. The bytes are
+    // fetched later, by id, exactly as the browser agent's reader does it.
     attachments: (message.attachments || []).map((att) => ({
       filename: att.filename,
       mimeType: att.contentType,

@@ -7,8 +7,8 @@ import env from '../../config/env.js';
  * Disk is the single source of truth for attachment bytes. Mongo is optional
  * in this repo (config/db.js falls back to an in-memory mailbox when
  * DATABASE_URL is unset or unreachable), so disk is the only store that works
- * in every configuration and is what can feed real bytes into a Gmail MIME
- * multipart.
+ * in every configuration and is what can feed real bytes into a MIME multipart
+ * on a NIC SMTP send, or into the browser agent's staging directory.
  *
  * Each attachment is a pair of files: `<id>.bin` (raw bytes) and `<id>.json`
  * (metadata sidecar). The sidecar means metadata survives a backend restart
@@ -47,9 +47,9 @@ async function ensureRoot() {
 
 /**
  * Writes bytes + metadata under a caller-supplied id. Idempotent by design —
- * writing the same id twice just overwrites — which is what lets Gmail
- * ingestion derive a deterministic id from (messageId, providerAttachmentId)
- * and re-poll safely without an index.
+ * writing the same id twice just overwrites — which is what lets mail ingestion
+ * derive a deterministic id from (messageId, providerAttachmentId) and re-poll
+ * safely without an index.
  */
 async function saveWithId(
   id,
@@ -81,8 +81,8 @@ async function saveWithId(
     /**
      * Who uploaded it, from the session — never from the request body.
      *
-     * An attachment can legitimately have no queryId yet: the portal uploads
-     * evidence before the case id exists. `uploadedBy` is what lets
+     * An attachment can legitimately have no queryId yet: a file can be uploaded
+     * against a case that does not exist. `uploadedBy` is what lets
      * middleware/authorizeAttachmentAccess.js admit the uploader to their own
      * not-yet-attached file without opening it to everyone. Null for
      * mail-ingested files, which have no human uploader.

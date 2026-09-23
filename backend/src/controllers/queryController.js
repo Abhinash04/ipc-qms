@@ -308,9 +308,10 @@ async function persistTransition(req, res, next) {
        * Every case write here is an upsert keyed on `queryId`, so the unique
        * index can never fire: a second case minted with the same id does not
        * collide, it *replaces* the first one and the original enquiry is gone.
-       * The email path no longer mints client-side (see
-       * services/email/mailbox/acceptMessage.js), but the portal still does,
-       * and two tabs hydrated at the same counter mint the same number.
+       * Nothing mints a Case ID client-side any more — intake is server-side
+       * (see services/email/mailbox/acceptMessage.js) — so this is a backstop
+       * rather than a live race. It is kept because the failure it prevents is a
+       * silently lost enquiry.
        *
        * `createdAt` is the witness: a genuine update to a case carries the same
        * one it was created with, a collision from another tab carries its own.
@@ -598,11 +599,10 @@ async function resetQueryState(req, res, next) {
  * A person has checked the sending mailbox's Sent folder and records what
  * happened to an email whose send was UNCERTAIN.
  *
- * The only way out of UNCERTAIN for a transport the server cannot ask (both
- * NICeMail paths; Gmail is checked automatically before any retry). `SENT`
- * records the email as a successful send would — a final response also closes
- * the case. `NOT_SENT` turns it into an ordinary failure the retry buttons can
- * send again.
+ * The only way out of UNCERTAIN, for every channel: no transport can ask its own
+ * Sent folder any more, so nothing settles this without a person. `SENT` records
+ * the email as a successful send would — a final response also closes the case.
+ * `NOT_SENT` turns it into an ordinary failure the retry buttons can send again.
  */
 async function resolveOutbound(req, res, next) {
   if (!requireDb(next)) return;

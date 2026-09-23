@@ -25,8 +25,8 @@ async function sendToMailbox(message, { asRole = null } = {}) {
   sentMessages.push(record);
 
   // Deposit a copy into the mock IPC inbox so the enquiry → ingestion loop
-  // closes locally. Skipped when the mailbox is a real Gmail inbox: that store
-  // is read-only and mail arrives in it by genuinely being sent, so there is
+  // closes locally. Skipped when the mailbox is a real one: that store is
+  // read-only and mail arrives in it by genuinely being sent, so there is
   // nothing to deposit into. Attempting it threw, and surfaced as a 500 on
   // every send made through this transport.
   if (mailbox.supportsDelivery()) {
@@ -42,7 +42,7 @@ async function sendToMailbox(message, { asRole = null } = {}) {
       body: message.body,
       // The deposited copy carries attachment metadata + attachmentId only —
       // the bytes stay on disk under attachmentStore, addressable by that id,
-      // matching what a real Gmail inbox read would produce.
+      // matching what a read of a real inbox produces.
       attachments: (message.attachments || []).map(
         ({ attachmentId, filename, mimeType, size }) => ({ attachmentId, filename, mimeType, size }),
       ),

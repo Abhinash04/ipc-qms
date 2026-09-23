@@ -3,16 +3,16 @@ import { mongoose } from '../config/db.js';
 /**
  * The Front Officer's accept/reject decision on one incoming message.
  *
- * Kept apart from `MailboxMessage` on purpose. Under `MAILBOX_SOURCE=gmail` the
- * mailbox is a live, read-only view of a real Gmail account — there is no row
- * to update, and `MailboxMessage` is not even populated. A decision has to
- * survive independently of whichever store the mailbox is being read from, so
- * it is keyed by the stable provider message id and nothing else.
+ * Kept apart from `MailboxMessage` on purpose. When the mailbox is a live
+ * NICeMail account — read over IMAP, or through the browser agent — it is a
+ * read-only view: there is no row to update, and `MailboxMessage` is not even
+ * populated. A decision has to survive independently of whichever store the
+ * mailbox is being read from, so it is keyed by the stable provider message id
+ * and nothing else.
  *
  * `MailboxMessage.ingested` is a different thing and stays as it is: it means
- * "this copy has been swept", carries no actor, and for Gmail is literally the
- * UNREAD label. This model is the decision — who decided, when, and what
- * became of the message.
+ * "this copy has been swept" and carries no actor. This model is the decision —
+ * who decided, when, and what became of the message.
  */
 const DECISIONS = { ACCEPTED: 'ACCEPTED', REJECTED: 'REJECTED' };
 
@@ -34,10 +34,10 @@ const mailboxDecisionSchema = new mongoose.Schema(
     /**
      * A snapshot of the message as it was when the decision was taken.
      *
-     * A rejected Gmail message stops matching `is:unread` once it is marked
-     * read, and may later be archived or deleted by its owner. Without this the
-     * audit question "what did she reject, and from whom?" would have no answer
-     * a month later.
+     * A rejected message sits in somebody's real mailbox, where its owner can
+     * read, move, archive or delete it at any time. Without this the audit
+     * question "what was rejected, and from whom?" would have no answer a month
+     * later.
      */
     from: { type: String, default: '' },
     subject: { type: String, default: '' },

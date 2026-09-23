@@ -80,7 +80,7 @@ function validateFile({ filename, mimeType, size }) {
    *
    * These two guards used to read `typeof size === 'number'`, so a caller
    * passing null silently skipped both the empty-file test and the per-file
-   * ceiling — which is exactly what the Gmail ingest path did, leaving the only
+   * ceiling — which is exactly what the mail ingest path did, leaving the only
    * route a fully external sender can drive with no size limit at all. Every
    * caller has the size available (a declared part size, or buffer.length), so
    * "no size" means a caller forgot to pass it, not that there is nothing to

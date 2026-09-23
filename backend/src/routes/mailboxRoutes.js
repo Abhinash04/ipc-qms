@@ -27,8 +27,8 @@ import {
 const router = express.Router();
 
 /**
- * The mailbox is the Front Officer's. Under MAILBOX_SOURCE=gmail these routes
- * operate on a real Gmail account, so the destructive ones are held to
+ * The mailbox is the Front Officer's. When it is a live NICeMail account these
+ * routes operate on somebody's real mail, so the destructive ones are held to
  * SUPER_ADMIN rather than merely to staff.
  */
 const FRONT_OFFICE_ONLY = [ROLES.FRONT_OFFICE, ROLES.SUPER_ADMIN];

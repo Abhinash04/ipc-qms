@@ -45,9 +45,8 @@ const queryCaseSchema = z.object({
    * These were absent, and because `z.object` strips silently the effect was
    * not a rejection but quiet data loss on every persist. `threadId` going
    * missing orphaned every EmailMessage from its thread; `sourceMailboxMessageId`
-   * going missing permanently disarmed the portal-claim duplicate guard, which
-   * tests `!q.sourceMailboxMessageId` and therefore matched everything after a
-   * refresh.
+   * going missing permanently disarmed the duplicate-case guard, which tests
+   * `!q.sourceMailboxMessageId` and therefore matched everything after a refresh.
    */
   threadId: nullableStr,
   sourceEmailId: nullableStr,

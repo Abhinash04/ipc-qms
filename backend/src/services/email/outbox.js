@@ -49,9 +49,10 @@ const S = OUTBOUND_STATUS;
 
 /**
  * How long a claim stands before it is presumed dead. It must outlast the
- * slowest send a transport can make — Gmail's client times out at 30 s, and a
- * NICeMail browser send may queue behind others first. A request that is still
- * sending when its lease runs out finds the row UNCERTAIN, never re-sent.
+ * slowest send a transport can make, which is a browser send: it waits for the
+ * one serialised session, and then every page step it takes carries its own
+ * NIC_BROWSER_TIMEOUT_MS. A request that is still sending when its lease runs
+ * out finds the row UNCERTAIN, never re-sent.
  */
 const LEASE_MS = 3 * 60 * 1000;
 

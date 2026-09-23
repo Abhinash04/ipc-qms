@@ -325,8 +325,13 @@ async function sendResponse({
 
 /**
  * Ask the transport a case's mail went through whether an UNCERTAIN send
- * actually left. Gmail can answer from its Sent folder; the mock and both
- * NICeMail paths cannot, and say UNKNOWN — a person settles those.
+ * actually left.
+ *
+ * Nothing answers any more. The Gmail transport's Sent-folder search was the
+ * only implementation of `reconcile`, so every channel now returns UNKNOWN and
+ * every UNCERTAIN send is settled by a person. The seam stays because the outbox
+ * asks on every uncertain send, and a transport that can verify its own Sent
+ * folder would slot in here without touching the outbox.
  */
 async function reconcileDelivery(dispatch, { sourceMailbox = null } = {}) {
   const transport = await transportFor(sourceMailbox, IDENTITY_ROLES.FRONT_OFFICE);
@@ -340,7 +345,7 @@ function senderDomainFor(sourceMailbox) {
 }
 
 // `mailbox` used to be re-exported here, bound directly to mockIpcMailbox —
-// which bypassed the gmail/nic/mongo/memory selection in mailbox/index.js. No
+// which bypassed the nic/mongo/memory selection in mailbox/index.js. No
 // caller used it, so it was a trap rather than a bug. Import
 // `services/email/mailbox/index.js` for the active store, as
 // controllers/mailboxController.js does.

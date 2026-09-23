@@ -7,8 +7,8 @@
  *
  * Deliberately separate from config/env.js, which owns EMAIL_TRANSPORT and
  * MAILBOX_SOURCE and calls `validateNicConfig()` when either is set to `nic`.
- * Keeping the NIC_* names in one file means the Gmail and mock paths cannot be
- * disturbed by anything here, and that the two validators cannot drift.
+ * Keeping the NIC_* names in one file means the mock path cannot be disturbed
+ * by anything here, and that the two validators cannot drift.
  *
  * This file configures IMAP/SMTP only. The NICeMail browser agent has its own
  * settings in config/browserConfig.js and shares nothing with these.

@@ -73,9 +73,8 @@ function toMessage(parsed, uid) {
 /**
  * Fetch the newest `limit` messages.
  *
- * `createClient` is the injection seam — the same `{ client = null }` pattern
- * the Gmail modules use — so tests never open a socket. Production callers
- * never pass it.
+ * `createClient` is the injection seam, so tests never open a socket.
+ * Production callers never pass it.
  *
  * Returns `{ ok, stage, data, error }`. `stage` is the furthest point reached:
  * connect → authenticate → open_mailbox → fetch.

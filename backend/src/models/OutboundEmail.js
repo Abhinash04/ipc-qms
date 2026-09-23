@@ -58,9 +58,11 @@ const outboundEmailSchema = new mongoose.Schema(
     transport: { type: String, default: null },
 
     /**
-     * The Message-ID header of the latest attempt. Unique per attempt, and what
-     * lets the Gmail transport find this exact message in the Sent folder when
-     * the outcome of a send is unknown.
+     * The Message-ID header of the latest attempt, unique per attempt. A NIC
+     * SMTP send carries it out as the real header; a browser send cannot set one.
+     * Nothing searches on it automatically any more — no transport reconciles
+     * itself — so this is what a person matches against the Sent folder when the
+     * outcome of a send is unknown.
      */
     rfcMessageId: { type: String, default: null },
 
@@ -68,7 +70,7 @@ const outboundEmailSchema = new mongoose.Schema(
     /** Identifies the request holding the claim; only it may settle the row. */
     claimToken: { type: String, default: null },
     leaseExpiresAt: { type: String, default: null },
-    /** When the latest attempt began — the start of the Sent-folder search window. */
+    /** When the latest attempt began — where a Sent-folder check starts looking. */
     attemptedAt: { type: String, default: null },
 
     providerMessageId: { type: String, default: null },

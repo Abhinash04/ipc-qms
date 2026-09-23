@@ -26,19 +26,20 @@ import { isPartyToCase, scopeKindForRole, SCOPE_KIND } from '../services/authz/c
 /**
  * The case an attachment belongs to, or null.
  *
- * `queryId` is often absent and that is not an error: the portal uploads
- * evidence before the case id exists, and Gmail ingestion stores files against
- * the provider's message id. The fallback recovers the whole mail-ingested
- * population once the case is registered — without it an official could not
- * open the attachment on their own case, which would read as data loss.
+ * `queryId` is often absent and that is not an error: mail ingestion stores a
+ * file against the provider's message id, long before the Front Office accepts
+ * the message and a case exists to attach it to. The fallback recovers that
+ * whole population once the case is registered — without it an official could
+ * not open the attachment on their own case, which would read as data loss.
  */
 export async function resolveAttachmentCase(meta) {
   if (meta?.queryId) return meta.queryId;
   if (!meta?.providerMessageId || !isConnected()) return null;
 
-  // Gmail's message id is the incoming message's sourceMessageId. A NICeMail
-  // message is stored under its mailbox id (NICB-…), with the NICeMail id —
-  // the one its attachments are saved against — as its providerMessageId.
+  // Two shapes, because a mailbox may store a message under an id of its own. A
+  // NICeMail message is stored under its mailbox id (NICB-…), with the NICeMail
+  // id — the one its attachments are saved against — as its providerMessageId;
+  // an IMAP message is stored under its own id as sourceMessageId.
   const message = await EmailMessage.findOne({
     $or: [
       { sourceMessageId: meta.providerMessageId },
@@ -70,10 +71,10 @@ async function authorizeAttachmentAccess(req, res, next) {
     /**
      * Uploads.
      *
-     * A queryId is NOT required: portal intake attaches evidence before the
-     * case exists, and requiring one would break it. But if the caller names a
-     * case, it has to be one of theirs — otherwise this is a way to plant a
-     * document on someone else's case.
+     * A queryId is NOT required: a file can be uploaded before the case it
+     * belongs to exists, and requiring one would break that. But if the caller
+     * names a case, it has to be one of theirs — otherwise this is a way to
+     * plant a document on someone else's case.
      */
     if (!req.params.id) {
       const queryId = req.body?.queryId;

@@ -21,9 +21,9 @@ function ProvenanceBadge({ summary }) {
 
   /**
    * Two shapes reach here. The accept path stores an explicit `status`; the
-   * portal path and the Re-generate button store the raw generator output,
-   * which carries only `fallback`. Reading both means a stand-in summary is
-   * labelled wherever it came from, rather than only on the newer path.
+   * Re-generate button stores the raw generator output, which carries only
+   * `fallback`. Reading both means a stand-in summary is labelled wherever it
+   * came from, rather than only on the newer path.
    */
   const status = summary.status ?? (summary.fallback ? 'FALLBACK' : 'GENERATED');
   if (status === 'GENERATED') return null;

@@ -157,9 +157,8 @@ const FUNNEL_STAGES = [
  * How far cases have travelled through the workflow.
  *
  * Counts *distinct cases* per stage, not raw events: QUERY_RECEIVED is also
- * emitted when follow-up correspondence attaches to an existing thread and when
- * a mailbox copy is claimed onto a portal case, so counting events would report
- * more enquiries received than there are enquiries.
+ * emitted when follow-up correspondence attaches to an existing thread, so
+ * counting events would report more enquiries received than there are enquiries.
  */
 export function processingFunnel(auditEvents = []) {
   return FUNNEL_STAGES.map(({ label, event }) => ({

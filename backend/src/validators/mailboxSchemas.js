@@ -57,9 +57,9 @@ export const listMessagesQuerySchema = z.object({
 /**
  * The incoming message as the Front Office inbox saw it.
  *
- * The server does not re-fetch the message before accepting it — under
- * MAILBOX_SOURCE=gmail that would be a second round trip to the provider for
- * data the client already holds. What it does NOT take from the body is the
+ * The server does not re-fetch the message before accepting it — for a live
+ * mailbox that would be a second round trip to the provider for data the client
+ * already holds. What it does NOT take from the body is the
  * actor, the Case ID or the decision: those are the server's to determine.
  */
 export const acceptMessageSchema = z.object({

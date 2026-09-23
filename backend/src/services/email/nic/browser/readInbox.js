@@ -44,7 +44,7 @@ function asHeader(text) {
   return name ? `${name} <${address}>` : address;
 }
 
-/** Same derivation as the Gmail reader's, so ids are deterministic across syncs. */
+/** Derived from the message, not the sync, so an id is stable across re-polls. */
 function attachmentId(seed) {
   const hex = createHash('sha1').update(seed).digest('hex').slice(0, 32);
   return `att_${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`;
@@ -346,10 +346,9 @@ export function toMessage(extracted, row = {}) {
 }
 
 /**
- * Download each attachment into the attachment store, the way the Gmail reader
- * materialises its attachments, so the forward to the Officer-in-Charge can
- * carry real bytes. One failed attachment is recorded on that entry and never
- * fails the message.
+ * Download each attachment into the attachment store, so the forward to the
+ * Officer-in-Charge can carry real bytes. One failed attachment is recorded on
+ * that entry and never fails the message.
  */
 async function readAttachments(session, providerMessageId, entries) {
   const { maxFileBytes } = limits();
@@ -361,12 +360,12 @@ async function readAttachments(session, providerMessageId, entries) {
     /**
      * The shape the rest of the app already consumes, both halves of it. The
      * case page (DispatchDetailPage) renders `att.name` and `att.sizeKb` raw,
-     * as gmailInboxReader emits them, while AttachmentList normalises
-     * `{attachmentId, filename, size}`; emitting only the second set showed a
-     * NIC attachment as a blank name and "undefined KB". `id` is the stable key
-     * that list keys on — the deterministic attachment id, which is the nearest
-     * thing NICeMail has to Gmail's per-part handle, and which is known before
-     * the download so a failed one still has a key.
+     * while AttachmentList normalises `{attachmentId, filename, size}`; emitting
+     * only the second set showed a NIC attachment as a blank name and
+     * "undefined KB". `id` is the stable key that list keys on — the
+     * deterministic attachment id, which stands in for the per-part handle
+     * NICeMail does not expose, and which is known before the download so a
+     * failed one still has a key.
      */
     const id = attachmentId(`${providerMessageId}:${index}:${filename}`);
     const record = { id, name: filename, filename, mimeType: mimeFor(filename) };

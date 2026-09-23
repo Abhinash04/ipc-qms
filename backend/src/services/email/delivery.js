@@ -17,16 +17,17 @@
  *   - neither → a local error, raised before anything was sent (a missing
  *     credential, a bad template, a refused attachment) → NOT_SENT
  *
- * The last rule is why a transport that talks HTTP must label its own
- * uncoded failures: gmailTransport marks any error from its HTTP layer that
- * this cannot place as UNCERTAIN.
+ * The last rule is why a transport that does not talk to a bare socket must
+ * label its own uncoded failures rather than leave them here: an error this
+ * cannot place falls to NOT_SENT, which is the wrong answer for a request that
+ * may well have arrived. nicBrowserTransport labels its own.
  */
 
 export const DELIVERY = { NOT_SENT: 'NOT_SENT', UNCERTAIN: 'UNCERTAIN' };
 
 /**
  * Codes that mean the request never reached the provider. A DNS failure is the
- * one seen in practice: `getaddrinfo ENOTFOUND gmail.googleapis.com`.
+ * one seen in practice: `getaddrinfo ENOTFOUND <mail host>`.
  */
 const NOT_SENT_CODES = new Set([
   'ENOTFOUND',

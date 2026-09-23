@@ -80,7 +80,7 @@ export async function send(message, { asRole = null, sender = null } = {}) {
     text: message.body,
     messageId: message.messageIdHeader || null,
     // Attachment bytes come from attachmentStore, already resolved by
-    // emailService — the same records the Gmail transport MIME-encodes.
+    // emailService — the same records the browser transport stages on disk.
     attachments: (message.attachments || []).map((att) => ({
       filename: att.filename,
       content: att.content,
