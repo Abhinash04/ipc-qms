@@ -15,7 +15,6 @@ vi.mock('@/services/api/mailboxService', () => ({
     transport: 'mock',
     ipcQueryEmail: 'ipc-query-mock@example.com',
     ipcReplyFrom: { email: 'arnd-ipc-mock@example.com', name: 'AR&D Division' },
-    inquirer: { email: 'abhinash.pritiraj@pharma.example', name: 'Abhinash Pritiraj' },
   }),
   fetchMailboxMessages: vi.fn().mockResolvedValue({ messages: [] }),
   fetchMailboxMessage: vi.fn().mockResolvedValue(null),

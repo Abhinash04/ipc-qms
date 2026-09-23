@@ -76,7 +76,6 @@ beforeEach(async () => {
     transport: 'mock',
     ipcQueryEmail: 'ipc-query-mock@example.com',
     ipcReplyFrom: { email: 'arnd-ipc-mock@example.com', name: 'AR&D Division' },
-    inquirer: { email: 'abhinash.pritiraj@pharma.example', name: 'Abhinash Pritiraj' },
   });
 
   useAuthStore.setState({ currentUser: findUserById('USR-0008') });

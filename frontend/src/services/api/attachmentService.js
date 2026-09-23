@@ -1,19 +1,15 @@
 import { axiosClient } from './axiosClient';
 
 /**
- * Uploads one or more files and returns their stored metadata records
- * (`{attachmentId, filename, mimeType, size}` each) — never bytes back.
+ * Reading attachments, which is all the app does with them.
+ *
+ * There is no upload here any more. `uploadAttachments` existed for the enquiry
+ * form's file picker, and both went with the in-app enquiry portal: an enquiry
+ * arrives as email, and the server fetches its attachments from the mailbox
+ * itself. `POST /attachments` still exists on the backend — mail ingestion writes
+ * through the same store, and it is the seam a future "attach a file to the
+ * response" would use — but nothing in this browser calls it.
  */
-export async function uploadAttachments(files, { onUploadProgress } = {}) {
-  const formData = new FormData();
-  files.forEach((file) => formData.append('files', file));
-
-  const { data } = await axiosClient.post('/attachments', formData, {
-    headers: { 'Content-Type': 'multipart/form-data' },
-    onUploadProgress,
-  });
-  return data.attachments;
-}
 
 /** Byte URL for an attachment — inline preview by default, `?download=1` forces a download. */
 export function attachmentUrl(attachmentId, { download = false } = {}) {

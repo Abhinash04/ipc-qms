@@ -84,9 +84,20 @@ export async function recordMailboxDecision(mailboxMessageId, { decision, queryI
  * this browser, which meant a closed tab halfway through left a case nobody had
  * been told about. Safe to retry: the server checks each artefact before acting.
  *
- * Resolves to `{ queryId, created, alreadyDecided, acknowledged, forwarded, errors }`
- * — a step that failed is reported, not thrown, because a case that exists but
- * was not forwarded is recoverable and losing its id would not be.
+ * Resolves to
+ * `{ queryId, created, alreadyDecided, acknowledged, acknowledgement, forwarded, aiSummaryStatus, errors }`.
+ * A step that failed is reported, not thrown, because a case that exists but was
+ * not forwarded is recoverable and losing its id would not be.
+ *
+ * `acknowledgement` is `{ outcome, providerMessageId, sentAt }` — on a repeat
+ * accept, the send that already happened (`ALREADY_SENT`, with its provider id),
+ * so the answer is the same and nothing is sent twice. `aiSummaryStatus` is
+ * `GENERATED` | `FALLBACK` | `FAILED`, a status rather than a boolean because
+ * "the model answered" and "the model timed out and this is the stand-in" are
+ * different facts the page must not present alike. Each entry in `errors` carries
+ * `{ step, outcome, error }` and, where they apply, `unconfirmed` (Send was
+ * pressed, so a blind retry could send twice), `retryable`, `inProgress` and the
+ * agent `stage` it stopped at.
  */
 export async function acceptMailboxMessage(mailboxMessageId, message) {
   const { data } = await axiosClient.post(

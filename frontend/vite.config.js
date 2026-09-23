@@ -57,5 +57,23 @@ export default defineConfig({
     globals: true,
     setupFiles: ['./src/test/setup.js'],
     include: ['src/**/*.test.{js,jsx}'],
+
+    /**
+     * Vitest defaults to 5 s, and several tests here sit right on it.
+     *
+     * The heavy ones mount the entire route tree in jsdom, hydrate the store and
+     * then drive a multi-step modal — `transferQuery` and `pullbackQuery` cost
+     * ~2.7 s each on an idle machine. Vitest runs files concurrently across
+     * worker threads, so under contention they crossed 5 s and failed, and WHICH
+     * one failed depended on how the files happened to be scheduled. Adding or
+     * removing an unrelated test file was enough to change the answer, which made
+     * the suite look intermittently broken when nothing was.
+     *
+     * A per-test override would have been whack-a-mole: the boundary is
+     * arbitrary, and the next slow page test would land on it too. Nothing is
+     * weakened — no assertion changes, and a test that genuinely hangs still
+     * fails, four times slower to notice.
+     */
+    testTimeout: 20_000,
   },
 })
