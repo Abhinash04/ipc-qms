@@ -1,5 +1,3 @@
-import env from './env.js';
-
 export const IDENTITY_ROLES = {
   INQUIRER: 'INQUIRER',
   FRONT_OFFICE: 'FRONT_OFFICE',
@@ -32,14 +30,11 @@ const DEFAULTS = {
 
 function readIdentity(role) {
   const defaults = DEFAULTS[role];
-  const refreshToken = process.env[`GMAIL_REFRESH_TOKEN_${role}`] || '';
 
   return {
     role,
     name: process.env[`${role}_NAME`] || defaults.name,
     email: (process.env[`${role}_EMAIL`] || defaults.email).trim(),
-    refreshToken,
-    canSendReal: Boolean(refreshToken && env.GMAIL_CLIENT_ID && env.GMAIL_CLIENT_SECRET),
   };
 }
 
@@ -51,22 +46,11 @@ export function allIdentities() {
   return Object.values(IDENTITY_ROLES).map(readIdentity);
 }
 
-export function identityForEmail(email) {
-  const wanted = String(email || '').trim().toLowerCase();
-  if (!wanted) return null;
-  return allIdentities().find((identity) => identity.email.toLowerCase() === wanted) || null;
-}
-
 export function formatSender(identity) {
   if (!identity) return '';
   return identity.name ? `${identity.name} <${identity.email}>` : identity.email;
 }
 
 export function publicDirectory() {
-  return allIdentities().map(({ role, name, email, canSendReal }) => ({
-    role,
-    name,
-    email,
-    canSendReal,
-  }));
+  return allIdentities().map(({ role, name, email }) => ({ role, name, email }));
 }

@@ -24,25 +24,103 @@ describe('email configuration', () => {
     expect(JSON.stringify(config)).not.toMatch(/GMAIL_|client_secret|refresh_token/i);
   });
 
-  it('validates transport selection and Gmail credential completeness', () => {
+  it('validates transport and mailbox selection', () => {
     expect(validateEmailConfig({ ...env, EMAIL_TRANSPORT: 'carrier-pigeon' })).toContainEqual(
       expect.stringContaining('EMAIL_TRANSPORT must be one of'),
     );
 
-    const errors = validateEmailConfig({
-      ...env,
-      EMAIL_TRANSPORT: 'gmail',
-      GMAIL_CLIENT_ID: '',
-      GMAIL_CLIENT_SECRET: '',
-    });
-    expect(errors).toHaveLength(3);
-    expect(errors.join(' ')).toMatch(/GMAIL_CLIENT_ID.*required/);
+    // gmail was a transport and a mailbox source until the NICeMail agent
+    // replaced both. A configuration still naming it must fail, not fall back.
+    expect(validateEmailConfig({ ...env, EMAIL_TRANSPORT: 'gmail' })).toContainEqual(
+      expect.stringContaining('EMAIL_TRANSPORT must be one of: mock, nic'),
+    );
+    expect(validateEmailConfig({ ...env, MAILBOX_SOURCE: 'gmail' })).toContainEqual(
+      expect.stringContaining('MAILBOX_SOURCE must be one of: auto, nic'),
+    );
 
     expect(validateEmailConfig({ ...env, IPC_QUERY_EMAIL: '' })).toContainEqual(
       expect.stringContaining('IPC_QUERY_EMAIL is required'),
     );
 
     expect(validateEmailConfig(env)).toEqual([]);
+  });
+
+  /**
+   * The defaults are development defaults: mock sends nothing while reporting
+   * success, and identities.js falls back to unroutable @example.com. Both are
+   * right locally and catastrophic in production — the first closes cases
+   * nobody was told about — so production is refused at boot rather than
+   * discovered at the first send.
+   */
+  describe('production refuses a configuration that cannot really send', () => {
+    afterEach(() => {
+      vi.unstubAllEnvs();
+    });
+
+    const inProduction = (overrides = {}) => {
+      vi.stubEnv('NODE_ENV', 'production');
+      vi.stubEnv('FRONT_OFFICE_EMAIL', 'front.office@ipc.gov.in');
+      vi.stubEnv('OFFICER_IN_CHARGE_EMAIL', 'oic@ipc.gov.in');
+      for (const [key, value] of Object.entries(overrides.envs || {})) vi.stubEnv(key, value);
+      return validateEmailConfig({ ...env, ...overrides.config });
+    };
+
+    it('refuses the mock transport', () => {
+      expect(inProduction({ config: { EMAIL_TRANSPORT: 'mock' } }).join(' ')).toMatch(
+        /records emails as sent without sending them/,
+      );
+    });
+
+    it('requires a real outbound channel', () => {
+      expect(inProduction({ config: { EMAIL_TRANSPORT: 'mock' } }).join(' ')).toMatch(
+        /needs a real outbound channel/,
+      );
+      // The browser agent is one, so it satisfies the rule on its own.
+      const withAgent = inProduction({
+        config: { EMAIL_TRANSPORT: 'mock' },
+        envs: { NIC_BROWSER_MAILBOX: 'true', NIC_EMAIL: 'lab@ipc.gov.in', NIC_BROWSER_TEST_RECIPIENT: 'test@ipc.gov.in' },
+      });
+      expect(withAgent.join(' ')).not.toMatch(/needs a real outbound channel/);
+    });
+
+    it('refuses the unroutable placeholder addresses', () => {
+      vi.stubEnv('NODE_ENV', 'production');
+      vi.stubEnv('FRONT_OFFICE_EMAIL', '');
+      vi.stubEnv('OFFICER_IN_CHARGE_EMAIL', 'officer-in-charge-unconfigured@example.com');
+
+      const errors = validateEmailConfig({ ...env, EMAIL_TRANSPORT: 'nic' }).join(' ');
+      expect(errors).toMatch(/FRONT_OFFICE_EMAIL must be a real address/);
+      expect(errors).toMatch(/OFFICER_IN_CHARGE_EMAIL must be a real address/);
+    });
+  });
+
+  /**
+   * browserConfig.testRecipient falls back to NIC_EMAIL, so a deployment that
+   * sets neither test-recipient variable has an interlock that reports itself
+   * closed while permitting mail to the mailbox itself.
+   */
+  it('requires a test recipient while the outbound interlock is closed', () => {
+    vi.stubEnv('NIC_BROWSER_MAILBOX', 'true');
+    vi.stubEnv('NIC_EMAIL', 'lab@ipc.gov.in');
+    vi.stubEnv('NIC_BROWSER_TEST_RECIPIENT', '');
+    vi.stubEnv('NIC_TEST_RECIPIENT', '');
+
+    expect(validateEmailConfig(env).join(' ')).toMatch(/NIC_BROWSER_TEST_RECIPIENT is required/);
+
+    vi.stubEnv('NIC_ALLOW_OUTBOUND', 'true');
+    expect(validateEmailConfig(env).join(' ')).not.toMatch(/NIC_BROWSER_TEST_RECIPIENT is required/);
+    vi.unstubAllEnvs();
+  });
+
+  it('requires a real Officer-in-Charge address before the internal forward may be allowed', () => {
+    vi.stubEnv('NIC_ALLOW_INTERNAL_FORWARD', 'true');
+    vi.stubEnv('OFFICER_IN_CHARGE_EMAIL', 'officer-in-charge-unconfigured@example.com');
+
+    expect(validateEmailConfig(env).join(' ')).toMatch(/NIC_ALLOW_INTERNAL_FORWARD=true requires a real/);
+
+    vi.stubEnv('OFFICER_IN_CHARGE_EMAIL', 'oic@ipc.gov.in');
+    expect(validateEmailConfig(env).join(' ')).not.toMatch(/NIC_ALLOW_INTERNAL_FORWARD/);
+    vi.unstubAllEnvs();
   });
 
   it('selects the mock transport and never loads Gmail in the test path', async () => {

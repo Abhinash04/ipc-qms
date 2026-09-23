@@ -8,7 +8,6 @@ import * as mockTransport from '../services/email/transports/mockTransport.js';
 import * as mailbox from '../services/email/mailbox/index.js';
 import {
   identityForRole,
-  identityForEmail,
   publicDirectory,
   IDENTITY_ROLES,
 } from '../config/identities.js';
@@ -42,77 +41,20 @@ describe('identity configuration', () => {
     expect(identity.name).toBe('Someone Else');
   });
 
-  it('reports a role as unable to send real mail when it has no token of its own', () => {
-    // Tokens are blank in the test environment.
+  /**
+   * The directory is published to every signed-in user. It carries who each
+   * role is and nothing else — no credential of any kind, whatever a future
+   * transport decides to keep on an identity.
+   */
+  it('publishes only role, name and address', () => {
     for (const identity of publicDirectory()) {
-      expect(identity.canSendReal).toBe(false);
+      expect(Object.keys(identity).sort()).toEqual(['email', 'name', 'role']);
     }
-  });
-
-  it('never exposes a refresh token in the public directory', () => {
-    process.env.GMAIL_REFRESH_TOKEN_FRONT_OFFICE = 'super-secret-token';
-
-    const serialised = JSON.stringify(publicDirectory());
-    expect(serialised).not.toContain('super-secret-token');
-    expect(serialised).not.toMatch(/refreshToken/);
   });
 
   it('returns null for a role with no configured identity', () => {
     expect(identityForRole('REVIEWER')).toBeNull();
     expect(identityForRole('SUPER_ADMIN')).toBeNull();
-  });
-});
-
-describe('identity resolution when a role holds more than one person', () => {
-  // Address-first resolution is what keeps a role with several holders honest:
-  // the acting user's own address decides whether they can send, never the role.
-  // ASSIGNED_OFFICIAL now holds six mock officials and no real account at all —
-  // it was briefly a real Gmail identity and that was rolled back — so no
-  // address on that role resolves to a sending account.
-
-  it('resolves the Front Officer from her own address', () => {
-    const identity = identityForEmail('front-office@test.invalid');
-    expect(identity).toMatchObject({
-      role: IDENTITY_ROLES.FRONT_OFFICE,
-      name: 'Test Front Officer',
-    });
-  });
-
-  it('has no Assigned Official identity — the role is entirely mock', () => {
-    expect(identityForRole(IDENTITY_ROLES.ASSIGNED_OFFICIAL)).toBeNull();
-    expect(identityForEmail('assigned-official@test.invalid')).toBeNull();
-    expect(identityForEmail('rawat.jatin@ipc.example')).toBeNull();
-  });
-
-  it('returns nothing for a mock user, so they can never borrow an account', () => {
-    expect(identityForEmail('neha.singh@ipc.example')).toBeNull();
-    expect(identityForEmail('amit.mehta@ipc.example')).toBeNull();
-    expect(identityForEmail('')).toBeNull();
-    expect(identityForEmail(undefined)).toBeNull();
-  });
-
-  it('ignores address casing and surrounding whitespace', () => {
-    expect(identityForEmail('  Front-Office@Test.Invalid ')?.role).toBe(
-      IDENTITY_ROLES.FRONT_OFFICE,
-    );
-  });
-
-  it('the Officer-in-Charge sends as himself and no Assigned Official can', () => {
-    // The two roles were held by people with near-identical display names, so
-    // this asserts on addresses: the OIC has an account, the official has none.
-    const officer = identityForEmail('officer@test.invalid');
-
-    expect(officer.role).toBe(IDENTITY_ROLES.OFFICER_IN_CHARGE);
-    expect(identityForEmail('rawat.jatin@ipc.example')).toBeNull();
-  });
-
-  it('sends through the mock transport for a user with no identity', async () => {
-    const transport = await emailService.getTransport(
-      'gmail',
-      IDENTITY_ROLES.ASSIGNED_OFFICIAL,
-      'neha.singh@ipc.example',
-    );
-    expect(transport.name).toBe('mock');
   });
 });
 
@@ -162,17 +104,24 @@ describe('sender identity comes from the acting stakeholder', () => {
   });
 });
 
-describe('transport resolution — credentials are never borrowed', () => {
-  it('uses the mock transport for every role while no token is configured', async () => {
+/**
+ * NICeMail is one mailbox, not one account per role, so there is no per-role
+ * credential to borrow and no per-role fallback to get wrong. The configured
+ * name alone decides the transport.
+ */
+describe('transport resolution is name-driven', () => {
+  it('gives every role the same transport', async () => {
     for (const role of Object.values(IDENTITY_ROLES)) {
-      const transport = await emailService.getTransport('gmail', role);
-      expect(transport.name, `${role} must not use another account`).toBe('mock');
+      expect((await emailService.getTransport('mock', role)).name, role).toBe('mock');
+      expect((await emailService.getTransport('nic', role)).name, role).toBe('nic');
     }
   });
 
-  it('keeps using the mock transport when the transport itself is mock', async () => {
-    const transport = await emailService.getTransport('mock', IDENTITY_ROLES.FRONT_OFFICE);
-    expect(transport.name).toBe('mock');
+  it('reaches a real transport only when EMAIL_TRANSPORT names one', async () => {
+    expect((await emailService.getTransport('mock')).name).toBe('mock');
+    expect((await emailService.getTransport('nic')).name).toBe('nic');
+    // A name no longer supported is the mock, never a half-configured send.
+    expect((await emailService.getTransport('gmail')).name).toBe('mock');
   });
 
   it('records which role a message was sent as', async () => {

@@ -26,7 +26,7 @@ const BACKEND_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), 
  * agent, which drives an authenticated web session over CDP, is never selected
  * here, and is not part of the request path at all.
  */
-const EMAIL_TRANSPORTS = { MOCK: 'mock', GMAIL: 'gmail', NIC: 'nic' };
+const EMAIL_TRANSPORTS = { MOCK: 'mock', NIC: 'nic' };
 const MAILBOX_SOURCES = { AUTO: 'auto', NIC: 'nic' };
 
 const env = {
@@ -48,10 +48,6 @@ const env = {
   // consumers. They are still read — by config/identities.js, through the
   // dynamic `process.env[`${role}_EMAIL`]` — but an inquirer is now whoever
   // sent the mail, so there is no single configured address to surface.
-
-  GMAIL_CLIENT_ID: process.env.GMAIL_CLIENT_ID || '',
-  GMAIL_CLIENT_SECRET: process.env.GMAIL_CLIENT_SECRET || '',
-  GMAIL_REDIRECT_URI: process.env.GMAIL_REDIRECT_URI || 'https://developers.google.com/oauthplayground',
 
   // `??`, not `||`: an explicitly empty GEMMA_API_URL means "no LLM configured"
   // and must stay empty, which is how the suite keeps off the network. With `||`
@@ -103,18 +99,33 @@ function validateEmailConfig(config = env) {
     );
   }
 
-  if (config.EMAIL_TRANSPORT === EMAIL_TRANSPORTS.GMAIL) {
-    for (const key of ['GMAIL_CLIENT_ID', 'GMAIL_CLIENT_SECRET']) {
-      if (!config[key]) errors.push(`${key} is required when EMAIL_TRANSPORT=gmail`);
+  const browserMailbox = String(process.env.NIC_BROWSER_MAILBOX || '').trim().toLowerCase() === 'true';
+
+  if (isProduction()) {
+    // The mock transport reports every send as delivered and sends nothing. In
+    // development that is the point; in production it would close cases and
+    // tell inquirers they had been answered.
+    if (config.EMAIL_TRANSPORT === EMAIL_TRANSPORTS.MOCK) {
+      errors.push(
+        'EMAIL_TRANSPORT=mock records emails as sent without sending them; set it explicitly when NODE_ENV=production',
+      );
     }
-    // Only the Front Office mailbox is authenticated. It is the one account the
-    // system reads from and sends as: acknowledgements, the forward to the
-    // Officer-in-Charge and the final dispatch all go out as the Front Officer,
-    // and inbox polling uses the same token. Inquirers are external senders who
-    // never authenticate to anything here, and nothing sends as the OIC — that
-    // role is a recipient, addressed by OFFICER_IN_CHARGE_EMAIL.
-    if (!process.env.GMAIL_REFRESH_TOKEN_FRONT_OFFICE) {
-      errors.push('GMAIL_REFRESH_TOKEN_FRONT_OFFICE is required when EMAIL_TRANSPORT=gmail');
+
+    // A case carries its own mailbox, so either channel can be the real one:
+    // the browser agent for NICeMail cases, NIC SMTP for everything else.
+    if (config.EMAIL_TRANSPORT !== EMAIL_TRANSPORTS.NIC && !browserMailbox) {
+      errors.push(
+        'production needs a real outbound channel: set NIC_BROWSER_MAILBOX=true, or EMAIL_TRANSPORT=nic',
+      );
+    }
+
+    // identities.js defaults to unroutable @example.com addresses so a missing
+    // value fails visibly. Failing at boot beats failing at the first forward.
+    for (const role of ['FRONT_OFFICE', 'OFFICER_IN_CHARGE']) {
+      const address = (process.env[`${role}_EMAIL`] || '').trim();
+      if (!address || address.endsWith('@example.com')) {
+        errors.push(`${role}_EMAIL must be a real address when NODE_ENV=production (got "${address}")`);
+      }
     }
   }
 
@@ -138,12 +149,34 @@ function validateEmailConfig(config = env) {
   // The NICeMail browser mailbox is a second Front Office mailbox, alongside
   // whatever MAILBOX_SOURCE selects. It needs only its address — the browser
   // session carries the authentication, so none of the IMAP settings apply.
-  if (String(process.env.NIC_BROWSER_MAILBOX || '').trim().toLowerCase() === 'true') {
+  if (browserMailbox) {
     const nicEmail = (process.env.NIC_EMAIL || '').trim().toLowerCase();
     const frontOffice = (process.env.FRONT_OFFICE_EMAIL || '').trim().toLowerCase();
     if (!nicEmail) errors.push('NIC_EMAIL is required when NIC_BROWSER_MAILBOX=true');
     else if (nicEmail === frontOffice) {
       errors.push('NIC_EMAIL must differ from FRONT_OFFICE_EMAIL when NIC_BROWSER_MAILBOX=true');
+    }
+
+    // browserConfig.testRecipient falls back to NIC_TEST_RECIPIENT and then to
+    // NIC_EMAIL, so a deployment that sets neither has a "closed" interlock
+    // that quietly permits mail to the mailbox itself. Say so at boot.
+    const outboundOpen = String(process.env.NIC_ALLOW_OUTBOUND || '').trim() === 'true';
+    const testRecipient = (process.env.NIC_BROWSER_TEST_RECIPIENT || process.env.NIC_TEST_RECIPIENT || '').trim();
+    if (!outboundOpen && !testRecipient) {
+      errors.push(
+        'NIC_BROWSER_TEST_RECIPIENT is required while NIC_ALLOW_OUTBOUND is not true, or the interlock confines sends to NIC_EMAIL itself',
+      );
+    }
+  }
+
+  // The allowance is defined by OFFICER_IN_CHARGE_EMAIL: a placeholder there
+  // would add a permanently-allowed recipient to a guard meant to be closed.
+  if (String(process.env.NIC_ALLOW_INTERNAL_FORWARD || '').trim() === 'true') {
+    const officer = (process.env.OFFICER_IN_CHARGE_EMAIL || '').trim();
+    if (!officer || officer.endsWith('@example.com')) {
+      errors.push(
+        'NIC_ALLOW_INTERNAL_FORWARD=true requires a real OFFICER_IN_CHARGE_EMAIL — it is the one address the allowance opens',
+      );
     }
   }
 

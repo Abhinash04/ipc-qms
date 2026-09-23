@@ -3,7 +3,6 @@ import browserConfig from '../../config/browserConfig.js';
 import {
   IDENTITY_ROLES,
   identityForRole,
-  identityForEmail,
   formatSender,
   publicDirectory,
 } from '../../config/identities.js';
@@ -19,38 +18,24 @@ import { ACTOR_TYPES } from '../../constants/roles.js';
 /**
  * Email orchestration.
  *
- * Sender identity comes from the acting stakeholder, never from the caller and
- * never from one global address: the enquiry is sent by the inquirer, the
- * acknowledgement, forward and final response by the Front Officer. Each is a
- * different Gmail account, so each needs its own credentials.
+ * Sender identity comes from the acting stakeholder, never from the caller:
+ * the acknowledgement, the forward and the final response are all sent by the
+ * Front Officer — for a NICeMail case, by that mailbox itself.
  */
 
 /**
- * Resolve the transport **for a specific sender**.
+ * The configured transport, for everything the case mailbox does not claim.
  *
- * A role that has its own refresh token sends through Gmail as itself. A role
- * without one falls back to the mock transport rather than borrowing another
- * account's credentials — which would make the QMS claim a `From` address that
- * Gmail did not actually send from. This is what lets the mocked tail of the
- * workflow keep running while the first three stakeholders are real.
+ * NICeMail is one mailbox, not one account per role: there is no per-role
+ * credential and so no per-role fallback. Every role sends from the same
+ * configured address, with the role carried in the display name.
  *
- * NICeMail is different in kind: it is one mailbox, not one account per role,
- * so there is no per-role credential to fall back from. Every role sends from
- * the same configured address, with the role carried in the display name.
- *
- * Both modules are loaded with a dynamic import so `googleapis` and
- * `nodemailer` are never evaluated unless a real send is actually happening.
+ * `nodemailer` is behind a dynamic import so it is never evaluated unless a
+ * real SMTP send is actually happening.
  */
-async function getTransport(name = env.EMAIL_TRANSPORT, asRole = null, asEmail = null) {
+async function getTransport(name = env.EMAIL_TRANSPORT) {
   if (name === EMAIL_TRANSPORTS.NIC) return import('./transports/nicTransport.js');
-  if (name !== EMAIL_TRANSPORTS.GMAIL) return mockTransport;
-
-  // The acting user's ADDRESS is the authority, because a role can hold more
-  // than one person. Falling back to the role is safe only for single-holder roles.
-  const identity = asEmail ? identityForEmail(asEmail) : asRole ? identityForRole(asRole) : null;
-  if ((asEmail || asRole) && !identity?.canSendReal) return mockTransport;
-
-  return import('./transports/gmailTransport.js');
+  return mockTransport;
 }
 
 /**
@@ -58,9 +43,8 @@ async function getTransport(name = env.EMAIL_TRANSPORT, asRole = null, asEmail =
  *
  * `sourceMailbox` is the `{ source, address }` stored on the case at intake.
  * A case from the NICeMail browser mailbox answers its inquirer through that
- * signed-in browser session; every other case — Gmail, mock, NIC SMTP,
- * portal, and cases from before the field existed — uses EMAIL_TRANSPORT
- * exactly as before.
+ * signed-in browser session; every other case — mock, NIC SMTP, and cases
+ * from before the field existed — uses EMAIL_TRANSPORT.
  *
  * All three case emails pass it, the internal forward included. The forward
  * used to stay on EMAIL_TRANSPORT because that is where Gmail was; with Gmail
@@ -71,9 +55,9 @@ async function getTransport(name = env.EMAIL_TRANSPORT, asRole = null, asEmail =
 const NIC_BROWSER = 'nic-browser';
 const isNicBrowser = (sourceMailbox) => sourceMailbox?.source === NIC_BROWSER;
 
-async function transportFor(sourceMailbox, asRole, asEmail) {
+async function transportFor(sourceMailbox) {
   if (isNicBrowser(sourceMailbox)) return import('./transports/nicBrowserTransport.js');
-  return getTransport(env.EMAIL_TRANSPORT, asRole, asEmail);
+  return getTransport(env.EMAIL_TRANSPORT);
 }
 
 /** Who external mail on this case is from: the mailbox's own Front Office. */
@@ -99,8 +83,7 @@ function getEmailConfig() {
     ipcReplyFrom: { email: env.IPC_ACK_FROM_EMAIL, name: env.IPC_ACK_FROM_NAME },
     inquirer: { email: inquirer.email, name: inquirer.name },
 
-    // Non-secret participant directory. Never contains tokens — only whether a
-    // role is able to authenticate as itself.
+    // Non-secret participant directory: who each role is, nothing more.
     participants: publicDirectory(),
   };
 }
@@ -116,7 +99,7 @@ function getEmailConfig() {
  */
 async function sendEmail(
   message,
-  { asRole = null, asEmail = null, sourceMailbox = null, internalForward = false, onStage = null } = {},
+  { asRole = null, sourceMailbox = null, internalForward = false, onStage = null } = {},
 ) {
   if (!message?.from) throw Object.assign(new Error('"from" is required'), { status: 400 });
 
@@ -128,10 +111,7 @@ async function sendEmail(
   const resolvedAttachments = await resolveAttachments(message.attachments);
 
   const normalised = { ...message, to: recipients, attachments: resolvedAttachments };
-  const transport = await transportFor(sourceMailbox, asRole, asEmail);
-  // The Gmail client is keyed by role; when an address was supplied, use the
-  // role that address actually belongs to rather than the one assumed.
-  const resolvedRole = asEmail ? identityForEmail(asEmail)?.role || asRole : asRole;
+  const transport = await transportFor(sourceMailbox);
   const provider = transport.name || null;
   onStage?.('RESOLUTION', {
     recipient: recipients,
@@ -142,7 +122,7 @@ async function sendEmail(
       ? { guard: outboundAllowed() ? 'production-outbound' : 'test-recipient' }
       : {}),
   });
-  const result = await transport.send(normalised, { asRole: resolvedRole, internalForward, onStage });
+  const result = await transport.send(normalised, { asRole, internalForward, onStage });
 
   return {
     ...normalised,
