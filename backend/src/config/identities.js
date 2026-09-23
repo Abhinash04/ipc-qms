@@ -3,15 +3,6 @@ export const IDENTITY_ROLES = {
   OFFICER_IN_CHARGE: 'OFFICER_IN_CHARGE',
 };
 
-/**
- * Placeholders, not people.
- *
- * These used to be three named individuals' real Gmail addresses, which meant a
- * deployment that forgot to set `<ROLE>_EMAIL` mailed private accounts from a
- * government system — and put personal data in the repository. `@example.com`
- * is reserved by RFC 2606 and cannot receive mail, so a missing variable now
- * fails visibly instead of quietly reaching the wrong person.
- */
 const DEFAULTS = {
   [IDENTITY_ROLES.FRONT_OFFICE]: {
     name: 'Front Officer (unconfigured)',

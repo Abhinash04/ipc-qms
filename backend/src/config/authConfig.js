@@ -2,35 +2,16 @@ import env from './env.js';
 import { allUsers } from '../constants/users.js';
 import { describeCredentials, envKeyFor } from '../services/auth/credentials.js';
 
-/**
- * Authentication configuration.
- *
- * Follows the pattern established by config/env.js: a flat snapshot read from
- * process.env at import, plus a `validate*` that returns an array of error
- * strings and an `assert*` that throws — so server.js can fail fast the same
- * way it already does for email config.
- *
- * Nothing here is ever logged or returned over HTTP.
- */
-const DEFAULT_TTL_SECONDS = 8 * 60 * 60; // 8 hours
+const DEFAULT_TTL_SECONDS = 8 * 60 * 60;
 
 const authConfig = {
   JWT_SECRET: process.env.JWT_SECRET || '',
   SEED_PASSWORD: process.env.QMS_SEED_PASSWORD || '',
   SESSION_TTL_SECONDS: parseInt(process.env.SESSION_TTL_SECONDS || String(DEFAULT_TTL_SECONDS), 10),
   COOKIE_NAME: process.env.SESSION_COOKIE_NAME || 'qms.session',
-  // Cross-site deployments (frontend and API on different registrable domains)
-  // need SameSite=None, which the browser only honours alongside Secure. Same
-  // -site deployments should stay on Lax. Default is the safer Lax.
   COOKIE_SAMESITE: (process.env.SESSION_COOKIE_SAMESITE || 'lax').toLowerCase(),
 };
 
-/**
- * The session cookie is httpOnly so no script can read it, which is also what
- * makes attachment previews work: `<img src>` / `<iframe src>` / `<a download>`
- * cannot attach an Authorization header, but the browser sends this cookie for
- * them automatically.
- */
 export function cookieOptions() {
   const secure = env.NODE_ENV === 'production' || authConfig.COOKIE_SAMESITE === 'none';
   return {
@@ -42,7 +23,6 @@ export function cookieOptions() {
   };
 }
 
-/** The legacy one-secret-opens-everything mode, off unless explicitly enabled or defaulting in development. */
 export function sharedPasswordEnabled() {
   const envVal = String(process.env.QMS_ALLOW_SHARED_PASSWORD || '').trim().toLowerCase();
   if (envVal === 'true') return true;
@@ -59,17 +39,6 @@ export function validateAuthConfig(config = authConfig) {
     errors.push(`JWT_SECRET must be at least 32 characters (got ${config.JWT_SECRET.length})`);
   }
 
-  /**
-   * Every account needs its own credential.
-   *
-   * Checked at startup rather than at login, so a missing credential is a boot
-   * failure naming the account, not a user who cannot sign in and is told only
-   * "Invalid email or password".
-   *
-   * QMS_SEED_PASSWORD is no longer required on its own: it is a credential
-   * source only under QMS_ALLOW_SHARED_PASSWORD=true, and that mode is what the
-   * per-account hashes replaced.
-   */
   const missing = describeCredentials(allUsers()).filter((row) => !row.configured);
   if (missing.length) {
     const named = missing.map((row) => `${row.userId} (${envKeyFor(row.userId)})`).join(', ');

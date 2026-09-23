@@ -1,22 +1,5 @@
 import { ROLES } from './roles.js';
 
-/**
- * Role → action authorization, ported from
- * frontend/src/constants/workflowRules.js — keep the two in sync.
- *
- * NOTE ON SCOPE: the frontend's `canPerform(role, action, workflowState)` has
- * two halves. Only the first — which roles may ever perform an action — can be
- * enforced here, because the server does not yet own workflow state (all Query
- * Case state lives in the browser's IndexedDB until Phase 2). The second half,
- * ACTION_VALID_STATES, is therefore NOT implemented server-side.
- *
- * Concretely: the server can refuse a REVIEWER attempting FORWARD, but it
- * cannot yet refuse a FRONT_OFFICE forwarding a query that is in the wrong
- * state. Do not read `roleCanPerform` as full parity with `canPerform`.
- *
- * TODO(phase-2): once cases are persisted server-side, add the state check and
- * make this the single authority.
- */
 export const WORKFLOW_ACTION = {
   VERIFY: 'VERIFY',
   FORWARD: 'FORWARD',
@@ -76,7 +59,6 @@ export const ROLE_ACTIONS = {
   ],
 };
 
-/** The role half of the frontend's `canPerform`. See the scope note above. */
 export function roleCanPerform(role, action) {
   if (CLARIFICATION_REQUIRED_ACTIONS.includes(action)) return false;
   return (ROLE_ACTIONS[role] || []).includes(action);
