@@ -21,11 +21,6 @@ const ATTACHMENTS = [
   { attachmentId: 'att_2', filename: 'photo.png', mimeType: 'image/png', size: 200 },
 ];
 
-/**
- * The forward is a server call now: the record of it, the audit row and the
- * move to PENDING_ASSIGNMENT all come back from the endpoint rather than being
- * written here. See src/test/fakeCaseMail.js.
- */
 const caseMail = fakeCaseMail();
 const fakeForward = caseMail.forwardQuery;
 
@@ -39,10 +34,6 @@ const fakeSend = (payload) =>
     sentAt: '2026-08-18T12:00:00.000Z',
   });
 
-/**
- * Final approval is one server call now, so the mail leg is injected into the
- * endpoint rather than into the store — see src/test/fakeFinalApprovalEndpoint.js.
- */
 const finalApproval = () => fakeFinalApprovalEndpoint({ send: fakeSend });
 
 function mailboxMessage(overrides = {}) {
@@ -58,9 +49,6 @@ function mailboxMessage(overrides = {}) {
   };
 }
 
-/** Polls Dexie directly rather than the store's `hydrate()` guard, since a
- *  transition's write to IndexedDB happens in the background (fire-and-forget
- *  inside applyTransition) and is not awaited by the action that triggered it. */
 async function waitForPersistedQuery(queryId) {
   for (let attempt = 0; attempt < 40; attempt += 1) {
     const stored = await loadAll();

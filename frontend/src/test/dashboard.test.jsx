@@ -44,7 +44,6 @@ function renderDashboard() {
   );
 }
 
-/** A KPI tile, found by its label. */
 function tile(label) {
   return screen
     .getAllByText(label)
@@ -52,16 +51,11 @@ function tile(label) {
     .closest('.bento-card');
 }
 
-/** The one table below the tiles — its heading carries the selected bucket's label. */
 function listPanel() {
   const heading = screen.getAllByRole('heading', { level: 2 })[0];
   return heading.closest('.bento-card');
 }
 
-/**
- * Read the ids off the row links rather than their text — which also proves
- * each row points at that query's detail page.
- */
 function visibleQueryIds() {
   return within(listPanel())
     .queryAllByRole('link')
@@ -69,17 +63,11 @@ function visibleQueryIds() {
     .filter(Boolean);
 }
 
-/**
- * The tile's count. Read it off the subtext element, whose own text is exactly
- * "N queries" — the headline number sits in an adjacent node, so the tile's
- * combined textContent would run the two together ("2" + "2 queries").
- */
 function tileCount(label) {
   const el = tile(label).querySelector('[data-slot="stat-value"]');
   return Number(el.textContent.trim());
 }
 
-/** Put a query directly into the store in a chosen state. */
 function seed(queries) {
   useWorkflowStore.setState({
     queries: queries.map((q) => ({
@@ -108,7 +96,6 @@ describe('a KPI number always equals the rows behind it', () => {
   ];
 
   it.each(CASES)('%s', (role, user) => {
-    // One query in every workflow state, all owned by / assigned to this user.
     seed(
       Object.values(WORKFLOW_STATE).map((state) => ({
         queryId: `QRY-${state}`,
@@ -172,7 +159,6 @@ describe('Front Office dashboard', () => {
     expect(tile('Pending Assignment')).toHaveTextContent('1');
     expect(tile('Awaiting Dispatch')).toHaveTextContent('1');
 
-    // The default selection is the first bucket, and the table proves it.
     expect(visibleQueryIds()).toEqual(['QRY-NEW']);
 
     fireEvent.click(tile('Awaiting Dispatch'));
@@ -236,7 +222,6 @@ describe('Assigned Official dashboard', () => {
     fireEvent.click(tile('Drafting'));
     expect(visibleQueryIds()).toEqual(['QRY-MINE-DRAFT']);
 
-    // A closed case still belongs to them — it just leaves the active buckets.
     fireEvent.click(tile('Completed'));
     expect(visibleQueryIds()).toEqual(['QRY-MINE-DONE']);
 
@@ -350,15 +335,12 @@ describe('Total Queries spans the whole permitted scope', () => {
     useAuthStore.setState({ currentUser: FRONT_OFFICE });
     renderDashboard();
 
-    // Total renders first, but the dashboard lands on the work waiting for you.
     expect(tile('New / Incoming')).toHaveAttribute('aria-pressed', 'true');
     expect(tile('Total Queries')).toHaveAttribute('aria-pressed', 'false');
     expect(visibleQueryIds()).toEqual(['QRY-1']);
   });
 
   it('covers a reviewer case that no status tile accounts for', () => {
-    // A pending level: in the reviewer's scope, but not awaiting them yet and
-    // not yet ruled on — so only Total should see it.
     seed([
       {
         queryId: 'QRY-PENDING-LEVEL',
@@ -411,10 +393,8 @@ describe('the query list is vertically contained', () => {
 
     const viewport = listPanel().querySelector('[data-radix-scroll-area-viewport]');
     expect(viewport).not.toBeNull();
-    // Bounded height lives on the scroll root, so the card cannot grow with the list.
     expect(viewport.closest('[data-slot="scroll-area"]').className).toMatch(/max-h-/);
 
-    // Every row is still rendered — containment is scroll, not truncation.
     expect(visibleQueryIds()).toHaveLength(25);
     expect(tileCount('Total Queries')).toBe(25);
   });

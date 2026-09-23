@@ -31,10 +31,8 @@ const MESSAGE = {
   receivedAt: '2026-08-17T09:00:00.000Z',
 };
 
-/** The address the enquiry was written from, which is where the ACK goes. */
 const INQUIRER_EMAIL = 'abhinash.pritiraj@pharma.example';
 
-/** The Front Office mailbox the server sends from. */
 const FRONT_OFFICE = MOCK_USERS.find((u) => u.role === ROLES.FRONT_OFFICE).email;
 
 let caseMail;
@@ -52,15 +50,6 @@ function renderAt(path) {
   );
 }
 
-/**
- * Ingest an enquiry and ask the server to acknowledge it.
- *
- * The acknowledgement is no longer composed or recorded here: one call to
- * `POST /emails/acknowledgement` names the case, and the server decides who it
- * goes to, what it says, and whether it has already gone. So these tests assert
- * what the server composed rather than what a caller handed it — the client can
- * no longer choose any of it. See src/test/fakeCaseMail.js.
- */
 async function ingestAndAcknowledge(message = MESSAGE) {
   const { queryId } = s().ingestEmail(message);
   const outcome = await s().acknowledgeInquirer(queryId, null);
@@ -162,11 +151,6 @@ describe('acknowledgement is idempotent — one per query', () => {
       audit: s().getAudit(queryId).length,
     };
 
-    /**
-     * The second press reaches the server — the browser is no longer the guard
-     * and could not be, since another tab or officer may have sent it. What
-     * comes back is "already sent", and nothing is added.
-     */
     const second = await s().acknowledgeInquirer(queryId, null);
 
     expect(second).toMatchObject({ acknowledged: true, alreadySent: true });
@@ -204,13 +188,6 @@ describe('acknowledgement is idempotent — one per query', () => {
   });
 });
 
-/**
- * Accepting a message is what acknowledges its sender, and it is the accept
- * endpoint that sends it — one server call registers the case, emails whoever
- * wrote in and forwards to the Officer-in-Charge. Arriving mail still
- * acknowledges nothing on its own: an advertisement must not be thanked for its
- * enquiry. What is left for the browser is the request and the reporting.
- */
 describe('accepting a message sends the acknowledgement', () => {
   it('hands the endpoint the message its sender is read off, and reports the answer', async () => {
     const external = {
@@ -222,17 +199,11 @@ describe('accepting a message sends the acknowledgement', () => {
 
     const result = await s().acceptMailboxMessage(external, accept);
 
-    // The From header is the only place the inquirer comes from, so the whole
-    // message goes with the request and the server reads it there. That the
-    // acknowledgement really reaches ravi@pharma.example, and nobody else, is
-    // asserted in backend/src/test/acceptMessage.test.js.
     expect(accept).toHaveBeenCalledWith('MSG-EXTERNAL-1', external);
     expect(result.acknowledged).toBe(true);
 
-    // The browser sends no mail at all on this path.
     expect(mailboxService.sendAcknowledgement).not.toHaveBeenCalled();
 
-    // And the acknowledgement the server sent is read back onto the case.
     expect(
       s().emailMessages.filter((m) => m.emailType === EMAIL_TYPE.ACKNOWLEDGEMENT),
     ).toHaveLength(1);
@@ -240,9 +211,6 @@ describe('accepting a message sends the acknowledgement', () => {
 
   it('creates nothing, and sends nothing, for mail that was already registered', async () => {
     const { queryId } = s().ingestEmail(MESSAGE);
-    // The endpoint recognises a message it has already accepted — the guard is
-    // the stored decision in the database, not anything this tab remembers — so
-    // it answers from the record instead of creating a second case.
     const accept = vi.fn(async () => ({
       queryId,
       created: false,
@@ -267,9 +235,6 @@ describe('accepting a message sends the acknowledgement', () => {
 
     const result = await s().acceptMailboxMessage(MESSAGE, accept);
 
-    // A failed acknowledgement is reported, never thrown: the case exists, and
-    // losing its id would be far worse than an email nobody received. The case
-    // page offers the retry.
     expect(result.accepted).toBe(true);
     expect(result.acknowledged).toBe(false);
     expect(result.errors).toEqual([{ step: 'acknowledgement', error: 'Network Error' }]);
@@ -296,8 +261,6 @@ describe('the email thread on the case workspace', () => {
 
     expect(await screen.findByText('Email thread')).toBeInTheDocument();
 
-    // Only the newest message is expanded now, so reveal and open the earlier
-    // one before checking both carry human-readable labels.
     fireEvent.click(screen.getByRole('button', { name: /Show 1 previous message/ }));
     fireEvent.click(screen.getByRole('button', { expanded: false }));
 

@@ -82,8 +82,6 @@ beforeEach(async () => {
   });
   fetchMailboxDecisions.mockResolvedValue({ decisions: [] });
   recordMailboxDecision.mockResolvedValue({ alreadyDecided: false });
-  // One call does the lot server-side, so this page's accept is a single
-  // request whose answer it reports; the case comes back through GET /queries.
   acceptMailboxMessage.mockImplementation(fakeAcceptEndpoint());
   deleteMailboxMessage.mockResolvedValue({ deleted: true });
   markMessageIngested.mockResolvedValue({ ingested: true });
@@ -113,8 +111,6 @@ describe('the inbox lists real mailbox messages', () => {
     expect(rejectFor('MSG-00001')).toBeInTheDocument();
     expect(screen.getAllByText('Awaiting validation')).toHaveLength(2);
 
-    // Listing the mailbox is not registering it. This is the whole point of the
-    // change: arriving mail waits for a person.
     expect(useWorkflowStore.getState().queries).toHaveLength(0);
     expect(recordMailboxDecision).not.toHaveBeenCalled();
     expect(sendAcknowledgement).not.toHaveBeenCalled();
@@ -130,16 +126,11 @@ describe('Scenario A — the Front Officer accepts a genuine enquiry', () => {
     await screen.findByText('Monograph query');
 
     fireEvent.click(acceptFor('MSG-00001'));
-    // One click now covers both judgements, and the caption says so.
     expect(screen.getByText('Register & forward?')).toBeInTheDocument();
-    // Still nothing sent on the first click.
     expect(acceptMailboxMessage).not.toHaveBeenCalled();
 
     fireEvent.click(confirm());
 
-    // The client's whole half of the contract: one request, carrying the
-    // message the server reads the sender off. Minting the Case ID, creating
-    // the case and emailing ravi@pharma.example all happen in MongoDB.
     await waitFor(() =>
       expect(acceptMailboxMessage).toHaveBeenCalledWith(
         'MSG-00001',
@@ -154,13 +145,9 @@ describe('Scenario A — the Front Officer accepts a genuine enquiry', () => {
     );
     expect(acceptMailboxMessage).toHaveBeenCalledTimes(1);
 
-    // That one request also records the ACCEPTED decision and sends the mail.
-    // The browser orchestrates neither any more.
     expect(recordMailboxDecision).not.toHaveBeenCalled();
     expect(sendAcknowledgement).not.toHaveBeenCalled();
 
-    // The row shows the case the server answered with, read back through
-    // GET /queries rather than reconstructed here.
     expect(await screen.findByText('QRY-2026-00001')).toBeInTheDocument();
     expect(useWorkflowStore.getState().queries.map((q) => q.queryId)).toEqual([
       'QRY-2026-00001',
@@ -176,10 +163,6 @@ describe('Scenario A — the Front Officer accepts a genuine enquiry', () => {
 
     await waitFor(() => expect(useWorkflowStore.getState().queries).toHaveLength(1));
 
-    // Accepting used to stop here, so forwarding could be a second judgement.
-    // It never was one in practice — every accepted enquiry goes to the
-    // Officer-in-Charge — and the gap was a case nobody had been told about, so
-    // the accept endpoint forwards in the same request.
     expect(useWorkflowStore.getState().queries[0].workflowState).toBe(
       'PENDING_ASSIGNMENT',
     );
@@ -216,8 +199,6 @@ describe('Scenario B — the Front Officer rejects an unwanted email', () => {
     renderInbox();
 
     expect(await screen.findByText('Rejected')).toBeInTheDocument();
-    // Still there — a rejection an administrator cannot inspect is barely
-    // better than a deletion.
     expect(screen.getByText('Doomed enquiry')).toBeInTheDocument();
     expect(deleteMailboxMessage).not.toHaveBeenCalled();
   });
@@ -231,7 +212,6 @@ describe('Scenario B — the Front Officer rejects an unwanted email', () => {
 
     expect(screen.queryByRole('button', { name: 'Accept message MSG-00002' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Reject message MSG-00002' })).toBeNull();
-    // The undecided message still has both.
     expect(acceptFor('MSG-00001')).toBeInTheDocument();
   });
 });
@@ -255,14 +235,9 @@ describe('Scenario C — many inquirers, one mailbox', () => {
     ]) {
       fireEvent.click(acceptFor(id));
       fireEvent.click(confirm());
-      // Each row shows the case the server answered it with, so no row can end
-      // up displaying another row's case.
       expect(await screen.findByText(caseId)).toBeInTheDocument();
     }
 
-    // One request per message, each under its own mailbox id and carrying its
-    // own From header. Reading the inquirer off that header, and giving each
-    // enquiry a distinct Case ID, is the server's half.
     expect(acceptMailboxMessage.mock.calls.map(([id, sent]) => [id, sent.from])).toEqual([
       ['MSG-00001', 'inquirer1@example.com'],
       ['MSG-00002', 'Second Person <inquirer2@example.org>'],
@@ -281,14 +256,8 @@ describe('Scenario D — the same message accepted twice', () => {
     fireEvent.click(acceptFor('MSG-00001'));
     fireEvent.click(confirm());
     expect(await screen.findByText('QRY-2026-00001')).toBeInTheDocument();
-    // The page re-reads the mailbox once the decision has settled.
     await waitFor(() => expect(fetchMailboxMessages).toHaveBeenCalledTimes(2));
 
-    // A second accept can only come from a stale tab or a retry — drive the
-    // store the same way the page would. The browser does not dedupe; the
-    // server answers from the decision it already stored, which is what makes
-    // one case, one acknowledgement and one forward guaranteed rather than
-    // hoped for.
     const [first] = useWorkflowStore.getState().queries;
     let again;
     await act(async () => {
@@ -305,7 +274,6 @@ describe('Scenario D — the same message accepted twice', () => {
     });
     expect(acceptMailboxMessage).toHaveBeenCalledTimes(2);
     expect(useWorkflowStore.getState().queries).toHaveLength(1);
-    // Nothing the browser could send twice: it sends no mail on this path.
     expect(sendAcknowledgement).not.toHaveBeenCalled();
   });
 });
@@ -349,7 +317,6 @@ describe('deleting a message is a two-step confirm', () => {
     renderInbox();
     await screen.findByText('Doomed enquiry');
 
-    // What the refetch after a successful delete will return.
     fetchMailboxMessages.mockResolvedValue({ messages: [message(1, 'Keep this one')] });
 
     fireEvent.click(trashFor('MSG-00002'));
@@ -381,29 +348,18 @@ describe('a message that already opened a Query Case', () => {
     renderInbox();
     await screen.findByText('Keep this one');
 
-    // The row links to the case it created, and still offers delete.
     expect(screen.getByText(queryId)).toBeInTheDocument();
     fireEvent.click(trashFor('MSG-00001'));
     fireEvent.click(screen.getByRole('button', { name: 'Yes' }));
 
     await waitFor(() => expect(deleteMailboxMessage).toHaveBeenCalledWith('MSG-00001'));
 
-    // Deleting the mailbox copy leaves the Query Case untouched.
     expect(
       useWorkflowStore.getState().queries.some((q) => q.queryId === queryId),
     ).toBe(true);
   });
 });
 
-/**
- * What the Front Officer is told when an acknowledgement may already be out.
- *
- * Accepting a NICeMail enquiry sends the acknowledgement through the signed-in
- * NICeMail browser. When Send is pressed and nothing confirms it left, the
- * server answers `acknowledged: false` with the error flagged `unconfirmed`.
- * This toast used to say "retry from the case page" for every failure — the one
- * piece of advice that, followed here, emails the inquirer twice.
- */
 describe('an acknowledgement that may already have been sent', () => {
   const answer = (ackError) => ({
     queryId: 'QRY-2026-00001',
@@ -451,12 +407,6 @@ describe('an acknowledgement that may already have been sent', () => {
   });
 });
 
-/**
- * The NICeMail mailbox is filled by an agent reading a signed-in browser tab.
- * A failed read does not fail the inbox request: the server answers 200 with
- * what it already has and reports the failure in `sync`. Nothing read that, so
- * a closed Chrome or an expired NICeMail session looked like an empty inbox.
- */
 describe('a NICeMail mailbox that could not be read', () => {
   const failedSync = {
     ok: false,
@@ -486,7 +436,6 @@ describe('a NICeMail mailbox that could not be read', () => {
     expect(screen.queryByText(/The mailbox could not be read/)).toBeNull();
   });
 
-  // Every other mailbox's response has no `sync` field at all.
   it('never appears for a mailbox that is not NICeMail', async () => {
     renderInbox();
     await screen.findByText('Keep this one');
@@ -536,7 +485,6 @@ describe('finding mail', () => {
     expect(screen.queryByText('No Mail in the IPC Mailbox')).toBeNull();
   });
 
-  // Awaiting is `unreadOnly`: not yet accepted or rejected, whether or not opened.
   it('narrows to mail awaiting validation', async () => {
     renderInbox();
     await screen.findByText('Keep this one');
@@ -592,7 +540,6 @@ describe('finding mail', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Next' }));
     await screen.findByText('Only mail on page two');
 
-    // Deleted, so page two is now past the end.
     fetchMailboxMessages.mockImplementation(async ({ offset }) =>
       offset === 0 ? page(50, [message(1, 'First page mail')]) : page(50, []),
     );
@@ -615,7 +562,6 @@ describe('what each row shows', () => {
           isRead: false,
           body: 'Please confirm the\n\n   impurity limit.',
         },
-        // A mailbox that keeps no read state is not "unread".
         { ...message(3, 'No read state', 'Other Sender <other@pharma.example>'), isRead: null },
       ],
     });
@@ -696,8 +642,6 @@ describe('opening a message', () => {
     expect(await screen.findByText('Opened MSG-00002')).toBeInTheDocument();
   });
 
-  // Tooltip content is portaled out of the row, but React bubbles its clicks
-  // up to the row all the same.
   it('does not open from a click on a tooltip', async () => {
     renderInboxRoutes();
     await screen.findByText('Doomed enquiry');
@@ -761,7 +705,6 @@ describe('Sync now', () => {
       });
       expect(fetchMailboxMessages).toHaveBeenCalledTimes(3);
 
-      // Back to the ordinary 15 s refresh.
       await act(async () => {
         await vi.advanceTimersByTimeAsync(3000);
       });
@@ -773,7 +716,6 @@ describe('Sync now', () => {
     }
   });
 
-  // The failed read keeps the last good answer, which still says `running`.
   it('stops polling every 3 s once the list cannot be read', async () => {
     vi.useFakeTimers();
     try {

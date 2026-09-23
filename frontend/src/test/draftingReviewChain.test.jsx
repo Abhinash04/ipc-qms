@@ -34,11 +34,6 @@ const OFFICIAL = findUserById('USR-0004');
 const REVIEWER_A = findUserById('USR-0005');
 const REVIEWER_B = findUserById('USR-0006');
 
-/**
- * The forward is a server call now: the record of it, the audit row and the
- * move to PENDING_ASSIGNMENT all come back from the endpoint rather than being
- * written here. See src/test/fakeCaseMail.js.
- */
 const caseMail = fakeCaseMail();
 const fakeForward = caseMail.forwardQuery;
 

@@ -21,13 +21,6 @@ const OFFICIAL = findUserById('USR-0004');
 
 const s = () => useWorkflowStore.getState();
 
-/**
- * The acknowledgement and the forward are server calls. A toast follows what
- * the server did with the case, so these tests need a server that does it —
- * a canned reply would leave the case where it was and the toast would be
- * announcing nothing. See src/test/fakeCaseMail.js.
- */
-
 const enquiry = (id = 'MSG-NOTIF-0001') => ({
   mailboxMessageId: id,
   to: 'ipc-query-mock@example.com',
@@ -39,14 +32,6 @@ const enquiry = (id = 'MSG-NOTIF-0001') => ({
 
 const received = (id) => s().ingestEmail(enquiry(id), async () => null).queryId;
 
-/**
- * A committed forward requires the query to be verified first.
- *
- * Both of these reach the server and come back through `refreshFromServer()`,
- * which is a React state update — so they are wrapped in `act`. Without it the
- * toast arrives after the assertion, and React says so on the console, which
- * the shared setup treats as a failure.
- */
 const verified = (queryId) => act(() => s().verifyQuery(queryId, FRONT_OFFICE));
 
 const forwarded = (queryId) => act(() => s().forwardToOic(queryId, FRONT_OFFICE));
@@ -64,8 +49,6 @@ beforeEach(async () => {
   await s().resetDemo();
   useAuthStore.setState({ currentUser: FRONT_OFFICE, authReady: true });
 
-  // Toasts queued by a previous test would otherwise appear as soon as the
-  // next Toaster mounts.
   notify.dismiss();
 });
 
@@ -83,8 +66,6 @@ describe('toasts follow committed transitions, not clicks', () => {
     await verified(queryId);
     await expect(forwarded(queryId)).rejects.toThrow(/SMTP down/);
 
-    // Nothing was committed, so nothing may be announced. A toast wired to the
-    // button rather than the operation would have fired here.
     await waitFor(() => {
       expect(
         s().getAudit(queryId).some((e) => e.event === AUDIT_EVENT.QUERY_FORWARDED),
@@ -119,7 +100,6 @@ describe('toasts follow committed transitions, not clicks', () => {
 
     act(() => s().saveDraftVersion(queryId, 'A revised draft body.', OFFICIAL));
 
-    // DRAFT_UPDATED is recorded but never toasted — the audit trail keeps it.
     expect(
       s().getAudit(queryId).some((e) => e.event === AUDIT_EVENT.DRAFT_UPDATED),
     ).toBe(true);
@@ -139,8 +119,6 @@ describe('history is never replayed as news', () => {
     await act(() => s().resetDemo());
     expect(s().auditEvents).toHaveLength(0);
 
-    // The subscriber survives the reset without mistaking the shrink for
-    // activity, and a genuinely new transition still announces itself once.
     const next = received('MSG-NOTIF-0002');
     await verified(next);
     await forwarded(next);
@@ -155,7 +133,6 @@ describe('history is never replayed as news', () => {
     await verified(queryId);
     await forwarded(queryId);
 
-    // Mounting after the fact must not announce what already happened.
     render(<NotificationHost />);
 
     await waitFor(() => {
@@ -179,9 +156,7 @@ describe('a mailbox sweep reports itself once', () => {
       endBatch();
     }
 
-    // The transitions committed and were audited...
     expect(s().auditEvents.some((e) => e.event === AUDIT_EVENT.QUERY_FORWARDED)).toBe(true);
-    // ...but the user sees the single summary instead of three toasts.
     expect(
       screen.queryByText('Forwarded to the Officer-in-Charge'),
     ).not.toBeInTheDocument();
@@ -193,9 +168,6 @@ describe('a mailbox sweep reports itself once', () => {
   it('reports mail as waiting, never as registered', async () => {
     render(<NotificationHost />);
 
-    // The background poll used to register everything it found and announce
-    // "N new cases registered". It now only counts what is waiting — a timer
-    // must not open a case on somebody's behalf.
     notifyMailboxCheck({ fetched: 3 });
 
     await screen.findByText('3 messages awaiting validation');

@@ -4,14 +4,6 @@ import { render, screen } from '@testing-library/react';
 import { QueryLifecycleTimeline } from '@/components/workflow/QueryLifecycleTimeline';
 import { STAGE_STATUS } from '@/constants/queryLifecycle';
 
-/**
- * Structural rather than pixel-based: jsdom does not evaluate container queries,
- * so these assert the markup that lets the layout adapt, not the layout itself.
- *
- * Both layouts (horizontal track + vertical stepper) are always in the DOM, with
- * CSS hiding one. That is pre-existing, so every text query matches twice.
- */
-
 const stage = (key, label, overrides = {}) => ({
   key,
   label,
@@ -26,7 +18,6 @@ const SHORT = [
   stage('delivered', 'Inquirer received response', { status: STAGE_STATUS.PENDING }),
 ];
 
-/** A realistic worst case: the 9 fixed stages plus several review levels. */
 const LONG = Array.from({ length: 12 }, (_, i) =>
   stage(`s-${i}`, `Stage number ${i + 1}`, { actor: `Official ${i + 1}` }),
 );
@@ -65,8 +56,6 @@ describe('the timeline renders its stages', () => {
 
 describe('the track adapts to its container instead of forcing a width', () => {
   it('is not pinned to its content width', () => {
-    // The regression: `min-w-max` made the per-stage `flex-1` inert, so the
-    // track demanded its full max-content width and overflowed the card.
     const { container } = render(<QueryLifecycleTimeline stages={LONG} />);
     expect(track(container).className).not.toMatch(/min-w-max/);
     expect(track(container).className).toMatch(/flex/);
@@ -80,9 +69,7 @@ describe('the track adapts to its container instead of forcing a width', () => {
 
   it('keys its layout off the container, not the viewport', () => {
     const { container } = render(<QueryLifecycleTimeline stages={SHORT} />);
-    // The root opens a container-query context…
     expect(container.firstChild.className).toMatch(/@container/);
-    // …and both layouts switch on container width (`@2xl:`), not `lg:`.
     expect(container.innerHTML).toMatch(/@2xl:/);
     expect(scroller().className).not.toMatch(/(^|\s|:)lg:/);
   });

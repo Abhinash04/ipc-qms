@@ -7,16 +7,6 @@ import { AppRoutes } from '@/routes/AppRoutes';
 import { useAuthStore } from '@/store/useAuthStore';
 import { findUserById } from '@/constants/mockUsers';
 
-/**
- * What the settings page is allowed to claim about mail leaving the machine.
- *
- * This page decided "real or mock" by comparing the transport to 'gmail'.
- * When Gmail was removed that comparison could never be true again, so the
- * panel promised an administrator "Nothing leaves this machine" while NICeMail
- * sent live correspondence from a .gov.in account — and nothing failed,
- * because no test covered the copy. These do.
- */
-
 vi.mock('@/services/api/adminService', () => ({
   fetchAuditSummary: vi.fn().mockResolvedValue({ backend: 'mongo', durable: true, total: 0, byResult: {} }),
   fetchAuditEvents: vi.fn().mockResolvedValue({ events: [] }),
@@ -80,10 +70,6 @@ describe('the email panel states what actually leaves the machine', () => {
     expect(screen.getByText(/Real mail leaves this machine/i)).toBeInTheDocument();
   });
 
-  /**
-   * The regression. EMAIL_TRANSPORT=mock is true of one channel and says
-   * nothing about the other: with the agent enabled, mail really does leave.
-   */
   it('reports the NICeMail agent even when the transport is mock', async () => {
     await renderSettings({ transport: 'mock', nicBrowserMailbox: true });
 

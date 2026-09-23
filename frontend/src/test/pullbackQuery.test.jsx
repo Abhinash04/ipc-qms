@@ -32,15 +32,10 @@ const s = () => useWorkflowStore.getState();
 
 const FRONT_OFFICE = findUserById('USR-0002');
 const OIC = findUserById('USR-0003');
-const OFFICIAL_A = findUserById('USR-0004'); // Neha Singh
-const ADMIN = findUserById('USR-0008'); // System Administrator (Super Admin)
-const REGULAR_ADMIN = findUserById('USR-0007'); // Suresh Gupta (Admin)
+const OFFICIAL_A = findUserById('USR-0004');
+const ADMIN = findUserById('USR-0008');
+const REGULAR_ADMIN = findUserById('USR-0007');
 
-/**
- * The forward is a server call now: the record of it, the audit row and the
- * move to PENDING_ASSIGNMENT all come back from the endpoint rather than being
- * written here. See src/test/fakeCaseMail.js.
- */
 const caseMail = fakeCaseMail();
 const fakeForward = caseMail.forwardQuery;
 
@@ -87,7 +82,6 @@ describe('Admin Pullback Query Functionality Unit & Integration Tests', () => {
       const initialQuery = s().getQuery(queryId);
       expect(initialQuery.workflowState).toBe(WORKFLOW_STATE.ASSIGNED);
 
-      // Perform pullback as Admin
       const result = s().pullBackQuery(
         queryId,
         WORKFLOW_STATE.PENDING_ASSIGNMENT,
@@ -100,9 +94,8 @@ describe('Admin Pullback Query Functionality Unit & Integration Tests', () => {
 
       const updatedQuery = s().getQuery(queryId);
       expect(updatedQuery.workflowState).toBe(WORKFLOW_STATE.PENDING_ASSIGNMENT);
-      expect(updatedQuery.currentAssigneeId).toBeNull(); // Reset for pre-assignment stage
+      expect(updatedQuery.currentAssigneeId).toBeNull();
 
-      // Check pullbackHistory
       expect(updatedQuery.pullbackHistory).toBeDefined();
       expect(updatedQuery.pullbackHistory.length).toBe(1);
       const historyEntry = updatedQuery.pullbackHistory[0];
@@ -111,7 +104,6 @@ describe('Admin Pullback Query Functionality Unit & Integration Tests', () => {
       expect(historyEntry.reason).toBe('Incorrect assignment');
       expect(historyEntry.remarks).toBe('Query assigned to wrong official department.');
 
-      // Check audit event
       const auditTrail = s().getAudit(queryId);
       const pullbackAudit = auditTrail.find((a) => a.event === AUDIT_EVENT.QUERY_PULLED_BACK);
       expect(pullbackAudit).toBeDefined();
@@ -155,7 +147,6 @@ describe('Admin Pullback Query Functionality Unit & Integration Tests', () => {
     });
 
     it('reopens a closed query when pulled back by Admin', () => {
-      // Manually set query state to CLOSED to test closed pullback
       s().applyTransition({
         queryId,
         actor: ADMIN,
@@ -168,7 +159,6 @@ describe('Admin Pullback Query Functionality Unit & Integration Tests', () => {
       expect(closedQuery.workflowState).toBe(WORKFLOW_STATE.CLOSED);
       expect(closedQuery.businessStatus).toBe(BUSINESS_STATUS.CLOSED);
 
-      // Perform pullback as Regular Admin
       s().pullBackQuery(
         queryId,
         WORKFLOW_STATE.UNDER_REVIEW,
@@ -190,7 +180,7 @@ describe('Admin Pullback Query Functionality Unit & Integration Tests', () => {
       expect(validStages).toContain(WORKFLOW_STATE.RECEIVED);
       expect(validStages).toContain(WORKFLOW_STATE.FRONT_OFFICE_VERIFICATION);
       expect(validStages).toContain(WORKFLOW_STATE.PENDING_ASSIGNMENT);
-      expect(validStages).not.toContain(WORKFLOW_STATE.ASSIGNED); // Excludes current state
+      expect(validStages).not.toContain(WORKFLOW_STATE.ASSIGNED);
     });
   });
 
@@ -198,32 +188,25 @@ describe('Admin Pullback Query Functionality Unit & Integration Tests', () => {
     it('renders "Pullback Query" button for Admin user and processes modal pullback flow', async () => {
       const { unmount } = renderAs(ADMIN, `/super-admin/queries/${queryId}`);
 
-      // Verify "Pullback Query" button exists for Admin
       const pullbackBtn = screen.getByRole('button', { name: /Pullback Query/i });
       expect(pullbackBtn).toBeInTheDocument();
 
-      // Open Modal
       fireEvent.click(pullbackBtn);
 
-      // Verify Modal Title & Dialog
       expect(screen.getByRole('heading', { name: 'Pullback Query' })).toBeInTheDocument();
       expect(screen.getAllByText(queryId).length).toBeGreaterThan(0);
 
-      // Click "Continue to Pullback"
       const continueBtn = screen.getByRole('button', { name: /Continue to Pullback/i });
       fireEvent.click(continueBtn);
 
-      // Verify Confirmation step is shown
       expect(screen.getByText('Confirm Query Pullback')).toBeInTheDocument();
       expect(
         screen.getByText(new RegExp('Are you sure you want to pull back query')),
       ).toBeInTheDocument();
 
-      // Click "Confirm Pullback"
       const confirmBtn = screen.getByRole('button', { name: /Confirm Pullback/i });
       fireEvent.click(confirmBtn);
 
-      // Verify state update in store
       await waitFor(() => {
         const updated = s().getQuery(queryId);
         expect(updated.workflowState).not.toBe(WORKFLOW_STATE.ASSIGNED);
@@ -235,7 +218,6 @@ describe('Admin Pullback Query Functionality Unit & Integration Tests', () => {
     it('does NOT render "Pullback Query" button for non-admin official (e.g. Neha Singh)', () => {
       const { unmount } = renderAs(OFFICIAL_A, `/assigned-official/queries/${queryId}`);
 
-      // Verify "Pullback Query" button is NOT rendered for regular official
       expect(screen.queryByRole('button', { name: /Pullback Query/i })).toBeNull();
 
       unmount();

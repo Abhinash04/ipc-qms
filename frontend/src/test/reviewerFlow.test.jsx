@@ -35,11 +35,6 @@ const OFFICIAL = findUserById('USR-0004');
 const REVIEWER_A = findUserById('USR-0005');
 const REVIEWER_B = findUserById('USR-0006');
 
-/**
- * The forward is a server call now: the record of it, the audit row and the
- * move to PENDING_ASSIGNMENT all come back from the endpoint rather than being
- * written here. See src/test/fakeCaseMail.js.
- */
 const caseMail = fakeCaseMail();
 const fakeForward = caseMail.forwardQuery;
 
@@ -71,7 +66,6 @@ function tile(label) {
   return labelEl.closest('.bento-card');
 }
 
-/** The headline figure the tile actually shows. */
 function tileCount(label) {
   const el = tile(label).querySelector('[data-slot="stat-value"]');
   return Number(el.textContent.trim());
@@ -113,7 +107,6 @@ describe('End-to-end reviewer flow and role dashboard reactivity', () => {
   it('allows Reviewer A to approve on QueryDetailPage, advancing state to PENDING_FINAL_APPROVAL', () => {
     const { unmount: unmountDetail } = renderAs(REVIEWER_A, `/reviewer/queries/${queryId}`);
 
-    // Verify ReviewDecisionCard presence
     expect(screen.getByRole('heading', { name: 'Review decision' })).toBeInTheDocument();
     const approveBtn = screen.getByRole('button', { name: 'Approve' });
     const requestBtn = screen.getByRole('button', { name: 'Request changes' });
@@ -121,22 +114,17 @@ describe('End-to-end reviewer flow and role dashboard reactivity', () => {
     expect(approveBtn).toBeInTheDocument();
     expect(requestBtn).toBeInTheDocument();
 
-    // Click Approve
     fireEvent.click(approveBtn);
 
-    // Verify workflow state updated
     const updatedQuery = s().queries.find((q) => q.queryId === queryId);
     expect(updatedQuery.workflowState).toBe(WORKFLOW_STATE.PENDING_FINAL_APPROVAL);
     unmountDetail();
 
-    // Verify Reviewer A's dashboard KPI is now 0
     const { unmount: unmountDash } = renderAs(REVIEWER_A, '/reviewer/dashboard');
     expect(tileCount('Awaiting My Review')).toBe(0);
-    // It moved to the bucket recording their own decision.
     expect(tileCount('Approved by me')).toBe(1);
     unmountDash();
 
-    // …and the OIC now owns it.
     const { unmount: unmountOic } = renderAs(OIC, '/officer-in-charge/dashboard');
     expect(tileCount('Awaiting Final Approval')).toBe(1);
     expect(screen.getAllByText(queryId).length).toBeGreaterThan(0);
@@ -147,29 +135,23 @@ describe('End-to-end reviewer flow and role dashboard reactivity', () => {
     const { unmount: unmountDetail } = renderAs(REVIEWER_A, `/reviewer/queries/${queryId}`);
 
     const requestBtn = screen.getByRole('button', { name: 'Request changes' });
-    // Disabled without comment
     expect(requestBtn).toBeDisabled();
 
-    // Add comment
     const commentBox = screen.getByPlaceholderText(/Add a comment for the assigned official/);
     fireEvent.change(commentBox, { target: { value: 'Please update testing limits according to revised monograph.' } });
     expect(requestBtn).toBeEnabled();
 
-    // Click Request changes
     fireEvent.click(requestBtn);
 
-    // Verify state transitioned to RETURNED_FOR_REVISION
     const updatedQuery = s().queries.find((q) => q.queryId === queryId);
     expect(updatedQuery.workflowState).toBe(WORKFLOW_STATE.RETURNED_FOR_REVISION);
     unmountDetail();
 
-    // Reviewer A dashboard KPI is 0
     const { unmount: unmountReviewerDash } = renderAs(REVIEWER_A, '/reviewer/dashboard');
     expect(tileCount('Awaiting My Review')).toBe(0);
     expect(tileCount('Returned by me')).toBe(1);
     unmountReviewerDash();
 
-    // Assigned official dashboard KPI "Returned for Revision" is 1
     const { unmount: unmountOfficialDash } = renderAs(OFFICIAL, '/assigned-official/dashboard');
     expect(tileCount('Returned for Revision')).toBe(1);
     expect(screen.getAllByText(queryId).length).toBeGreaterThan(0);

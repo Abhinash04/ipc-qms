@@ -50,9 +50,6 @@ describe('collapsed geometry adds up', () => {
 
   it('never allows the nav to scroll horizontally', () => {
     renderSidebar({ collapsed: true });
-    // The scroll container is the nav's parent, not the nav itself — the nav
-    // only carries layout classes. Asserting on whichever element actually
-    // scrolls keeps this about the behaviour rather than the markup shape.
     expect(nav().parentElement.className).toContain('overflow-x-hidden');
   });
 });
@@ -106,16 +103,10 @@ describe('every icon-only control has an accessible name', () => {
     useAuthStore.setState({ currentUser: userFor(ROLES.REVIEWER) });
     renderSidebar({ collapsed: true });
 
-    // Collapsed, both render as a bare icon with no visible text. Without an
-    // accessible name they are unreachable for anyone not looking at them —
-    // the tooltip does not supply one, as it is not in the a11y tree until
-    // hover.
     expect(screen.getByRole('button', { name: 'Sign out session' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Expand sidebar' })).toBeInTheDocument();
   });
 
-  // The signed-in identity used to live in this footer. It now sits in the
-  // Header, so that contract is asserted in header.test.jsx rather than here.
 });
 
 describe('the active item is marked, and only it', () => {
@@ -137,8 +128,6 @@ describe('the active item is marked, and only it', () => {
 });
 
 describe('signing out works while collapsed', () => {
-  // Signing out now round-trips to the server to clear the session cookie, so
-  // the store updates a tick later than it used to.
   it('clears the session — collapsing used to hide the only way out', async () => {
     useAuthStore.setState({ currentUser: userFor(ROLES.ADMIN) });
     renderSidebar({ collapsed: true });
@@ -162,9 +151,6 @@ describe('collapsing and expanding', () => {
 
     renderSidebar({ collapsed: false });
     expect(within(nav()).getByText(first.label)).toBeInTheDocument();
-    // The "Main Menu" heading was dropped in the sidebar redesign. A decorative
-    // caption over a single ungrouped list carries no behavioural contract, so
-    // the assertion goes rather than the heading coming back.
   });
 
   it('renders no visible labels in the rail when collapsed', () => {

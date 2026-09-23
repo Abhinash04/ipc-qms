@@ -49,14 +49,6 @@ const USER_FOR_ROLE = Object.fromEntries(
 
 const ALL_ROLES = Object.values(ROLES);
 
-/**
- * A role the grant table does not name.
- *
- * INQUIRER was one until it was removed, so a session minted before that still
- * carries it — the realistic principal for "a role nothing grants anything to".
- * These assertions read `ROLES.INQUIRER` until the constant was deleted, at
- * which point they were passing `undefined` and held vacuously.
- */
 const REMOVED_ROLE = 'INQUIRER';
 
 function renderAt(path) {
@@ -123,10 +115,6 @@ describe('the route gate agrees with the grant table', () => {
 
   it('refuses an unknown role and an unknown path', () => {
     expect(isRouteAllowedForRole('DIRECTOR', '/reviewer/reviews')).toBe(false);
-    // INQUIRER was a role, with a whole /inquirer/* section of its own. A
-    // session minted before it was removed still carries it, and must be
-    // refused like any other role the grant table does not name — including
-    // under the slug that used to be its.
     expect(isRouteAllowedForRole(REMOVED_ROLE, '/inquirer/queries')).toBe(false);
     expect(isRouteAllowedForRole(ROLES.REVIEWER, '/nonsense')).toBe(false);
   });
@@ -150,23 +138,11 @@ describe('navigation is derived from the grants, never a second list', () => {
     );
   });
 
-  /**
-   * Every role that remains is granted Notifications, so the only way left to
-   * pin that the sidebar is derived from the grants — and not from a second
-   * list that could disagree with them — is a role the grant table does not
-   * name. It gets nothing at all, not merely nothing extra.
-   */
   it('offers nothing to a role the grant table does not name', () => {
     expect(roleHasSection(REMOVED_ROLE, SECTION.NOTIFICATIONS)).toBe(false);
     expect(navItemsForRole(REMOVED_ROLE)).toEqual([]);
   });
 
-  /**
-   * Enquiries arrive as email. There is no in-app form to raise one, for any
-   * role — Super Admin included, which is the case worth pinning: its grant is
-   * every key of SECTIONS, so a section added back for one role silently
-   * reappears there too.
-   */
   it('offers no Raise Enquiry section to any role, Super Admin included', () => {
     expect(SECTION.COMPOSE).toBeUndefined();
     expect(Object.values(SECTIONS).some((section) => section.segment === 'compose')).toBe(false);

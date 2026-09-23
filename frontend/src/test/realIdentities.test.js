@@ -38,20 +38,9 @@ function incomingEnquiry(overrides = {}) {
   };
 }
 
-/**
- * The forward is a server call now: the record of it, the audit row and the
- * move to PENDING_ASSIGNMENT all come back from the endpoint rather than being
- * written here. See src/test/fakeCaseMail.js.
- */
 const caseMail = fakeCaseMail();
 const fakeForward = caseMail.forwardQuery;
 
-/**
- * The Front Office's retry is `POST /emails/response` — the whole send, named
- * by case. Final approval's send is the mail leg *inside* the endpoint, which
- * is handed a composed message. They are different seams and take different
- * arguments; this is the retry one.
- */
 const fakeResponse = caseMail.sendResponse;
 
 const fakeMailLeg = ({ to, subject, body }) =>
@@ -64,21 +53,9 @@ const fakeMailLeg = ({ to, subject, body }) =>
     sentAt: '2026-08-19T10:00:00.000Z',
   });
 
-/**
- * Final approval is one server call now, so the mail leg is injected into the
- * endpoint rather than into the store — see src/test/fakeFinalApprovalEndpoint.js.
- * Jatin is the approver on this path, and the server reads that actor off the
- * session rather than taking it from the client.
- */
 const finalApproval = (send = fakeMailLeg) =>
   fakeFinalApprovalEndpoint({ send, actor: JATIN.name });
 
-/**
- * The Front Office mailbox acknowledges Abhinash — a server call now, so this asks the
- * endpoint and re-reads the case exactly as the store does. The addresses the
- * assertions check are the server's choice: the Front Office mailbox it sends
- * from, and the inquirer stored on the case at intake.
- */
 async function acknowledge(queryId) {
   const result = await caseMail.sendAcknowledgement({ queryId });
   await s().refreshFromServer();
@@ -90,23 +67,8 @@ beforeEach(async () => {
   await s().resetDemo();
 });
 
-/**
- * The seeded directory.
- *
- * This described "the real identities" while two accounts carried named
- * individuals' personal Gmail addresses, and pinned those addresses so they
- * could not drift. They are gone: every account is on the reserved
- * `@ipc.example` domain, and the assertions below pin that instead — which is
- * now the property worth defending, because it is the one that keeps personal
- * data out of the repository and stops a sign-in identity doubling as somebody's
- * private inbox.
- */
 describe('the seeded directory', () => {
   it('names the Front Office by its post, not by a person', () => {
-    // USR-0002 carried a named individual until the Front Office became the
-    // NICeMail account. It is the PRIMARY-mailbox Front Officer now — the one
-    // that exists whether or not the browser agent is switched on — so it is
-    // named for the post it holds rather than for whoever happens to hold it.
     expect(FRONT_OFFICE).toMatchObject({
       role: ROLES.FRONT_OFFICE,
       email: 'front.office@ipc.example',
@@ -144,12 +106,6 @@ describe('the seeded directory', () => {
     expect(new Set(addresses).size).toBe(addresses.length);
   });
 
-  /**
-   * The rule the whole file exists for now: not one address in the directory can
-   * receive mail. `@ipc.example` is reserved by RFC 2606, so an account that
-   * acquires a routable address — a real colleague's, or a real IPC one — fails
-   * here rather than at the first send.
-   */
   it('puts every account on a reserved, unroutable domain', () => {
     expect(MOCK_USERS.length).toBeGreaterThan(0);
     for (const user of MOCK_USERS) {
@@ -262,12 +218,6 @@ describe('5–6. the Front Office forwards to Jatin, same case throughout', () =
       .getAudit(queryId)
       .find((a) => a.event === AUDIT_EVENT.QUERY_FORWARDED);
 
-    /**
-     * Who forwarded is the audit actor; to whom is the address on the email the
-     * server actually sent. The details line no longer repeats either, because
-     * the server writes it and a name copied into prose can disagree with the
-     * row it describes.
-     */
     expect(entry.actor).toBe(FRONT_OFFICE.name);
     expect(entry.details).toContain('Officer-in-Charge');
 
@@ -419,15 +369,6 @@ describe('9–10. Jatin assigns a mock official and the mocked tail completes', 
   });
 });
 
-/**
- * Intake is a gate, not a pipeline.
- *
- * This suite used to assert that one email registered, acknowledged, verified
- * AND forwarded itself with nobody involved. The gate is still the point: mail
- * arriving changes nothing until the Front Officer accepts it. What accepting then does
- * is no longer split across two clicks — it is one server call that registers,
- * acknowledges and forwards, and the browser orchestrates none of it.
- */
 describe('intake — mail waits for the Front Officer', () => {
   function mockMailbox({ forwardFails = false } = {}) {
     vi.mocked(mailboxService.fetchMailboxMessages).mockResolvedValue({
@@ -436,9 +377,6 @@ describe('intake — mail waits for the Front Officer', () => {
     vi.mocked(mailboxService.markMessageIngested).mockResolvedValue({ ingested: true });
     vi.mocked(mailboxService.recordMailboxDecision).mockResolvedValue({ alreadyDecided: false });
     vi.mocked(mailboxService.sendAcknowledgement).mockImplementation(caseMail.sendAcknowledgement);
-    // The whole intake sequence lives behind this one endpoint now. With the mailbox
-    // down its forward step fails on its own: the case is still created and
-    // acknowledged, and is left at FRONT_OFFICE_VERIFICATION for a retry.
     vi.mocked(mailboxService.acceptMailboxMessage).mockImplementation(
       fakeAcceptEndpoint(
         forwardFails
@@ -453,7 +391,6 @@ describe('intake — mail waits for the Front Officer', () => {
     );
   }
 
-  /** What the background poll does: look, and report. Nothing else. */
   async function checkMailbox() {
     useAuthStore.setState({ currentUser: FRONT_OFFICE });
     const { result } = renderHook(() => useMailboxIngestion());
@@ -464,7 +401,6 @@ describe('intake — mail waits for the Front Officer', () => {
     return outcome;
   }
 
-  /** What the tick does. */
   async function acceptEnquiry() {
     useAuthStore.setState({ currentUser: FRONT_OFFICE });
     const { result } = renderHook(() => useMailboxIngestion());
@@ -498,13 +434,9 @@ describe('intake — mail waits for the Front Officer', () => {
     expect(outcome.acknowledged).toBe(true);
     expect(outcome.forwarded).toBe(true);
 
-    // Accepting used to stop here so the Front Officer could forward separately. It was
-    // never a second judgement — every accepted enquiry goes to Jatin — and the
-    // gap left a case sitting where nobody had been told about it.
     expect(s().getQuery('QRY-2026-00001').workflowState).toBe(
       WORKFLOW_STATE.PENDING_ASSIGNMENT,
     );
-    // And the browser drives none of the sequence: no mail, no decision call.
     expect(mailboxService.forwardQuery).not.toHaveBeenCalled();
     expect(mailboxService.sendAcknowledgement).not.toHaveBeenCalled();
     expect(mailboxService.recordMailboxDecision).not.toHaveBeenCalled();
@@ -514,11 +446,6 @@ describe('intake — mail waits for the Front Officer', () => {
     mockMailbox();
     await acceptEnquiry();
 
-    // The accept endpoint writes this trail against the Front Officer's own
-    // session. This tab used to mint its own QUERY_RECEIVED and
-    // AI_SUMMARY_GENERATED here and must now add nothing at all. The order, and
-    // the Front Officer as the acting officer, are asserted in
-    // backend/src/test/acceptMessage.test.js.
     expect(s().getAudit('QRY-2026-00001').map((a) => a.event)).toEqual([
       AUDIT_EVENT.QUERY_RECEIVED,
       AUDIT_EVENT.QUERY_REGISTERED,
@@ -534,7 +461,6 @@ describe('intake — mail waits for the Front Officer', () => {
     const query = s().getQuery('QRY-2026-00001');
     const thread = s().emailMessages.filter((m) => m.queryId === query.queryId);
 
-    // Three messages, not two: the forward belongs to the same accept.
     expect(thread.map((m) => m.emailType)).toEqual([
       EMAIL_TYPE.INCOMING_QUERY,
       EMAIL_TYPE.ACKNOWLEDGEMENT,
@@ -543,7 +469,6 @@ describe('intake — mail waits for the Front Officer', () => {
     expect(new Set(thread.map((m) => m.threadId))).toEqual(new Set([query.threadId]));
 
     expect(thread[0].to).toEqual([FRONT_OFFICE.email]);
-    // The acknowledgement goes back to whoever wrote in; the forward to Jatin.
     expect(thread[1].to).toEqual([ABHINASH.email]);
     expect(thread[2].to).toEqual([JATIN.email]);
     expect(s().queries).toHaveLength(1);
@@ -558,9 +483,6 @@ describe('intake — mail waits for the Front Officer', () => {
       WORKFLOW_STATE.PENDING_ASSIGNMENT,
     );
 
-    // The second click went with the second judgement: FORWARD is valid only at
-    // FRONT_OFFICE_VERIFICATION, so a case the server already forwarded cannot
-    // be forwarded again from here.
     await expect(s().forwardToOic('QRY-2026-00001', FRONT_OFFICE)).rejects.toThrow(
       /may not perform FORWARD/,
     );
@@ -571,9 +493,6 @@ describe('intake — mail waits for the Front Officer', () => {
     mockMailbox({ forwardFails: true });
     const outcome = await acceptEnquiry();
 
-    // The forward is the one step of the accept that can fail without losing
-    // anything: the case exists, Abhinash was told, and what is left is the
-    // retry the case page offers.
     expect(outcome.accepted).toBe(true);
     expect(outcome.forwarded).toBe(false);
     expect(outcome.errors).toEqual([{ step: 'forward', error: 'mail send failed' }]);
@@ -593,10 +512,6 @@ describe('intake — mail waits for the Front Officer', () => {
     await acceptEnquiry();
     const second = await acceptEnquiry();
 
-    // The browser does not dedupe: it sends the second accept too, and the
-    // server answers it from the decision it already stored. That this leaves
-    // one case, one acknowledgement and one forward is asserted in
-    // backend/src/test/acceptMessage.test.js.
     expect(mailboxService.acceptMailboxMessage).toHaveBeenCalledTimes(2);
     expect(second).toMatchObject({
       accepted: false,
@@ -697,14 +612,6 @@ describe('final approval dispatches automatically', () => {
   it('7. a failed send leaves the case approved but NOT closed', async () => {
     const queryId = await readyForApproval();
 
-    /**
-     * The endpoint reports a failed send instead of throwing it. Approval is a
-     * decision a person made, and it has to survive a mail server being down —
-     * so the approval is recorded first and the case is left exactly where the
-     * Front Office retry acts on it. What must never happen is the case reading
-     * CLOSED while the inquirer received nothing, which is asserted below by
-     * the absence of an OUTGOING_RESPONSE alongside the state.
-     */
     const outcome = await s().grantFinalApproval(queryId, JATIN, finalApproval(failing));
 
     expect(outcome.approved).toBe(true);
@@ -736,12 +643,6 @@ describe('final approval dispatches automatically', () => {
     const queryId = await readyForApproval();
     await s().grantFinalApproval(queryId, JATIN, finalApproval());
 
-    /**
-     * The guard moved to the server, so these presses do reach it — and are
-     * answered "already sent" rather than sending again. That answer is the
-     * point: the browser no longer decides, and cannot decide wrongly from a
-     * stale copy of the case.
-     */
     const sendAgain = vi.fn(fakeResponse);
     const second = await s().dispatchResponse(queryId, null, sendAgain);
     const third = await s().dispatchResponse(queryId, null, sendAgain);

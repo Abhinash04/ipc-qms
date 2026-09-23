@@ -114,10 +114,6 @@ describe('Administration is one console, gated by section grants', () => {
     expect(await screen.findByRole('heading', { name: heading })).toBeInTheDocument();
   });
 
-  // Routes exist only for a role's granted sections, so an ADMIN visiting
-  // /admin/administration/settings matches no route at all. The reachable
-  // way to attempt it is the Super Admin URL, which is what a curious user
-  // would actually paste — and there ProtectedRoute refuses.
   it('ADMIN is refused System Settings — the one elevated area', async () => {
     renderAs(ADMIN, '/super-admin/administration/settings');
 
@@ -141,7 +137,6 @@ describe('Administration is one console, gated by section grants', () => {
     expect(sectionsForRole(ROLES.SUPER_ADMIN)).toContain(SECTION.ADMIN_SETTINGS);
     expect(sectionsForRole(ROLES.ADMIN)).not.toContain(SECTION.ADMIN_SETTINGS);
 
-    // Everything else in the console is shared — the console is not forked.
     for (const section of [SECTION.ADMINISTRATION, SECTION.ADMIN_ACTIVITY, SECTION.ADMIN_EMAIL, SECTION.ADMIN_AI]) {
       expect(sectionsForRole(ROLES.ADMIN)).toContain(section);
       expect(sectionsForRole(ROLES.SUPER_ADMIN)).toContain(section);
@@ -154,7 +149,6 @@ describe('the dashboard shows server-recorded figures, not invented ones', () =>
     renderAs(ADMIN, '/admin/administration');
 
     expect(await screen.findByText('System events today')).toBeInTheDocument();
-    // 1 EMAIL_FORWARDED from byAction, and 1 denied from byResult.
     expect(screen.getByText('Email actions today')).toBeInTheDocument();
     expect(screen.getByText('Failures & denials today')).toBeInTheDocument();
     expect(adminService.fetchAuditSummary).toHaveBeenCalled();
@@ -170,10 +164,6 @@ describe('the dashboard shows server-recorded figures, not invented ones', () =>
   it('labels the case figures as system-wide, which is what they now are', async () => {
     renderAs(ADMIN, '/admin/administration');
 
-    // This label read "This browser only — cases are not yet stored
-    // server-side" for as long as cases lived in each user's IndexedDB. They
-    // are in MongoDB now, and an admin console that understates its own scope
-    // is as misleading as one that overstates it.
     expect(
       await screen.findByText(/System-wide — cases are stored server-side/),
     ).toBeInTheDocument();
@@ -201,8 +191,6 @@ describe('the audit trail table', () => {
   it('renders one row per event with actor, action and result', async () => {
     renderAs(ADMIN, '/admin/administration/activity');
 
-    // Wait on the case id: it appears only in a rendered row, whereas the
-    // event names also exist as filter options and would resolve immediately.
     const caseLinks = await screen.findAllByRole('button', { name: 'QRY-2026-00421' });
     expect(caseLinks).toHaveLength(2);
 
@@ -243,7 +231,6 @@ describe('AI monitoring surfaces the fallback, which is otherwise silent', () =>
   it('separates model-answered calls from fallbacks', async () => {
     renderAs(ADMIN, '/admin/administration/ai');
 
-    // Awaits the note itself — the donut title renders before the data lands.
     expect(await screen.findByText(/used deterministic fallback text/)).toBeInTheDocument();
     expect(screen.getByText('Answered by the model vs fallback')).toBeInTheDocument();
   });
@@ -276,7 +263,6 @@ describe('the roles matrix is generated from the live permission tables', () => 
 
     const actions = (await screen.findByText('Workflow actions')).closest('section');
     const forwardRow = within(actions).getByText('Forward').closest('tr');
-    // Column order is SUPER_ADMIN, ADMIN, ... — Super Admin granted, Admin not.
     const cells = within(forwardRow).getAllByLabelText(/granted/);
     expect(cells[0]).toHaveAttribute('aria-label', 'granted');
     expect(cells[1]).toHaveAttribute('aria-label', 'not granted');

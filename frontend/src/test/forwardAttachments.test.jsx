@@ -55,12 +55,6 @@ beforeEach(async () => {
 });
 
 describe('forwarding a query with attachments', () => {
-  /**
-   * The browser no longer carries the files. It names the case; the server
-   * attaches whatever the enquiry arrived with, which is the only copy anyone
-   * should be forwarding — a tab that had gone stale used to be able to send a
-   * different set, or none.
-   */
   it('forwards the files the enquiry arrived with, named only by case', async () => {
     const { queryId } = s().ingestEmail(enquiry(), async () => null);
     await s().verifyQuery(queryId, FRONT_OFFICE);
@@ -97,9 +91,6 @@ describe('forwarding a query with attachments', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: /Forward to Officer-in-Charge/ }));
 
-    // The notice appears first with the generic "not forwarded" text, and the
-    // server's reason is added when the forward's answer arrives — so wait for
-    // the reason, not for the first alert.
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Missing attachment(s): spec.pdf'));
     expect(s().getQuery(queryId).workflowState).toBe(WORKFLOW_STATE.FRONT_OFFICE_VERIFICATION);
     expect(

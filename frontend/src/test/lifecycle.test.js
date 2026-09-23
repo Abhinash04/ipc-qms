@@ -38,10 +38,6 @@ const fakeSend = (payload) =>
     sentAt: '2026-08-18T12:00:00.000Z',
   });
 
-/**
- * Final approval is one server call now, so the mail leg is injected into the
- * endpoint rather than into the store — see src/test/fakeFinalApprovalEndpoint.js.
- */
 const finalApproval = (send = fakeSend) => fakeFinalApprovalEndpoint({ send });
 
 const failingSend = () => Promise.reject(new Error('mail send failed'));
@@ -92,9 +88,6 @@ async function runTo(stopAt, { reviewers = [REVIEWER_A], message } = {}) {
   if (stopAt === WORKFLOW_STATE.PENDING_FINAL_APPROVAL) return queryId;
 
   if (stopAt === WORKFLOW_STATE.READY_FOR_DISPATCH) {
-    // A send that fails is reported, not thrown: the approval stands, the
-    // response stays locked, and the case waits where the Front Office retry
-    // acts on it.
     await s().grantFinalApproval(queryId, OIC, finalApproval(failingSend));
     return queryId;
   }
@@ -108,8 +101,6 @@ const stateOf = (queryId) => s().getQuery(queryId).workflowState;
 beforeEach(async () => {
   await s().hydrate();
   await s().resetDemo();
-  // The acknowledgement and the forward are server calls now — their records,
-  // audit rows and state moves come back from the endpoint. See fakeCaseMail.js.
   installFakeCaseMail(mailboxService);
 });
 
@@ -155,9 +146,6 @@ describe('the complete lifecycle, end to end', () => {
     const query = s().getQuery(queryId);
     const messages = s().emailMessages.filter((m) => m.queryId === queryId);
 
-    // Four emails, all on the case's own thread: the enquiry, the
-    // acknowledgement to whoever sent it, the forward to the Officer-in-Charge,
-    // and the answer.
     expect(new Set(messages.map((m) => m.emailType))).toEqual(
       new Set([
         EMAIL_TYPE.INCOMING_QUERY,

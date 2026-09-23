@@ -21,10 +21,8 @@ const OTHER_OFFICIAL = { id: 'USR-0006', role: ROLES.ASSIGNED_OFFICIAL };
 const REVIEWER = { id: 'USR-0005', role: ROLES.REVIEWER };
 const OTHER_REVIEWER = { id: 'USR-0007', role: ROLES.REVIEWER };
 
-
 const ALL_STATES = Object.values(WORKFLOW_STATE);
 
-/** One query per workflow state, all owned by the same people. */
 function queryInState(state, overrides = {}) {
   return {
     queryId: `QRY-${state}`,
@@ -126,7 +124,6 @@ describe('Total Queries means "everything in my scope, any status"', () => {
     const total = bucketsForRole(role).find((b) => b.key === 'total');
     expect(total, `${role} is missing a total bucket`).toBeDefined();
     expect(total.label).toBe('Total Queries');
-    // It deliberately overlaps the status tiles, so exclusivity checks skip it.
     expect(total.aggregate).toBe(true);
   });
 
@@ -140,7 +137,6 @@ describe('Total Queries means "everything in my scope, any status"', () => {
 
   it.each(roles)('%s Total spans many workflow states', (role) => {
     const total = bucketRecords(EVERY_STATE, role, 'total', ctxFor(role));
-    // The point of the tile: it is not pinned to one status.
     expect(new Set(total.map((q) => q.workflowState)).size).toBeGreaterThan(1);
   });
 
@@ -164,7 +160,6 @@ describe('Total Queries means "everything in my scope, any status"', () => {
     expect(defaultBucketKey(ROLES.OFFICER_IN_CHARGE)).toBe('awaitingAssignment');
     expect(defaultBucketKey(ROLES.ASSIGNED_OFFICIAL)).toBe('assigned');
     expect(defaultBucketKey(ROLES.REVIEWER)).toBe('awaitingReview');
-    // These two have no queue of their own to land on.
     expect(defaultBucketKey(ROLES.ADMIN)).toBe('total');
   });
 
@@ -277,7 +272,6 @@ describe('list-page filters are built from the same buckets', () => {
       ].sort(),
     );
 
-    // Another official's cases are excluded by the role scope, not by state.
     const foreign = EVERY_STATE.filter(
       anyBucket(ROLES.ASSIGNED_OFFICIAL, ['assigned', 'drafting', 'returned'], {
         ...ctx,

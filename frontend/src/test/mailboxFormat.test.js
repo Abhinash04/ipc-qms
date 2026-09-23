@@ -11,8 +11,6 @@ describe('mailbox formatting', () => {
     });
   });
 
-  // It used to fall back to `new Date()`, so an undated message looked as if it
-  // had arrived that second.
   it('shows a missing or unreadable date as unknown, never as now', () => {
     expect(formatReceived(null)).toEqual({ date: '—', time: '' });
     expect(formatReceived('not a date')).toEqual({ date: '—', time: '' });

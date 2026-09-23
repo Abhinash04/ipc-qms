@@ -74,11 +74,6 @@ const threadPanel = () =>
 const collapsedRows = () =>
   within(threadPanel()).queryAllByRole('button', { expanded: false });
 
-/**
- * Count rendered messages structurally. The enquiry body text is quoted inside
- * the forwarded email and repeated in the Query Info tab, so matching on it
- * cannot tell you what is expanded.
- */
 const expandedMessages = () => threadPanel().querySelectorAll('article').length;
 
 const officialsPanel = () =>
@@ -86,13 +81,11 @@ const officialsPanel = () =>
 
 let queryId;
 
-/** A freshly received query: still with Front Office, nothing assigned. */
 function received() {
   ({ queryId } = s().ingestEmail(enquiry(), async () => null));
   return queryId;
 }
 
-/** Drive the case to UNDER_REVIEW so the full chain exists. */
 async function underReview() {
   received();
   await s().validateAndForward(queryId, FRONT_OFFICE);
@@ -105,9 +98,6 @@ async function underReview() {
 
 beforeEach(async () => {
   vi.clearAllMocks();
-  // The acknowledgement and the forward are server calls, and the case only
-  // reaches PENDING_ASSIGNMENT because the server put it there. A canned reply
-  // moves nothing, so the chain below would stall at the forward.
   installFakeCaseMail(mailboxService);
   await s().hydrate();
   await s().resetDemo();
@@ -119,7 +109,6 @@ describe('the page is one workspace, not a long document', () => {
     renderAs(REVIEWER, `/reviewer/queries/${queryId}`);
 
     expect(grid()).not.toBeNull();
-    // minmax(0,1fr) stops wide children blowing the column out.
     expect(grid().className).toMatch(/items-start/);
   });
 
@@ -191,7 +180,6 @@ describe('the email thread reads like a conversation', () => {
     ).length;
 
     fireEvent.click(screen.getByRole('button', { name: 'Received Only' }));
-    // Filtering narrows the set; collapse still applies within it.
     expect(expandedMessages()).toBe(1);
     expect(collapsedRows().length + expandedMessages()).toBeLessThanOrEqual(inbound + 1);
 
@@ -254,7 +242,7 @@ describe('audit history is bounded but complete', () => {
     const auditCard = screen
       .getByRole('heading', { name: 'Audit history' })
       .closest('div.rounded-3xl');
-    expect(within(auditCard).getAllByRole('row')).toHaveLength(8 + 1); // + header
+    expect(within(auditCard).getAllByRole('row')).toHaveLength(8 + 1);
 
     fireEvent.click(screen.getByRole('button', { name: new RegExp(`Show all ${total} events`) }));
     expect(within(auditCard).getAllByRole('row')).toHaveLength(total + 1);

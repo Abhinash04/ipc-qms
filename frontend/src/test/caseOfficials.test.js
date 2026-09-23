@@ -77,7 +77,6 @@ describe('status tracks where the case actually is', () => {
 
     expect(byRole(rows, 'Front Office').status).toBe(STAGE_STATUS.CURRENT);
     expect(byRole(rows, 'Officer-in-Charge').status).toBe(STAGE_STATUS.PENDING);
-    // Nobody is assigned yet, so that row is not invented.
     expect(byRole(rows, 'Assigned Official')).toBeUndefined();
   });
 

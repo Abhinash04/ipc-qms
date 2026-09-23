@@ -85,7 +85,6 @@ describe('attachment access follows the existing case permissions', () => {
     expect(within(legacyRow).queryByRole('link', { name: /Download/ })).toBeNull();
     expect(within(legacyRow).getByText('Preview unavailable')).toBeInTheDocument();
 
-    // The real attachment in the same case is unaffected.
     const realRow = screen.getByText('spec.pdf').closest('li');
     expect(within(realRow).getByRole('button', { name: /Preview/ })).toBeInTheDocument();
   });

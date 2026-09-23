@@ -86,8 +86,6 @@ describe('periodDelta refuses to invent a trend', () => {
   it('never renders a percentage against a zero baseline', () => {
     const delta = periodDelta(5, 0);
 
-    // The failure this pins: 0 → 5 is not "+500%" and certainly not "+100%".
-    // There was no baseline to measure against, so it must not claim one.
     expect(delta.text).toBe('New activity');
     expect(delta.text).not.toMatch(/%/);
     expect(delta.percent).toBeNull();
@@ -107,8 +105,6 @@ describe('periodDelta refuses to invent a trend', () => {
 
 describe('the case aggregations count real records', () => {
   it('counts a case once even when QUERY_RECEIVED is recorded twice for it', () => {
-    // Follow-up correspondence on an existing thread emits QUERY_RECEIVED
-    // again; counting events rather than cases would over-report the funnel.
     const events = [
       { event: AUDIT_EVENT.QUERY_RECEIVED, queryId: 'QRY-1' },
       { event: AUDIT_EVENT.QUERY_RECEIVED, queryId: 'QRY-1' },
@@ -127,8 +123,6 @@ describe('the case aggregations count real records', () => {
 
     const days = volumeByDay([{ createdAt: justAfterMidnight.toISOString() }]);
 
-    // Keying the bucket off the raw UTC string would push an IST morning case
-    // into yesterday.
     expect(days).toHaveLength(7);
     expect(days[6].value).toBe(1);
     expect(days.reduce((sum, d) => sum + d.value, 0)).toBe(1);
@@ -139,7 +133,7 @@ describe('the case aggregations count real records', () => {
       { createdAt: daysAgo(1) },
       { createdAt: daysAgo(3) },
       { createdAt: daysAgo(9) },
-      { createdAt: daysAgo(30) }, // outside both windows
+      { createdAt: daysAgo(30) },
     ]);
 
     expect(trend.current).toBe(2);
@@ -169,8 +163,6 @@ describe('the case aggregations count real records', () => {
 
 describe('the KPI trend is wired to a second windowed request', () => {
   it('renders a delta computed from the comparison window', async () => {
-    // Today 12 events, yesterday 10 — the tile must show +20%, which is only
-    // knowable from the windowed call.
     vi.mocked(adminService.fetchAuditSummary).mockImplementation((filters = {}) =>
       Promise.resolve(
         filters.from
@@ -184,8 +176,6 @@ describe('the KPI trend is wired to a second windowed request', () => {
     await screen.findByText('System events today');
     await screen.findByText('+20%');
 
-    // A hardcoded trend would pass the assertion above; this is what makes it
-    // a wiring test.
     await waitFor(() => {
       expect(adminService.fetchAuditSummary).toHaveBeenCalledWith(
         expect.objectContaining({ from: expect.any(String), to: expect.any(String) }),
@@ -218,9 +208,6 @@ describe('the KPI trend is wired to a second windowed request', () => {
     const label = await screen.findByText('System events today');
     const tile = label.closest('a');
 
-    // The headline figure still renders; the trend simply is not claimed.
-    // Scoped to the tile, because the case-trend stat below has its own
-    // "No change" that comes from local data and is unaffected.
     await waitFor(() => {
       expect(tile).toHaveTextContent('7');
       expect(tile).not.toHaveTextContent('No change');
@@ -244,8 +231,6 @@ describe('the KPI trend is wired to a second windowed request', () => {
       </QueryClientProvider>,
     );
 
-    // The tile links here; the filter must reach the API rather than being
-    // applied to whatever the page had already fetched.
     await waitFor(() => {
       expect(adminService.fetchAuditEvents).toHaveBeenCalledWith(
         expect.objectContaining({ result: 'failure' }),
