@@ -124,7 +124,6 @@ export const SECTIONS = {
     segment: "reports",
     label: "Reports",
     icon: BarChart3,
-    // nav: true,
   },
   [SECTION.ADMINISTRATION]: {
     segment: "administration",

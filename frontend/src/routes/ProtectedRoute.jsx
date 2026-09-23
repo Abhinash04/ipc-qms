@@ -8,13 +8,6 @@ export function ProtectedRoute({ children }) {
   const authReady = useAuthStore((state) => state.authReady);
   const location = useLocation();
 
-  // Decide nothing until GET /auth/me has answered. Without this, a page
-  // reload redirects an authenticated user to the login screen for the moment
-  // before the session is restored from the cookie.
-  //
-  // A user that is already known means the session is settled whatever the
-  // flag says — which is also what lets a test sign in with a plain
-  // `setState({ currentUser })` and not have to know this mechanism exists.
   if (!authReady && !currentUser) return null;
 
   if (!currentUser) {

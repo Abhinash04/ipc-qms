@@ -1,14 +1,6 @@
 import { lazy } from 'react';
 import { SECTION } from '@/constants/routeSections';
 
-/**
- * Production page-loading strategy: every page (and the authenticated shell)
- * is a lazy route chunk, so the login page never downloads the app shell and
- * one role never downloads another role's pages.
- *
- * Vitest swaps this module for `routeElements.eager.jsx` (see vite.config.js)
- * because the suites drive pages synchronously after render.
- */
 const lazyPage = (loader, name) =>
   lazy(() => loader().then((module) => ({ default: module[name] })));
 

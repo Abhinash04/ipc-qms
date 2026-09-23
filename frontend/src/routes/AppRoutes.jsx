@@ -7,10 +7,8 @@ import { ProtectedRoute } from '@/routes/ProtectedRoute';
 import { ROUTE_PATHS, roleHome } from '@/constants/routePaths';
 import { ROLE_ROUTES } from '@/routes/roleRoutes';
 import { useAuthStore } from '@/store/useAuthStore';
-// Lazy in production, eager under vitest — see routeElements.jsx.
 import { MainLayout, LoginPage, SECTION_ELEMENT } from '@/routes/routeElements';
 
-/** Full-viewport, fixed-size fallback so a loading chunk never shifts layout. */
 function RouteFallback() {
   return (
     <div
