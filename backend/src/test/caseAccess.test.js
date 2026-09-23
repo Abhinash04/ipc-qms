@@ -81,57 +81,6 @@ describe('unknown and absent roles', () => {
   );
 });
 
-describe('INQUIRER', () => {
-  const inquirer = user(ROLES.INQUIRER, { id: 'USR-0001', email: 'abhinash.pritiraj@gmail.com' });
-
-  it('matches on inquirer.id, and on email only when no id is recorded', async () => {
-    QueryCase.distinct.mockResolvedValue(['QRY-2026-00001']);
-
-    await expect(isPartyToCase(inquirer, 'QRY-2026-00001')).resolves.toBe(true);
-
-    const [, filter] = QueryCase.distinct.mock.calls[0];
-    expect(filter.$or[0]).toEqual({ 'inquirer.id': 'USR-0001' });
-
-    // The email branch is reachable only when inquirer.id is absent or blank —
-    // a present id naming someone else must not fall through to it.
-    const emailBranch = filter.$or[1].$and;
-    expect(emailBranch[0].$or).toEqual([
-      { 'inquirer.id': null },
-      { 'inquirer.id': '' },
-      { 'inquirer.id': { $exists: false } },
-    ]);
-    expect(emailBranch[1]['inquirer.email']).toBeInstanceOf(RegExp);
-  });
-
-  it('matches the address case-insensitively', async () => {
-    await visibleQueryIds(inquirer);
-    const regex = QueryCase.distinct.mock.calls[0][1].$or[1].$and[1]['inquirer.email'];
-
-    expect(regex.test('Abhinash.Pritiraj@Gmail.com')).toBe(true);
-    expect(regex.test('abhinash.pritiraj@gmail.com.attacker.example')).toBe(false);
-    expect(regex.test('xabhinash.pritiraj@gmail.com')).toBe(false);
-  });
-
-  /**
-   * `+` is a regex quantifier and a perfectly ordinary thing to have in an
-   * address. Unescaped, this either throws or silently matches nothing — and a
-   * silent mismatch means the inquirer sees none of their own cases while the
-   * application otherwise looks healthy.
-   */
-  it('escapes regex metacharacters in the address', async () => {
-    await visibleQueryIds(user(ROLES.INQUIRER, { id: 'USR-0001', email: 'a+b@example.com' }));
-    const regex = QueryCase.distinct.mock.calls[0][1].$or[1].$and[1]['inquirer.email'];
-
-    expect(regex.test('a+b@example.com')).toBe(true);
-    expect(regex.test('abbbb@example.com')).toBe(false);
-  });
-
-  it('refuses rather than widening when storage is unavailable', async () => {
-    connected.value = false;
-    await expect(visibleQueryIds(inquirer)).rejects.toMatchObject({ status: 503 });
-  });
-});
-
 describe('REVIEWER', () => {
   const reviewer = user(ROLES.REVIEWER, { id: 'USR-0005' });
 

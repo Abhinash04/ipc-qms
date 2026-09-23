@@ -5,12 +5,12 @@ import { findUserById } from '@/constants/mockUsers';
 import { WORKFLOW_STATE } from '@/constants/statusEnums';
 import { fakeFinalApprovalEndpoint } from '@/test/fakeFinalApprovalEndpoint';
 import { fakeCaseMail } from '@/test/fakeCaseMail';
+import { EXTERNAL_INQUIRER as INQUIRER } from '@/test/externalInquirer';
 
 vi.mock('@/services/api/mailboxService');
 
 const s = () => useWorkflowStore.getState();
 
-const INQUIRER = findUserById('USR-0001');
 const FRONT_OFFICE = findUserById('USR-0002');
 const OIC = findUserById('USR-0003');
 const OFFICIAL = findUserById('USR-0004');

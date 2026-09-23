@@ -40,9 +40,12 @@ describe('401 — no session at all', () => {
 });
 
 describe('403 — a session without the role', () => {
-  it('only an Inquirer (or Super Admin) may send an enquiry', async () => {
-    expect((await request(app).post('/api/v1/emails/enquiry').set(as(ROLES.REVIEWER)).send({})).status).toBe(403);
-    expect((await request(app).post('/api/v1/emails/enquiry').set(as(ROLES.INQUIRER)).send({})).status).not.toBe(403);
+  // Enquiries arrive as email in the Front Office mailbox; there is no
+  // endpoint that sends one, for any role.
+  it('has no enquiry endpoint left to authorise', async () => {
+    for (const role of [ROLES.REVIEWER, ROLES.FRONT_OFFICE, ROLES.SUPER_ADMIN]) {
+      expect((await request(app).post('/api/v1/emails/enquiry').set(as(role)).send({})).status).toBe(404);
+    }
   });
 
   it('only the Front Office (or Super Admin) may acknowledge', async () => {
@@ -75,7 +78,7 @@ describe('403 — a session without the role', () => {
   });
 
   it('any signed-in role may use the AI helpers', async () => {
-    for (const role of [ROLES.INQUIRER, ROLES.REVIEWER, ROLES.ASSIGNED_OFFICIAL]) {
+    for (const role of [ROLES.REVIEWER, ROLES.ASSIGNED_OFFICIAL]) {
       const res = await request(app).post('/api/v1/ai/summary').set(as(role)).send({});
       expect(res.status).not.toBe(403);
     }
@@ -91,7 +94,6 @@ describe('workflow-action authorization mirrors the frontend table', () => {
 
   it('refuses the ones it does not', () => {
     expect(roleCanPerform(ROLES.REVIEWER, WORKFLOW_ACTION.FORWARD)).toBe(false);
-    expect(roleCanPerform(ROLES.INQUIRER, WORKFLOW_ACTION.DISPATCH)).toBe(false);
     expect(roleCanPerform(ROLES.ADMIN, WORKFLOW_ACTION.VERIFY)).toBe(false);
   });
 
@@ -135,7 +137,6 @@ describe('NIC agent capabilities', () => {
   });
 
   it('gives the Inquirer and Admin nothing on the official mailbox', () => {
-    expect(capabilitiesFor({ actorType: ACTOR_TYPES.HUMAN, role: ROLES.INQUIRER })).toEqual([]);
     expect(capabilitiesFor({ actorType: ACTOR_TYPES.HUMAN, role: ROLES.ADMIN })).toEqual([]);
   });
 

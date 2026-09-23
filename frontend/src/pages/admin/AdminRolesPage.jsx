@@ -25,7 +25,6 @@ const ROLE_ORDER = [
   ROLES.OFFICER_IN_CHARGE,
   ROLES.ASSIGNED_OFFICIAL,
   ROLES.REVIEWER,
-  ROLES.INQUIRER,
 ];
 
 /** Section grants are static tables, so index them once instead of per matrix cell. */

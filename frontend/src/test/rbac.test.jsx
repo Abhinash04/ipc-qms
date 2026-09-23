@@ -43,7 +43,7 @@ vi.mock('@/services/api/mailboxService', () => ({
 }));
 
 const USER_FOR_ROLE = Object.fromEntries(
-  ['USR-0001', 'USR-0002', 'USR-0003', 'USR-0004', 'USR-0005', 'USR-0007', 'USR-0008']
+  ['USR-0002', 'USR-0003', 'USR-0004', 'USR-0005', 'USR-0007', 'USR-0008']
     .map(findUserById)
     .map((user) => [user.role, user]),
 );
@@ -129,8 +129,12 @@ describe('navigation is derived from the grants, never a second list', () => {
     }
   });
 
-  it('offers the inquirer only their own dashboard', () => {
-    expect(navItemsForRole(ROLES.INQUIRER).map((i) => i.label)).toEqual(['Dashboard']);
+  it('offers the Reviewer only the sections their grant names', () => {
+    expect(navItemsForRole(ROLES.REVIEWER).map((i) => i.label)).toEqual(
+      sectionsForRole(ROLES.REVIEWER)
+        .filter((section) => SECTIONS[section].nav)
+        .map((section) => SECTIONS[section].label),
+    );
   });
 
   it('does not offer Notifications to a role that was never granted it', () => {
@@ -173,19 +177,17 @@ describe('path resolution', () => {
       '/front-officer/queries/:queryId',
     );
     expect(sectionPath(ROLES.SUPER_ADMIN, SECTION.USERS)).toBe('/super-admin/users');
-    expect(sectionPath(ROLES.INQUIRER, SECTION.QUERY_DETAIL)).toBe('/inquirer/queries/:queryId');
+    expect(sectionPath(ROLES.REVIEWER, SECTION.QUERY_DETAIL)).toBe('/reviewer/queries/:queryId');
   });
 
-  it('lets the inquirer open a query detail URL under their own slug only', () => {
-    expect(isRouteAllowedForRole(ROLES.INQUIRER, '/inquirer/queries/QRY-2026-00001')).toBe(true);
-    expect(isRouteAllowedForRole(ROLES.INQUIRER, '/front-officer/queries/QRY-2026-00001')).toBe(
-      false,
-    );
+  it('lets a role open a query detail URL under their own slug only', () => {
+    expect(isRouteAllowedForRole(ROLES.REVIEWER, '/reviewer/queries/QRY-2026-00001')).toBe(true);
+    expect(isRouteAllowedForRole(ROLES.REVIEWER, '/front-officer/queries/QRY-2026-00001')).toBe(false);
   });
 
   it('exposes only granted sections, so an ungranted link cannot be built', () => {
-    const paths = pathsForRole(ROLES.INQUIRER);
-    expect(paths[SECTION.QUERY_DETAIL]).toBe('/inquirer/queries/:queryId');
+    const paths = pathsForRole(ROLES.REVIEWER);
+    expect(paths[SECTION.QUERY_DETAIL]).toBe('/reviewer/queries/:queryId');
     expect(paths[SECTION.DISPATCH]).toBeUndefined();
   });
 

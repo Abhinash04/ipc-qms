@@ -12,7 +12,7 @@ import {
   Zap,
 } from "lucide-react";
 
-import { roleHome } from "@/constants/routePaths";
+import { ROUTE_PATHS, roleHome } from "@/constants/routePaths";
 import { useAuthStore } from "@/store/useAuthStore";
 import { MOCK_USERS } from "@/constants/mockUsers";
 import { notify } from "@/services/notify";
@@ -30,7 +30,18 @@ export function LoginPage() {
   const [error, setError] = useState(null);
   const [devOpen, setDevOpen] = useState(false);
 
-  if (currentUser) return <Navigate to={roleHome(currentUser.role)} replace />;
+  /**
+   * A session whose role this build no longer knows has nowhere to go.
+   *
+   * roleHome falls back to the login path for an unrecognised role, so sending
+   * the user there left them on a page that renders nothing: no form, and no
+   * way to sign out, because that control lives in the main layout. Sessions
+   * are held by the server and survive a deploy, so this is the ordinary fate
+   * of anyone signed in as a role that has just been removed. Show the form
+   * instead — signing in again is the way out.
+   */
+  const home = currentUser ? roleHome(currentUser.role) : null;
+  if (home && home !== ROUTE_PATHS.LOGIN) return <Navigate to={home} replace />;
 
   const submit = async (event) => {
     event.preventDefault();

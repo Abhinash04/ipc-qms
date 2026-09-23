@@ -14,7 +14,7 @@ describe('POST /api/v1/queries/:queryId/pullback', () => {
   });
 
   it('returns 403 for a role that may not perform PULLBACK', async () => {
-    for (const role of [ROLES.OFFICER_IN_CHARGE, ROLES.ASSIGNED_OFFICIAL, ROLES.INQUIRER]) {
+    for (const role of [ROLES.OFFICER_IN_CHARGE, ROLES.ASSIGNED_OFFICIAL, ROLES.REVIEWER]) {
       const res = await request(app).post(PATH).set(authHeader(role)).send(VALID);
       expect(res.status).toBe(403);
       expect(res.body.error).toContain('PULLBACK');

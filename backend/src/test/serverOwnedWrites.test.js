@@ -88,30 +88,6 @@ describe('the inquirer is written once', () => {
     expect(after.inquirer.email).toBe('ravi@pharma.example');
   });
 
-  /**
-   * An Inquirer's own portal enquiry: the inquirer is clamped to the session
-   * identity, and still written once — on insert. Both rules used to write the
-   * field, one in `$set` and one in `$setOnInsert`, which MongoDB refuses; every
-   * portal enquiry would have failed.
-   */
-  it('is the signed-in Inquirer on their own portal enquiry, whatever the request names', async () => {
-    const res = await persist(
-      {
-        query: {
-          ...CASE,
-          queryId: 'QRY-2026-00002',
-          workflowState: 'RECEIVED',
-          inquirer: { id: null, name: 'Forged', email: 'forged@example.com' },
-        },
-      },
-      ROLES.INQUIRER,
-    );
-
-    expect(res.status).toBe(200);
-    const created = await QueryCase.findOne({ queryId: 'QRY-2026-00002' }).lean();
-    expect(created.inquirer.id).toBe('USR-0001');
-    expect(created.inquirer.email).not.toBe('forged@example.com');
-  });
 });
 
 describe('closing a case is the server’s to do', () => {

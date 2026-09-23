@@ -78,8 +78,6 @@ export default defineConfig({
       NIC_ALLOW_OUTBOUND: '',
       NIC_ALLOW_INTERNAL_FORWARD: '',
 
-      INQUIRER_NAME: 'Test Inquirer',
-      INQUIRER_EMAIL: 'inquirer@test.invalid',
       FRONT_OFFICE_NAME: 'Test Front Officer',
       FRONT_OFFICE_EMAIL: 'front-office@test.invalid',
       OFFICER_IN_CHARGE_NAME: 'Test Officer',

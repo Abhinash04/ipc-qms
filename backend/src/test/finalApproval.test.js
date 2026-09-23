@@ -513,7 +513,6 @@ describe('POST /queries/:queryId/final-approval — authorization', () => {
 
   it('refuses every role that may not grant final approval', async () => {
     for (const role of [
-      ROLES.INQUIRER,
       ROLES.FRONT_OFFICE,
       ROLES.ASSIGNED_OFFICIAL,
       ROLES.REVIEWER,

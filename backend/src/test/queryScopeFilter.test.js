@@ -13,7 +13,7 @@ const scoped = {
   everything: false,
   ids: new Set(['QRY-A', 'QRY-B']),
   userId: 'USR-0001',
-  role: ROLES.INQUIRER,
+  role: ROLES.REVIEWER,
 };
 
 const CASE_KEYED = [
@@ -57,7 +57,7 @@ describe('a narrowed role', () => {
     const filters = buildScopedFilters(scoped);
 
     expect(filters.notifications).toEqual({
-      $or: [{ recipientUserId: 'USR-0001' }, { recipientRole: ROLES.INQUIRER }],
+      $or: [{ recipientUserId: 'USR-0001' }, { recipientRole: ROLES.REVIEWER }],
     });
   });
 
@@ -76,7 +76,7 @@ describe('a narrowed role', () => {
   });
 
   it('yields an empty result rather than everything when nothing is visible', () => {
-    const none = { everything: false, ids: new Set(), userId: 'USR-0001', role: ROLES.INQUIRER };
+    const none = { everything: false, ids: new Set(), userId: 'USR-0001', role: ROLES.REVIEWER };
 
     // An empty $in matches no documents. The failure to avoid is an absent
     // filter, which would match all of them.

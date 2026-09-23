@@ -33,7 +33,7 @@ let WALKTHROUGH_ID;
 let ADVANCED_ID;
 
 const USER_FOR_ROLE = Object.fromEntries(
-  ['USR-0001', 'USR-0002', 'USR-0003', 'USR-0004', 'USR-0005', 'USR-0007', 'USR-0008']
+  ['USR-0002', 'USR-0003', 'USR-0004', 'USR-0005', 'USR-0007', 'USR-0008']
     .map(findUserById)
     .map((user) => [user.role, user]),
 );

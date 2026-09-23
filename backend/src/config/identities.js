@@ -1,5 +1,4 @@
 export const IDENTITY_ROLES = {
-  INQUIRER: 'INQUIRER',
   FRONT_OFFICE: 'FRONT_OFFICE',
   OFFICER_IN_CHARGE: 'OFFICER_IN_CHARGE',
 };
@@ -14,10 +13,6 @@ export const IDENTITY_ROLES = {
  * fails visibly instead of quietly reaching the wrong person.
  */
 const DEFAULTS = {
-  [IDENTITY_ROLES.INQUIRER]: {
-    name: 'Inquirer (unconfigured)',
-    email: 'inquirer-unconfigured@example.com',
-  },
   [IDENTITY_ROLES.FRONT_OFFICE]: {
     name: 'Front Officer (unconfigured)',
     email: 'front-office-unconfigured@example.com',

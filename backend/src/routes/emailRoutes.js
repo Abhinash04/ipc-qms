@@ -4,8 +4,7 @@ import { verifyRole, verifyAction } from '../middleware/verifyRole.js';
 import { ROLES } from '../constants/roles.js';
 import { WORKFLOW_ACTION } from '../constants/workflowActions.js';
 import {
-  getConfig,
-  sendEnquiry,
+  getConfig,
   sendAcknowledgement,
   forwardQuery,
   sendResponse,
@@ -16,14 +15,6 @@ const router = express.Router();
 // Returns the participant directory (names + addresses), so it needs a session
 // even though it is not role-specific.
 router.get('/emails/config', verifyToken, getConfig);
-
-// Sends as the INQUIRER identity — only an inquirer may trigger it.
-router.post(
-  '/emails/enquiry',
-  verifyToken,
-  verifyRole(ROLES.INQUIRER, ROLES.SUPER_ADMIN),
-  sendEnquiry,
-);
 
 router.post(
   '/emails/acknowledgement',

@@ -7,6 +7,7 @@ import { useMailboxIngestion } from '@/hooks/useMailboxIngestion';
 import * as mailboxService from '@/services/api/mailboxService';
 import { fakeAcceptEndpoint } from '@/test/fakeAcceptEndpoint';
 import { fakeFinalApprovalEndpoint } from '@/test/fakeFinalApprovalEndpoint';
+import { EXTERNAL_INQUIRER } from '@/test/externalInquirer';
 import { findUserById, MOCK_USERS } from '@/constants/mockUsers';
 import { ROLES } from '@/constants/roles';
 import { WORKFLOW_STATE, AUDIT_EVENT } from '@/constants/statusEnums';
@@ -17,7 +18,7 @@ vi.mock('@/services/api/mailboxService');
 
 const s = () => useWorkflowStore.getState();
 
-const ABHINASH = findUserById('USR-0001');
+const ABHINASH = EXTERNAL_INQUIRER;
 const BHUMIKA = findUserById('USR-0002');
 const JATIN = findUserById('USR-0003');
 const NEHA = findUserById('USR-0004');
@@ -90,10 +91,14 @@ beforeEach(async () => {
 });
 
 describe('the real identities', () => {
-  it('holds Abhinash, Bhumika and Jatin as the first three stakeholders', () => {
-    expect(ABHINASH).toMatchObject({ role: ROLES.INQUIRER, email: 'abhinash.pritiraj@gmail.com' });
+  it('holds Bhumika and Jatin as the two real stakeholders', () => {
     expect(BHUMIKA).toMatchObject({ role: ROLES.FRONT_OFFICE, email: 'bhoomikamakker@gmail.com' });
     expect(JATIN).toMatchObject({ role: ROLES.OFFICER_IN_CHARGE, email: 'rawatjatin436@gmail.com' });
+  });
+
+  it('holds no account for the inquirer — they email in and never sign in', () => {
+    expect(MOCK_USERS.some((u) => u.email === ABHINASH.email)).toBe(false);
+    expect(ABHINASH.id).toBeNull();
   });
 
   it('holds Rawat Jatin as a MOCK Assigned Official — no Gmail account', () => {
@@ -124,7 +129,7 @@ describe('the real identities', () => {
 
   it('leaves every user without a real identity on a mock address', () => {
 
-    const realAddresses = new Set([ABHINASH.email, BHUMIKA.email, JATIN.email]);
+    const realAddresses = new Set([BHUMIKA.email, JATIN.email]);
     const stillMock = MOCK_USERS.filter((u) => !realAddresses.has(u.email));
 
     expect(stillMock.length).toBeGreaterThan(0);
@@ -153,7 +158,7 @@ describe('1–3. Abhinash → Bhumika creates one stable Query Case', () => {
 
     expect(query.threadId).toBe(threadId);
     expect(query.inquirer.email).toBe(ABHINASH.email);
-    expect(query.inquirer.id).toBe(ABHINASH.id);
+    expect(query.inquirer.id).toBeNull();
     expect(message.sourceMessageId).toBe('18f2a1b2c3d4e5f6');
     expect(message.providerThreadId).toBe('18f2a1b2c3d4e5f6');
     expect(message.direction).toBe(EMAIL_DIRECTION.INBOUND);
@@ -622,7 +627,7 @@ describe('the inquirer device does not matter', () => {
     const { queryId } = s().ingestEmail(gmailEnquiry());
 
     const query = s().getQuery(queryId);
-    expect(query.inquirer.id).toBe(ABHINASH.id);
+    expect(query.inquirer.id).toBeNull();
     expect(query.inquirer.email).toBe(ABHINASH.email);
   });
 });

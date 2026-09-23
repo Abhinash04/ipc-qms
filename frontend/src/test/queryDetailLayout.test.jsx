@@ -9,6 +9,7 @@ import { useWorkflowStore } from '@/store/useWorkflowStore';
 import { findUserById } from '@/constants/mockUsers';
 import * as mailboxService from '@/services/api/mailboxService';
 import { installFakeCaseMail } from '@/test/fakeCaseMail';
+import { EXTERNAL_INQUIRER as INQUIRER } from '@/test/externalInquirer';
 
 vi.mock('@/services/api/mailboxService', () => ({
   fetchEmailConfig: vi.fn().mockResolvedValue({}),
@@ -28,7 +29,6 @@ vi.mock('@/services/api/mailboxService', () => ({
  * that prove the compaction removed space and not functionality.
  */
 
-const INQUIRER = findUserById('USR-0001');
 const FRONT_OFFICE = findUserById('USR-0002');
 const OFFICIAL = findUserById('USR-0004');
 const REVIEWER = findUserById('USR-0005');
@@ -103,6 +103,22 @@ describe('the detail columns size to their own content', () => {
   });
 });
 
+/**
+ * The control that used to live in inquirerQueryDetail.test.jsx, which existed
+ * to prove the inquirer's cut-down view had not taken anything away from the
+ * staff view. The role is gone; the blocks it guarded still matter, because
+ * they were rendered behind a condition that has now been unwound.
+ */
+describe('the front officer case page shows the internal blocks', () => {
+  it('renders the draft, the actions and the audit trail', () => {
+    renderAs(FRONT_OFFICE, `/front-officer/queries/${queryId}`);
+
+    expect(screen.getByText('Audit history')).toBeInTheDocument();
+    expect(screen.getByText('Available actions')).toBeInTheDocument();
+    expect(screen.getByText('Response Draft')).toBeInTheDocument();
+  });
+});
+
 describe('nothing was lost to the compaction', () => {
   it('still shows the timeline, every action, and the review decision card', () => {
     renderAs(REVIEWER, `/reviewer/queries/${queryId}`);
@@ -149,12 +165,4 @@ describe('nothing was lost to the compaction', () => {
     expect(actionsCard().className).not.toMatch(/h-full/);
   });
 
-  it('renders the single-column inquirer view with no actions column', () => {
-    renderAs(INQUIRER, `/inquirer/queries/${queryId}`);
-
-    expect(screen.getAllByText('Enquiry submitted').length).toBeGreaterThan(0);
-    // The inquirer never had the actions card; that must not have changed.
-    expect(screen.queryByRole('heading', { name: 'Available actions' })).toBeNull();
-    expect(detailGrid()).toBeNull();
-  });
 });

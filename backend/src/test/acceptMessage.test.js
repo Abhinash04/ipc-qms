@@ -532,7 +532,7 @@ describe('POST /mailbox/messages/:messageId/accept — authorization', () => {
 
   it('is refused to every role except Front Office and Super Admin', async () => {
     const denied = [
-      ROLES.INQUIRER,
+      ROLES.REVIEWER,
       ROLES.OFFICER_IN_CHARGE,
       ROLES.ASSIGNED_OFFICIAL,
       ROLES.REVIEWER,

@@ -9,7 +9,7 @@ import { WORKFLOW_STATE } from '../constants/workflowStates.js';
 import { caseScopeFor, scopeKindForRole, SCOPE_KIND } from '../services/authz/caseAccess.js';
 import * as audit from '../services/audit/auditService.js';
 import { AUDIT_ACTIONS, AUDIT_RESULTS } from '../constants/auditActions.js';
-import { ACTOR_TYPES, ROLES } from '../constants/roles.js';
+import { ACTOR_TYPES } from '../constants/roles.js';
 import { QueryCase, WorkflowStep, Review, ResponseVersion } from '../models/index.js';
 import { isConnected } from '../config/db.js';
 
@@ -301,32 +301,16 @@ async function authorizeCaseDelta(req, res, next) {
 }
 
 /**
- * Creating a case: there is no prior membership to check, so the rules are
- * about what the new case may claim.
+ * Creating a case through this route: nobody scoped may.
  *
- * The INQUIRER may raise a portal enquiry, but may not hand it an assignee or a
- * current step — that would be self-service membership on a case nobody has
- * triaged. Their `inquirer` record is CLAMPED to the session identity in the
- * controller rather than validated here, the same choice already made for the
- * audit actor and for `sourceMailbox`.
- *
- * The ASSIGNED_OFFICIAL and REVIEWER raise no cases in this workflow. Letting
- * them would hand both an unbounded way to mint cases they are party to.
+ * A case is created by the Front Office accepting a message in the mailbox,
+ * which is a server-side intake, not a delta. The roles that reach this
+ * function are the scoped ones — the officials and reviewers party to a case —
+ * and letting either mint one would hand them an unbounded way to create cases
+ * they are party to. The roles that legitimately create cases see everything
+ * and returned before this point.
  */
-function creationViolation(user, body) {
-  if (user.role === ROLES.INQUIRER) {
-    const query = body?.query || {};
-    if (query.currentAssigneeId || query.currentWorkflowStepId) {
-      return {
-        message: 'A new enquiry cannot name its own assignee',
-        fields: ['query.currentAssigneeId', 'query.currentWorkflowStepId'].filter(
-          (field) => query[field.split('.')[1]],
-        ),
-      };
-    }
-    return null;
-  }
-
+function creationViolation(user) {
   return {
     message: `${user.role} is not permitted to raise a case`,
     fields: ['query.queryId'],

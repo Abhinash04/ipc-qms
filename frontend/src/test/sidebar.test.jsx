@@ -80,15 +80,15 @@ describe('navigation comes from the permission system, in both states', () => {
   });
 
   it('grants no item the permission table withheld', () => {
-    useAuthStore.setState({ currentUser: userFor(ROLES.INQUIRER) });
+    useAuthStore.setState({ currentUser: userFor(ROLES.REVIEWER) });
     renderSidebar({ collapsed: true });
 
     const hrefs = within(nav())
       .getAllByRole('link')
       .map((a) => a.getAttribute('href'));
 
-    expect(hrefs.some((h) => h.includes('/queries'))).toBe(false);
-    expect(hrefs.every((h) => h.startsWith('/inquirer/'))).toBe(true);
+    expect(hrefs.some((h) => h.includes('/drafting'))).toBe(false);
+    expect(hrefs.every((h) => h.startsWith('/reviewer/'))).toBe(true);
   });
 });
 

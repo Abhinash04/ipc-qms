@@ -4,7 +4,7 @@ import * as audit from '../services/audit/auditService.js';
 import * as workflow from '../services/workflow/finalApproval.js';
 import * as caseMail from '../services/email/caseMail.js';
 import { toPublic as publicOutbound } from '../services/email/outbox.js';
-import { ACTOR_TYPES, ROLES } from '../constants/roles.js';
+import { ACTOR_TYPES } from '../constants/roles.js';
 import { isKnownAuditAction } from '../constants/auditActions.js';
 import { caseScopeFor, scopeFilter } from '../services/authz/caseAccess.js';
 import {
@@ -358,26 +358,15 @@ async function persistTransition(req, res, next) {
        * The inquirer is who the final response gets mailed to.
        *
        * `services/workflow/finalApproval.js` reads `query.inquirer.email` to
-       * address the dispatch, and `services/authz/caseAccess.js` reads it to
-       * decide which cases an Inquirer may see — so a client-writable inquirer
-       * is both a redirect of outbound government mail and a self-service grant
-       * of case membership.
+       * address the dispatch, so a client-writable inquirer is a redirect of
+       * outbound government mail.
        *
-       * Same treatment as the audit actor and `sourceMailbox` above: an
-       * Inquirer raising their own enquiry has it CLAMPED to the session
-       * identity rather than validated, because a value a caller can name is a
-       * value a caller can forge. Nobody else may write the field at all once
-       * the case exists; middleware/authorizeCaseDelta.js has already refused
-       * the delta if they tried to create one.
-       *
-       * Either way it goes in `$setOnInsert` alone: written when the case is
-       * created, never after. (In `$set` as well, MongoDB refuses the update —
-       * one path under two operators.)
+       * The inquirer is whoever the enquiry arrived from: intake writes it from
+       * the message's From header, and it goes in `$setOnInsert` alone —
+       * written when the case is created, never after. (In `$set` as well,
+       * MongoDB refuses the update — one path under two operators.)
        */
-      const inquirer =
-        req.user?.role === ROLES.INQUIRER
-          ? { id: req.user.id, name: req.user.name || null, email: req.user.email || null }
-          : submittedInquirer;
+      const inquirer = submittedInquirer;
       const update = { $set: clientQuery };
       if (inquirer !== undefined) update.$setOnInsert = { inquirer };
 

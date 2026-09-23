@@ -36,7 +36,7 @@ const AGENT_CAPABILITIES = [NIC_READ, NIC_PREPARE];
 /**
  * ADMIN is a configuration role (users, divisions, categories, workflows) and
  * holds no operational mail capability — see docs/workflow/role-permission-matrix.md.
- * INQUIRER is external and never reaches the official mailbox at all.
+ * An inquirer is external and never reaches the official mailbox at all.
  */
 const ROLE_CAPABILITIES = {
   [ROLES.SUPER_ADMIN]: [NIC_READ, NIC_PREPARE, NIC_SEND, NIC_DESTRUCTIVE],
@@ -45,7 +45,6 @@ const ROLE_CAPABILITIES = {
   [ROLES.ASSIGNED_OFFICIAL]: [NIC_READ],
   [ROLES.REVIEWER]: [NIC_READ],
   [ROLES.ADMIN]: [],
-  [ROLES.INQUIRER]: [],
 };
 
 /**

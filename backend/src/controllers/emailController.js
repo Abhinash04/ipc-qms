@@ -119,18 +119,6 @@ function getConfig(req, res) {
   res.status(HTTP_STATUS.OK).json(emailService.getEmailConfig());
 }
 
-async function sendEnquiry(req, res, next) {
-  try {
-    const { subject, body, attachments, cc, timestamp } = req.body || {};
-    const result = await emailService.sendEnquiry({ subject, body, attachments, cc, timestamp });
-    await auditSend({ req, action: AUDIT_ACTIONS.EMAIL_SENT, result });
-    res.status(HTTP_STATUS.CREATED).json(result);
-  } catch (error) {
-    await auditSend({ req, action: AUDIT_ACTIONS.EMAIL_SEND_FAILED, error });
-    next(error);
-  }
-}
-
 async function sendAcknowledgement(req, res, next) {
   if (isConnected()) {
     return sendForCase(req, res, next, { emailType: 'ACKNOWLEDGEMENT', send: caseMail.acknowledge });
@@ -202,4 +190,4 @@ async function sendResponse(req, res, next) {
   }
 }
 
-export { getConfig, sendEnquiry, sendAcknowledgement, forwardQuery, sendResponse };
+export { getConfig, sendAcknowledgement, forwardQuery, sendResponse };

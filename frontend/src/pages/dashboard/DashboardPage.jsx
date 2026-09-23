@@ -6,14 +6,12 @@ import { FrontOfficeDashboard } from "./roles/FrontOfficeDashboard";
 import { OICDashboard } from "./roles/OICDashboard";
 import { AssignedOfficialDashboard } from "./roles/AssignedOfficialDashboard";
 import { ReviewerDashboard } from "./roles/ReviewerDashboard";
-import { InquirerDashboard } from "./roles/InquirerDashboard";
 
 const DASHBOARD_FOR_ROLE = {
   [ROLES.FRONT_OFFICE]: FrontOfficeDashboard,
   [ROLES.OFFICER_IN_CHARGE]: OICDashboard,
   [ROLES.ASSIGNED_OFFICIAL]: AssignedOfficialDashboard,
   [ROLES.REVIEWER]: ReviewerDashboard,
-  [ROLES.INQUIRER]: InquirerDashboard,
 };
 
 export function DashboardPage() {

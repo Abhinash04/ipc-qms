@@ -24,7 +24,6 @@ describe('POST /mailbox/messages/:messageId/decision — authorization', () => {
 
   it('is refused to every role except Front Office and Super Admin', async () => {
     const denied = [
-      ROLES.INQUIRER,
       ROLES.OFFICER_IN_CHARGE,
       ROLES.ASSIGNED_OFFICIAL,
       ROLES.REVIEWER,
@@ -47,7 +46,7 @@ describe('GET /mailbox/decisions', () => {
   it('is held to the same roles as the mailbox itself', async () => {
     expect((await request(app).get('/api/v1/mailbox/decisions')).status).toBe(401);
     expect(
-      (await request(app).get('/api/v1/mailbox/decisions').set(authHeader(ROLES.INQUIRER))).status,
+      (await request(app).get('/api/v1/mailbox/decisions').set(authHeader(ROLES.ASSIGNED_OFFICIAL))).status,
     ).toBe(403);
     expect(
       (await request(app).get('/api/v1/mailbox/decisions').set(authHeader(ROLES.FRONT_OFFICE)))

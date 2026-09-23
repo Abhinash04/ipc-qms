@@ -17,8 +17,6 @@ import { useWorkflowStore } from '@/store/useWorkflowStore';
 import { WORKFLOW_ACTION } from '@/constants/workflowRules';
 import { AUDIT_EVENT } from '@/constants/statusEnums';
 import { AiRecommendationCard } from '@/components/ai/AiRecommendationCard';
-import { ROLES } from '@/constants/roles';
-import { isQueryOwnedBy } from '@/utils/queryOwnership';
 import { buildLifecycle } from '@/constants/queryLifecycle';
 import { findUserById } from '@/constants/mockUsers';
 
@@ -95,24 +93,22 @@ function DraftTabContent({ versions, latestVersion }) {
   );
 }
 
-/** Draft / info / attachments. Inquirers do not see the internal draft. */
-function CaseWorkspaceTabs({ query, versions, latestVersion, isInquirer }) {
+/** Draft / info / attachments. */
+function CaseWorkspaceTabs({ query, versions, latestVersion }) {
   return (
     <div className="bg-white rounded-3xl border border-slate-200/80 overflow-hidden shadow-sm p-5">
-      <Tabs defaultValue={isInquirer ? 'info' : 'draft'}>
+      <Tabs defaultValue="draft">
         <div className="border-b border-slate-100 pb-3">
           <TabsList variant="line">
-            {!isInquirer && <TabsTrigger value="draft">Response Draft</TabsTrigger>}
+            <TabsTrigger value="draft">Response Draft</TabsTrigger>
             <TabsTrigger value="info">Query Info</TabsTrigger>
             <TabsTrigger value="attachments">Attachments</TabsTrigger>
           </TabsList>
         </div>
 
-        {!isInquirer && (
-          <TabsContent value="draft" className="mt-0 pt-5">
-            <DraftTabContent versions={versions} latestVersion={latestVersion} />
-          </TabsContent>
-        )}
+        <TabsContent value="draft" className="mt-0 pt-5">
+          <DraftTabContent versions={versions} latestVersion={latestVersion} />
+        </TabsContent>
 
         <TabsContent value="info" className="mt-0 pt-5 space-y-1">
           <InfoRow label="Inquirer" value={query.inquirer.name} />
@@ -214,9 +210,8 @@ export function QueryDetailPage() {
   } = useQueryCase();
   const canAssign = can(WORKFLOW_ACTION.ASSIGN);
   const assignQuery = useWorkflowStore((state) => state.assignQuery);
-  const isInquirer = currentUser?.role === ROLES.INQUIRER;
 
-  if (!query || (isInquirer && !isQueryOwnedBy(query, currentUser))) {
+  if (!query) {
     return (
       <EmptyState
         title="Query not found"
@@ -227,13 +222,11 @@ export function QueryDetailPage() {
 
   const stages = buildLifecycle({ query, steps, versions, reviews, audit, messages });
 
-  const breadcrumbItems = isInquirer
-    ? [{ label: 'Dashboard', path: paths.DASHBOARD }, { label: query.queryId }]
-    : [
-        { label: 'Dashboard', path: paths.DASHBOARD },
-        { label: 'Queries', path: paths.QUERIES },
-        { label: query.queryId },
-      ];
+  const breadcrumbItems = [
+    { label: 'Dashboard', path: paths.DASHBOARD },
+    { label: 'Queries', path: paths.QUERIES },
+    { label: query.queryId },
+  ];
 
   return (
     <div>
@@ -251,49 +244,34 @@ export function QueryDetailPage() {
 
       {/* One workspace grid. minmax(0,1fr) stops wide children (the audit
           table, long email bodies) blowing the left column out. */}
-      <div
-        className={
-          isInquirer
-            ? 'space-y-5 mb-5'
-            : 'grid grid-cols-1 items-start gap-5 lg:grid-cols-[minmax(0,1fr)_340px] mb-5'
-        }
-      >
+      <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-[minmax(0,1fr)_340px] mb-5">
         <div className="min-w-0 space-y-5">
-          {!isInquirer && (
-            <CaseInsightPanels
-              query={query}
-              steps={steps}
-              audit={audit}
-              canAssign={canAssign}
-              currentUser={currentUser}
-              assignQuery={assignQuery}
-            />
-          )}
+          <CaseInsightPanels
+            query={query}
+            steps={steps}
+            audit={audit}
+            canAssign={canAssign}
+            currentUser={currentUser}
+            assignQuery={assignQuery}
+          />
 
           <EmailThread messages={messages} />
 
-          <CaseWorkspaceTabs
-            query={query}
-            versions={versions}
-            latestVersion={latestVersion}
-            isInquirer={isInquirer}
-          />
+          <CaseWorkspaceTabs query={query} versions={versions} latestVersion={latestVersion} />
         </div>
 
-        {!isInquirer && (
-          /* Sticky so the actions stay reachable through a long thread. It
-             scrolls internally rather than overflowing the viewport. */
-          <div className="lg:sticky lg:top-6 self-start space-y-4 lg:max-h-[calc(100vh-3rem)] lg:overflow-y-auto">
-            <WorkflowActionsCard />
-            {can(WORKFLOW_ACTION.APPROVE_REVIEW) && <ReviewDecisionCard />}
-            <CaseDetailsPanel query={query} />
-          </div>
-        )}
+        {/* Sticky so the actions stay reachable through a long thread. It
+            scrolls internally rather than overflowing the viewport. */}
+        <div className="lg:sticky lg:top-6 self-start space-y-4 lg:max-h-[calc(100vh-3rem)] lg:overflow-y-auto">
+          <WorkflowActionsCard />
+          {can(WORKFLOW_ACTION.APPROVE_REVIEW) && <ReviewDecisionCard />}
+          <CaseDetailsPanel query={query} />
+        </div>
       </div>
 
-      {!isInquirer && <AuditHistoryCard audit={audit} />}
+      <AuditHistoryCard audit={audit} />
 
-      {!isInquirer && <StageLinksFooter paths={paths} />}
+      <StageLinksFooter paths={paths} />
     </div>
   );
 }

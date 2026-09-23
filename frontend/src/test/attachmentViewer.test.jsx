@@ -25,8 +25,9 @@ vi.mock('@/services/api/attachmentService', () => ({
 }));
 
 import * as attachmentService from '@/services/api/attachmentService';
+import { EXTERNAL_INQUIRER as INQUIRER } from '@/test/externalInquirer';
+const FRONT_OFFICE = findUserById('USR-0002');
 
-const INQUIRER = findUserById('USR-0001');
 const s = () => useWorkflowStore.getState();
 
 const ATTACHMENTS = [
@@ -68,7 +69,7 @@ beforeEach(async () => {
 
 describe('the Attachments tab', () => {
   it('shows filename, type and size for every attachment', async () => {
-    renderAs(INQUIRER, `/inquirer/queries/${queryId}`);
+    renderAs(FRONT_OFFICE, `/front-officer/queries/${queryId}`);
     fireEvent.focus(await screen.findByRole('tab', { name: 'Attachments' }));
 
     expect(await screen.findByText('spec.pdf')).toBeInTheDocument();
@@ -78,7 +79,7 @@ describe('the Attachments tab', () => {
   });
 
   it('opens an image preview with the byte URL as the img src', async () => {
-    renderAs(INQUIRER, `/inquirer/queries/${queryId}`);
+    renderAs(FRONT_OFFICE, `/front-officer/queries/${queryId}`);
     fireEvent.focus(await screen.findByRole('tab', { name: 'Attachments' }));
 
     const pngRow = (await screen.findByText('photo.png')).closest('li');
@@ -89,7 +90,7 @@ describe('the Attachments tab', () => {
   });
 
   it('offers download-only for a file type with no in-app preview', async () => {
-    renderAs(INQUIRER, `/inquirer/queries/${queryId}`);
+    renderAs(FRONT_OFFICE, `/front-officer/queries/${queryId}`);
     fireEvent.focus(await screen.findByRole('tab', { name: 'Attachments' }));
 
     const xlsxRow = (await screen.findByText('sheet.xlsx')).closest('li');
@@ -103,7 +104,7 @@ describe('the Attachments tab', () => {
   });
 
   it('the row-level Download link always carries ?download=1', async () => {
-    renderAs(INQUIRER, `/inquirer/queries/${queryId}`);
+    renderAs(FRONT_OFFICE, `/front-officer/queries/${queryId}`);
     fireEvent.focus(await screen.findByRole('tab', { name: 'Attachments' }));
 
     const pdfRow = (await screen.findByText('spec.pdf')).closest('li');
@@ -116,7 +117,7 @@ describe('the Attachments tab', () => {
   it('shows an unavailable state when the attachment no longer exists on the server', async () => {
     vi.mocked(attachmentService.fetchAttachmentMeta).mockRejectedValue(new Error('404'));
 
-    renderAs(INQUIRER, `/inquirer/queries/${queryId}`);
+    renderAs(FRONT_OFFICE, `/front-officer/queries/${queryId}`);
     fireEvent.focus(await screen.findByRole('tab', { name: 'Attachments' }));
 
     const pdfRow = (await screen.findByText('spec.pdf')).closest('li');
@@ -130,7 +131,7 @@ describe('the Attachments tab', () => {
       { ...enquiry([]), mailboxMessageId: 'MSG-ATT-2' },
       async () => null,
     );
-    renderAs(INQUIRER, `/inquirer/queries/${emptyId}`);
+    renderAs(FRONT_OFFICE, `/front-officer/queries/${emptyId}`);
     fireEvent.focus(await screen.findByRole('tab', { name: 'Attachments' }));
 
     expect(await screen.findByText('No attachments')).toBeInTheDocument();

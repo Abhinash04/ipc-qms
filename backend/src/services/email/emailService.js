@@ -69,7 +69,6 @@ function senderFor(sourceMailbox) {
 }
 
 function getEmailConfig() {
-  const inquirer = identityForRole(IDENTITY_ROLES.INQUIRER);
   const frontOffice = identityForRole(IDENTITY_ROLES.FRONT_OFFICE);
 
   return {
@@ -97,7 +96,6 @@ function getEmailConfig() {
     mockMailboxEmail: env.IPC_QUERY_EMAIL,
 
     ipcReplyFrom: { email: env.IPC_ACK_FROM_EMAIL, name: env.IPC_ACK_FROM_NAME },
-    inquirer: { email: inquirer.email, name: inquirer.name },
 
     // Non-secret participant directory: who each role is, nothing more.
     participants: publicDirectory(),
@@ -147,25 +145,6 @@ async function sendEmail(
     ...result,
     sentAt: normalised.timestamp || new Date().toISOString(),
   };
-}
-
-/** Inquirer → Front Officer. Sender identity is config, not caller input. */
-async function sendEnquiry({ subject, body, attachments = [], cc = [], timestamp }) {
-  const inquirer = identityForRole(IDENTITY_ROLES.INQUIRER);
-  const frontOffice = identityForRole(IDENTITY_ROLES.FRONT_OFFICE);
-
-  return sendEmail(
-    {
-      from: formatSender(inquirer),
-      to: [frontOffice?.email || env.IPC_QUERY_EMAIL],
-      cc,
-      subject,
-      body,
-      attachments,
-      timestamp,
-    },
-    { asRole: IDENTITY_ROLES.INQUIRER },
-  );
 }
 
 /**
@@ -369,7 +348,6 @@ export {
   getEmailConfig,
   getTransport,
   sendEmail,
-  sendEnquiry,
   composeAcknowledgement,
   sendAcknowledgement,
   forwardSubject,

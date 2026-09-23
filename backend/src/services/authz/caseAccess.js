@@ -10,8 +10,7 @@ import { QueryCase, WorkflowStep, Review } from '../../models/index.js';
  * frontend/src/constants/queryBuckets.js (`ROLE_BUCKETS[*].scope`). Until now
  * they ran only in the browser, so `GET /queries` returned every case to every
  * signed-in account and `POST /queries/persist` accepted a write to any case
- * from any account — including the seeded INQUIRER, who is a member of the
- * public rather than staff.
+ * from any account — including an official with no part in it.
  *
  * ## One resolution, two consumers
  *
@@ -47,7 +46,7 @@ const EVERYTHING_ROLES = new Set([
 ]);
 
 /** Roles narrowed to the cases they are party to. */
-const SCOPED_ROLES = new Set([ROLES.INQUIRER, ROLES.ASSIGNED_OFFICIAL, ROLES.REVIEWER]);
+const SCOPED_ROLES = new Set([ROLES.ASSIGNED_OFFICIAL, ROLES.REVIEWER]);
 
 export const SCOPE_KIND = { EVERYTHING: 'EVERYTHING', SCOPED: 'SCOPED', NONE: 'NONE' };
 
@@ -57,18 +56,6 @@ export function scopeKindForRole(role) {
   if (SCOPED_ROLES.has(role)) return SCOPE_KIND.SCOPED;
   return SCOPE_KIND.NONE;
 }
-
-/**
- * An address is not a pattern.
- *
- * A perfectly ordinary address — `a+b@example.com` — contains a regex
- * quantifier. Unescaped it either throws or, worse, silently fails to match,
- * and a silent mismatch here means an inquirer sees none of their own cases
- * while everything appears to work.
- */
-const escapeRegex = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-
-const exactCaseInsensitive = (value) => new RegExp(`^${escapeRegex(value)}$`, 'i');
 
 function scopeUnavailable() {
   return Object.assign(new Error('Case access cannot be determined: query storage is unavailable'), {
@@ -93,33 +80,6 @@ export async function visibleQueryIds(user) {
   // Refusing is the only safe answer: with no connection we cannot tell which
   // cases are theirs, and "cannot tell" must never widen to "all of them".
   if (!isConnected()) throw scopeUnavailable();
-
-  if (user.role === ROLES.INQUIRER) {
-    /**
-     * Ported from frontend/src/utils/queryOwnership.js, including its
-     * precedence: a PRESENT `inquirer.id` that names someone else blocks the
-     * email fallback. The email branch is load-bearing rather than a
-     * convenience — cases created from inbound mail store
-     * `{ id: null, name, email }` (services/email/mailbox/acceptMessage.js), so
-     * an emailed enquiry has no id to match on at all.
-     *
-     * `inquirer` is an untyped Object, so there is no index to use here. The
-     * scan is bounded by the collection size; revisit if case volume grows, or
-     * normalise the address at write time.
-     */
-    const ids = await QueryCase.distinct('queryId', {
-      $or: [
-        { 'inquirer.id': user.id },
-        {
-          $and: [
-            { $or: [{ 'inquirer.id': null }, { 'inquirer.id': '' }, { 'inquirer.id': { $exists: false } }] },
-            { 'inquirer.email': exactCaseInsensitive(user.email) },
-          ],
-        },
-      ],
-    });
-    return new Set(ids);
-  }
 
   if (user.role === ROLES.REVIEWER) {
     const [fromSteps, fromReviews] = await Promise.all([

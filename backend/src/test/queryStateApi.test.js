@@ -38,7 +38,7 @@ describe('/api/v1/queries — authorization', () => {
    * role still gets 200, with less in it.
    */
   it('refuses no signed-in role the hydration route', async () => {
-    for (const role of [ROLES.INQUIRER, ROLES.FRONT_OFFICE, ROLES.REVIEWER]) {
+    for (const role of [ROLES.ASSIGNED_OFFICIAL, ROLES.FRONT_OFFICE, ROLES.REVIEWER]) {
       const read = await request(app).get('/api/v1/queries').set(authHeader(role));
       expect(read.status).not.toBe(403);
     }
@@ -50,7 +50,7 @@ describe('/api/v1/queries — authorization', () => {
    * prove a point.
    */
   it('refuses no signed-in role an empty delta', async () => {
-    for (const role of [ROLES.INQUIRER, ROLES.FRONT_OFFICE, ROLES.REVIEWER]) {
+    for (const role of [ROLES.ASSIGNED_OFFICIAL, ROLES.FRONT_OFFICE, ROLES.REVIEWER]) {
       const write = await request(app)
         .post('/api/v1/queries/persist')
         .set(authHeader(role))
@@ -72,7 +72,7 @@ describe('/api/v1/queries — authorization', () => {
   it('does not let a protected write through unauthorized when the store is down', async () => {
     const res = await request(app)
       .post('/api/v1/queries/persist')
-      .set(authHeader(ROLES.INQUIRER))
+      .set(authHeader(ROLES.ASSIGNED_OFFICIAL))
       .send({ query: { queryId: 'QRY-2026-00001', workflowState: 'READY_FOR_DISPATCH' } });
 
     expect(res.status).toBe(503);
@@ -86,7 +86,7 @@ describe('/api/v1/queries — authorization', () => {
    */
   it('refuses /queries/reset to every role except SUPER_ADMIN', async () => {
     const denied = [
-      ROLES.INQUIRER,
+      ROLES.ASSIGNED_OFFICIAL,
       ROLES.FRONT_OFFICE,
       ROLES.OFFICER_IN_CHARGE,
       ROLES.ASSIGNED_OFFICIAL,

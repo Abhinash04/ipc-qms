@@ -9,6 +9,7 @@ import { useWorkflowStore } from '@/store/useWorkflowStore';
 import { findUserById } from '@/constants/mockUsers';
 import * as mailboxService from '@/services/api/mailboxService';
 import { installFakeCaseMail } from '@/test/fakeCaseMail';
+import { EXTERNAL_INQUIRER as INQUIRER } from '@/test/externalInquirer';
 
 vi.mock('@/services/api/mailboxService', () => ({
   fetchEmailConfig: vi.fn().mockResolvedValue({}),
@@ -36,7 +37,6 @@ vi.mock('@/services/api/mailboxService', () => ({
   sendResponse: vi.fn().mockResolvedValue({}),
 }));
 
-const INQUIRER = findUserById('USR-0001');
 const FRONT_OFFICE = findUserById('USR-0002');
 const OIC = findUserById('USR-0003');
 const OFFICIAL = findUserById('USR-0004');
@@ -134,14 +134,6 @@ describe('the page is one workspace, not a long document', () => {
     expect(panel.className).toMatch(/overflow-y-auto/);
   });
 
-  it('keeps the inquirer on a single column with no action panel', async () => {
-    await underReview();
-    renderAs(INQUIRER, `/inquirer/queries/${queryId}`);
-
-    expect(grid()).toBeNull();
-    expect(screen.queryByRole('heading', { name: 'Available actions' })).toBeNull();
-    expect(screen.queryByRole('heading', { name: 'Audit history' })).toBeNull();
-  });
 });
 
 describe('the email thread reads like a conversation', () => {
@@ -287,16 +279,4 @@ describe('nothing was lost to the restructure', () => {
     expect(screen.getByRole('heading', { name: 'Workflow progress' })).toBeInTheDocument();
   });
 
-  it('still refuses another inquirers case', async () => {
-    await underReview();
-    useAuthStore.setState({
-      currentUser: { ...INQUIRER, id: 'USR-OTHER', email: 'other@example.com' },
-    });
-    renderAs(
-      { ...INQUIRER, id: 'USR-OTHER', email: 'other@example.com' },
-      `/inquirer/queries/${queryId}`,
-    );
-
-    expect(screen.getByText('Query not found')).toBeInTheDocument();
-  });
 });

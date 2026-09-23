@@ -80,7 +80,7 @@ describe('requirement 2 — a query is created dynamically from an email', () =>
     expect(query.source).toBe('Email');
     expect(query.inquirer.email).toBe('abhinash.pritiraj@gmail.com');
     expect(query.inquirer.name).toBe('Abhinash Pritiraj');
-    expect(query.inquirer.id).toBe('USR-0001');
+    expect(query.inquirer.id).toBeNull();
   });
 
   it('mints the documented id shapes, sequentially', () => {

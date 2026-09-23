@@ -12,7 +12,6 @@ import {
 
 import { WORKFLOW_STATE, BUSINESS_STATUS } from "@/constants/statusEnums";
 import { ROLES } from "@/constants/roles";
-import { isQueryOwnedBy } from "@/utils/queryOwnership";
 
 const ACTIVE_WORK_STATES = [
   WORKFLOW_STATE.ASSIGNED,
@@ -104,34 +103,6 @@ const totalBucket = (caption) => ({
 });
 
 export const ROLE_BUCKETS = {
-  [ROLES.INQUIRER]: {
-    scope: (query, { user }) => isQueryOwnedBy(query, user),
-    defaultKey: "total",
-    buckets: [
-      totalBucket("Everything you raised"),
-      {
-        key: "open",
-        label: "Open Queries",
-        caption: "Received, not yet picked up",
-        icon: Inbox,
-        predicate: inBusinessStatus(BUSINESS_STATUS.OPEN),
-      },
-      {
-        key: "inProgress",
-        label: "In Progress",
-        caption: "Being worked on by IPC",
-        icon: Clock,
-        predicate: inBusinessStatus(BUSINESS_STATUS.IN_PROGRESS),
-      },
-      {
-        key: "closed",
-        label: "Closed",
-        caption: "Answered and closed",
-        icon: CheckCircle2,
-        predicate: inBusinessStatus(BUSINESS_STATUS.CLOSED),
-      },
-    ],
-  },
 
   [ROLES.FRONT_OFFICE]: {
     scope: everything,

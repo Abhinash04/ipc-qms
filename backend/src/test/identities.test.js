@@ -59,14 +59,6 @@ describe('identity configuration', () => {
 });
 
 describe('sender identity comes from the acting stakeholder', () => {
-  it('sends the enquiry from the inquirer to the Front Officer', async () => {
-    const result = await emailService.sendEnquiry({ subject: 'Monograph query', body: 'Details' });
-
-    expect(result.from).toBe('Test Inquirer <inquirer@test.invalid>');
-    expect(result.to).toEqual(['front-office@test.invalid']);
-    expect(result.sentAsRole).toBe(IDENTITY_ROLES.INQUIRER);
-  });
-
   it('sends the acknowledgement from the Front Officer to the inquirer', async () => {
     const result = await emailService.sendAcknowledgement({
       to: 'inquirer@test.invalid',
@@ -125,9 +117,9 @@ describe('transport resolution is name-driven', () => {
   });
 
   it('records which role a message was sent as', async () => {
-    const result = await emailService.sendEnquiry({ subject: 'x', body: 'y' });
+    const result = await emailService.sendAcknowledgement({ to: 'inquirer@test.invalid', queryId: 'QRY-1' });
     expect(result.transport).toBe('mock');
-    expect(result.sentAsRole).toBe(IDENTITY_ROLES.INQUIRER);
+    expect(result.sentAsRole).toBe(IDENTITY_ROLES.FRONT_OFFICE);
   });
 });
 
@@ -136,22 +128,9 @@ describe('email HTTP surface', () => {
     const res = await request(app).get('/api/v1/emails/config').set(AUTH);
 
     expect(res.status).toBe(200);
-    expect(res.body.participants).toHaveLength(3);
-    expect(res.body.participants.map((p) => p.role)).toEqual([
-      'INQUIRER',
-      'FRONT_OFFICE',
-      'OFFICER_IN_CHARGE',
-    ]);
+    expect(res.body.participants).toHaveLength(2);
+    expect(res.body.participants.map((p) => p.role)).toEqual(['FRONT_OFFICE', 'OFFICER_IN_CHARGE']);
     expect(JSON.stringify(res.body)).not.toMatch(/GMAIL_|client_secret|refresh_?token/i);
-  });
-
-  it('addresses an enquiry to the Front Officer, not to the old shared mailbox', async () => {
-    const res = await request(app)
-      .post('/api/v1/emails/enquiry').set(AUTH)
-      .send({ subject: 'Query', body: 'Body' });
-
-    expect(res.status).toBe(201);
-    expect(res.body.to).toEqual(['front-office@test.invalid']);
   });
 
   it('forwards an existing query and requires its id', async () => {
@@ -165,13 +144,12 @@ describe('email HTTP surface', () => {
     expect(bad.status).toBe(400);
   });
 
-  it('delivers the enquiry into the Front Officer inbox, which is what she polls', async () => {
-    await request(app).post('/api/v1/emails/enquiry').set(AUTH).send({ subject: 'Inbox check', body: 'b' });
+  it('delivers a sent copy into the Front Officer inbox, which is what she polls', async () => {
+    await emailService.sendAcknowledgement({ to: 'front-office@test.invalid', queryId: 'QRY-1' });
 
     const res = await request(app).get('/api/v1/mailbox/messages').set(AUTH);
     expect(res.body.recipient).toBe('front-office@test.invalid');
     expect(res.body.messages).toHaveLength(1);
-    expect(res.body.messages[0].subject).toBe('Inbox check');
   });
 });
 

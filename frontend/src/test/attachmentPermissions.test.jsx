@@ -7,6 +7,7 @@ import { AppRoutes } from '@/routes/AppRoutes';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useWorkflowStore } from '@/store/useWorkflowStore';
 import { findUserById } from '@/constants/mockUsers';
+import { EXTERNAL_INQUIRER as INQUIRER } from '@/test/externalInquirer';
 
 vi.mock('@/services/api/mailboxService', () => ({
   fetchEmailConfig: vi.fn().mockResolvedValue({}),
@@ -24,8 +25,8 @@ vi.mock('@/services/api/attachmentService', () => ({
   fetchAttachmentMeta: vi.fn().mockResolvedValue({}),
 }));
 
-const INQUIRER = findUserById('USR-0001');
 const FRONT_OFFICE = findUserById('USR-0002');
+const REVIEWER = findUserById('USR-0005');
 
 const s = () => useWorkflowStore.getState();
 
@@ -63,15 +64,15 @@ beforeEach(async () => {
 });
 
 describe('attachment access follows the existing case permissions', () => {
-  it('the inquirer who raised the case sees its attachments', async () => {
-    renderAs(INQUIRER, `/inquirer/queries/${queryId}`);
+  it('a Front Officer on the case sees its attachments', async () => {
+    renderAs(FRONT_OFFICE, `/front-officer/queries/${queryId}`);
     fireEvent.focus(await screen.findByRole('tab', { name: 'Attachments' }));
 
     expect(await screen.findByText('spec.pdf')).toBeInTheDocument();
   });
 
   it('a role with no route to this case is denied by the existing guard, not by attachment code', async () => {
-    renderAs(INQUIRER, '/front-officer/queries');
+    renderAs(REVIEWER, '/front-officer/queries');
     expect(await screen.findByText('Access restricted')).toBeInTheDocument();
   });
 

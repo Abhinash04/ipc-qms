@@ -21,7 +21,7 @@ vi.mock('@/services/api/mailboxService', () => ({
   deleteMailboxMessage: vi.fn().mockResolvedValue({ deleted: true }),  sendAcknowledgement: vi.fn().mockResolvedValue({}),
 }));
 
-const INQUIRER = findUserById('USR-0001');
+import { EXTERNAL_INQUIRER } from '@/test/externalInquirer';
 const FRONT_OFFICE = findUserById('USR-0002');
 const OIC = findUserById('USR-0003');
 const OFFICIAL = findUserById('USR-0004');
@@ -85,7 +85,7 @@ function seed(queries) {
     queries: queries.map((q) => ({
       priority: 'NORMAL',
       createdAt: '2026-08-20T09:00:00.000Z',
-      inquirer: { id: INQUIRER.id, email: INQUIRER.email, name: INQUIRER.name },
+      inquirer: { id: null, email: EXTERNAL_INQUIRER.email, name: EXTERNAL_INQUIRER.name },
       currentAssigneeId: null,
       currentWorkflowStepId: null,
       ...q,
@@ -105,7 +105,6 @@ describe('a KPI number always equals the rows behind it', () => {
     [ROLES.OFFICER_IN_CHARGE, OIC],
     [ROLES.ASSIGNED_OFFICIAL, OFFICIAL],
     [ROLES.REVIEWER, REVIEWER],
-    [ROLES.INQUIRER, INQUIRER],
   ];
 
   it.each(CASES)('%s', (role, user) => {
@@ -149,52 +148,6 @@ describe('a KPI number always equals the rows behind it', () => {
       ).toBe(shown);
     }
   });
-});
-
-describe('Inquirer dashboard', () => {
-  beforeEach(() => {
-    useAuthStore.setState({ currentUser: INQUIRER });
-  });
-
-  it('starts empty and invents no counts', () => {
-    renderDashboard();
-    expect(tile('Total Queries')).toHaveTextContent('0');
-    expect(tile('Open Queries')).toHaveTextContent('0');
-    expect(tile('In Progress')).toHaveTextContent('0');
-    expect(tile('Closed')).toHaveTextContent('0');
-  });
-
-  it('counts the inquirers own queries by business status', () => {
-    seed([
-      { queryId: 'QRY-A', subject: 'Open one', workflowState: WORKFLOW_STATE.RECEIVED },
-      { queryId: 'QRY-B', subject: 'Working', workflowState: WORKFLOW_STATE.DRAFTING },
-      { queryId: 'QRY-C', subject: 'Done', workflowState: WORKFLOW_STATE.CLOSED },
-    ]);
-    renderDashboard();
-
-    expect(tile('Total Queries')).toHaveTextContent('3');
-    expect(tile('Open Queries')).toHaveTextContent('1');
-    expect(tile('In Progress')).toHaveTextContent('1');
-    expect(tile('Closed')).toHaveTextContent('1');
-  });
-
-  it('hides another inquirers queries entirely', () => {
-    seed([
-      { queryId: 'QRY-MINE', subject: 'Mine', workflowState: WORKFLOW_STATE.RECEIVED },
-      {
-        queryId: 'QRY-THEIRS',
-        subject: 'Not mine',
-        workflowState: WORKFLOW_STATE.RECEIVED,
-        inquirer: { id: 'USR-9999', email: 'other@example.com', name: 'Other' },
-      },
-    ]);
-    renderDashboard();
-
-    expect(tile('Total Queries')).toHaveTextContent('1');
-    expect(visibleQueryIds()).toEqual(['QRY-MINE']);
-    expect(screen.queryByText('Not mine')).toBeNull();
-  });
-
 });
 
 describe('Front Office dashboard', () => {
@@ -403,23 +356,6 @@ describe('Total Queries spans the whole permitted scope', () => {
     expect(visibleQueryIds()).toEqual(['QRY-1']);
   });
 
-  it('still scopes Total to the signed-in inquirer', () => {
-    seed([
-      ...MIXED,
-      {
-        queryId: 'QRY-OTHER',
-        subject: 'Someone else',
-        workflowState: WORKFLOW_STATE.RECEIVED,
-        inquirer: { id: 'USR-9999', email: 'other@example.com', name: 'Other' },
-      },
-    ]);
-    useAuthStore.setState({ currentUser: INQUIRER });
-    renderDashboard();
-
-    expect(tileCount('Total Queries')).toBe(4);
-    expect(screen.queryByText('Someone else')).toBeNull();
-  });
-
   it('covers a reviewer case that no status tile accounts for', () => {
     // A pending level: in the reviewer's scope, but not awaiting them yet and
     // not yet ruled on — so only Total should see it.
@@ -470,7 +406,7 @@ describe('the query list is vertically contained', () => {
         workflowState: WORKFLOW_STATE.RECEIVED,
       })),
     );
-    useAuthStore.setState({ currentUser: INQUIRER });
+    useAuthStore.setState({ currentUser: FRONT_OFFICE });
     renderDashboard();
 
     const viewport = listPanel().querySelector('[data-radix-scroll-area-viewport]');
@@ -485,7 +421,7 @@ describe('the query list is vertically contained', () => {
 
   it('leaves the header and footer outside the scroll area', () => {
     seed([{ queryId: 'QRY-1', subject: 'One', workflowState: WORKFLOW_STATE.RECEIVED }]);
-    useAuthStore.setState({ currentUser: INQUIRER });
+    useAuthStore.setState({ currentUser: FRONT_OFFICE });
     renderDashboard();
 
     const scroller = listPanel().querySelector('[data-slot="scroll-area"]');
