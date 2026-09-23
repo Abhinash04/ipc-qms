@@ -9,8 +9,6 @@ export function OICDashboard({
   auditEvents,
   reviews,
 }) {
-  // Also the fallback view for Admin / Super Admin, whose role resolves to the
-  // systemwide bucket set.
   const isOic = currentUser?.role === ROLES.OFFICER_IN_CHARGE;
 
   return (

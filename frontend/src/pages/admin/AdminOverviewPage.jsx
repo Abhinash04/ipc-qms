@@ -46,28 +46,6 @@ import { useRoutePaths } from '@/hooks/useRoutePaths';
 import { SECTION, SECTIONS } from '@/constants/routeSections';
 import { cn } from '@/utils/cn';
 
-/**
- * The Administration overview.
- *
- * Two data sources, deliberately distinguished on screen rather than blended:
- *
- *  - **Audit API** (`GET /audit`): email, AI, attachment and access events,
- *    queried directly and paginated server-side.
- *  - **Workflow store** (hydrated from `GET /queries`): case counts and the
- *    case lifecycle. Both are now server-side and true across every user —
- *    Query Cases moved out of browser-local IndexedDB into MongoDB. The two
- *    stay separate because they are fetched differently, not because one is
- *    less real than the other.
- *
- * Nothing here is seeded, sampled or estimated. Where there is no data, the
- * section says so instead of showing a zero dressed up as a measurement.
- *
- * The period-over-period figures are real too: `GET /audit/summary` passes a
- * caller's `from`/`to` through to its `overall` half, so "vs yesterday" is a
- * second windowed request against the audit collection, not arithmetic on a
- * number invented in the browser.
- */
-
 const ACTOR_LABELS = { human: 'User', agent: 'AI Agent', system: 'System' };
 
 const RANGES = [
@@ -103,7 +81,6 @@ function SourceNote({ children }) {
   return <p className="m-0 mt-2 text-[11px] font-semibold text-slate-400">{children}</p>;
 }
 
-/** One figure beneath the case trend line. */
 function MiniStat({ icon: Icon, value, label, tone = 'text-slate-400' }) {
   return (
     <div className="flex items-center gap-2.5">
@@ -132,11 +109,6 @@ function trendTone(direction) {
   return 'text-slate-400';
 }
 
-/**
- * Every server-recorded figure the page shows. The comparison window is a
- * separate request rather than a derived guess — if that call is missing, the
- * tiles cannot show a trend at all.
- */
 function useAdminActivity(range) {
   const summary = useQuery({
     queryKey: ['audit', 'summary'],
@@ -179,7 +151,6 @@ function useAdminActivity(range) {
 const failuresOf = (period) =>
   (period?.byResult?.failure ?? 0) + (period?.byResult?.denied ?? 0);
 
-/** The four headline tiles, with a delta only once the comparison has loaded. */
 function buildKpiTiles({ today, yesterday, hasComparison, paths }) {
   const deltaFor = (current, prior) =>
     hasComparison ? periodDelta(current, prior) : null;
@@ -232,7 +203,6 @@ function buildKpiTiles({ today, yesterday, hasComparison, paths }) {
       tint: 'bg-tone-rose-tint text-tone-rose-figure',
       surface: 'bg-rose-50/50',
       border: 'border-tone-rose-line',
-      // The one metric where a rise is bad news, so the trend must not be green.
       higherIsWorse: true,
     },
   ];
@@ -313,7 +283,6 @@ function ActivityRow({ event }) {
   );
 }
 
-/** Loading, unreachable, empty, or the last few audited actions. */
 function RecentActivityBody({ recent }) {
   if (recent.isLoading) return <Skeleton className="h-64 w-full rounded-2xl" />;
 
@@ -419,7 +388,6 @@ function ActorBreakdownPanel({ actors, selectedRange, range, onRangeChange }) {
   );
 }
 
-/** Case figures, which come from this browser rather than the server. */
 function CaseOverviewSection({ byStatus, caseVolume, trend, funnel }) {
   const TrendIcon = TREND_ICON[trend.delta.direction] || Minus;
 
@@ -518,10 +486,6 @@ function AreaLink({ section, to }) {
   );
 }
 
-/**
- * Support routes to the configured IPC address rather than a help centre this
- * deployment does not have.
- */
 function SupportCard({ supportAddress }) {
   return (
     <div
@@ -587,7 +551,6 @@ export function AdminOverviewPage() {
   const overall = summary.data?.overall;
   const tiles = buildKpiTiles({
     today: summary.data?.today,
-    // `overall` on a windowed request is that window's count — see the file note.
     yesterday: previous.data?.overall,
     hasComparison: previous.isSuccess,
     paths,
@@ -616,10 +579,8 @@ export function AdminOverviewPage() {
         </div>
       )}
 
-      {/* ── Server-recorded KPIs ──────────────────────────────────────────── */}
       <SystemActivitySection summary={summary} overall={overall} tiles={tiles} />
 
-      {/* ── Activity feed + actor breakdown ───────────────────────────────── */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_400px]">
         <RecentActivityPanel recent={recent} paths={paths} />
         <ActorBreakdownPanel
@@ -630,7 +591,6 @@ export function AdminOverviewPage() {
         />
       </div>
 
-      {/* ── Query cases (workflow store) ───────────────────────────────────── */}
       <CaseOverviewSection
         byStatus={statusDistribution(queries)}
         caseVolume={volumeByDay(queries)}
@@ -638,7 +598,6 @@ export function AdminOverviewPage() {
         funnel={processingFunnel(auditEvents)}
       />
 
-      {/* ── Console areas ─────────────────────────────────────────────────── */}
       <AdminAreasSection paths={paths} supportAddress={emailConfig.data?.ipcQueryEmail} />
     </div>
   );

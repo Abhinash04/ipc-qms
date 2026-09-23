@@ -20,11 +20,6 @@ import { AiRecommendationCard } from '@/components/ai/AiRecommendationCard';
 import { buildLifecycle } from '@/constants/queryLifecycle';
 import { findUserById } from '@/constants/mockUsers';
 
-/**
- * Compact metadata for the sticky panel. CaseSummaryBar carries some of this
- * too, but that bar scrolls away — keeping the identifiers in view while
- * reading a long thread is the point.
- */
 function CaseDetailsPanel({ query }) {
   const rows = [
     ['Case ID', query.queryId],
@@ -68,7 +63,6 @@ function InfoRow({ label, value }) {
   );
 }
 
-/** The drafted response, or why there isn't one yet. */
 function DraftTabContent({ versions, latestVersion }) {
   if (versions.length === 0) {
     return (
@@ -93,7 +87,6 @@ function DraftTabContent({ versions, latestVersion }) {
   );
 }
 
-/** Draft / info / attachments. */
 function CaseWorkspaceTabs({ query, versions, latestVersion }) {
   return (
     <div className="bg-white rounded-3xl border border-slate-200/80 overflow-hidden shadow-sm p-5">
@@ -126,7 +119,6 @@ function CaseWorkspaceTabs({ query, versions, latestVersion }) {
   );
 }
 
-/** AI summary, the officials on the case, and who to assign it to. */
 function CaseInsightPanels({ query, steps, audit, canAssign, currentUser, assignQuery }) {
   return (
     <>
@@ -140,10 +132,6 @@ function CaseInsightPanels({ query, steps, audit, canAssign, currentUser, assign
               queryId: query.queryId,
               actor: null,
               actorLabel: 'AI Summary Assistant',
-              // Without this the delta went out with `event: undefined`, which
-              // the server's schema rejects — so every re-generated summary
-              // 400ed and lived in this tab only. The store's own summary
-              // transition uses the same event; see useWorkflowStore.js.
               event: AUDIT_EVENT.AI_SUMMARY_GENERATED,
               patch: { aiSummary: newSummary },
               details: newSummary.text,
@@ -154,8 +142,6 @@ function CaseInsightPanels({ query, steps, audit, canAssign, currentUser, assign
 
       <CaseOfficialsCard query={query} steps={steps} audit={audit} />
 
-      {/* Suggestions for whom to assign are only useful while the
-          assignment is still open; after that Officials is the answer. */}
       {canAssign && (
         <div className="bg-white rounded-3xl border border-slate-200/80 p-5 shadow-sm">
           <AiRecommendationCard
@@ -234,7 +220,6 @@ export function QueryDetailPage() {
 
       <CaseSummaryBar query={query} />
 
-      {/* Workflow is a status indicator, so it keeps the full width. */}
       <div className="bg-white rounded-3xl border border-slate-200/80 p-5 shadow-sm mb-5">
         <h2 className="font-heading text-[19px] font-black text-slate-900 mb-3 border-b border-slate-100 pb-2.5">
           Workflow progress
@@ -242,8 +227,6 @@ export function QueryDetailPage() {
         <QueryLifecycleTimeline stages={stages} />
       </div>
 
-      {/* One workspace grid. minmax(0,1fr) stops wide children (the audit
-          table, long email bodies) blowing the left column out. */}
       <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-[minmax(0,1fr)_340px] mb-5">
         <div className="min-w-0 space-y-5">
           <CaseInsightPanels
@@ -260,8 +243,6 @@ export function QueryDetailPage() {
           <CaseWorkspaceTabs query={query} versions={versions} latestVersion={latestVersion} />
         </div>
 
-        {/* Sticky so the actions stay reachable through a long thread. It
-            scrolls internally rather than overflowing the viewport. */}
         <div className="lg:sticky lg:top-6 self-start space-y-4 lg:max-h-[calc(100vh-3rem)] lg:overflow-y-auto">
           <WorkflowActionsCard />
           {can(WORKFLOW_ACTION.APPROVE_REVIEW) && <ReviewDecisionCard />}

@@ -30,26 +30,8 @@ export function LoginPage() {
   const [error, setError] = useState(null);
   const [devOpen, setDevOpen] = useState(false);
 
-  /**
-   * The NICeMail Front Office address, for the dev sign-in list below.
-   *
-   * From configuration because that account is not in the directory: the server
-   * builds it from NIC_EMAIL and it does not exist when NIC_BROWSER_MAILBOX is
-   * off. Left unset, the entry is simply not offered. It is an address, not a
-   * credential — and the list it sits in is stripped from a production build.
-   */
   const nicFrontOfficeEmail = (import.meta.env.VITE_NIC_FRONT_OFFICE_EMAIL || "").trim();
 
-  /**
-   * A session whose role this build no longer knows has nowhere to go.
-   *
-   * roleHome falls back to the login path for an unrecognised role, so sending
-   * the user there left them on a page that renders nothing: no form, and no
-   * way to sign out, because that control lives in the main layout. Sessions
-   * are held by the server and survive a deploy, so this is the ordinary fate
-   * of anyone signed in as a role that has just been removed. Show the form
-   * instead — signing in again is the way out.
-   */
   const home = currentUser ? roleHome(currentUser.role) : null;
   if (home && home !== ROUTE_PATHS.LOGIN) return <Navigate to={home} replace />;
 
@@ -63,8 +45,6 @@ export function LoginPage() {
       notify.success(`Welcome back, ${user.name || user.email}`);
       navigate(roleHome(user.role), { replace: true });
     } catch (caught) {
-      // The server answers with one message for an unknown address and a wrong
-      // password alike, so that a failed sign-in cannot enumerate accounts.
       const message =
         caught?.response?.data?.error || "Incorrect email or password.";
       setError(message);
@@ -290,20 +270,6 @@ export function LoginPage() {
 
                 {devOpen && (
                   <div className="absolute bottom-full left-0 right-0 mb-2 z-30 max-h-72 overflow-y-auto rounded-2xl border border-slate-200/90 bg-white shadow-xl shadow-slate-900/10 p-1.5">
-                    {/**
-                     * The NICeMail Front Office, and it is NOT a quick login.
-                     *
-                     * That account reads a live .gov.in mailbox and its session
-                     * can make the browser agent send, so `POST /auth/dev-login`
-                     * refuses it — 403, audited — and must keep refusing it.
-                     * Offering it here as one click would only produce that
-                     * error. So this fills the address in and hands over to the
-                     * password form, which is the one way in.
-                     *
-                     * The address comes from configuration rather than the
-                     * directory: the account is built from NIC_EMAIL on the
-                     * server and does not exist at all when the agent is off.
-                     */}
                     {nicFrontOfficeEmail && (
                       <button
                         type="button"

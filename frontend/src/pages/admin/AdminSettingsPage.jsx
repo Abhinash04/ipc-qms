@@ -9,15 +9,6 @@ import { fetchEmailConfig } from '@/services/api/mailboxService';
 import { fetchHealth } from '@/services/api/healthService';
 import { useRoutePaths } from '@/hooks/useRoutePaths';
 
-/**
- * System settings — Super Admin only, by virtue of SECTION.ADMIN_SETTINGS
- * being absent from ADMIN_CONSOLE while SUPER_ADMIN receives every section.
- *
- * Read-only on purpose. Everything shown is reported by the server about its
- * own configuration; nothing here is editable yet, and inventing a control
- * that writes nowhere would be worse than showing the truth.
- */
-
 function toneClassFor(tone) {
   if (tone === 'warn') return 'text-amber-800';
   if (tone === 'good') return 'text-emerald-800';
@@ -84,21 +75,6 @@ function AuditPanel({ audit }) {
   );
 }
 
-/**
- * Two channels, reported separately, because they are independent.
- *
- * EMAIL_TRANSPORT carries mail for cases that did not arrive in the NICeMail
- * mailbox. A case that did is answered by the browser agent from that account
- * whatever the transport says — so a deployment can read `mock` here and still
- * be sending real mail from a .gov.in address.
- *
- * This panel used to decide "real or not" by comparing the transport to
- * 'gmail'. Once Gmail was removed that comparison could never be true, and the
- * page told an administrator "Nothing leaves this machine" while NICeMail was
- * sending live correspondence. The rule is now inverted: `mock` is the single
- * case that delivers nothing, and an unrecognised transport is assumed to send
- * rather than assumed to be safe.
- */
 const TRANSPORT_HINT = {
   mock: 'Delivers nothing — messages are kept in the local mailbox',
   nic: 'Real mail leaves this machine — NICeMail SMTP',
@@ -156,12 +132,6 @@ function EmailPanel({ config }) {
   );
 }
 
-/**
- * Kept honest deliberately: an administrator reads this to know what the
- * system does NOT do. The first two entries described the server as it was
- * before case-level scoping existed, and understating what is enforced is the
- * same kind of error as overstating it.
- */
 const KNOWN_LIMITATIONS = [
   {
     label: 'Case authorization',

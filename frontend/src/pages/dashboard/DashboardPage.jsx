@@ -23,7 +23,6 @@ export function DashboardPage() {
 
   if (!currentUser) return null;
 
-  // Admin and Super Admin fall through to the systemwide view.
   const Dashboard = DASHBOARD_FOR_ROLE[currentUser.role] || OICDashboard;
 
   return (

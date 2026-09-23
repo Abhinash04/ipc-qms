@@ -26,7 +26,6 @@ function reviewStatusVariant(status) {
   return 'status-gray';
 }
 
-/** Why the draft came back, shown above the editor. */
 function ReturnedForRevisionNotice({ review }) {
   return (
     <div className="mb-6 rounded-md border border-status-orange-line bg-status-orange-bg px-4 py-3 text-sm text-status-orange-fg">
@@ -36,7 +35,6 @@ function ReturnedForRevisionNotice({ review }) {
   );
 }
 
-/** Why "Submit for review" is unavailable, if it is. */
 function submitBlockedReason(isDirty, hasReviewers) {
   if (isDirty) return 'Save your changes as a version first';
   if (!hasReviewers) return 'Add at least one review level first';
@@ -94,7 +92,6 @@ function DraftActions({
   );
 }
 
-/** The editable response, plus the actions that move it along. */
 function DraftEditorCard({
   latestVersion,
   versions,
@@ -181,7 +178,6 @@ function ReviewChainRow({ step, index, onDelete }) {
   );
 }
 
-/** Who reviews this response, in order, and how to change that list. */
 function ReviewChainCard({
   reviewSteps,
   deleteError,
