@@ -1,6 +1,6 @@
 import { mkdtemp, rm, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
-import { join } from 'path';
+import { basename, join } from 'path';
 
 import browserConfig from '../../../../config/browserConfig.js';
 import { normaliseAddress } from '../../mailbox/address.js';
@@ -436,6 +436,27 @@ async function fillBody(session, body) {
  * chooser, which is intercepted and handed the staged files. Each file must
  * then be listed with its upload and virus scan finished before Send.
  */
+/**
+ * The name to write inside the staging directory.
+ *
+ * `filename` reaches here from whatever an external sender called the file:
+ * NICeMail's attachment row → the attachment store's metadata → the forward.
+ * attachmentPolicy checks the extension, the type and the size, and never the
+ * path, so "../../../x.pdf" passes every one of those and would resolve
+ * outside the staging directory. basename() is what makes join() safe; the
+ * rejection covers the names basename() can still return ('', '.', '..').
+ *
+ * NICeMail shows the file under the name on disk, so the name is preserved
+ * rather than replaced by an index.
+ */
+function stagedName(filename) {
+  const name = basename(String(filename || '').trim());
+  if (!name || name === '.' || name === '..') {
+    throw refuse(`An attachment has an unusable filename (${filename}); nothing was sent.`, 'validate');
+  }
+  return name;
+}
+
 async function attachFiles(session, attachments) {
   const staging = await mkdtemp(join(tmpdir(), 'qms-nic-send-'));
   let chooser = null;
@@ -445,7 +466,7 @@ async function attachFiles(session, attachments) {
   try {
     const paths = [];
     for (const attachment of attachments) {
-      const path = join(staging, attachment.filename);
+      const path = join(staging, stagedName(attachment.filename));
       await writeFile(path, attachment.content);
       paths.push(path);
     }

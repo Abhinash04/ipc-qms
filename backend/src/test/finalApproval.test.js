@@ -404,7 +404,7 @@ describe('when the transport quietly degrades to the mock', () => {
   });
 
   it('refuses to close the case when real mail was configured', async () => {
-    env.EMAIL_TRANSPORT = 'gmail';
+    env.EMAIL_TRANSPORT = 'nic';
     sendSpy.mockResolvedValue(MOCK_RESULT);
 
     const res = await approve();
@@ -428,6 +428,27 @@ describe('when the transport quietly degrades to the mock', () => {
     const res = await approve();
 
     expect(res.body).toMatchObject({ dispatched: true, workflowState: 'CLOSED' });
+  });
+
+  /**
+   * The channel is the case's, not the deployment's. A NICeMail case sends
+   * through the browser whatever EMAIL_TRANSPORT says, so a mock result there
+   * means the browser never sent it — and accepting it would close the case
+   * and tell the inquirer they had been answered.
+   */
+  it('refuses a mock result for a NICeMail case even under EMAIL_TRANSPORT=mock', async () => {
+    env.EMAIL_TRANSPORT = 'mock';
+    await QueryCase.updateOne(
+      { queryId: QUERY_ID },
+      { $set: { sourceMailbox: { source: 'nic-browser', address: 'nic-mailbox@test.invalid' } } },
+    );
+    sendSpy.mockResolvedValue(MOCK_RESULT);
+
+    const res = await approve();
+
+    expect(res.body).toMatchObject({ dispatched: false, workflowState: 'READY_FOR_DISPATCH' });
+    expect(res.body.errors[0].error).toMatch(/no usable credential/i);
+    expect(await messagesOfType('OUTGOING_RESPONSE')).toHaveLength(0);
   });
 });
 

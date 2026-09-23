@@ -233,6 +233,30 @@ describe('composeEmail — a message that went out', () => {
     expect(params.files[0]).toMatch(/reply\.pdf$/);
   });
 
+  /**
+   * The filename reaches here from whatever an external sender called the
+   * file: NICeMail's attachment row, through the store's metadata, onto the
+   * forward. attachmentPolicy checks the extension, the type and the size and
+   * never the path, so a name carrying "../" would otherwise resolve outside
+   * the staging directory that join() is supposed to confine it to.
+   */
+  it('stages an attachment under its base name, whatever path the sender put in it', async () => {
+    await composeEmail({
+      ...MESSAGE,
+      attachments: [{ filename: '../../../escaped.pdf', content: Buffer.from('%PDF-1.4') }],
+    });
+
+    const [, params] = page.state.sends.find(([method]) => method === 'DOM.setFileInputFiles');
+    expect(params.files[0]).toMatch(/qms-nic-send-[^/\\]*[/\\]escaped\.pdf$/);
+    expect(params.files[0]).not.toMatch(/\.\./);
+  });
+
+  it('refuses an attachment whose filename is only a path', async () => {
+    await expect(
+      composeEmail({ ...MESSAGE, attachments: [{ filename: '../..', content: Buffer.from('x') }] }),
+    ).rejects.toThrow(/unusable filename/);
+  });
+
   it('is still sendMail to the transport', () => {
     expect(sendMail).toBe(composeEmail);
   });

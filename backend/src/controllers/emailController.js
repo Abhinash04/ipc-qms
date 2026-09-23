@@ -53,6 +53,9 @@ function respondWithOutcome(res, { queryId, emailType, result }) {
     // The step the send stopped at, when the transport works in steps.
     ...(result.stage ? { stage: result.stage } : {}),
     ...(result.retryable ? { retryable: true } : {}),
+    // Refused by configuration, not by the mailbox: a retry cannot succeed
+    // until an environment variable changes.
+    ...(result.configuration ? { configuration: true } : {}),
     ...(result.outcome === OUTCOMES.UNCERTAIN || result.outcome === OUTCOMES.BLOCKED_UNCERTAIN
       ? { unconfirmed: true }
       : {}),

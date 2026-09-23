@@ -71,12 +71,15 @@ async function loadCase(queryId) {
  * `getTransport` falls back to the mock when a role holds no usable credential,
  * and the mock returns an ordinary success — correct for the mocked tail of a
  * development workflow, and wrong here: it would record the inquirer as told.
- * So a mock result counts only when mock delivery is what the deployment asked
- * for. Under EMAIL_TRANSPORT=gmail or nic it means the Front Office credential
- * is missing or revoked, and nothing was sent.
+ * So a mock result counts only when mock delivery is what this email's channel
+ * asked for. Under nic or nic-browser it means nothing was sent.
+ *
+ * The channel is the plan's own `transport`, not env.EMAIL_TRANSPORT: a
+ * NICeMail case sends through the browser whatever the global says, so keying
+ * on the global would accept a mock result for a mailbox that never saw it.
  */
-function requireReal(sent) {
-  if (env.EMAIL_TRANSPORT === EMAIL_TRANSPORTS.MOCK || sent?.transport !== 'mock') return sent;
+function requireReal(sent, channel = env.EMAIL_TRANSPORT) {
+  if (channel === EMAIL_TRANSPORTS.MOCK || sent?.transport !== 'mock') return sent;
   throw labelDelivery(
     new Error(
       'The Front Office mailbox has no usable credential, so nothing was sent. ' +
@@ -154,7 +157,10 @@ function acknowledgementPlan(query, actor) {
     transport: transportLabel(sourceMailbox),
     domain: emailService.senderDomainFor(sourceMailbox),
     send: async ({ rfcMessageId, onStage }) =>
-      requireReal(await emailService.sendAcknowledgement({ to, queryId, sourceMailbox, rfcMessageId, onStage })),
+      requireReal(
+        await emailService.sendAcknowledgement({ to, queryId, sourceMailbox, rfcMessageId, onStage }),
+        transportLabel(sourceMailbox),
+      ),
     reconcile: (doc) => emailService.reconcileDelivery(doc, { sourceMailbox }),
     finalize: async (doc, sent) => {
       const { inserted } = await recordArtefact({
@@ -194,17 +200,23 @@ async function forwardPlan(query, actor, source = null) {
   const attachments = inbound?.attachments ?? query.attachments ?? [];
   const aiSummary = usableSummary(query.aiSummary) ? query.aiSummary : null;
   const fullSubject = emailService.forwardSubject({ subject, queryId });
-  const frontOffice = identityForRole(IDENTITY_ROLES.FRONT_OFFICE);
+  const sourceMailbox = query.sourceMailbox || null;
+  // Whoever sends this case's mail. For a NICeMail case that is the mailbox
+  // itself, which is what the compose form's From is checked against before
+  // Send — record any other address and the case would name an account that
+  // did not send the message.
+  const frontOffice = emailService.senderFor(sourceMailbox);
+  const channel = transportLabel(sourceMailbox);
 
   return {
     emailType: OUTBOUND_TYPES.FORWARD,
     label: 'forward to the Officer-in-Charge',
     recipients: [officer.email],
     subject: fullSubject,
-    // Internal mail: always the configured transport, whichever mailbox the
-    // enquiry arrived in.
-    transport: env.EMAIL_TRANSPORT,
-    domain: emailService.senderDomainFor(null),
+    // Internal mail, but on the same channel as the rest of the case: a
+    // NICeMail case tells the Officer-in-Charge from the NICeMail mailbox.
+    transport: channel,
+    domain: emailService.senderDomainFor(sourceMailbox),
     send: async ({ rfcMessageId, onStage }) =>
       requireReal(
         await emailService.forwardToOfficerInCharge({
@@ -217,10 +229,12 @@ async function forwardPlan(query, actor, source = null) {
           // carry the same text and the forward costs no second model call.
           aiSummary,
           rfcMessageId,
+          sourceMailbox,
           onStage,
         }),
+        channel,
       ),
-    reconcile: (doc) => emailService.reconcileDelivery(doc, { sourceMailbox: null }),
+    reconcile: (doc) => emailService.reconcileDelivery(doc, { sourceMailbox }),
     finalize: async (doc, sent) => {
       const { inserted } = await recordArtefact({
         queryId,
@@ -271,9 +285,24 @@ async function forwardPlan(query, actor, source = null) {
         error: describeFailure(error),
         details:
           delivery === DELIVERY.UNCERTAIN
-            ? `The forward to the Officer-in-Charge may have been sent but was not confirmed. ${uncertainAdvice(null)}`
+            ? `The forward to the Officer-in-Charge may have been sent but was not confirmed. ${uncertainAdvice(sourceMailbox)}`
             : 'The forward to the Officer-in-Charge could not be sent.',
       });
+      // An uncertain forward leaves the case short of PENDING_ASSIGNMENT with
+      // nothing in anyone's queue: the Officer-in-Charge may or may not have
+      // been told, and only a person can settle it. The response does the same
+      // on its own uncertain path.
+      if (delivery === DELIVERY.UNCERTAIN) {
+        await Notification.create({
+          notificationId: await mint('NOTIF'),
+          queryId,
+          recipientRole: 'FRONT_OFFICE',
+          title: `${queryId} forward not confirmed`,
+          message: `${queryId}: the forward to the Officer-in-Charge may already have gone out. ${uncertainAdvice(sourceMailbox)}`,
+          type: 'WARNING',
+          at: now(),
+        }).catch(() => {});
+      }
     },
   };
 }
@@ -327,6 +356,7 @@ async function responsePlan(query, actor) {
           rfcMessageId,
           onStage,
         }),
+        transportLabel(sourceMailbox),
       ),
     reconcile: (doc) => emailService.reconcileDelivery(doc, { sourceMailbox }),
     finalize: async (doc, sent) => {

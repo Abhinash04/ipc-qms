@@ -351,6 +351,10 @@ async function sendClaimed({ doc, meta, send, finalize, onFailure, quickRetryDel
     const reason = describeFailure(error);
     // The step a staged sender (the NICeMail agent) stopped at, for the caller.
     const stage = error?.failedStep ? { stage: error.failedStep } : {};
+    // A refusal by configuration — the outbound interlock, so far. Nothing was
+    // sent and the row stays claimable, but retrying before someone edits the
+    // environment fails identically, so the caller is told not to offer one.
+    const configuration = error?.configuration ? { configuration: true } : {};
 
     if (delivery === DELIVERY.NOT_SENT) {
       const failed =
@@ -367,7 +371,14 @@ async function sendClaimed({ doc, meta, send, finalize, onFailure, quickRetryDel
       }
 
       if (onFailure) await onFailure(failed, error, delivery);
-      return { outcome: OUTCOMES.FAILED, dispatch: toPublic(failed), error: reason, retryable: true, ...stage };
+      return {
+        outcome: OUTCOMES.FAILED,
+        dispatch: toPublic(failed),
+        error: reason,
+        retryable: !error?.configuration,
+        ...stage,
+        ...configuration,
+      };
     }
 
     const uncertain =

@@ -60,8 +60,13 @@ async function getTransport(name = env.EMAIL_TRANSPORT, asRole = null, asEmail =
  * A case from the NICeMail browser mailbox answers its inquirer through that
  * signed-in browser session; every other case — Gmail, mock, NIC SMTP,
  * portal, and cases from before the field existed — uses EMAIL_TRANSPORT
- * exactly as before. Only the acknowledgement and the final response pass it:
- * the forward to the Officer-in-Charge is internal and stays on the default.
+ * exactly as before.
+ *
+ * All three case emails pass it, the internal forward included. The forward
+ * used to stay on EMAIL_TRANSPORT because that is where Gmail was; with Gmail
+ * gone, a NICeMail case that answered its inquirer through the browser but
+ * told the Officer-in-Charge through a different channel would be two
+ * channels, and the second one has no credential.
  */
 const NIC_BROWSER = 'nic-browser';
 const isNicBrowser = (sourceMailbox) => sourceMailbox?.source === NIC_BROWSER;
@@ -109,7 +114,10 @@ function getEmailConfig() {
  * before a single byte is dispatched, for every send path (enquiry, forward,
  * response) alike.
  */
-async function sendEmail(message, { asRole = null, asEmail = null, sourceMailbox = null, onStage = null } = {}) {
+async function sendEmail(
+  message,
+  { asRole = null, asEmail = null, sourceMailbox = null, internalForward = false, onStage = null } = {},
+) {
   if (!message?.from) throw Object.assign(new Error('"from" is required'), { status: 400 });
 
   const recipients = (Array.isArray(message.to) ? message.to : [message.to]).filter(Boolean);
@@ -134,7 +142,7 @@ async function sendEmail(message, { asRole = null, asEmail = null, sourceMailbox
       ? { guard: outboundAllowed() ? 'production-outbound' : 'test-recipient' }
       : {}),
   });
-  const result = await transport.send(normalised, { asRole: resolvedRole, onStage });
+  const result = await transport.send(normalised, { asRole: resolvedRole, internalForward, onStage });
 
   return {
     ...normalised,
@@ -208,9 +216,10 @@ async function forwardToOfficerInCharge({
   aiSummary = null,
   attachments = [],
   rfcMessageId = null,
+  sourceMailbox = null,
   onStage = null,
 }) {
-  const frontOffice = identityForRole(IDENTITY_ROLES.FRONT_OFFICE);
+  const frontOffice = senderFor(sourceMailbox);
   const officer = identityForRole(IDENTITY_ROLES.OFFICER_IN_CHARGE);
 
   if (!officer?.email) {
@@ -295,7 +304,10 @@ async function forwardToOfficerInCharge({
       providerThreadId,
       messageIdHeader: rfcMessageId,
     },
-    { asRole: IDENTITY_ROLES.FRONT_OFFICE, onStage },
+    // `internalForward` is a boolean, never an address: the outbound guard
+    // re-derives the Officer-in-Charge's address from config, so nothing a
+    // caller supplies can widen what the interlock permits.
+    { asRole: IDENTITY_ROLES.FRONT_OFFICE, sourceMailbox, internalForward: true, onStage },
   );
 
   return { ...sent, aiSummary: summary };

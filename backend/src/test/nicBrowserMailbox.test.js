@@ -85,6 +85,7 @@ import * as mailbox from '../services/email/mailbox/index.js';
 import * as nicMailbox from '../services/email/mailbox/nicBrowserMailbox.js';
 import * as emailService from '../services/email/emailService.js';
 import * as nicBrowserTransport from '../services/email/transports/nicBrowserTransport.js';
+import * as attachments from '../services/attachments/attachmentStore.js';
 import { QueryCase, ResponseVersion } from '../models/index.js';
 import { traceSink } from '../services/email/sendTrace.js';
 
@@ -372,8 +373,57 @@ describe('outbound mail follows the case mailbox', () => {
     expect(browser.sendMail).not.toHaveBeenCalled();
   });
 
-  it('keeps the forward to the Officer-in-Charge off the browser', async () => {
-    await emailService.forwardToOfficerInCharge({ queryId: 'QRY-2026-00001', subject: 's', body: 'b' });
+  it('sends the forward of a NICeMail case through the browser, as the NICeMail Front Office', async () => {
+    vi.stubEnv('NIC_ALLOW_INTERNAL_FORWARD', 'true');
+
+    const sent = await emailService.forwardToOfficerInCharge({
+      queryId: 'QRY-2026-00001',
+      subject: 's',
+      body: 'b',
+      sourceMailbox: nicCase,
+    });
+
+    // The From is what the compose form is checked against before Send: record
+    // anything else and the case names an account that did not send it.
+    expect(sent).toMatchObject({ transport: 'nic-browser', from: `Eco-Clubs Front Office <${NIC_ADDRESS}>` });
+    expect(browser.sendMail).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the forward of a case with no NICeMail mailbox on EMAIL_TRANSPORT', async () => {
+    const sent = await emailService.forwardToOfficerInCharge({ queryId: 'QRY-2026-00001', subject: 's', body: 'b' });
+
+    expect(sent.transport).toBe('mock');
+    expect(browser.sendMail).not.toHaveBeenCalled();
+  });
+
+  it("carries the forward's attachments to the browser as resolved bytes", async () => {
+    vi.stubEnv('NIC_ALLOW_INTERNAL_FORWARD', 'true');
+    const content = Buffer.from('%PDF-1.4 spec');
+    const stored = await attachments.save({ buffer: content, filename: 'spec.pdf', mimeType: 'application/pdf' });
+
+    await emailService.forwardToOfficerInCharge({
+      queryId: 'QRY-2026-00001',
+      subject: 's',
+      body: 'b',
+      sourceMailbox: nicCase,
+      // A ref, as intake stores it — the bytes are fetched by the fail-closed
+      // gate, never supplied by the caller.
+      attachments: [{ attachmentId: stored.attachmentId }],
+    });
+
+    // What attachFiles stages and hands to Chrome by path. The forward is the
+    // only case email that carries attachments at all.
+    expect(browser.sendMail.mock.calls[0][0].attachments).toMatchObject([
+      { filename: 'spec.pdf', mimeType: 'application/pdf', content },
+    ]);
+
+    await attachments.remove(stored.attachmentId);
+  });
+
+  it('refuses a Bcc rather than dropping a recipient', async () => {
+    await expect(
+      nicBrowserTransport.send({ to: ['ravi@pharma.example'], bcc: ['quiet@example.com'], subject: 's', body: 'b' }),
+    ).rejects.toThrow(/Bcc/);
     expect(browser.sendMail).not.toHaveBeenCalled();
   });
 
@@ -385,6 +435,62 @@ describe('outbound mail follows the case mailbox', () => {
 
     vi.stubEnv('NIC_ALLOW_OUTBOUND', 'true');
     await expect(nicBrowserTransport.send(message)).resolves.toMatchObject({ transport: 'nic-browser' });
+  });
+
+  /**
+   * The interlock confines the mailbox to one test recipient, which the
+   * Officer-in-Charge's address is not — so with the forward on the browser,
+   * intake could not complete at all without opening the mailbox to every
+   * address on the internet first. NIC_ALLOW_INTERNAL_FORWARD widens it by
+   * exactly one configured internal address, and only for the forward.
+   */
+  describe('the internal-forward allowance', () => {
+    const forward = () =>
+      emailService.forwardToOfficerInCharge({
+        queryId: 'QRY-2026-00001',
+        subject: 's',
+        body: 'b',
+        sourceMailbox: nicCase,
+      });
+
+    it('refuses the forward while it is off, and says so as configuration', async () => {
+      await expect(forward()).rejects.toMatchObject({ configuration: true, failedStep: 'outbound_guard' });
+      await expect(forward()).rejects.toThrow(/NIC_ALLOW_INTERNAL_FORWARD=true/);
+      expect(browser.sendMail).not.toHaveBeenCalled();
+    });
+
+    it('allows the Officer-in-Charge once it is on', async () => {
+      vi.stubEnv('NIC_ALLOW_INTERNAL_FORWARD', 'true');
+      await expect(forward()).resolves.toMatchObject({ transport: 'nic-browser' });
+      expect(browser.sendMail).toHaveBeenCalledTimes(1);
+    });
+
+    it('allows that one address and no other', async () => {
+      vi.stubEnv('NIC_ALLOW_INTERNAL_FORWARD', 'true');
+
+      await expect(
+        nicBrowserTransport.send(
+          { to: ['someone.else@example.com'], subject: 's', body: 'b' },
+          { internalForward: true },
+        ),
+      ).rejects.toThrow(/refused to send to someone.else@example.com/);
+      expect(browser.sendMail).not.toHaveBeenCalled();
+    });
+
+    it('does not widen the acknowledgement to the inquirer', async () => {
+      vi.stubEnv('NIC_ALLOW_INTERNAL_FORWARD', 'true');
+
+      // The allowance is for internal mail. External mail stays confined to
+      // the test recipient until the main interlock opens.
+      await expect(
+        emailService.sendAcknowledgement({
+          to: 'stranger@public.example',
+          queryId: 'QRY-2026-00001',
+          sourceMailbox: nicCase,
+        }),
+      ).rejects.toThrow(/NIC_ALLOW_OUTBOUND/);
+      expect(browser.sendMail).not.toHaveBeenCalled();
+    });
   });
 
   /**

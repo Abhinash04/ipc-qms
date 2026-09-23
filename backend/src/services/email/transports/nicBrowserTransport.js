@@ -30,7 +30,10 @@ export async function send(message, options = {}) {
   }
 }
 
-async function sendThroughBrowser(message, { asRole = null, sender = null, onStage = null } = {}) {
+async function sendThroughBrowser(
+  message,
+  { asRole = null, sender = null, internalForward = false, onStage = null } = {},
+) {
   const to = asList(message.to);
   const cc = asList(message.cc);
   const bcc = asList(message.bcc);
@@ -44,9 +47,12 @@ async function sendThroughBrowser(message, { asRole = null, sender = null, onSta
       testRecipient: browserConfig.testRecipient,
       variable: 'NIC_BROWSER_TEST_RECIPIENT',
       label: 'NICeMail browser transport',
+      internalForward,
     });
   } catch (error) {
     onStage?.('NIC BROWSER', { step: 'outbound_guard', result: 'refused' });
+    // Object.assign, deliberately: `configuration` set by the guard must
+    // survive, and labelDelivery would not carry it.
     throw Object.assign(error, { failedStep: 'outbound_guard' });
   }
   onStage?.('NIC BROWSER', {
