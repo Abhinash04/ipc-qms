@@ -174,8 +174,12 @@ describe('GET /auth/users', () => {
     expect(serialised).not.toMatch(/password|hash|secret/i);
   });
 
+  // The least-privileged role there is, so a 200 here means the route carries no
+  // role gate at all. It named INQUIRER until that role was removed, at which
+  // point `authHeader(undefined)` fell through to its SUPER_ADMIN default and
+  // this quietly asserted nothing the test above had not already covered.
   it('is readable by any role — it is a directory, not an admin console', async () => {
-    const res = await request(app).get('/api/v1/auth/users').set(authHeader(ROLES.INQUIRER));
+    const res = await request(app).get('/api/v1/auth/users').set(authHeader(ROLES.REVIEWER));
     expect(res.status).toBe(200);
   });
 });

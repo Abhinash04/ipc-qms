@@ -22,6 +22,19 @@ import { protectedValueViolations } from '../middleware/authorizeCaseDelta.js';
 
 const CASE_ID = 'QRY-2026-00005';
 
+/**
+ * A role the system does not have.
+ *
+ * INQUIRER was one until it was removed, and a session minted before that still
+ * carries it — which is exactly the principal these rules have to fail closed
+ * on. `scopeKindForRole` answers NONE for it and `roleCanPerform` answers false
+ * for every action, so it is the strongest available statement of "this rule
+ * grants nothing by default". These assertions read `ROLES.INQUIRER` until the
+ * constant was deleted, at which point they were passing `undefined` and every
+ * one of them held vacuously.
+ */
+const REMOVED_ROLE = 'INQUIRER';
+
 const user = (role) => ({ id: 'USR-0011', role, name: 'Test', email: 't@ipc.example' });
 
 /** Stored state for a case that already exists. */
@@ -82,8 +95,8 @@ describe('changing a workflow state', () => {
   const moveTo = (state) => ({ query: { queryId: CASE_ID, workflowState: state } });
 
   it('refuses a state the role holds no action for', () => {
-    // INQUIRER is granted the empty action list, so no transition is theirs.
-    expect(check(ROLES.INQUIRER, moveTo('READY_FOR_DISPATCH'))).toContain('query.workflowState');
+    // A role the table does not name holds no action, so no transition is theirs.
+    expect(check(REMOVED_ROLE, moveTo('READY_FOR_DISPATCH'))).toContain('query.workflowState');
     expect(check(ROLES.REVIEWER, moveTo('DISPATCHED'))).toContain('query.workflowState');
   });
 
@@ -110,20 +123,22 @@ describe('changing a workflow state', () => {
 
 describe('creating a case', () => {
   /**
-   * A new case opens at RECEIVED. An Inquirer raising a portal enquiry holds no
-   * workflow action at all, so gating the initial state on one would break
-   * portal intake entirely.
+   * The value layer does not decide WHO may create a case — `creationViolation`
+   * in the middleware does, and it refuses everyone who reaches it. What is
+   * asserted here is the split: opening a case at RECEIVED is not a transition
+   * anybody needs a workflow action for, so the value rules stay out of it even
+   * for a principal that holds no action whatsoever.
    */
-  it('lets an inquirer open a new case at RECEIVED', () => {
+  it('does not gate the initial state on a workflow action', () => {
     const body = { query: { queryId: 'QRY-2026-00099', workflowState: 'RECEIVED' } };
 
-    expect(check(ROLES.INQUIRER, body, noCase)).toEqual([]);
+    expect(check(REMOVED_ROLE, body, noCase)).toEqual([]);
   });
 
   it('does not let a new case be opened mid-workflow', () => {
     const body = { query: { queryId: 'QRY-2026-00099', workflowState: 'READY_FOR_DISPATCH' } };
 
-    expect(check(ROLES.INQUIRER, body, noCase)).toContain('query.workflowState');
+    expect(check(REMOVED_ROLE, body, noCase)).toContain('query.workflowState');
   });
 });
 
@@ -134,7 +149,7 @@ describe('naming the assignee', () => {
    * Writing a NEW assignee is how a principal would grant itself membership of
    * a case, so this is the direct anti-self-promotion rule.
    */
-  it.each([ROLES.INQUIRER, ROLES.REVIEWER])('refuses %s naming a different assignee', (role) => {
+  it.each([REMOVED_ROLE, ROLES.REVIEWER])('refuses %s naming a different assignee', (role) => {
     expect(check(role, assignTo('USR-0004'))).toContain('query.currentAssigneeId');
   });
 
@@ -147,7 +162,7 @@ describe('naming the assignee', () => {
   });
 
   it('allows clearing it, which is what a pre-assignment pullback does', () => {
-    expect(check(ROLES.INQUIRER, assignTo(null))).toEqual([]);
+    expect(check(REMOVED_ROLE, assignTo(null))).toEqual([]);
   });
 });
 
@@ -156,7 +171,7 @@ describe('the final-approval lock', () => {
     upsertVersions: [{ responseId: 'RESP-NEW', queryId: CASE_ID, status, content: 'text' }],
   });
 
-  it.each([ROLES.INQUIRER, ROLES.REVIEWER, ROLES.ASSIGNED_OFFICIAL, ROLES.FRONT_OFFICE, ROLES.ADMIN])(
+  it.each([REMOVED_ROLE, ROLES.REVIEWER, ROLES.ASSIGNED_OFFICIAL, ROLES.FRONT_OFFICE, ROLES.ADMIN])(
     'refuses %s marking a response FINAL_APPROVED',
     (role) => {
       expect(check(role, setStatus('FINAL_APPROVED'))).toContain('upsertVersions.status');
@@ -192,7 +207,13 @@ describe('the route wiring', () => {
    * outright. Skipping it because the database is down is exactly how an
    * interim guard becomes decorative — a 200 here would mean it never ran.
    */
-  it.each([ROLES.INQUIRER, ROLES.REVIEWER, ROLES.SUPER_ADMIN])(
+  // A scoped role, a second scoped role and one that sees every case: the guard
+  // must refuse all three, because it is the store it cannot reach, not the
+  // caller. REMOVED_ROLE cannot appear here — `authHeader` mints from a seeded
+  // account, and naming a role no account holds makes it throw. It named
+  // INQUIRER until that role was deleted, after which `authHeader(undefined)`
+  // silently fell back to SUPER_ADMIN and this case duplicated the last one.
+  it.each([ROLES.ASSIGNED_OFFICIAL, ROLES.REVIEWER, ROLES.SUPER_ADMIN])(
     'fails closed for %s when case storage is unavailable',
     async (role) => {
       const res = await persistAs(role, { query: { queryId: CASE_ID, workflowState: 'ASSIGNED' } });

@@ -28,7 +28,6 @@ vi.mock('@/services/api/mailboxService', () => ({
     transport: 'mock',
     ipcQueryEmail: 'ipc-query-mock@example.com',
     ipcReplyFrom: { email: 'arnd@example.com', name: 'AR&D Division' },
-    inquirer: { email: 'abhinash.pritiraj@gmail.com', name: 'Abhinash Pritiraj' },
   }),
   fetchMailboxMessages: vi.fn().mockResolvedValue({ messages: [] }),
   fetchMailboxMessage: vi.fn().mockResolvedValue(null),
@@ -49,6 +48,16 @@ const USER_FOR_ROLE = Object.fromEntries(
 );
 
 const ALL_ROLES = Object.values(ROLES);
+
+/**
+ * A role the grant table does not name.
+ *
+ * INQUIRER was one until it was removed, so a session minted before that still
+ * carries it — the realistic principal for "a role nothing grants anything to".
+ * These assertions read `ROLES.INQUIRER` until the constant was deleted, at
+ * which point they were passing `undefined` and held vacuously.
+ */
+const REMOVED_ROLE = 'INQUIRER';
 
 function renderAt(path) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -102,7 +111,6 @@ describe('the route gate agrees with the grant table', () => {
   });
 
   it('refuses a section the role was never granted, even under its own slug', () => {
-    expect(isRouteAllowedForRole(ROLES.INQUIRER, '/inquirer/dispatch')).toBe(false);
     expect(isRouteAllowedForRole(ROLES.REVIEWER, '/reviewer/approvals')).toBe(false);
     expect(isRouteAllowedForRole(ROLES.FRONT_OFFICE, '/front-officer/drafting')).toBe(false);
   });
@@ -115,6 +123,11 @@ describe('the route gate agrees with the grant table', () => {
 
   it('refuses an unknown role and an unknown path', () => {
     expect(isRouteAllowedForRole('DIRECTOR', '/reviewer/reviews')).toBe(false);
+    // INQUIRER was a role, with a whole /inquirer/* section of its own. A
+    // session minted before it was removed still carries it, and must be
+    // refused like any other role the grant table does not name — including
+    // under the slug that used to be its.
+    expect(isRouteAllowedForRole(REMOVED_ROLE, '/inquirer/queries')).toBe(false);
     expect(isRouteAllowedForRole(ROLES.REVIEWER, '/nonsense')).toBe(false);
   });
 });
@@ -137,11 +150,15 @@ describe('navigation is derived from the grants, never a second list', () => {
     );
   });
 
-  it('does not offer Notifications to a role that was never granted it', () => {
-    expect(roleHasSection(ROLES.INQUIRER, SECTION.NOTIFICATIONS)).toBe(false);
-    expect(navItemsForRole(ROLES.INQUIRER).map((i) => i.section)).not.toContain(
-      SECTION.NOTIFICATIONS,
-    );
+  /**
+   * Every role that remains is granted Notifications, so the only way left to
+   * pin that the sidebar is derived from the grants — and not from a second
+   * list that could disagree with them — is a role the grant table does not
+   * name. It gets nothing at all, not merely nothing extra.
+   */
+  it('offers nothing to a role the grant table does not name', () => {
+    expect(roleHasSection(REMOVED_ROLE, SECTION.NOTIFICATIONS)).toBe(false);
+    expect(navItemsForRole(REMOVED_ROLE)).toEqual([]);
   });
 
   /**

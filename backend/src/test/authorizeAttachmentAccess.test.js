@@ -38,7 +38,7 @@ const run = async (req) => {
   return next;
 };
 
-const INQUIRER = { id: 'USR-0001', role: ROLES.INQUIRER };
+const OUTSIDER = { id: 'USR-0005', role: ROLES.REVIEWER };
 const OFFICIAL = { id: 'USR-0004', role: ROLES.ASSIGNED_OFFICIAL };
 const SUPER_ADMIN = { id: 'USR-0008', role: ROLES.SUPER_ADMIN };
 
@@ -61,7 +61,7 @@ describe('fail-closed basics', () => {
   it('passes an unknown attachment through for the controller to 404', async () => {
     store.getMetadata.mockResolvedValue(null);
 
-    const next = await run({ user: INQUIRER, params: { id: 'att_missing' } });
+    const next = await run({ user: OUTSIDER, params: { id: 'att_missing' } });
 
     expect(next).toHaveBeenCalledWith();
   });
@@ -69,7 +69,7 @@ describe('fail-closed basics', () => {
   it('passes a malformed id through rather than turning the throw into a 500', async () => {
     store.getMetadata.mockRejectedValue(new Error('attachmentStore: invalid id'));
 
-    const next = await run({ user: INQUIRER, params: { id: 'not-an-id' } });
+    const next = await run({ user: OUTSIDER, params: { id: 'not-an-id' } });
 
     expect(next).toHaveBeenCalledWith();
   });
@@ -86,15 +86,15 @@ describe('reading an attachment that belongs to a case', () => {
   });
 
   /**
-   * The finding this file exists for. An Inquirer is a member of the public,
-   * and before the fix this call returned the bytes of any document on any
-   * other inquirer's case.
+   * The finding this file exists for. Before the fix this call returned the
+   * bytes of any document on any case to any signed-in account — and the ids
+   * were enumerable, because GET /queries handed every caller the whole list.
    */
   it('refuses a principal who is not', async () => {
     store.getMetadata.mockResolvedValue(meta);
     party.value = false;
 
-    const next = await run({ user: INQUIRER, params: { id: 'att_x' } });
+    const next = await run({ user: OUTSIDER, params: { id: 'att_x' } });
 
     const [error] = next.mock.calls[0];
     expect(error?.status).toBe(403);
@@ -140,19 +140,20 @@ describe('an attachment saved from a NICeMail message', () => {
 
 describe('an attachment with no case yet', () => {
   /**
-   * A real population, not an edge case: the portal uploads evidence before the
-   * case id exists, and older sidecars predate `uploadedBy` entirely.
+   * A real population, not an edge case: mail ingestion saves a file before the
+   * Front Office accepts the message and a case exists, and older sidecars
+   * predate `uploadedBy` entirely.
    */
   it('admits the uploader to their own', async () => {
-    store.getMetadata.mockResolvedValue({ queryId: null, uploadedBy: 'USR-0001' });
+    store.getMetadata.mockResolvedValue({ queryId: null, uploadedBy: 'USR-0005' });
 
-    expect(await run({ user: INQUIRER, params: { id: 'att_x' } })).toHaveBeenCalledWith();
+    expect(await run({ user: OUTSIDER, params: { id: 'att_x' } })).toHaveBeenCalledWith();
   });
 
   it('refuses anyone else', async () => {
     store.getMetadata.mockResolvedValue({ queryId: null, uploadedBy: 'USR-0002' });
 
-    const [error] = (await run({ user: INQUIRER, params: { id: 'att_x' } })).mock.calls[0];
+    const [error] = (await run({ user: OUTSIDER, params: { id: 'att_x' } })).mock.calls[0];
     expect(error?.status).toBe(403);
   });
 
@@ -172,17 +173,17 @@ describe('an attachment with no case yet', () => {
 
 describe('uploading', () => {
   /**
-   * No queryId is required — portal intake attaches evidence before the case
-   * exists, and requiring one would break it.
+   * No queryId is required — a file can be uploaded before the case it belongs
+   * to exists, and requiring one would break that.
    */
   it('allows an upload that names no case', async () => {
-    expect(await run({ user: INQUIRER, body: {} })).toHaveBeenCalledWith();
+    expect(await run({ user: OUTSIDER, body: {} })).toHaveBeenCalledWith();
   });
 
   it('refuses planting a document on a case the caller is not party to', async () => {
     party.value = false;
 
-    const next = await run({ user: INQUIRER, body: { queryId: 'QRY-SOMEONE-ELSE' } });
+    const next = await run({ user: OUTSIDER, body: { queryId: 'QRY-SOMEONE-ELSE' } });
 
     const [error] = next.mock.calls[0];
     expect(error?.status).toBe(403);
