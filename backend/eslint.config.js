@@ -21,6 +21,13 @@ export default defineConfig([
       // `const { _id, ...rest } = doc` is how a field is dropped from an object.
       // The binding is the mechanism, not dead code.
       'no-unused-vars': ['error', { ignoreRestSiblings: true }],
+      // An empty `catch` is a deliberate "this failure is not worth reporting",
+      // and there are several: closing a socket that is already gone, reading a
+      // title off a page mid-navigation, a log line that must never be the
+      // reason a send failed. They used to carry a comment saying so, and read
+      // as empty once the comments were removed. Every other empty block — an
+      // `if`, a loop — is still an error.
+      'no-empty': ['error', { allowEmptyCatch: true }],
     },
   },
   {
