@@ -15,6 +15,7 @@ import { EMAIL_DIRECTION, EMAIL_TYPE } from '@/constants/emailModel';
 import { fakeFinalApprovalEndpoint } from '@/test/fakeFinalApprovalEndpoint';
 import { installFakeCaseMail } from '@/test/fakeCaseMail';
 import * as mailboxService from '@/services/api/mailboxService';
+import { EXTERNAL_INQUIRER as INQUIRER } from '@/test/externalInquirer';
 
 vi.mock('@/services/api/mailboxService');
 
@@ -25,7 +26,6 @@ const OIC = findUserById('USR-0003');
 const OFFICIAL = findUserById('USR-0004');
 const REVIEWER_A = findUserById('USR-0005');
 const REVIEWER_B = findUserById('USR-0006');
-const INQUIRER = findUserById('USR-0001');
 const ADMIN = findUserById('USR-0007');
 
 const fakeSend = (payload) =>
@@ -50,7 +50,7 @@ function mailboxMessage(overrides = {}) {
   return {
     mailboxMessageId: 'MSG-00001',
     to: 'ipc-query-mock@example.com',
-    from: 'Abhinash Pritiraj <abhinash.pritiraj@gmail.com>',
+    from: `${INQUIRER.name} <${INQUIRER.email}>`,
     subject: 'Clarification on monograph revision and impurity limits',
     body:
       'Dear Sir/Madam,\n\n' +
@@ -186,7 +186,7 @@ describe('the complete lifecycle, end to end', () => {
       .find((v) => v.status === RESPONSE_STATUS.FINAL_APPROVED);
 
     expect(response.direction).toBe(EMAIL_DIRECTION.OUTBOUND);
-    expect(response.to).toEqual(['abhinash.pritiraj@gmail.com']);
+    expect(response.to).toEqual([INQUIRER.email]);
     expect(response.subject).toContain(queryId);
     expect(response.body).toBe(approved.content);
   });

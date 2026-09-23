@@ -6,6 +6,7 @@ import { WORKFLOW_STATE } from '@/constants/statusEnums';
 import { buildLifecycle, STAGE, STAGE_STATUS } from '@/constants/queryLifecycle';
 import { fakeFinalApprovalEndpoint } from '@/test/fakeFinalApprovalEndpoint';
 import { fakeCaseMail } from '@/test/fakeCaseMail';
+import { EXTERNAL_INQUIRER as INQUIRER } from '@/test/externalInquirer';
 
 vi.mock('@/services/api/mailboxService');
 
@@ -16,7 +17,6 @@ const OIC = findUserById('USR-0003');
 const OFFICIAL = findUserById('USR-0004');
 const REVIEWER_A = findUserById('USR-0005');
 const REVIEWER_B = findUserById('USR-0006');
-const INQUIRER = findUserById('USR-0001');
 
 /**
  * The forward is a server call now: the record of it, the audit row and the

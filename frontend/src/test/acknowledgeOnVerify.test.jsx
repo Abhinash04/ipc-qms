@@ -12,10 +12,10 @@ import { EMAIL_TYPE } from '@/constants/emailModel';
 import * as mailboxService from '@/services/api/mailboxService';
 import { notify } from '@/services/notify';
 import { installFakeCaseMail } from '@/test/fakeCaseMail';
+import { EXTERNAL_INQUIRER as INQUIRER } from '@/test/externalInquirer';
 
 vi.mock('@/services/api/mailboxService');
 
-const INQUIRER = findUserById('USR-0001');
 const FRONT_OFFICE = findUserById('USR-0002');
 
 const s = () => useWorkflowStore.getState();

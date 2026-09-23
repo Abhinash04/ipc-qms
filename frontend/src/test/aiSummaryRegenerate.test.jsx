@@ -8,6 +8,7 @@ import { useWorkflowStore } from '@/store/useWorkflowStore';
 import { findUserById } from '@/constants/mockUsers';
 import { AUDIT_EVENT } from '@/constants/statusEnums';
 import * as queryCaseService from '@/services/api/queryCaseService';
+import { EXTERNAL_INQUIRER as INQUIRER } from '@/test/externalInquirer';
 
 vi.mock('@/services/api/mailboxService');
 
@@ -60,7 +61,6 @@ vi.mock('@/services/api/aiService', () => ({
 }));
 
 const s = () => useWorkflowStore.getState();
-const INQUIRER = findUserById('USR-0001');
 const FRONT_OFFICE = findUserById('USR-0002');
 
 const enquiry = () => ({

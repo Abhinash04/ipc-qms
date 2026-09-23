@@ -8,6 +8,7 @@ import {
   NOT_ESTABLISHED_SENTENCE,
 } from '@/services/ai/draftComposer';
 import { fakeCaseMail } from '@/test/fakeCaseMail';
+import { EXTERNAL_INQUIRER as INQUIRER } from '@/test/externalInquirer';
 
 vi.mock('@/services/api/mailboxService');
 
@@ -16,7 +17,6 @@ const s = () => useWorkflowStore.getState();
 const FRONT_OFFICE = findUserById('USR-0002');
 const OIC = findUserById('USR-0003');
 const OFFICIAL = findUserById('USR-0004');
-const INQUIRER = findUserById('USR-0001');
 
 /**
  * The forward is a server call now: the record of it, the audit row and the
