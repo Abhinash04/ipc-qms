@@ -264,20 +264,12 @@ describe('the case page forwards an already-accepted case', () => {
   });
 });
 
-describe('a portal enquiry carries no foreign thread id', () => {
-  it('does not store the inquirers own Gmail thread on the case', async () => {
-    const { queryId } = s().raiseEnquiry(
-      {
-        subject: 'Portal enquiry',
-        body: 'Body',
-        inquirer: { id: INQUIRER.id, name: INQUIRER.name, email: INQUIRER.email },
-        providerMessageId: 'sent-by-inquirer',
-        // ComposeEnquiryPage deliberately passes no providerThreadId: that id
-        // belongs to the inquirer's mailbox and Front Office cannot reply into
-        // it, which is what made the forward fail with a 404.
-      },
-      async () => null,
-    );
+describe('an enquiry that carries no thread id', () => {
+  it('stores none on the case, and the forward still goes out', async () => {
+    // A message the mailbox read without a thread id of its own. The id, when
+    // there is one, belongs to the account the mail was read from; a foreign
+    // one the Front Office cannot reply into is what made the forward 404.
+    const { queryId } = s().ingestEmail({ ...enquiry(), providerThreadId: null }, async () => null);
 
     const incoming = messagesOfType(queryId, EMAIL_TYPE.INCOMING_QUERY)[0];
     expect(incoming.providerThreadId).toBeNull();

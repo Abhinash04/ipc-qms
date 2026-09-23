@@ -39,7 +39,6 @@ vi.mock('@/services/api/mailboxService', () => ({
   recordMailboxDecision: vi.fn().mockResolvedValue({ alreadyDecided: false }),
   markMessageIngested: vi.fn().mockResolvedValue({ ingested: true }),
   deleteMailboxMessage: vi.fn().mockResolvedValue({ deleted: true }),
-  sendEnquiry: vi.fn().mockResolvedValue({ providerMessageId: 'mock-msg-1' }),
   sendAcknowledgement: vi.fn().mockResolvedValue({ providerMessageId: 'mock-msg-2' }),
 }));
 
@@ -130,11 +129,8 @@ describe('navigation is derived from the grants, never a second list', () => {
     }
   });
 
-  it('offers the inquirer only their own two pages', () => {
-    expect(navItemsForRole(ROLES.INQUIRER).map((i) => i.label)).toEqual([
-      'Dashboard',
-      'Raise Enquiry',
-    ]);
+  it('offers the inquirer only their own dashboard', () => {
+    expect(navItemsForRole(ROLES.INQUIRER).map((i) => i.label)).toEqual(['Dashboard']);
   });
 
   it('does not offer Notifications to a role that was never granted it', () => {
@@ -144,11 +140,19 @@ describe('navigation is derived from the grants, never a second list', () => {
     );
   });
 
-  it('offers Raise Enquiry only to the inquirer and Super Admin', () => {
-    const offered = ALL_ROLES.filter((role) =>
-      navItemsForRole(role).some((i) => i.section === SECTION.COMPOSE),
-    );
-    expect(offered.sort()).toEqual([ROLES.INQUIRER, ROLES.SUPER_ADMIN].sort());
+  /**
+   * Enquiries arrive as email. There is no in-app form to raise one, for any
+   * role — Super Admin included, which is the case worth pinning: its grant is
+   * every key of SECTIONS, so a section added back for one role silently
+   * reappears there too.
+   */
+  it('offers no Raise Enquiry section to any role, Super Admin included', () => {
+    expect(SECTION.COMPOSE).toBeUndefined();
+    expect(Object.values(SECTIONS).some((section) => section.segment === 'compose')).toBe(false);
+
+    for (const role of ALL_ROLES) {
+      expect(navItemsForRole(role).map((item) => item.label), role).not.toContain('Raise Enquiry');
+    }
   });
 
   it('unknown or missing role gets no navigation at all', () => {
@@ -169,7 +173,6 @@ describe('path resolution', () => {
       '/front-officer/queries/:queryId',
     );
     expect(sectionPath(ROLES.SUPER_ADMIN, SECTION.USERS)).toBe('/super-admin/users');
-    expect(sectionPath(ROLES.INQUIRER, SECTION.COMPOSE)).toBe('/inquirer/compose');
     expect(sectionPath(ROLES.INQUIRER, SECTION.QUERY_DETAIL)).toBe('/inquirer/queries/:queryId');
   });
 
@@ -182,7 +185,7 @@ describe('path resolution', () => {
 
   it('exposes only granted sections, so an ungranted link cannot be built', () => {
     const paths = pathsForRole(ROLES.INQUIRER);
-    expect(paths.COMPOSE).toBe('/inquirer/compose');
+    expect(paths[SECTION.QUERY_DETAIL]).toBe('/inquirer/queries/:queryId');
     expect(paths[SECTION.DISPATCH]).toBeUndefined();
   });
 

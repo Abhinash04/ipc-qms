@@ -16,7 +16,6 @@ export const MainLayout = lazyPage(() => import('@/layouts/MainLayout'), 'MainLa
 export const LoginPage = lazyPage(() => import('@/pages/auth/LoginPage'), 'LoginPage');
 
 const DashboardPage = lazyPage(() => import('@/pages/dashboard/DashboardPage'), 'DashboardPage');
-const ComposeEnquiryPage = lazyPage(() => import('@/pages/inquirer/ComposeEnquiryPage'), 'ComposeEnquiryPage');
 const MailboxInboxPage = lazyPage(() => import('@/pages/frontOffice/MailboxInboxPage'), 'MailboxInboxPage');
 const MailboxMessagePage = lazyPage(() => import('@/pages/frontOffice/MailboxMessagePage'), 'MailboxMessagePage');
 const QueriesListPage = lazyPage(() => import('@/pages/queries/QueriesListPage'), 'QueriesListPage');
@@ -47,7 +46,6 @@ const AdminSettingsPage = lazyPage(() => import('@/pages/admin/AdminSettingsPage
 
 export const SECTION_ELEMENT = {
   [SECTION.DASHBOARD]: <DashboardPage />,
-  [SECTION.COMPOSE]: <ComposeEnquiryPage />,
   [SECTION.INBOX]: <MailboxInboxPage />,
   [SECTION.INBOX_DETAIL]: <MailboxMessagePage />,
   [SECTION.QUERIES]: <QueriesListPage />,

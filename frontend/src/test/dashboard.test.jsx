@@ -18,9 +18,7 @@ vi.mock('@/services/api/mailboxService', () => ({
   fetchMailboxDecisions: vi.fn().mockResolvedValue({ decisions: [] }),
   recordMailboxDecision: vi.fn().mockResolvedValue({ alreadyDecided: false }),
   markMessageIngested: vi.fn().mockResolvedValue({ ingested: true }),
-  deleteMailboxMessage: vi.fn().mockResolvedValue({ deleted: true }),
-  sendEnquiry: vi.fn().mockResolvedValue({}),
-  sendAcknowledgement: vi.fn().mockResolvedValue({}),
+  deleteMailboxMessage: vi.fn().mockResolvedValue({ deleted: true }),  sendAcknowledgement: vi.fn().mockResolvedValue({}),
 }));
 
 const INQUIRER = findUserById('USR-0001');
@@ -197,10 +195,6 @@ describe('Inquirer dashboard', () => {
     expect(screen.queryByText('Not mine')).toBeNull();
   });
 
-  it('keeps the New Query action for the inquirer alone', () => {
-    renderDashboard();
-    expect(screen.getByRole('button', { name: /New Query/ })).toBeInTheDocument();
-  });
 });
 
 describe('Front Office dashboard', () => {

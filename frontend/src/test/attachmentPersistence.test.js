@@ -77,21 +77,6 @@ beforeEach(async () => {
 });
 
 describe('attachments persist against the correct Case ID', () => {
-  it('raiseEnquiry (portal intake) binds attachments to the new query', () => {
-    const { queryId } = s().raiseEnquiry(
-      {
-        subject: 'Portal enquiry with attachments',
-        body: 'Body',
-        inquirer: { id: INQUIRER.id, name: INQUIRER.name, email: INQUIRER.email },
-        providerMessageId: 'sent-by-inquirer',
-        attachments: ATTACHMENTS,
-      },
-      async () => null,
-    );
-
-    expect(s().getQuery(queryId).attachments).toEqual(ATTACHMENTS);
-  });
-
   it('ingestEmail (mailbox intake) binds attachments to the new query', () => {
     const { queryId } = s().ingestEmail(mailboxMessage(), async () => null);
     expect(s().getQuery(queryId).attachments).toEqual(ATTACHMENTS);

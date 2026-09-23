@@ -36,9 +36,7 @@ vi.mock('@/services/api/mailboxService', () => ({
   fetchMailboxMessages: vi.fn().mockResolvedValue({ messages: [] }),
   fetchMailboxDecisions: vi.fn().mockResolvedValue({ decisions: [] }),
   recordMailboxDecision: vi.fn().mockResolvedValue({ alreadyDecided: false }),
-  markMessageIngested: vi.fn().mockResolvedValue({ ingested: true }),
-  sendEnquiry: vi.fn().mockResolvedValue({ providerMessageId: 'mock-msg-1' }),
-  sendAcknowledgement: vi.fn().mockResolvedValue({ providerMessageId: 'mock-msg-2' }),
+  markMessageIngested: vi.fn().mockResolvedValue({ ingested: true }),  sendAcknowledgement: vi.fn().mockResolvedValue({ providerMessageId: 'mock-msg-2' }),
 }));
 
 import * as authService from '@/services/api/authService';

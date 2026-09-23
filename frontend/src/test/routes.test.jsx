@@ -26,7 +26,6 @@ vi.mock('@/services/api/mailboxService', () => ({
   recordMailboxDecision: vi.fn().mockResolvedValue({ alreadyDecided: false }),
   markMessageIngested: vi.fn().mockResolvedValue({ ingested: true }),
   deleteMailboxMessage: vi.fn().mockResolvedValue({ deleted: true }),
-  sendEnquiry: vi.fn().mockResolvedValue({ providerMessageId: 'mock-msg-1' }),
   sendAcknowledgement: vi.fn().mockResolvedValue({ providerMessageId: 'mock-msg-2' }),
 }));
 

@@ -33,7 +33,6 @@ vi.mock('@/services/api/mailboxService', () => ({
   acceptMailboxMessage: vi.fn(),
   markMessageIngested: vi.fn().mockResolvedValue({ ingested: true }),
   deleteMailboxMessage: vi.fn().mockResolvedValue({ deleted: true }),
-  sendEnquiry: vi.fn().mockResolvedValue({}),
   sendAcknowledgement: vi.fn().mockResolvedValue({}),
   forwardQuery: vi.fn().mockResolvedValue({}),
 }));

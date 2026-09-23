@@ -53,22 +53,14 @@ const actorName = (user) => user?.name || 'System';
 
 const byQuery = (rows, queryId) => rows.filter((r) => r.queryId === queryId);
 
-const QUERY_SOURCE = { EMAIL: 'Email', PORTAL: 'Portal' };
-
-/** Enquiries reach IPC by two channels; the mail copy of a portal enquiry may
- *  arrive minutes later and must attach to the case rather than open a new one. */
-const PORTAL_CLAIM_WINDOW_MS = 24 * 60 * 60 * 1000;
-
-const sameEmail = (a, b) =>
-  Boolean(a) && Boolean(b) && String(a).trim().toLowerCase() === String(b).trim().toLowerCase();
-
-/** "Re: Fwd: Monograph  query " and "monograph query" are the same subject. */
-const normaliseSubject = (subject) =>
-  String(subject || '')
-    .replace(/^(\s*(re|fwd|fw)\s*:\s*)+/i, '')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .toLowerCase();
+/**
+ * One channel. An enquiry reaches IPC as email in the Front Office mailbox and
+ * nowhere else — there was a second, an in-app portal, whose mail copy could
+ * arrive minutes later and had to be matched to the case it had already
+ * created rather than opening a second one. The portal is gone, so the match
+ * and its helpers are too.
+ */
+const QUERY_SOURCE = { EMAIL: 'Email' };
 
 /**
  * Builds every record a new Query Case needs. Shared by both intake channels so
@@ -434,32 +426,6 @@ export const useWorkflowStore = create((set, get) => ({
       email: inquirerEmail,
     };
 
-    // The inquirer may have raised this through the portal moments ago. Gmail
-    // ids are per-mailbox, so the sender's id never equals the id of the copy
-    // read from the Front Office inbox — match on content instead, or we mint a
-    // second case for the same enquiry.
-    const claimable = state.queries.find(
-      (q) =>
-        q.source === QUERY_SOURCE.PORTAL &&
-        !q.sourceMailboxMessageId &&
-        sameEmail(q.inquirer?.email, inquirerEmail) &&
-        normaliseSubject(q.subject) === normaliseSubject(mailboxMessage.subject) &&
-        new Date(timestamp) - new Date(q.createdAt) < PORTAL_CLAIM_WINDOW_MS,
-    );
-
-    if (claimable) {
-      const attached = get().attachToThread(claimable.queryId, mailboxMessage);
-      get().applyTransition({
-        queryId: claimable.queryId,
-        actor: null,
-        actorLabel: 'System',
-        event: AUDIT_EVENT.QUERY_RECEIVED,
-        patch: { sourceMailboxMessageId: sourceMessageId },
-        details: 'Mailbox copy of this portal enquiry matched to the existing case.',
-      });
-      return { ...attached, created: false, reason: 'claimed-by-portal-case' };
-    }
-
     return get().createCase({
       subject: mailboxMessage.subject,
       body: mailboxMessage.body,
@@ -478,37 +444,6 @@ export const useWorkflowStore = create((set, get) => ({
     });
   },
 
-  /**
-   * The portal intake channel: the signed-in Inquirer raises an enquiry and the
-   * case exists immediately, carrying their real identity rather than one
-   * parsed from a mail header.
-   */
-  raiseEnquiry: (
-    { subject, body, inquirer, providerMessageId, providerThreadId, attachments, to },
-    fetchSummary = fetchGemmaAiSummary,
-  ) => {
-    if (!inquirer?.email) {
-      throw new Error('raiseEnquiry: an inquirer with an email address is required');
-    }
-
-    return get().createCase({
-      subject,
-      body,
-      from: `${inquirer.name} <${inquirer.email}>`,
-      to: to || null,
-      inquirer,
-      attachments,
-      timestamp: now(),
-      source: QUERY_SOURCE.PORTAL,
-      providerMessageId,
-      providerThreadId,
-      sourceMessageId: providerMessageId || null,
-      // Left null so the inbound mail copy can still be claimed onto this case.
-      sourceMailboxMessageId: null,
-      detail: `Query raised through the inquirer portal by ${inquirer.name || inquirer.email}.`,
-      fetchSummary,
-    });
-  },
 
   createCase: ({ detail, fetchSummary = fetchGemmaAiSummary, ...params }) => {
     const { query, thread, message, bumps } = buildNewCase(get(), params);

@@ -114,11 +114,6 @@ export async function deleteMailboxMessage(mailboxMessageId, { recipient } = {})
   return data;
 }
 
-export async function sendEnquiry({ subject, body, attachments = [], cc = [] }) {
-  const { data } = await axiosClient.post('/emails/enquiry', { subject, body, attachments, cc });
-  return data;
-}
-
 /**
  * The three case emails — the acknowledgement, the forward, the final response.
  *

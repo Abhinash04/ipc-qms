@@ -7,7 +7,6 @@ import { AppRoutes } from '@/routes/AppRoutes';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useWorkflowStore } from '@/store/useWorkflowStore';
 import { findUserById } from '@/constants/mockUsers';
-import { ROLES } from '@/constants/roles';
 
 vi.mock('@/services/api/mailboxService', () => ({
   fetchEmailConfig: vi.fn().mockResolvedValue({}),
@@ -15,9 +14,7 @@ vi.mock('@/services/api/mailboxService', () => ({
   fetchMailboxDecisions: vi.fn().mockResolvedValue({ decisions: [] }),
   recordMailboxDecision: vi.fn().mockResolvedValue({ alreadyDecided: false }),
   markMessageIngested: vi.fn().mockResolvedValue({ ingested: true }),
-  deleteMailboxMessage: vi.fn().mockResolvedValue({ deleted: true }),
-  sendEnquiry: vi.fn().mockResolvedValue({}),
-  sendAcknowledgement: vi.fn().mockResolvedValue({}),
+  deleteMailboxMessage: vi.fn().mockResolvedValue({ deleted: true }),  sendAcknowledgement: vi.fn().mockResolvedValue({}),
   forwardQuery: vi.fn().mockResolvedValue({}),
   sendResponse: vi.fn().mockResolvedValue({}),
 }));
@@ -77,14 +74,6 @@ describe('attachment access follows the existing case permissions', () => {
     renderAs(INQUIRER, '/front-officer/queries');
     expect(await screen.findByText('Access restricted')).toBeInTheDocument();
   });
-
-  it.each([ROLES.REVIEWER, ROLES.ASSIGNED_OFFICIAL])(
-    'denies the inquirer compose/queue URLs to %s the same as before this feature',
-    async (role) => {
-      renderAs(role, '/inquirer/compose');
-      expect(await screen.findByText('Access restricted')).toBeInTheDocument();
-    },
-  );
 
   it('a legacy metadata-only attachment (no attachmentId) exposes no preview or download control', async () => {
     renderAs(FRONT_OFFICE, `/front-officer/queries/${queryId}`);
