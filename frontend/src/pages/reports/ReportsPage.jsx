@@ -67,7 +67,7 @@ export function ReportsPage() {
       <EmptyState
         icon={BarChart3Icon}
         title="No reporting data source connected"
-        description="Counts above are computed live from the mock workflow store. Turnaround-time, volume-by-category, and SLA-compliance charts are proposed but not confirmed — see docs/srs/11-dashboard-and-reporting.md."
+        description="Counts above are computed from the cases this browser has loaded from the server. Turnaround-time, volume-by-category, and SLA-compliance charts are proposed but not confirmed — see docs/srs/11-dashboard-and-reporting.md."
       />
     </div>
   );

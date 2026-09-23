@@ -795,7 +795,20 @@ function MailboxRow({
   );
 }
 
-function MailboxFeedCard({ count, deleteMessage, children }) {
+/**
+ * `backend` is the store the server actually read, so the subtitle names the
+ * mailbox in front of the Front Officer rather than asserting a live one. It
+ * used to read "Live email received in the official IPC inbox" whatever was
+ * behind it, including a local development store with injected messages.
+ */
+const FEED_SUBTITLE = {
+  'nic-browser': 'Email received in the NICeMail mailbox, from any sender.',
+  nic: 'Email received in the NICeMail mailbox over IMAP, from any sender.',
+  mongo: 'Messages in the local mailbox store — development and testing, not a live inbox.',
+  'in-memory': 'Messages in the local mailbox store — development and testing, not a live inbox.',
+};
+
+function MailboxFeedCard({ count, backend, deleteMessage, children }) {
   return (
     <div className="glass-panel aurora-panel bento-card rounded-[30px] border border-white/80 p-6 sm:p-7 shadow-lg bg-white/95 backdrop-blur-xl">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 mb-5 border-b border-slate-100/80">
@@ -808,8 +821,8 @@ function MailboxFeedCard({ count, deleteMessage, children }) {
               Incoming Mailbox Feed 📬
             </h2>
             <p className="m-0 text-[13.5px] font-medium text-slate-500 mt-1">
-              Live email received in the official IPC inbox, from any sender. A
-              message becomes a Query Case only when you accept it.
+              {FEED_SUBTITLE[backend] || 'Messages in the Front Office mailbox, from any sender.'}{' '}
+              A message becomes a Query Case only when you accept it.
             </p>
           </div>
         </div>
@@ -1073,6 +1086,7 @@ export function MailboxInboxPage() {
 
       <MailboxFeedCard
         count={inbox.data?.total ?? messages.length}
+        backend={inbox.data?.backend}
         deleteMessage={deleteMessage}
       >
         <InboxToolbar
