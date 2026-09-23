@@ -338,10 +338,10 @@ describe('accepting a NICeMail message', () => {
   });
 
   it('leaves a primary-mailbox case on the configured transport', async () => {
-    const res = await acceptAs(primaryFrontOffice(), 'gmail-msg-1', {
+    const res = await acceptAs(primaryFrontOffice(), 'msg-1', {
       from: INQUIRER,
       to: process.env.FRONT_OFFICE_EMAIL,
-      subject: 'Via Gmail',
+      subject: 'Via the primary mailbox',
       body: 'x',
       receivedAt: '2026-09-18T09:00:00.000Z',
     });
@@ -497,8 +497,9 @@ describe('outbound mail follows the case mailbox', () => {
    * The case page's retry buttons. They reach the email endpoints directly,
    * not through accept or final approval, and those endpoints used to send
    * with no mailbox at all — so a NICeMail case whose acknowledgement or
-   * response had failed was retried from Bhumika's Gmail, past the NICeMail
-   * interlock, to a member of the public.
+   * response had failed was retried through whatever EMAIL_TRANSPORT named,
+   * which at the time was a different provider entirely: out of the wrong
+   * mailbox, past the NICeMail interlock, to a member of the public.
    */
   describe('the case page retry buttons', () => {
     /**

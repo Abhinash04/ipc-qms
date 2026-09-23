@@ -44,7 +44,7 @@ const fakeSend = (payload) =>
  */
 const finalApproval = (send = fakeSend) => fakeFinalApprovalEndpoint({ send });
 
-const failingSend = () => Promise.reject(new Error('Gmail unavailable'));
+const failingSend = () => Promise.reject(new Error('mail send failed'));
 
 function mailboxMessage(overrides = {}) {
   return {

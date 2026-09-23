@@ -160,7 +160,7 @@ describe('what the Dispatch page does with a send that failed', () => {
         OIC,
         fakeFinalApprovalEndpoint({
           actor: OIC.name,
-          send: () => Promise.reject(new Error('getaddrinfo ENOTFOUND gmail.googleapis.com')),
+          send: () => Promise.reject(new Error('getaddrinfo ENOTFOUND mail.mgovcloud.in')),
         }),
       )
       .catch(() => {});

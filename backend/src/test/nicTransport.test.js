@@ -51,7 +51,7 @@ describe('EMAIL_TRANSPORT=nic', () => {
     expect(transport.name).toBe('nic');
   });
 
-  it('does not require a Gmail refresh token — NICeMail is one mailbox, not one per role', () => {
+  it('validates with one credential — NICeMail is one mailbox, not one per role', () => {
     configured();
     const errors = validateEmailConfig({
       EMAIL_TRANSPORT: EMAIL_TRANSPORTS.NIC,
@@ -146,8 +146,8 @@ describe('MAILBOX_SOURCE=nic', () => {
     mailbox.useAuto();
 
     expect(mailbox.describe().backend).toBe('nic');
-    // A real mailbox cannot be deposited into or cleared — the same rule the
-    // Gmail reader follows, and what stops mockTransport trying.
+    // A real mailbox cannot be deposited into or cleared — mail arrives in it by
+    // genuinely being sent. This is what stops mockTransport trying.
     expect(mailbox.supportsDelivery()).toBe(false);
   });
 });

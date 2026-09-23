@@ -84,9 +84,9 @@ vi.mock('@/services/api/queryCaseService', () => ({
 }));
 
 const enquiry = () => ({
-  mailboxMessageId: 'gmail-msg-contract-1',
-  providerMessageId: 'gmail-msg-contract-1',
-  providerThreadId: 'gmail-thread-contract-1',
+  mailboxMessageId: 'msg-contract-1',
+  providerMessageId: 'msg-contract-1',
+  providerThreadId: 'thread-contract-1',
   to: 'front-office@test.invalid',
   from: 'A Member of the Public <someone@example.com>',
   subject: 'Clarification on dissolution limits',
@@ -207,7 +207,7 @@ describe('the delta the store sends to POST /queries/persist', () => {
     // sourceMailboxMessageId disarmed the duplicate guard, which tests for its
     // absence and so matched every case after a reload.
     expect(query.threadId).toEqual(expect.any(String));
-    expect(query.sourceMailboxMessageId).toBe('gmail-msg-contract-1');
+    expect(query.sourceMailboxMessageId).toBe('msg-contract-1');
     expect(query.sourceEmailId).toEqual(expect.any(String));
   });
 
@@ -233,8 +233,8 @@ describe('the delta the store sends to POST /queries/persist', () => {
       .find((m) => m.queryId === queryId);
 
     expect(message).toBeDefined();
-    expect(message.sourceMessageId).toBe('gmail-msg-contract-1');
-    expect(message.providerThreadId).toBe('gmail-thread-contract-1');
+    expect(message.sourceMessageId).toBe('msg-contract-1');
+    expect(message.providerThreadId).toBe('thread-contract-1');
   });
 });
 

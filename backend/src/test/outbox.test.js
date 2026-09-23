@@ -39,7 +39,7 @@ const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
 const slowSuccess = () =>
   vi.fn(async () => {
     await tick();
-    return { providerMessageId: 'gmail-1', providerThreadId: 'thread-1', transport: 'gmail', sentAt: '2026-09-18T10:00:00.000Z' };
+    return { providerMessageId: 'provider-1', providerThreadId: 'thread-1', transport: 'nic', sentAt: '2026-09-18T10:00:00.000Z' };
   });
 
 const failWith = (properties, message = 'send failed') =>
@@ -53,7 +53,7 @@ const dispatch = (overrides = {}) =>
     emailType: 'OUTGOING_RESPONSE',
     recipients: ['ravi@pharma.example'],
     subject: 'Re: Dissolution limits [QRY-2026-00001]',
-    transport: 'gmail',
+    transport: 'nic',
     quickRetryDelayMs: 0,
     ...overrides,
   });
@@ -110,7 +110,7 @@ describe('two requests, one email', () => {
 
 describe('a send that provably did not go out', () => {
   it('is FAILED, and can be claimed again', async () => {
-    const send = failWith({ code: 'ENOTFOUND' }, 'getaddrinfo ENOTFOUND gmail.googleapis.com');
+    const send = failWith({ code: 'ENOTFOUND' }, 'getaddrinfo ENOTFOUND smtp.mgovcloud.in');
     const onFailure = vi.fn();
 
     // One automatic retry for a network failure, then it reports.
@@ -134,7 +134,7 @@ describe('a send that provably did not go out', () => {
     const send = vi
       .fn()
       .mockRejectedValueOnce(Object.assign(new Error('getaddrinfo EAI_AGAIN'), { code: 'EAI_AGAIN' }))
-      .mockResolvedValue({ providerMessageId: 'gmail-2', transport: 'gmail' });
+      .mockResolvedValue({ providerMessageId: 'provider-2', transport: 'nic' });
     const onFailure = vi.fn();
 
     const result = await dispatch({ send, onFailure });
@@ -156,7 +156,7 @@ describe('a send that provably did not go out', () => {
   });
 
   it('treats a local failure as not sent — nothing reached the provider', async () => {
-    const send = failWith({}, 'Gmail transport selected but the OAuth app is not configured.');
+    const send = failWith({}, 'NICeMail SMTP selected but no app password is configured.');
 
     const result = await dispatch({ send });
 
@@ -205,7 +205,7 @@ describe('a send that may have gone out', () => {
     await dispatch({ send: uncertainSend() });
 
     const send = slowSuccess();
-    const reconcile = vi.fn(async () => ({ verdict: 'SENT', providerMessageId: 'gmail-9' }));
+    const reconcile = vi.fn(async () => ({ verdict: 'SENT', providerMessageId: 'provider-9' }));
     const finalize = vi.fn();
 
     const result = await dispatch({ send, reconcile, finalize });
@@ -215,7 +215,7 @@ describe('a send that may have gone out', () => {
     expect(send).not.toHaveBeenCalled();
     // The case is brought up to date as though the send had been seen to work.
     expect(finalize).toHaveBeenCalledTimes(1);
-    expect((await row()).providerMessageId).toBe('gmail-9');
+    expect((await row()).providerMessageId).toBe('provider-9');
   });
 
   it('is settled by the Sent folder: absent means it can be sent', async () => {
@@ -282,7 +282,7 @@ describe('a case answered before this ledger existed', () => {
       to: ['ravi@pharma.example'],
       subject: 'Re: Dissolution limits [QRY-2026-00001]',
       timestamp: '2026-09-18T09:45:44.239Z',
-      providerMessageId: 'gmail-legacy',
+      providerMessageId: 'provider-legacy',
     });
 
     const send = slowSuccess();
@@ -290,7 +290,7 @@ describe('a case answered before this ledger existed', () => {
 
     expect(result.outcome).toBe(OUTCOMES.ALREADY_SENT);
     expect(send).not.toHaveBeenCalled();
-    expect(await row()).toMatchObject({ status: 'SENT', providerMessageId: 'gmail-legacy' });
+    expect(await row()).toMatchObject({ status: 'SENT', providerMessageId: 'provider-legacy' });
   });
 });
 

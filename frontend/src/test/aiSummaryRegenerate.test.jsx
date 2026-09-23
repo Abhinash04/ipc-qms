@@ -64,9 +64,9 @@ const s = () => useWorkflowStore.getState();
 const FRONT_OFFICE = findUserById('USR-0002');
 
 const enquiry = () => ({
-  mailboxMessageId: 'gmail-msg-summary-1',
-  providerMessageId: 'gmail-msg-summary-1',
-  providerThreadId: 'gmail-thread-summary-1',
+  mailboxMessageId: 'msg-summary-1',
+  providerMessageId: 'msg-summary-1',
+  providerThreadId: 'thread-summary-1',
   to: 'front-office@test.invalid',
   from: `${INQUIRER.name} <${INQUIRER.email}>`,
   subject: 'Clarification on dissolution limits',

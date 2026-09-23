@@ -16,7 +16,7 @@ const POLL_MS = 30000;
 const BACKOFF_MS = [60000, 120000, 300000];
 
 /** What a mailbox the server could not reach rejects with. */
-const unreachable = (reason = 'Gmail mailbox unreachable (getaddrinfo ENOTFOUND gmail.googleapis.com)') =>
+const unreachable = (reason = 'Mailbox unreachable (getaddrinfo ENOTFOUND mail.mgovcloud.in)') =>
   Object.assign(new Error('Request failed with status code 503'), {
     response: { status: 503, data: { error: reason, retryable: true } },
   });
@@ -58,7 +58,7 @@ afterEach(() => {
 /**
  * A mailbox that cannot be reached is an outage, not a stream of events.
  *
- * The live Gmail test produced one permanent "Could not check the IPC mailbox"
+ * The live mailbox test produced one permanent "Could not check the IPC mailbox"
  * toast every thirty seconds for as long as the DNS failure lasted, because an
  * error toast stays until it is dismissed and every poll raised another. The
  * failure still has to be visible — silently not reading the mailbox is worse —

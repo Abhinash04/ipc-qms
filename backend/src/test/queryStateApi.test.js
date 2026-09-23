@@ -167,7 +167,7 @@ describe('/api/v1/queries/persist — the client contract', () => {
         workflowState: 'RECEIVED',
         threadId: 'THREAD-2026-00001',
         sourceEmailId: 'MSG-00001',
-        sourceMailboxMessageId: 'gmail-msg-abc123',
+        sourceMailboxMessageId: 'msg-abc123',
         aiSummary: { text: 'A summary.' },
         assignmentDecision: { recommended: 'USR-0004' },
         pullbackHistory: [],
@@ -177,7 +177,7 @@ describe('/api/v1/queries/persist — the client contract', () => {
     expect(parsed.query).toMatchObject({
       threadId: 'THREAD-2026-00001',
       sourceEmailId: 'MSG-00001',
-      sourceMailboxMessageId: 'gmail-msg-abc123',
+      sourceMailboxMessageId: 'msg-abc123',
       aiSummary: { text: 'A summary.' },
       assignmentDecision: { recommended: 'USR-0004' },
       pullbackHistory: [],
@@ -305,7 +305,7 @@ describe('/api/v1/queries/persist — the client contract', () => {
         updatedAt: '2026-09-17T09:00:01.000Z',
         threadId: 'THREAD-2026-00001',
         sourceEmailId: 'MSG-00001',
-        sourceMailboxMessageId: 'gmail-msg-abc123',
+        sourceMailboxMessageId: 'msg-abc123',
         aiSummary: null,
         assignmentDecision: null,
         pullbackHistory: [],
@@ -337,9 +337,9 @@ describe('/api/v1/queries/persist — the client contract', () => {
           body: 'Please clarify.',
           attachments: [],
           timestamp: '2026-09-17T09:00:00.000Z',
-          providerMessageId: 'gmail-msg-abc123',
-          providerThreadId: 'gmail-thread-abc123',
-          sourceMessageId: 'gmail-msg-abc123',
+          providerMessageId: 'msg-abc123',
+          providerThreadId: 'thread-abc123',
+          sourceMessageId: 'msg-abc123',
         },
       ],
       addThreads: [
@@ -359,8 +359,8 @@ describe('/api/v1/queries/persist — the client contract', () => {
       );
     }
 
-    expect(result.data.query.sourceMailboxMessageId).toBe('gmail-msg-abc123');
-    expect(result.data.addMessages[0].sourceMessageId).toBe('gmail-msg-abc123');
+    expect(result.data.query.sourceMailboxMessageId).toBe('msg-abc123');
+    expect(result.data.addMessages[0].sourceMessageId).toBe('msg-abc123');
   });
 });
 

@@ -94,8 +94,8 @@ const incoming = (overrides = {}) => ({
   subject: 'Dissolution limits for a modified-release tablet',
   body: 'Please clarify the applicable dissolution limits.',
   receivedAt: '2026-09-17T09:00:00.000Z',
-  providerMessageId: 'gmail-msg-ravi-1',
-  providerThreadId: 'gmail-thread-ravi-1',
+  providerMessageId: 'msg-ravi-1',
+  providerThreadId: 'thread-ravi-1',
   ...overrides,
 });
 
@@ -124,7 +124,7 @@ afterEach(() => {
 
 describe('POST /mailbox/messages/:messageId/accept — an unseen message', () => {
   it('registers the case, acknowledges the sender and forwards, in one call', async () => {
-    const res = await accept('gmail-msg-ravi-1');
+    const res = await accept('msg-ravi-1');
 
     expect(res.status).toBe(200);
     expect(res.body).toMatchObject({
@@ -140,7 +140,7 @@ describe('POST /mailbox/messages/:messageId/accept — an unseen message', () =>
     // The bug this pins: the case used to carry the seeded inquirer identity,
     // so every enquiry looked as though it came from the same person and the
     // reply went to an address that had never asked anything.
-    const res = await accept('gmail-msg-ravi-1');
+    const res = await accept('msg-ravi-1');
     const stored = await QueryCase.findOne({ queryId: res.body.queryId }).lean();
 
     expect(stored.inquirer).toMatchObject({ name: 'Ravi Kumar', email: SENDER_EMAIL });
@@ -148,14 +148,14 @@ describe('POST /mailbox/messages/:messageId/accept — an unseen message', () =>
   });
 
   it('leaves the case at PENDING_ASSIGNMENT once the forward is out', async () => {
-    const res = await accept('gmail-msg-ravi-1');
+    const res = await accept('msg-ravi-1');
     const stored = await QueryCase.findOne({ queryId: res.body.queryId }).lean();
 
     expect(stored.workflowState).toBe('PENDING_ASSIGNMENT');
   });
 
   it('keeps a copy of the acknowledgement and of the forward', async () => {
-    const res = await accept('gmail-msg-ravi-1');
+    const res = await accept('msg-ravi-1');
 
     const [acknowledgement] = await messagesOfType('ACKNOWLEDGEMENT');
     expect(acknowledgement.queryId).toBe(res.body.queryId);
@@ -166,9 +166,9 @@ describe('POST /mailbox/messages/:messageId/accept — an unseen message', () =>
   });
 
   it('records the decision that produced the case', async () => {
-    const res = await accept('gmail-msg-ravi-1');
+    const res = await accept('msg-ravi-1');
     const decision = await MailboxDecision.findOne({
-      mailboxMessageId: 'gmail-msg-ravi-1',
+      mailboxMessageId: 'msg-ravi-1',
     }).lean();
 
     expect(decision).toMatchObject({ decision: 'ACCEPTED', queryId: res.body.queryId });
@@ -181,7 +181,7 @@ describe('POST /mailbox/messages/:messageId/accept — an unseen message', () =>
    * the stub was told to return.
    */
   it('addresses the forward to the Officer-in-Charge', async () => {
-    await accept('gmail-msg-ravi-1');
+    await accept('msg-ravi-1');
 
     const [forward] = await messagesOfType('FORWARD');
     expect(forward.to).toContain('officer@test.invalid');
@@ -195,7 +195,7 @@ describe('POST /mailbox/messages/:messageId/accept — an unseen message', () =>
    * the case was registered would describe a sequence that never happened.
    */
   it('writes the intake history in order, attributed to the acting officer', async () => {
-    const res = await accept('gmail-msg-ravi-1');
+    const res = await accept('msg-ravi-1');
 
     const history = (await AuditEvent.find({ queryId: res.body.queryId }).lean()).map(
       (event) => event.action,
@@ -240,7 +240,7 @@ describe('POST /mailbox/messages/:messageId/accept — an unseen message', () =>
  */
 describe('the AI summary', () => {
   it('is stored on the case, not only mailed', async () => {
-    const res = await accept('gmail-msg-ravi-1');
+    const res = await accept('msg-ravi-1');
 
     const stored = await QueryCase.findOne({ queryId: res.body.queryId }).lean();
     expect(stored.aiSummary).toBeTruthy();
@@ -255,7 +255,7 @@ describe('the AI summary', () => {
    * than no summary, because nobody goes looking for it.
    */
   it('says when it is the deterministic fallback rather than the model', async () => {
-    const res = await accept('gmail-msg-ravi-1');
+    const res = await accept('msg-ravi-1');
 
     expect(res.body.aiSummaryStatus).toBe('FALLBACK');
 
@@ -264,7 +264,7 @@ describe('the AI summary', () => {
   });
 
   it('is generated once and handed to the forward, not computed twice', async () => {
-    await accept('gmail-msg-ravi-1');
+    await accept('msg-ravi-1');
 
     // The forward receives the stored summary, so it does not make its own
     // call — and the trail holds one AI row, not two.
@@ -280,7 +280,7 @@ describe('the AI summary', () => {
   it('keeps the case when generation throws, and records the failure', async () => {
     vi.spyOn(gemmaService, 'generateSummary').mockRejectedValue(new Error('Gemma unreachable'));
 
-    const res = await accept('gmail-msg-ravi-1');
+    const res = await accept('msg-ravi-1');
 
     expect(res.status).toBe(200);
     expect(res.body).toMatchObject({ created: true, aiSummaryStatus: 'FAILED' });
@@ -299,12 +299,12 @@ describe('the AI summary', () => {
       .spyOn(gemmaService, 'generateSummary')
       .mockRejectedValue(new Error('Gemma unreachable'));
 
-    const first = await accept('gmail-msg-ravi-1');
+    const first = await accept('msg-ravi-1');
     expect(first.body.aiSummaryStatus).toBe('FAILED');
 
     failing.mockRestore();
 
-    const second = await accept('gmail-msg-ravi-1');
+    const second = await accept('msg-ravi-1');
 
     expect(second.body.aiSummaryStatus).toBe('FALLBACK');
     const stored = await QueryCase.findOne({ queryId: first.body.queryId }).lean();
@@ -318,10 +318,10 @@ describe('the AI summary', () => {
   });
 
   it('does not re-summarise a case that already has one', async () => {
-    await accept('gmail-msg-ravi-1');
+    await accept('msg-ravi-1');
     const calls = (await AuditEvent.find({ action: 'AI_SUMMARY_GENERATED' }).lean()).length;
 
-    await accept('gmail-msg-ravi-1');
+    await accept('msg-ravi-1');
 
     expect((await AuditEvent.find({ action: 'AI_SUMMARY_GENERATED' }).lean()).length).toBe(calls);
   });
@@ -330,8 +330,8 @@ describe('the AI summary', () => {
 describe('Case ID numbering', () => {
   it('numbers cases sequentially from one, off the server-side counter', async () => {
     // The counter used to live in the browser, so two tabs minted the same id.
-    const first = await accept('gmail-msg-ravi-1');
-    const second = await accept('gmail-msg-priya-1', incoming({ from: 'Priya <priya@lab.example>' }));
+    const first = await accept('msg-ravi-1');
+    const second = await accept('msg-priya-1', incoming({ from: 'Priya <priya@lab.example>' }));
 
     expect(first.body.queryId).toMatch(/-00001$/);
     expect(second.body.queryId).toMatch(/-00002$/);
@@ -343,8 +343,8 @@ describe('Case ID numbering', () => {
 
 describe('accepting the same message twice', () => {
   it('answers from the record, without a second case or a second email', async () => {
-    const first = await accept('gmail-msg-ravi-1');
-    const second = await accept('gmail-msg-ravi-1');
+    const first = await accept('msg-ravi-1');
+    const second = await accept('msg-ravi-1');
 
     expect(second.status).toBe(200);
     expect(second.body).toMatchObject({
@@ -374,8 +374,8 @@ describe('accepting the same message twice', () => {
 describe('two accepts of the same message at once', () => {
   it('opens one case, and sends one acknowledgement and one forward', async () => {
     const [first, second] = await Promise.all([
-      accept('gmail-msg-ravi-1'),
-      accept('gmail-msg-ravi-1'),
+      accept('msg-ravi-1'),
+      accept('msg-ravi-1'),
     ]);
 
     expect(await QueryCase.find({}).lean()).toHaveLength(1);
@@ -400,7 +400,7 @@ describe('a step that fails', () => {
   it('still creates and forwards the case when the acknowledgement fails', async () => {
     ackSpy.mockRejectedValue(new Error('SMTP refused the acknowledgement'));
 
-    const res = await accept('gmail-msg-ravi-1');
+    const res = await accept('msg-ravi-1');
 
     // 200, not 500: a case that exists but was not acknowledged is a state an
     // operator can recover from. A 500 would lose the Case ID as well.
@@ -427,7 +427,7 @@ describe('a step that fails', () => {
       }),
     );
 
-    const res = await accept('gmail-msg-ravi-1');
+    const res = await accept('msg-ravi-1');
 
     expect(res.status).toBe(200);
     expect(res.body.acknowledged).toBe(false);
@@ -441,7 +441,7 @@ describe('a step that fails', () => {
   it('does not mark an ordinary acknowledgement failure as unconfirmed', async () => {
     ackSpy.mockRejectedValue(new Error('SMTP refused the acknowledgement'));
 
-    const res = await accept('gmail-msg-ravi-1');
+    const res = await accept('msg-ravi-1');
 
     const failure = res.body.errors.find((entry) => entry.step === 'acknowledgement');
     expect(failure.unconfirmed).toBeUndefined();
@@ -464,7 +464,7 @@ describe('a step that fails', () => {
       }),
     );
 
-    const res = await accept('gmail-msg-ravi-1');
+    const res = await accept('msg-ravi-1');
 
     const [failure, ...more] = await sendFailures(res.body.queryId);
     expect(more).toHaveLength(0);
@@ -476,7 +476,7 @@ describe('a step that fails', () => {
   it('audits an ordinary acknowledgement failure as not sent', async () => {
     ackSpy.mockRejectedValue(new Error('SMTP refused the acknowledgement'));
 
-    const res = await accept('gmail-msg-ravi-1');
+    const res = await accept('msg-ravi-1');
 
     const [failure] = await sendFailures(res.body.queryId);
     expect(failure.error).toBe('SMTP refused the acknowledgement');
@@ -487,7 +487,7 @@ describe('a step that fails', () => {
   it('leaves the case where the manual forward button acts when the forward fails', async () => {
     forwardSpy.mockRejectedValue(new Error('the officer mailbox timed out'));
 
-    const res = await accept('gmail-msg-ravi-1');
+    const res = await accept('msg-ravi-1');
 
     expect(res.status).toBe(200);
     expect(res.body).toMatchObject({ created: true, acknowledged: true, forwarded: false });
@@ -501,8 +501,8 @@ describe('a step that fails', () => {
   it('finishes the forward on a retry, without acknowledging a second time', async () => {
     forwardSpy.mockRejectedValueOnce(new Error('the officer mailbox timed out'));
 
-    const first = await accept('gmail-msg-ravi-1');
-    const second = await accept('gmail-msg-ravi-1');
+    const first = await accept('msg-ravi-1');
+    const second = await accept('msg-ravi-1');
 
     expect(second.body).toMatchObject({
       queryId: first.body.queryId,
@@ -524,7 +524,7 @@ describe('a step that fails', () => {
 describe('POST /mailbox/messages/:messageId/accept — authorization', () => {
   it('rejects an unauthenticated caller', async () => {
     const res = await request(app)
-      .post('/api/v1/mailbox/messages/gmail-msg-ravi-1/accept')
+      .post('/api/v1/mailbox/messages/msg-ravi-1/accept')
       .send(incoming());
 
     expect(res.status).toBe(401);
@@ -540,7 +540,7 @@ describe('POST /mailbox/messages/:messageId/accept — authorization', () => {
     ];
 
     for (const role of denied) {
-      const res = await accept('gmail-msg-ravi-1', incoming(), role);
+      const res = await accept('msg-ravi-1', incoming(), role);
       expect(res.status).toBe(403);
     }
 

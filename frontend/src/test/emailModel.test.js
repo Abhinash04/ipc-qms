@@ -54,9 +54,9 @@ describe('createEmailMessage', () => {
   });
 
   it('is provider-agnostic — provider ids are null unless supplied', () => {
-    const msg = createEmailMessage({ ...base, providerMessageId: 'gmail-abc', providerThreadId: 'gmail-thr' });
-    expect(msg.providerMessageId).toBe('gmail-abc');
-    expect(msg.providerThreadId).toBe('gmail-thr');
+    const msg = createEmailMessage({ ...base, providerMessageId: 'provider-abc', providerThreadId: 'provider-thr' });
+    expect(msg.providerMessageId).toBe('provider-abc');
+    expect(msg.providerThreadId).toBe('provider-thr');
   });
 
   it('rejects invalid or missing required fields', () => {

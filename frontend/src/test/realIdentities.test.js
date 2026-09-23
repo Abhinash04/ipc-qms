@@ -24,7 +24,7 @@ const JATIN = findUserById('USR-0003');
 const NEHA = findUserById('USR-0004');
 const RAWAT = findUserById('USR-0009');
 
-function gmailEnquiry(overrides = {}) {
+function incomingEnquiry(overrides = {}) {
   return {
     mailboxMessageId: '18f2a1b2c3d4e5f6',
     providerMessageId: '18f2a1b2c3d4e5f6',
@@ -158,8 +158,8 @@ describe('the seeded directory', () => {
 });
 
 describe('1–3. Abhinash → Bhumika creates one stable Query Case', () => {
-  it('creates the case from the incoming email, linked to the real Gmail ids', () => {
-    const { queryId, threadId, created } = s().ingestEmail(gmailEnquiry());
+  it('creates the case from the incoming email, linked to the provider ids', () => {
+    const { queryId, threadId, created } = s().ingestEmail(incomingEnquiry());
 
     expect(created).toBe(true);
     expect(queryId).toBe('QRY-2026-00001');
@@ -177,9 +177,9 @@ describe('1–3. Abhinash → Bhumika creates one stable Query Case', () => {
   });
 
   it('keeps the same Query ID when the same mail is polled again', () => {
-    const first = s().ingestEmail(gmailEnquiry());
-    const second = s().ingestEmail(gmailEnquiry());
-    const third = s().ingestEmail(gmailEnquiry());
+    const first = s().ingestEmail(incomingEnquiry());
+    const second = s().ingestEmail(incomingEnquiry());
+    const third = s().ingestEmail(incomingEnquiry());
 
     expect(second).toMatchObject({ queryId: first.queryId, created: false });
     expect(third.queryId).toBe(first.queryId);
@@ -187,7 +187,7 @@ describe('1–3. Abhinash → Bhumika creates one stable Query Case', () => {
   });
 
   it('keeps the same Query ID across a reload', async () => {
-    const { queryId } = s().ingestEmail(gmailEnquiry());
+    const { queryId } = s().ingestEmail(incomingEnquiry());
     await new Promise((r) => setTimeout(r, 60));
 
     useWorkflowStore.setState({
@@ -198,14 +198,14 @@ describe('1–3. Abhinash → Bhumika creates one stable Query Case', () => {
     await s().hydrate();
 
     expect(s().queries.map((q) => q.queryId)).toEqual([queryId]);
-    expect(s().ingestEmail(gmailEnquiry()).created).toBe(false);
+    expect(s().ingestEmail(incomingEnquiry()).created).toBe(false);
     expect(s().queries).toHaveLength(1);
   });
 });
 
 describe('4. Bhumika acknowledges Abhinash on the same thread', () => {
   it('records the acknowledgement as sent by Bhumika, to Abhinash', async () => {
-    const { queryId, threadId } = s().ingestEmail(gmailEnquiry());
+    const { queryId, threadId } = s().ingestEmail(incomingEnquiry());
     const outcome = await acknowledge(queryId);
 
     const ack = s().emailMessages.find((m) => m.emailType === EMAIL_TYPE.ACKNOWLEDGEMENT);
@@ -219,7 +219,7 @@ describe('4. Bhumika acknowledges Abhinash on the same thread', () => {
   });
 
   it('does not create another Query Case', async () => {
-    const { queryId } = s().ingestEmail(gmailEnquiry());
+    const { queryId } = s().ingestEmail(incomingEnquiry());
     await acknowledge(queryId);
     await acknowledge(queryId);
 
@@ -230,7 +230,7 @@ describe('4. Bhumika acknowledges Abhinash on the same thread', () => {
 
 describe('5–6. Bhumika forwards to Jatin, same case throughout', () => {
   it('sends the forward from Bhumika to Jatin on the same thread', async () => {
-    const { queryId, threadId } = s().ingestEmail(gmailEnquiry());
+    const { queryId, threadId } = s().ingestEmail(incomingEnquiry());
     await acknowledge(queryId);
     s().verifyQuery(queryId, BHUMIKA);
 
@@ -246,7 +246,7 @@ describe('5–6. Bhumika forwards to Jatin, same case throughout', () => {
   });
 
   it('records who forwarded to whom in the audit trail', async () => {
-    const { queryId } = s().ingestEmail(gmailEnquiry());
+    const { queryId } = s().ingestEmail(incomingEnquiry());
     s().verifyQuery(queryId, BHUMIKA);
     await s().forwardToOic(queryId, BHUMIKA, fakeForward);
 
@@ -270,18 +270,18 @@ describe('5–6. Bhumika forwards to Jatin, same case throughout', () => {
   });
 
   it('7. forwarding never creates a second Query Case', async () => {
-    const { queryId } = s().ingestEmail(gmailEnquiry());
+    const { queryId } = s().ingestEmail(incomingEnquiry());
     s().verifyQuery(queryId, BHUMIKA);
     await s().forwardToOic(queryId, BHUMIKA, fakeForward);
 
     expect(s().queries.map((q) => q.queryId)).toEqual([queryId]);
   });
 
-  it('7. a reply on the same Gmail thread attaches instead of creating QRY-2026-00002', () => {
-    const { queryId, threadId } = s().ingestEmail(gmailEnquiry());
+  it('7. a reply on the same provider thread attaches instead of creating QRY-2026-00002', () => {
+    const { queryId, threadId } = s().ingestEmail(incomingEnquiry());
 
     const reply = s().ingestEmail(
-      gmailEnquiry({
+      incomingEnquiry({
         mailboxMessageId: '18f2a1b2c3d4e5f7',
         providerMessageId: '18f2a1b2c3d4e5f7',
         subject: 'Re: Clarification on monograph revision and impurity limits',
@@ -299,9 +299,9 @@ describe('5–6. Bhumika forwards to Jatin, same case throughout', () => {
   });
 
   it('7. a genuinely different enquiry still gets its own case', () => {
-    const first = s().ingestEmail(gmailEnquiry());
+    const first = s().ingestEmail(incomingEnquiry());
     const other = s().ingestEmail(
-      gmailEnquiry({
+      incomingEnquiry({
         mailboxMessageId: 'aaaa1111',
         providerMessageId: 'aaaa1111',
         providerThreadId: 'bbbb2222',
@@ -317,7 +317,7 @@ describe('5–6. Bhumika forwards to Jatin, same case throughout', () => {
 
 describe('8. RBAC for Bhumika and Jatin', () => {
   it('lets Bhumika verify and forward, but not assign', async () => {
-    const { queryId } = s().ingestEmail(gmailEnquiry());
+    const { queryId } = s().ingestEmail(incomingEnquiry());
 
     s().verifyQuery(queryId, BHUMIKA);
     await s().forwardToOic(queryId, BHUMIKA, fakeForward);
@@ -326,7 +326,7 @@ describe('8. RBAC for Bhumika and Jatin', () => {
   });
 
   it('lets Jatin assign, but not verify or forward', async () => {
-    const { queryId } = s().ingestEmail(gmailEnquiry());
+    const { queryId } = s().ingestEmail(incomingEnquiry());
 
     expect(() => s().verifyQuery(queryId, JATIN)).toThrow(/may not perform VERIFY/);
 
@@ -337,7 +337,7 @@ describe('8. RBAC for Bhumika and Jatin', () => {
   });
 
   it('refuses Abhinash any action on his own case', async () => {
-    const { queryId } = s().ingestEmail(gmailEnquiry());
+    const { queryId } = s().ingestEmail(incomingEnquiry());
 
     expect(() => s().verifyQuery(queryId, ABHINASH)).toThrow(/may not perform VERIFY/);
     await expect(s().forwardToOic(queryId, ABHINASH, fakeForward)).rejects.toThrow();
@@ -346,7 +346,7 @@ describe('8. RBAC for Bhumika and Jatin', () => {
 
 describe('9–10. Jatin assigns a mock official and the mocked tail completes', () => {
   it('offers an advisory recommendation that Jatin is free to override', async () => {
-    const { queryId } = s().ingestEmail(gmailEnquiry());
+    const { queryId } = s().ingestEmail(incomingEnquiry());
     s().verifyQuery(queryId, BHUMIKA);
     await s().forwardToOic(queryId, BHUMIKA, fakeForward);
 
@@ -362,7 +362,7 @@ describe('9–10. Jatin assigns a mock official and the mocked tail completes', 
   });
 
   it('runs to CLOSED with the mocked tail, keeping one Query ID and the real identities', async () => {
-    const { queryId } = s().ingestEmail(gmailEnquiry());
+    const { queryId } = s().ingestEmail(incomingEnquiry());
     await acknowledge(queryId);
 
     s().verifyQuery(queryId, BHUMIKA);
@@ -400,11 +400,11 @@ describe('9–10. Jatin assigns a mock official and the mocked tail completes', 
   });
 
   it('a failed forward leaves the case where it was, for retry', async () => {
-    const { queryId } = s().ingestEmail(gmailEnquiry());
+    const { queryId } = s().ingestEmail(incomingEnquiry());
     s().verifyQuery(queryId, BHUMIKA);
 
-    const failing = () => Promise.reject(new Error('Gmail unavailable'));
-    await expect(s().forwardToOic(queryId, BHUMIKA, failing)).rejects.toThrow(/Gmail unavailable/);
+    const failing = () => Promise.reject(new Error('mail send failed'));
+    await expect(s().forwardToOic(queryId, BHUMIKA, failing)).rejects.toThrow(/mail send failed/);
 
     expect(s().getQuery(queryId).workflowState).toBe(WORKFLOW_STATE.FRONT_OFFICE_VERIFICATION);
     expect(s().emailMessages.filter((m) => m.emailType === EMAIL_TYPE.FORWARD)).toHaveLength(0);
@@ -421,26 +421,26 @@ describe('9–10. Jatin assigns a mock official and the mocked tail completes', 
  * acknowledges and forwards, and the browser orchestrates none of it.
  */
 describe('intake — mail waits for the Front Officer', () => {
-  function mockGmail({ forwardFails = false } = {}) {
+  function mockMailbox({ forwardFails = false } = {}) {
     vi.mocked(mailboxService.fetchMailboxMessages).mockResolvedValue({
-      messages: [gmailEnquiry()],
+      messages: [incomingEnquiry()],
     });
     vi.mocked(mailboxService.markMessageIngested).mockResolvedValue({ ingested: true });
     vi.mocked(mailboxService.recordMailboxDecision).mockResolvedValue({ alreadyDecided: false });
     vi.mocked(mailboxService.sendAcknowledgement).mockImplementation(caseMail.sendAcknowledgement);
-    // The whole intake sequence lives behind this one endpoint now. With Gmail
+    // The whole intake sequence lives behind this one endpoint now. With the mailbox
     // down its forward step fails on its own: the case is still created and
     // acknowledged, and is left at FRONT_OFFICE_VERIFICATION for a retry.
     vi.mocked(mailboxService.acceptMailboxMessage).mockImplementation(
       fakeAcceptEndpoint(
         forwardFails
-          ? { forwarded: false, errors: [{ step: 'forward', error: 'Gmail unavailable' }] }
+          ? { forwarded: false, errors: [{ step: 'forward', error: 'mail send failed' }] }
           : {},
       ),
     );
     vi.mocked(mailboxService.forwardQuery).mockImplementation(
       forwardFails
-        ? () => Promise.reject(new Error('Gmail unavailable'))
+        ? () => Promise.reject(new Error('mail send failed'))
         : (payload) => fakeForward(payload),
     );
   }
@@ -462,7 +462,7 @@ describe('intake — mail waits for the Front Officer', () => {
     const { result } = renderHook(() => useMailboxIngestion());
     let outcome;
     await act(async () => {
-      outcome = await result.current.accept(gmailEnquiry());
+      outcome = await result.current.accept(incomingEnquiry());
     });
     return outcome;
   }
@@ -472,7 +472,7 @@ describe('intake — mail waits for the Front Officer', () => {
   });
 
   it('creates nothing when mail merely arrives', async () => {
-    mockGmail();
+    mockMailbox();
     const outcome = await checkMailbox();
 
     expect(outcome.fetched).toBe(1);
@@ -482,7 +482,7 @@ describe('intake — mail waits for the Front Officer', () => {
   });
 
   it('registers, acknowledges and forwards on accept — one click, one request', async () => {
-    mockGmail();
+    mockMailbox();
     const outcome = await acceptEnquiry();
 
     expect(outcome.accepted).toBe(true);
@@ -503,7 +503,7 @@ describe('intake — mail waits for the Front Officer', () => {
   });
 
   it('adds nothing to the intake history — it shows what the server recorded', async () => {
-    mockGmail();
+    mockMailbox();
     await acceptEnquiry();
 
     // The accept endpoint writes this trail against the Front Officer's own
@@ -520,7 +520,7 @@ describe('intake — mail waits for the Front Officer', () => {
   });
 
   it('puts the enquiry, its acknowledgement and the forward on one case and one thread', async () => {
-    mockGmail();
+    mockMailbox();
     await acceptEnquiry();
 
     const query = s().getQuery('QRY-2026-00001');
@@ -542,7 +542,7 @@ describe('intake — mail waits for the Front Officer', () => {
   });
 
   it('forwards to the Officer-in-Charge as part of accepting, not on a second click', async () => {
-    mockGmail();
+    mockMailbox();
     await acceptEnquiry();
 
     expect(s().emailMessages.filter((m) => m.emailType === EMAIL_TYPE.FORWARD)).toHaveLength(1);
@@ -560,7 +560,7 @@ describe('intake — mail waits for the Front Officer', () => {
   });
 
   it('keeps the case at verification when the forward email fails', async () => {
-    mockGmail({ forwardFails: true });
+    mockMailbox({ forwardFails: true });
     const outcome = await acceptEnquiry();
 
     // The forward is the one step of the accept that can fail without losing
@@ -568,10 +568,10 @@ describe('intake — mail waits for the Front Officer', () => {
     // retry the case page offers.
     expect(outcome.accepted).toBe(true);
     expect(outcome.forwarded).toBe(false);
-    expect(outcome.errors).toEqual([{ step: 'forward', error: 'Gmail unavailable' }]);
+    expect(outcome.errors).toEqual([{ step: 'forward', error: 'mail send failed' }]);
 
     await expect(s().forwardToOic('QRY-2026-00001', BHUMIKA)).rejects.toThrow(
-      /Gmail unavailable/,
+      /mail send failed/,
     );
 
     const query = s().getQuery('QRY-2026-00001');
@@ -581,7 +581,7 @@ describe('intake — mail waits for the Front Officer', () => {
   });
 
   it('accepting the same enquiry twice changes nothing', async () => {
-    mockGmail();
+    mockMailbox();
     await acceptEnquiry();
     const second = await acceptEnquiry();
 
@@ -602,10 +602,10 @@ describe('intake — mail waits for the Front Officer', () => {
 
 describe('the inquirer device does not matter', () => {
   it('treats desktop and mobile as the same inquirer on the same thread', () => {
-    const { queryId } = s().ingestEmail(gmailEnquiry());
+    const { queryId } = s().ingestEmail(incomingEnquiry());
 
     const fromPhone = s().ingestEmail(
-      gmailEnquiry({
+      incomingEnquiry({
         mailboxMessageId: 'mobile-msg-1',
         providerMessageId: 'mobile-msg-1',
         body: 'Sent from my iPhone — one more detail.',
@@ -617,9 +617,9 @@ describe('the inquirer device does not matter', () => {
   });
 
   it('opens a second case for a genuinely new enquiry from the same person', () => {
-    const first = s().ingestEmail(gmailEnquiry());
+    const first = s().ingestEmail(incomingEnquiry());
     const second = s().ingestEmail(
-      gmailEnquiry({
+      incomingEnquiry({
         mailboxMessageId: 'mobile-msg-2',
         providerMessageId: 'mobile-msg-2',
         providerThreadId: 'a-different-thread',
@@ -635,7 +635,7 @@ describe('the inquirer device does not matter', () => {
   it('resolves the inquirer from the email address, not from any session', () => {
 
     useAuthStore.setState({ currentUser: null });
-    const { queryId } = s().ingestEmail(gmailEnquiry());
+    const { queryId } = s().ingestEmail(incomingEnquiry());
 
     const query = s().getQuery(queryId);
     expect(query.inquirer.id).toBeNull();
@@ -646,7 +646,7 @@ describe('the inquirer device does not matter', () => {
 describe('final approval dispatches automatically', () => {
 
   async function readyForApproval() {
-    const { queryId } = s().ingestEmail(gmailEnquiry());
+    const { queryId } = s().ingestEmail(incomingEnquiry());
     await acknowledge(queryId);
     s().verifyQuery(queryId, BHUMIKA);
     await s().forwardToOic(queryId, BHUMIKA, fakeForward);
@@ -661,7 +661,7 @@ describe('final approval dispatches automatically', () => {
     return queryId;
   }
 
-  const failing = () => Promise.reject(new Error('Gmail unavailable'));
+  const failing = () => Promise.reject(new Error('mail send failed'));
 
   it('1–2. approval alone takes the case from READY_FOR_DISPATCH to CLOSED', async () => {
     const queryId = await readyForApproval();
@@ -702,7 +702,7 @@ describe('final approval dispatches automatically', () => {
     expect(outcome.approved).toBe(true);
     expect(outcome.dispatched).toBe(false);
     expect(outcome.workflowState).toBe(WORKFLOW_STATE.READY_FOR_DISPATCH);
-    expect(outcome.errors.map((e) => e.error).join(' ')).toMatch(/Gmail unavailable/);
+    expect(outcome.errors.map((e) => e.error).join(' ')).toMatch(/mail send failed/);
 
     const query = s().getQuery(queryId);
     expect(query.workflowState).toBe(WORKFLOW_STATE.READY_FOR_DISPATCH);
@@ -809,7 +809,7 @@ describe('final approval dispatches automatically', () => {
 
 describe('assignment recommendation weighs expertise', () => {
   const officialFor = (subject, body) => {
-    const { queryId } = s().ingestEmail(gmailEnquiry({ subject, body }));
+    const { queryId } = s().ingestEmail(incomingEnquiry({ subject, body }));
     return s().recommendAssigneeFor(queryId);
   };
 
@@ -851,7 +851,7 @@ describe('assignment recommendation weighs expertise', () => {
   });
 
   it('remains advisory — the OIC assigns whoever they choose', async () => {
-    const { queryId } = s().ingestEmail(gmailEnquiry({ subject: 'Sterility testing' }));
+    const { queryId } = s().ingestEmail(incomingEnquiry({ subject: 'Sterility testing' }));
     s().verifyQuery(queryId, BHUMIKA);
     await s().forwardToOic(queryId, BHUMIKA, fakeForward);
 
