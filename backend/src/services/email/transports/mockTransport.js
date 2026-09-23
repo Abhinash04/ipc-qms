@@ -4,10 +4,6 @@ import { DELIVERY, labelDelivery } from '../delivery.js';
 let sendCounter = 0;
 const sentMessages = [];
 
-/**
- * Nothing leaves the machine, so a mock send cannot half-happen: whatever it
- * throws, the message was not delivered and sending again is safe.
- */
 async function send(message, options = {}) {
   try {
     return await sendToMailbox(message, options);
@@ -24,14 +20,7 @@ async function sendToMailbox(message, { asRole = null } = {}) {
   const record = { ...message, providerMessageId, providerThreadId, transport: 'mock', sentAsRole: asRole };
   sentMessages.push(record);
 
-  // Deposit a copy into the mock IPC inbox so the enquiry → ingestion loop
-  // closes locally. Skipped when the mailbox is a real one: that store is
-  // read-only and mail arrives in it by genuinely being sent, so there is
-  // nothing to deposit into. Attempting it threw, and surfaced as a 500 on
-  // every send made through this transport.
   if (mailbox.supportsDelivery()) {
-    // Only the *primary* recipient is delivered — cc/bcc are carried on the
-    // record but are not separate inboxes in this development stand-in.
     const primaryRecipient = Array.isArray(message.to) ? message.to[0] : message.to;
     await mailbox.deliver({
       to: primaryRecipient,
@@ -40,9 +29,6 @@ async function sendToMailbox(message, { asRole = null } = {}) {
       bcc: message.bcc || [],
       subject: message.subject,
       body: message.body,
-      // The deposited copy carries attachment metadata + attachmentId only —
-      // the bytes stay on disk under attachmentStore, addressable by that id,
-      // matching what a read of a real inbox produces.
       attachments: (message.attachments || []).map(
         ({ attachmentId, filename, mimeType, size }) => ({ attachmentId, filename, mimeType, size }),
       ),
@@ -60,8 +46,6 @@ function listSent() {
 async function reset() {
   sendCounter = 0;
   sentMessages.length = 0;
-  // Same reason as the deposit above: a real inbox cannot be cleared, and
-  // trying would delete somebody's mail.
   if (mailbox.supportsDelivery()) await mailbox.reset();
 }
 

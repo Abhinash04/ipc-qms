@@ -1,34 +1,3 @@
-/**
- * The page-side element resolver, shared by every lookup the agent makes.
- *
- * NICeMail is Zoho, and Zoho's class names are generated: a build-hashed class
- * such as `zmbtn__rhuj3` changes on every deploy. What does not change is what
- * an element IS — a button called "New Mail", a textbox labelled "To". So an
- * element is described in selectors.js as an ordered list of strategies, most
- * semantic first, and this resolves them the way a person would look:
- *
- *   1. role + accessible name   { role: 'button', name: 'New Mail' }
- *   2. aria-label               { label: 'Search ( / )' }
- *   3. title                    { title: 'Inbox' }
- *   4. stable attributes        { testid } | { attr, value } | { id }
- *   5. visible text             { text: 'New Mail', tag?: 'button' }
- *   6/7. structure / class      { css: '…' }
- *
- * There is no visual or coordinate fallback: the agent's tab is a background
- * tab Chrome never composites, so there is nothing to look at or hit-test.
- *
- * An entry can also demand that what it found is `visible`, carries the
- * expected accessible `name`, and is `unique`. Those checks are what stop a
- * present-but-wrong element from resolving — the compose selector once matched
- * a hidden "send outbox now" button, because an element that exists counted
- * as found.
- *
- * `pageKit` is serialised by cdp.js and rebuilt inside every evaluated
- * expression, so it must stay self-contained (nothing from module scope) and it
- * must only READ: it runs in the operator's own document during discovery.
- * It searches open shadow roots and same-origin iframes; a cross-origin frame
- * cannot be read from here and is reported instead.
- */
 export const pageKit = () => {
   const norm = (value) => String(value ?? '').replace(/\s+/g, ' ').trim();
 
@@ -41,7 +10,6 @@ export const pageKit = () => {
   };
 
   let searched = null;
-  /** Every document and shadow root to search, and the frames that could not be. */
   const roots = () => {
     if (searched) return searched;
     searched = { list: [], crossOrigin: [] };
@@ -71,7 +39,7 @@ export const pageKit = () => {
       try {
         found.push(...root.querySelectorAll(css));
       } catch {
-        return []; // A selector the page rejects matches nothing.
+        return [];
       }
     }
     return found;
@@ -102,7 +70,6 @@ export const pageKit = () => {
     return null;
   };
 
-  /** Where each role's candidates can be, before the role is checked exactly. */
   const ROLE_CSS = {
     button: 'button, summary, input, [role]',
     link: 'a[href], [role]',
@@ -114,12 +81,10 @@ export const pageKit = () => {
     option: 'option, [role]',
   };
 
-  /** Roles whose accessible name comes from their content. */
   const NAMED_BY_CONTENT = new Set([
     'button', 'link', 'treeitem', 'tab', 'menuitem', 'option', 'checkbox', 'radio', 'switch', 'heading', 'cell',
   ]);
 
-  /** The accessible name, by the common cases of the spec's precedence. */
   const nameOf = (element) => {
     const labelledBy = norm(element.getAttribute('aria-labelledby'));
     if (labelledBy) {
@@ -169,8 +134,6 @@ export const pageKit = () => {
       if (view.getComputedStyle(element).visibility === 'hidden') return false;
     }
 
-    // A tab that was never given a size lays nothing out, so a zero-sized box
-    // there says nothing about the element. Only a real viewport can judge.
     if (!view.innerWidth || !view.innerHeight) return true;
     const box = element.getBoundingClientRect();
     return box.width > 0 && box.height > 0;
@@ -179,7 +142,6 @@ export const pageKit = () => {
   const ATTRIBUTE = /^[a-zA-Z_:][-\w:.]*$/;
   const quoted = (value) => JSON.stringify(String(value));
 
-  /** The CSS that collects a strategy's candidates; the strategy then filters them. */
   const candidatesFor = (strategy) => {
     if (strategy.css) return strategy.css;
     if (strategy.testid !== undefined) return `[data-testid=${quoted(strategy.testid)}]`;
@@ -216,13 +178,6 @@ export const pageKit = () => {
     return [...new Set(found)];
   };
 
-  /**
-   * The elements an entry resolves to: those of the first strategy that
-   * produces any, after the entry's own checks. `raw` skips the checks —
-   * "is anything there at all", which is what waiting for an element to go
-   * away asks. `tried` holds counts only, never element text, because it ends
-   * up in error messages and those can reach the outbox.
-   */
   const resolve = (entry, { raw = false } = {}) => {
     const tried = [];
     for (const [strategy, spec] of entry.strategies.entries()) {
@@ -244,7 +199,6 @@ export const pageKit = () => {
 
   const clip = (value, width = 60) => norm(value).slice(0, width);
 
-  /** What an element is, for a report. Clipped; addresses are masked by the caller. */
   const summary = (element) => ({
     tag: element.tagName.toLowerCase(),
     role: roleOf(element),
