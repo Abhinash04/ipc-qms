@@ -39,7 +39,7 @@ startup with `ERR_MODULE_NOT_FOUND` rather than degrading. Use `npm ci` on a dep
 ```bash
 npm run dev      # nodemon, auto-restart
 npm start        # plain node
-npm test         # vitest, 44 test files / 589 tests
+npm test         # vitest, 59 test files / 912 tests
 npm run lint     # eslint
 ```
 
@@ -119,7 +119,6 @@ still signs in there without a password whenever `NODE_ENV=development` — see
 | Method | Path | Guards |
 |---|---|---|
 | GET | `/emails/config` | `verifyToken` |
-| POST | `/emails/enquiry` | `verifyRole(INQUIRER, SUPER_ADMIN)` |
 | POST | `/emails/acknowledgement` | `verifyRole(FRONT_OFFICE, SUPER_ADMIN)` |
 | POST | `/emails/forward` | `verifyAction(FORWARD)` |
 | POST | `/emails/response` | `verifyAction(DISPATCH)` — the Front Office **retry** path; the normal send happens inside `POST /queries/:queryId/final-approval` |
@@ -842,10 +841,12 @@ The IMAP settings are not needed. MongoDB is: the mailbox is stored in `MailboxM
   (`SYNC_FAILED`, `SYNC_RECOVERED`) and `SYNC_COMPLETED` only when something happened or the sync was
   manual.
 - **Answering.** The accept stores `sourceMailbox: { source: 'nic-browser', address }` on the case.
-  The acknowledgement, the final response and their retries then go out through
-  `nicBrowserTransport.js` — typed into the signed-in NICeMail compose form — after the
-  `NIC_ALLOW_OUTBOUND` interlock (`nic/outboundGuard.js`) has approved every recipient. The forward
-  to the Officer-in-Charge stays on `EMAIL_TRANSPORT`.
+  All three of its emails — the acknowledgement, the forward to the Officer-in-Charge, the final
+  response — and their retries then go out through `nicBrowserTransport.js`, typed into the signed-in
+  NICeMail compose form, after the `NIC_ALLOW_OUTBOUND` interlock (`nic/outboundGuard.js`) has
+  approved every recipient. `NIC_ALLOW_INTERNAL_FORWARD=true` is what lets the forward through while
+  that interlock is closed: it opens exactly `OFFICER_IN_CHARGE_EMAIL`, for the forward alone. See
+  [which channel a case's mail goes out through](#which-channel-a-cases-mail-goes-out-through).
 - **Checks before Send.** `composeEmail` (`nic/browser/sendMail.js`) refuses, and discards the draft,
   unless the form's From is `NIC_EMAIL`, the To/Cc chips are exactly the intended recipients, and the
   subject, body and every attachment (uploaded and scanned) are held by the form.
@@ -1026,7 +1027,7 @@ Also required:
 
 ## Tests
 
-50 test files (660 tests) under `src/test/`, run with `npm test` (Vitest 4 + supertest,
+59 test files (912 tests) under `src/test/`, run with `npm test` (Vitest 4 + supertest,
 `environment: 'node'`).
 
 `support/memoryDb.js` is an in-memory stand-in for the Mongoose models a test replaces. It is not a

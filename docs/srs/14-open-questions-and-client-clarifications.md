@@ -9,7 +9,7 @@ Every item below is tagged:
 ## Email
 
 - Automatic or manual email ingestion? — **Resolved in implementation**: both, at different stages. The mailbox is polled automatically, but only to *list* what is waiting; registration is manual. A Front Officer accepts or rejects each message, and only an accepted one becomes a case. See the intake section below.
-- Which email provider/API? — **Resolved in implementation**: Gmail API (OAuth2) with a mock transport for development. **One mailbox is authenticated — the Front Office's** — because it is the only account the system reads from and sends as; inquirers are external and authenticate to nothing. A NICeMail (`@gov.in`) IMAP/SMTP path is built and selectable, awaiting an application-specific password — see [../NIC_EMAIL_PHASE0.md](../NIC_EMAIL_PHASE0.md). Client confirmation of the production choice still outstanding.
+- Which email provider/API? — ~~**Resolved in implementation**: Gmail API (OAuth2) with a mock transport for development. **One mailbox is authenticated — the Front Office's** — because it is the only account the system reads from and sends as; inquirers are external and authenticate to nothing. A NICeMail (`@gov.in`) IMAP/SMTP path is built and selectable, awaiting an application-specific password.~~ — **✅ Re-resolved 2026-09-23: NICeMail.** The Gmail transport, the Gmail inbox reader, the OAuth variables, the `googleapis` dependency and the `gmail:preflight` script have all been **deleted**; `EMAIL_TRANSPORT` accepts only `mock` and `nic`, and `MAILBOX_SOURCE` only `auto` and `nic`. NICeMail is now reached two ways. The **browser agent is the primary channel**: with `NIC_BROWSER_MAILBOX=true` a second Front Office mailbox is read and answered through a Chrome session an operator signed in to by hand, over CDP, and it is verified working against the live mailbox. **IMAP/SMTP is available but not yet proven** — the transport is written and selectable, and still awaiting an application-specific password; see [../NIC_EMAIL_PHASE0.md](../NIC_EMAIL_PHASE0.md). The mailbox address is environment-driven (`NIC_EMAIL`): a test mailbox today, `lab.ipc@gov.in` in production. Client confirmation of the production choice is still outstanding.
 - Does the system need email threading (replies attach to the same query)? — **Resolved in implementation**: yes, threading is implemented (RFC 5322 headers, provider thread ids); a reply attaches to the existing case rather than opening a new one.
 - How should an incoming reply mid-workflow be handled? — *Client Clarification Required*
 - ~~Should outgoing dispatch email be automatic on approval, or require a Front Office confirmation step?~~ — **✅ Decided by the user: automatic on approval.** Granting final approval sends the response; there is no Front Office confirmation step. See *Automatic final dispatch* and [Dispatch](#dispatch) below.
@@ -37,16 +37,23 @@ Query Case, using the client-supplied template, recorded on the same email threa
 - Reply handling is unchanged and still open: the acknowledgement says "do not reply", but nothing
   processes a reply if one arrives. — *Client Clarification Required*
 
-### Real multi-account Gmail identities (development phase, user-directed)
+### Real multi-account Gmail identities (development phase, user-directed) — HISTORY
 
-**One** account authenticates: Bhumika Makker's, the Front Office mailbox. It is the only address
-the system reads from and the only one it sends as.
+> **2026-09-23.** Gmail is gone: the transport, the inbox reader, the OAuth variables and the
+> `googleapis` dependency have all been deleted, and every seeded address is now on `@ipc.example`,
+> which RFC 2606 reserves and which cannot receive mail. This section is kept because it records the
+> arrangement that was actually run during development, and because **its privacy concern transfers
+> intact** — see *Reading a stakeholder's mailbox* below. Read the rest of this section in the past
+> tense.
 
-This section previously described three authenticated accounts — an inquirer, the Front Officer and
-the Officer-in-Charge. That arrangement is gone. Inquirers are **external**: anyone may write in from
-their own mail client, and there is no configured inquirer address at all. Nothing sends as the
-Officer-in-Charge either; that role is a recipient, addressed by `OFFICER_IN_CHARGE_EMAIL`. Every
-other identity remains mock.
+**One** account authenticated: the Front Office mailbox. It was the only address the system read
+from and the only one it sent as.
+
+This section had previously described three authenticated accounts — an inquirer, the Front Officer
+and the Officer-in-Charge. That arrangement was already gone by then. Inquirers are **external**:
+anyone may write in from their own mail client, and there is no configured inquirer address at all.
+Nothing sends as the Officer-in-Charge either; that role is a recipient, addressed by
+`OFFICER_IN_CHARGE_EMAIL`. Every other identity was mock.
 
 - **Enquiries are addressed to the Front Officer**, not to a shared IPC mailbox. The SRS describes
   a single IPC query mailbox (`lab.ipc@gov.in`), not a named officer. This is a development
@@ -59,10 +66,20 @@ other identity remains mock.
 - **Forwarding to the Officer-in-Charge is now a real email** with its own message record
   (`EMAIL_TYPE.FORWARD`) on the same thread. The SRS treats forwarding as a workflow transition
   only and does not mention an email. — *Proposed Design*
-- **Reading a stakeholder's mailbox.** With `MAILBOX_SOURCE=gmail` the system polls the Front
-  Officer's inbox with `gmail.modify`, which grants access to her entire personal mailbox and lets
+- **Reading a stakeholder's mailbox.** With `MAILBOX_SOURCE=gmail` the system polled the Front
+  Officer's inbox with `gmail.modify`, which granted access to her entire personal mailbox and let
   the system mark messages read. In production this should be a delegated/service mailbox, not a
   personal account. — *Client Clarification Required*
+  > **The concern transfers intact (2026-09-23).** Deleting Gmail did not answer this question, it
+  > moved it. With `NIC_BROWSER_MAILBOX=true` the QMS reads and answers a whole **live government
+  > mailbox** through a **person's own signed-in Chrome profile**, over CDP on `localhost:9222`. The
+  > agent never signs in and holds no credential — authentication is the operator's, by hand — but
+  > the session it borrows is that person's, and its reach is the whole mailbox, not a scoped
+  > delegation. Two things narrow the blast radius and neither is an answer: reads are throttled
+  > (`NIC_BROWSER_SYNC_TTL_MS`, `NIC_BROWSER_SYNC_MAX`) because every message opened is a real page
+  > interaction in somebody's mailbox, and sends are confined to one test recipient until
+  > `NIC_ALLOW_OUTBOUND` is the exact string `true`. Whether a delegated or service mailbox is
+  > required before production remains **Client Clarification Required**.
 - **Only the Front Officer's inbox is polled.** Mail arriving in the Officer-in-Charge's inbox is
   never registered, because it belongs to a case that already exists. If OIC-initiated enquiries
   must also become cases, that is a separate intake path. — *Client Clarification Required*
@@ -84,7 +101,7 @@ implementation, and the answers went the way the SRS assumed.
   `QUERY_REGISTERED` audit event now records a judgement somebody actually made.
 - ~~**Only mail from a known inquirer address opens a case.** … In production, intake presumably must
   accept mail from any member of the public.~~
-  **✅ Resolved: intake accepts mail from anyone.** The sender allow-list is gone; the Gmail query
+  **✅ Resolved: intake accepts mail from anyone.** The sender allow-list is gone; a mailbox read
   filters on the recipient only. Intake is N:1 — many external inquirers, one Front Office mailbox
   (two with the optional NICeMail browser mailbox, each with its own Front Officer) —
   and the inquirer on a case is read off the incoming `From` header. What protects the Front
@@ -156,9 +173,16 @@ It is one server endpoint — `POST /api/v1/queries/:queryId/final-approval`
 
 ### AI assistance as built (user-directed)
 
-Summaries, assignment recommendations and first drafts are now **derived from each query's own
-subject and body** (`frontend/src/services/ai/mockAiService.js`), not read from a fixed template.
-There is no model behind it yet; the interface is the swap point.
+Summaries, assignment recommendations and first drafts are **derived from each query's own subject and
+body**, not read from a fixed template.
+
+**Corrected 2026-09-23:** this said "there is no model behind it yet". There is. A real model is wired
+in — `backend/src/services/ai/gemmaService.js` calls the external Pravah Gemma endpoint, and it is
+what runs on intake (`services/email/mailbox/acceptMessage.js`) and behind the AI routes. Each call
+falls back to a deterministic stand-in when the endpoint does not answer, and the stored summary
+records which happened (`GENERATED` / `FALLBACK` / `FAILED`) so a stand-in is never presented as the
+model's work. The AI section further down this file already described this correctly; these two
+paragraphs had not caught up.
 
 - Assignment recommendation and draft generation. — *Confirmed Requirement* (srs/07)
 - **Summarisation of the incoming enquiry.** — *Proposed Design* (user-directed). srs/07 documents
@@ -191,7 +215,7 @@ There is no model behind it yet; the interface is the swap point.
 
 ## Roles
 
-- Seven roles: `SUPER_ADMIN`, `ADMIN`, `FRONT_OFFICE`, `OFFICER_IN_CHARGE`, `ASSIGNED_OFFICIAL`, `REVIEWER`, `INQUIRER`. — *Confirmed Requirement*. Note `INQUIRER` was originally scoped as external and non-signing-in; the implementation gives it an in-app account with its own dashboard and Raise Enquiry form.
+- Seven roles: `SUPER_ADMIN`, `ADMIN`, `FRONT_OFFICE`, `OFFICER_IN_CHARGE`, `ASSIGNED_OFFICIAL`, `REVIEWER`, `INQUIRER`. — *Confirmed Requirement*, **narrowed 2026-09-23**. The stakeholder list was never wrong, and it is not being deleted: an inquirer is a party to every case and belongs in it. What was wrong was the implementation, which had given `INQUIRER` a **login** — an in-app account with its own dashboard, a Raise Enquiry form and read access to its own cases. **That has been reverted.** There are now **six signing-in roles** — the list above without `INQUIRER` — and the inquirer is **external**: a member of the public who emails the Front Office mailbox, whose name and address are read off the `From` header at intake, who holds no account and never signs in. `ROLES` in `frontend/src/constants/roles.js` and `backend/src/constants/roles.js` lists exactly six, the Inquirer Dashboard and every `/inquirer/*` route are gone, and no app-level requirement asks an external inquirer to log in. **This narrowing needs the client's sign-off.** The SRS names seven roles; reading one of them as a stakeholder rather than as an account holder is our interpretation, and if the client does intend inquirers to sign in and track their own cases, the portal has to come back. — *Client Clarification Required*
 - Can a single user hold multiple roles? — *Client Clarification Required*
 - Can queries be assigned across divisions, or only within the inquirer's/query's division? — *Client Clarification Required*
 - Is delegation (acting on behalf of another user, e.g. during leave) required? — *Client Clarification Required*

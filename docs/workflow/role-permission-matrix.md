@@ -10,30 +10,44 @@ The live tables are rendered in-app at **Administration → Roles**, which gener
 matrix and the page-access matrix from the same source — so the app is the authoritative view and
 this page is the narrative one.
 
-| Action | Inquirer | Front Office | OIC | Assigned Official | Reviewer | Admin | Super Admin |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| Raise an enquiry | ✅ | — | — | — | — | — | ✅ |
-| View own cases | ✅ | — | — | — | — | — | ✅ |
-| Register/verify incoming query (accept — includes the forward) | — | ✅ | — | — | — | — | ✅ |
-| Forward to Officer-in-Charge (recovery only) | — | ✅ | — | — | — | — | ✅ |
-| Assign query (accept AI or override) | — | — | ✅ | — | — | — | ✅ |
-| Generate AI draft / edit response | — | — | — | ✅ | — | — | ✅ |
-| Add a review level | — | — | — | ✅ | — | — | ✅ |
-| Delete a review level (while PENDING) | — | — | — | ✅ | — | — | ✅ |
-| Submit for review | — | — | — | ✅ | — | — | ✅ |
-| Approve / request changes at a review level | — | — | — | — | ✅ | — | ✅ |
-| Grant/reject final approval (granting also sends the response) | — | — | ✅ | — | — | — | ✅ |
-| Dispatch response (retry only) | — | ✅ | — | — | — | — | ✅ |
-| Transfer query | ⛔ gated | ⛔ gated | ⛔ gated | ⛔ gated | ⛔ gated | ⛔ gated | ⛔ gated |
-| Pull back query | ⛔ gated | ⛔ gated | ⛔ gated | ⛔ gated | ⛔ gated | ⛔ gated | ⛔ gated |
-| Read the audit trail | — | — | — | — | — | ✅ | ✅ |
-| View admin console (users/divisions/categories/workflows) | — | — | — | — | — | ✅ | ✅ |
-| System Settings | — | — | — | — | — | — | ✅ |
-| View dashboard | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+**Six roles, six columns.** There is no Inquirer column, because an inquirer holds no account: they
+are a member of the public who emails the Front Office mailbox, are read off the `From` header at
+intake, and sign in to nothing. An earlier revision of this table carried an Inquirer column with
+*Raise an enquiry* and *View own cases* rows, for a signing-in `INQUIRER` role that has since been
+removed along with the Raise Enquiry portal — see
+[srs/03-stakeholders-and-roles.md](../srs/03-stakeholders-and-roles.md#31-roles).
 
-**⛔ gated** — the action is implemented in the store but listed in
-`CLARIFICATION_REQUIRED_ACTIONS`, and `canPerform` refuses anything in that list *before* checking
-the role table. No role can perform it today. See [workflow-rules.md](./workflow-rules.md).
+| Action | Front Office | OIC | Assigned Official | Reviewer | Admin | Super Admin |
+| --- | --- | --- | --- | --- | --- | --- |
+| Register/verify incoming query (accept — includes the forward) | ✅ | — | — | — | — | ✅ |
+| Forward to Officer-in-Charge (recovery only) | ✅ | — | — | — | — | ✅ |
+| Assign query (accept AI or override) | — | ✅ | — | — | — | ✅ |
+| Generate AI draft / edit response | — | — | ✅ | — | — | ✅ |
+| Add a review level | — | — | ✅ | — | — | ✅ |
+| Delete a review level | ⛔ gated | ⛔ gated | ⛔ gated | ⛔ gated | ⛔ gated | ⛔ gated |
+| Submit for review | — | — | ✅ | — | — | ✅ |
+| Approve / request changes at a review level | — | — | — | ✅ | — | ✅ |
+| Grant/reject final approval (granting also sends the response) | — | ✅ | — | — | — | ✅ |
+| Return a draft for revision from final approval | — | ✅ | — | — | — | ✅ |
+| Dispatch response (retry only) | ✅ | — | — | — | — | ✅ |
+| Transfer query (assignee only, reason required) | — | — | ✅ | — | — | ✅ |
+| Pull back query (any stage) | — | — | — | — | ✅ | ✅ |
+| Read the audit trail | — | — | — | — | ✅ | ✅ |
+| View admin console (users/divisions/categories/workflows) | — | — | — | — | ✅ | ✅ |
+| System Settings | — | — | — | — | — | ✅ |
+| View dashboard | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+
+**Transfer and pullback are live, and their policy is not settled.** Corrected 2026-09-23 — both rows
+read "⛔ gated" for every role, which stopped being true when the two actions were taken out of
+`CLARIFICATION_REQUIRED_ACTIONS`. The grants above are what `ROLE_ACTIONS` and `ACTION_VALID_STATES`
+now enforce; who *should* hold them, and from which stages, is still open with the client. See
+[workflow-rules.md](./workflow-rules.md), which lists the defaults the implementation chose.
+
+**⛔ gated** — an action implemented in the store but listed in `CLARIFICATION_REQUIRED_ACTIONS`, which
+`canPerform` refuses *before* checking the role table, so no role can perform it. One action is in
+that list today: `DELETE_REVIEW_LEVEL`, the *Delete a review level* row above, on both the frontend and
+the backend. It appears in no role's `ROLE_ACTIONS` entry either, which is why every column reads
+gated rather than showing it as an Assigned Official grant.
 
 **Accept and forward are one grant, not two.** Accepting a mailbox message registers the case *and*
 forwards it to the Officer-in-Charge in a single server call, so the two rows above are exercised
@@ -62,10 +76,12 @@ nothing.
 grant was added or split. What differs is its **mailbox**: the mailbox routes always act on the
 NICeMail mailbox read by the browser agent, and `?recipient=` cannot point them elsewhere, while the
 other Front Office keeps the `MAILBOX_SOURCE` mailbox. Cases are shared by both. Which mailbox
-answers an inquirer follows the **case**, not the person acting: a case accepted from NICeMail sends
-its acknowledgement, its final response and their retries through NICeMail, whether a Front Officer,
-Super Admin or the Officer-in-Charge's final approval triggers the send. The pinning covers that
-account's own requests only — the decision routes are not scoped to a mailbox; see
+answers follows the **case**, not the person acting: a case accepted from NICeMail sends **all three**
+of its emails — acknowledgement, forward to the Officer-in-Charge, final response — and their retries
+through NICeMail, whether a Front Officer, Super Admin or the Officer-in-Charge's final approval
+triggers the send. The rule is stated normatively in
+[backend/README.md](../../backend/README.md#which-channel-a-cases-mail-goes-out-through). The pinning
+covers that account's own requests only — the decision routes are not scoped to a mailbox; see
 [NIC_BROWSER_AGENT.md §17](../NIC_BROWSER_AGENT.md#known-limitations--open).
 
 **Resetting the workflow state is Super Admin only**, in the UI as well as in the API. The header

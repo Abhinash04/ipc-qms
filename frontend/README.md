@@ -18,7 +18,7 @@ npm run dev        # http://localhost:5173
 | `npm run build:check` | Production build, then enforce the bundle budget (`scripts/check-bundle-budget.mjs`) |
 | `npm run preview` | Serve the build |
 | `npm run lint` | ESLint |
-| `npm test` | Vitest, 44 test files (804 tests) |
+| `npm test` | Vitest, 42 test files (760 tests) |
 | `npm run test:watch` | Vitest watch mode |
 | `npm run test:e2e` | Playwright, specs in `e2e/` — same as `npx playwright test`. See below |
 | `npm run doctor` | React Doctor locally (the same check CI runs) |
@@ -27,8 +27,12 @@ npm run dev        # http://localhost:5173
 against them. Unlike the Vitest suite it needs a **local MongoDB on `127.0.0.1:27017`** — it uses its
 own `qms_e2e` database and wipes it between specs — and a one-off
 `npx playwright install chromium`. Backend settings come from `backend/.env.e2e`, which is
-credential-free and committed on purpose; `JWT_SECRET` and `QMS_SEED_PASSWORD` are deliberately not
-in it and still come from `backend/.env`. **Stop a hand-started backend first**: `reuseExistingServer`
+credential-free and committed on purpose. It pins `QMS_SEED_PASSWORD` to **empty** and
+`QMS_ALLOW_SHARED_PASSWORD=false`, deliberately — unset, the shared-password mode would switch itself
+on here, because `NODE_ENV` is development. Sign-in uses one distinct password per account from
+`src/test/fixtures/passwords.json`, which `playwright.config.js` resolves to an absolute path and
+gives to both the server and the test process. Only `JWT_SECRET` is inherited from the gitignored
+`backend/.env`. **Stop a hand-started backend first**: `reuseExistingServer`
 is `false` for the backend, so anything already on `:5000` makes the run fail outright rather than be
 adopted along with whatever database and mail transport it holds.
 
@@ -85,7 +89,6 @@ Every authenticated URL is `/<role-slug>/<section>`:
 | `OFFICER_IN_CHARGE` | `officer-in-charge` | `/officer-in-charge/dashboard` |
 | `ASSIGNED_OFFICIAL` | `assigned-official` | `/assigned-official/dashboard` |
 | `REVIEWER` | `reviewer` | `/reviewer/dashboard` |
-| `INQUIRER` | `inquirer` | `/inquirer/dashboard` |
 
 `ProtectedRoute` waits for `authReady`, redirects to `/login` when signed out, then checks
 `isRouteAllowedForRole(role, pathname)` and renders an inline "Access restricted" panel on failure.
@@ -337,8 +340,8 @@ src/
   services/      api/, persistence/ (queryState.js), ai/ (local), notify.js
   hooks/         useQueryCase, useWorkflowAction, useMailboxIngestion, useBucketFilter, useRoutePaths
   components/    admin/ ai/ attachments/ common/ dashboard/ email/ layout/ notifications/ ui/ workflow/
-  pages/         34 page components across 14 folders
-  test/          42 test files + setup.js and three in-process fakes (fakeQueryApi.js,
+  pages/         33 page components across 13 folders
+  test/          42 test files + setup.js and five in-process fakes (fakeQueryApi.js,
                  fakeAcceptEndpoint.js, fakeFinalApprovalEndpoint.js)
   utils/         cn, greeting, queryOwnership
 ```
@@ -348,7 +351,7 @@ configured by `playwright.config.js` at the package root.
 
 ## Tests
 
-44 files (804 tests), `npm test` (Vitest 4 + Testing Library, jsdom).
+42 files (760 tests), `npm test` (Vitest 4 + Testing Library, jsdom).
 
 The harness is deliberately strict:
 
@@ -393,8 +396,11 @@ Playwright, run with `npx playwright test` (or `npm run test:e2e`), configured b
 `playwright.config.js`. These are the opposite trade-off to the Vitest suite: a real browser, a real
 Express server and a real MongoDB, with nothing mocked. Prerequisites are a local MongoDB on
 `127.0.0.1:27017` and a one-off `npx playwright install chromium`; backend configuration comes from
-`backend/.env.e2e`, which names no mailbox, no OAuth token and no password, and points at its own
-`qms_e2e` database. `JWT_SECRET` and `QMS_SEED_PASSWORD` stay in the gitignored `backend/.env`.
+`backend/.env.e2e`, which points at its own `qms_e2e` database and pins **every** mail variable —
+most of them to an empty value — so that none is inherited from a developer's `.env`. That
+inheritance is the trap: a key the overlay omits is taken from `.env`, so an overlay naming no
+`NIC_*` variable would have run the suite against whatever mailbox the developer had configured.
+Credentials come from the per-account fixture; only `JWT_SECRET` is inherited.
 
 The specs share one database and each wipes it first, so the config runs one worker, no parallelism
 and no retries. Playwright starts both servers itself and **refuses to adopt one it did not start**:

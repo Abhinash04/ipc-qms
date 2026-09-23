@@ -1,6 +1,6 @@
 # 13. Data Model
 
-Field lists as actually implemented. Every collection below is a Mongoose schema in `backend/src/models/` — thirteen models across twelve files — and the client shapes produced by `frontend/src/store/useWorkflowStore.js` are synced into them through `/api/v1/queries`.
+Field lists as actually implemented. Every collection below is a Mongoose schema in `backend/src/models/` — fourteen models across thirteen files — and the client shapes produced by `frontend/src/store/useWorkflowStore.js` are synced into them through `/api/v1/queries`.
 
 **Timestamps are stored as ISO-8601 strings, not `Date`.** That is deliberate: ISO-8601 sorts and compares correctly as text, so the same `from`/`to` bounds work unchanged against a Mongo filter and against the in-memory audit buffer that serves the degraded path, with no conversion on either side. Every schema also sets `versionKey: false`.
 
@@ -26,15 +26,15 @@ Field lists as actually implemented. Every collection below is a Mongoose schema
 | `createdAt` / `updatedAt` | ISO-8601 string | Default `new Date().toISOString()`. |
 | `threadId` | string | The email thread the case's messages belong to, e.g. `THREAD-2026-00012`. Nullable, **indexed**. |
 | `sourceEmailId` | string → `EmailMessage.messageId` | The inbound message record the case was opened from. Nullable. |
-| `sourceMailboxMessageId` | string | The mailbox's own id for that incoming message — what lets the client recognise an already-registered message after a reload. Nullable, **indexed** (sparse): portal-raised cases have none. |
+| `sourceMailboxMessageId` | string | The mailbox's own id for that incoming message — what makes one incoming email open exactly one case. Nullable, **uniquely indexed, partial on `$type: 'string'`** — *not* sparse: the field defaults to `null`, and a sparse unique index would collide every case that has none on that shared null. Every case now comes from a mailbox message, so it is set in practice. |
 | `assignmentDecision` | object | `{ assigneeId, acceptedAiRecommendation, decidedAt }`, written at assignment. Nullable. |
 | `pullbackHistory` | array | One record per pullback, oldest first. Defaults to `[]`. |
 | `aiSummary` | object | The enquiry summary. Written by the accept before it acknowledges and forwards, and rewritten if it is re-generated from the case page. Nullable, shape unconstrained: `{ text, keyPoints, topics, aiGenerated, fallback, status, generatedAt, error }` with `status` one of `GENERATED` / `FALLBACK` / `FAILED`. There is deliberately no separate `aiSummaryStatus` or `aiSummaryGeneratedAt` column — the provenance rides inside the object it describes. See [12-email-integration.md](./12-email-integration.md). |
-| `sourceMailbox` | object | The mailbox the enquiry arrived in: `{ source, address }`, e.g. `{ source: 'nic-browser', address: <NIC_EMAIL> }` for the NICeMail browser mailbox. Written **by the server at accept**, from the signed-in user's mailbox, and kept across a retried accept. It decides how the inquirer is written back to: the acknowledgement, the final response and their retries go out through the NICeMail browser session when `source` is `nic-browser`, and through `EMAIL_TRANSPORT` otherwise. Absent from the persist validator and stripped by `persistTransition`, so a client write can neither set, change nor clear it. Null on portal-raised cases and on cases from before the field existed, which use `EMAIL_TRANSPORT`. |
+| `sourceMailbox` | object | The mailbox the enquiry arrived in: `{ source, address }`, e.g. `{ source: 'nic-browser', address: <NIC_EMAIL> }` for the NICeMail browser mailbox. Written **by the server at accept**, from the signed-in user's mailbox, and kept across a retried accept. It decides which channel the case's mail goes out through: when `source` is `nic-browser`, **all three** of its emails — acknowledgement, forward to the Officer-in-Charge, and final response — plus their retries go through the NICeMail browser session; every other case uses `EMAIL_TRANSPORT`. The rule is stated normatively in [backend/README.md](../../backend/README.md#which-channel-a-cases-mail-goes-out-through). Absent from the persist validator and stripped by `persistTransition`, so a client write can neither set, change nor clear it. Null on cases from before the field existed, which use `EMAIL_TRANSPORT`. |
 
 The three enum-valued fields above are plain `String`s in the schema, not Mongoose enums — the value sets live in `frontend/src/constants/statusEnums.js`. There is no embedded `auditHistory`: audit events are their own collection (13.4), joined by `queryId`.
 
-**The unique index on `queryId` does not protect `POST /queries/persist`.** Every case write there is an upsert keyed on `queryId`, so a colliding id never raises a duplicate-key error — it *replaces* the stored case. `persistTransition` therefore compares `createdAt` first and answers **409** when the stored value differs from the incoming one, keeping the original enquiry. Case IDs on the email path are minted server-side by `QueryCounter` and cannot collide; the in-app **Raise Enquiry** portal path still mints client-side, and this is the guard that protects it.
+**The unique index on `queryId` does not protect `POST /queries/persist`.** Every case write there is an upsert keyed on `queryId`, so a colliding id never raises a duplicate-key error — it *replaces* the stored case. `persistTransition` therefore compares `createdAt` first and answers **409** when the stored value differs from the incoming one, keeping the original enquiry. Nothing mints a Case ID client-side any more — intake is one server call, and `QueryCounter` mints the id under `$inc` — so this is now a backstop rather than a live race. It is kept because the failure it prevents is a silently lost enquiry.
 
 **`inquirer` is write-once.** It is written with `$setOnInsert` by `POST /queries/persist`, so the
 address read off the `From` header at intake cannot be replaced by a later delta. Every
@@ -122,9 +122,9 @@ One collection serves both trails. The client works in `{ event, actor, at }` an
 | `from` / `subject` | string | Default `''`. A snapshot of the message as it was when decided. |
 | `receivedAt` | ISO-8601 string | Nullable. Part of the same snapshot. |
 
-**Why this is a separate collection, and not a field on `MailboxMessage`.** Under `MAILBOX_SOURCE=gmail` the mailbox is a live, read-only view of a real Gmail account: there is no row to update, and `MailboxMessage` is not even populated. A decision has to survive independently of whichever store the mailbox is being read from, so it is keyed by the provider message id and nothing else. `MailboxMessage.ingested` is a different thing and stays as it is — it means "this copy has been swept", carries no actor, and for Gmail is literally the `UNREAD` label.
+**Why this is a separate collection, and not a field on `MailboxMessage`.** Under `MAILBOX_SOURCE=nic` the mailbox is a live, read-only view of a real NICeMail account — `nicImap` opens the folder with `readOnly: true` — so there is no row to update, and `MailboxMessage` is not even populated. A decision has to survive independently of whichever store the mailbox is being read from, so it is keyed by the provider message id and nothing else. `MailboxMessage.ingested` is a different thing and stays as it is: it means "this copy has been swept" and carries no actor.
 
-The `from`/`subject`/`receivedAt` snapshot exists for the same reason: a rejected Gmail message stops matching `is:unread` once marked read, and may later be archived or deleted by its owner. Without the snapshot, "what did she reject, and from whom?" would have no answer a month later.
+The `from`/`subject`/`receivedAt` snapshot exists for the same reason: a rejected message in a real mailbox may later be archived or deleted by its owner. Without the snapshot, "what was rejected, and from whom?" would have no answer a month later.
 
 ## 13.6 OutboundEmail
 
@@ -141,7 +141,7 @@ whether it has been sent, and the thing that makes sure it is sent only once.
 | `leaseExpiresAt` | ISO-8601 string | Three minutes. A `SENDING` row past its lease is promoted to `UNCERTAIN` — the process that held it died mid-send, and whether the email went out is genuinely unknown. |
 | `recipients` | [string] | Read from the stored case, never from a request. |
 | `subject`, `transport`, `domain` | string | What was sent, through what, from where. |
-| `rfcMessageId` | string | The `Message-ID` header of the attempt, which is what a Gmail Sent-folder search matches on. |
+| `rfcMessageId` | string | The `Message-ID` header of the attempt — what a Sent-folder search would match on, if a channel could be asked. None can today; see below. |
 | `attempts` | number | Including the one automatic quick retry. |
 | `providerMessageId` / `providerThreadId` | string | Returned by the transport on success. |
 | `sentAt` | ISO-8601 string | Set only when the send is known to have happened. |
@@ -157,9 +157,13 @@ response sent yet" during one twenty-two-second send, and all proceed.
 
 **`UNCERTAIN` is a first-class state, not an error.** A send whose outcome was never confirmed
 cannot be retried safely and must not be silently treated as failed. The row keeps it, the UI reads
-it, and a person settles it through `POST /queries/:queryId/outbound/resolve` — audited as
-`EMAIL_DELIVERY_CONFIRMED` or `EMAIL_DELIVERY_DENIED`. For Gmail the Sent folder is searched first
-and the row is settled automatically where the answer is unambiguous.
+it, and **a person** settles it through `POST /queries/:queryId/outbound/resolve` — audited as
+`EMAIL_DELIVERY_CONFIRMED` or `EMAIL_DELIVERY_DENIED`, and neither call sends anything. **Nothing
+settles it automatically.** `emailService.reconcileDelivery` asks the case's channel on every
+uncertain send and every channel answers `UNKNOWN`: the legacy Gmail transport's Sent-folder search
+was the only implementation of `reconcile` that ever existed, neither NICeMail path can be asked, and
+the mock has nothing to say. The seam is kept for a transport that could verify its own Sent folder,
+but every `UNCERTAIN` row is a standing human work item today.
 
 **Cleared by a reset.** `POST /queries/reset` and `npm run db:reset` delete this collection with the
 rest. Case IDs restart from `00001` after a reset, so a surviving row would silently suppress the

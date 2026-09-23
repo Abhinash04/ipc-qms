@@ -11,18 +11,18 @@ frontend/src/
   App.jsx            HydrationGate -> NotificationHost + BrowserRouter -> AppRoutes
   index.css          Tailwind v4 @theme tokens + custom utility layers (no tailwind.config.js)
   components/
-    ui/              shadcn/ui primitives (34 files; 17 in use, 17 dormant scaffold)
+    ui/              shadcn/ui primitives (33 files; roughly half dormant scaffold)
     layout/          Sidebar, Header, MobileNav (app shell chrome)
     common/          PageHeader, Breadcrumb, EmptyState, StatTile, StatusBadge, RoleGate, IpcLogo
     workflow/        WorkflowActionsCard, QueryTable, QueryLifecycleTimeline, ReviewDecisionCard,
                      CaseOfficialsCard, MailboxIngestButton, MailboxAutoSync
     admin/           AuditTable, KpiTile, Panel, charts (hand-written SVG), adminStats
-    attachments/     AttachmentPicker, AttachmentList, AttachmentViewerDialog
+    attachments/     AttachmentList, AttachmentViewerDialog
     ai/              AiSummaryCard, AiRecommendationCard
     dashboard/       BucketDashboard and its widgets
     email/           EmailThread
     notifications/   NotificationHost
-  pages/             34 page components across 14 folders; thin, no business logic
+  pages/             33 page components across 13 folders; thin, no business logic
   layouts/           MainLayout (authenticated shell), AuthLayout (bare, for /login)
   hooks/             useQueryCase, useWorkflowAction, useMailboxIngestion, useBucketFilter,
                      useRoutePaths
@@ -36,7 +36,7 @@ frontend/src/
   constants/         roles, permissions, routeSections, routePaths, navigation, status enums,
                      workflowRules, queryBuckets, policies, directory data
   utils/             cn, greeting, queryOwnership
-  test/              39 test files + setup.js + fakeQueryApi.js
+  test/              42 test files + setup.js and five in-process fakes
 ```
 
 `src/assets/` and `src/features/` exist but are empty.
@@ -94,8 +94,9 @@ the Case ID, creates the case, summarises the enquiry onto `aiSummary`, acknowle
 forwards to the Officer-in-Charge, and then calls `refreshFromServer()` to read the result back. It reconstructs nothing locally, because
 the server is now the only holder of that case — and it refreshes on a repeat accept too, since the
 answer may name a case this tab has never seen and the inbox row would otherwise have nothing to
-link to. The client no longer mints Case IDs on the email path; the in-app **Raise Enquiry** portal
-path still does, and `POST /queries/persist` answers 409 if two tabs mint the same id.
+link to. The client no longer mints Case IDs at all: email is the only intake channel, the in-app
+Raise Enquiry portal that was the other one is gone, and `POST /queries/persist`'s 409 on a colliding
+id is now a backstop rather than a guard against a live race.
 
 `grantFinalApproval` follows the same shape: it posts to
 `POST /queries/:queryId/final-approval` and calls `refreshFromServer()`, because the server is the
@@ -141,16 +142,18 @@ namespace.
 
 | Role | Slug | Sections granted |
 |---|---|---|
-| Inquirer | `inquirer` | 3 — dashboard, compose, query detail |
-| Front Office | `front-officer` | 7 — + inbox, queries, dispatch, notifications |
-| Officer-in-Charge | `officer-in-charge` | 9 — + assignments, approvals, reports |
-| Assigned Official | `assigned-official` | 7 — + my work, drafting |
-| Reviewer | `reviewer` | 7 — + my work, reviews |
+| Front Office | `front-officer` | 8 — dashboard, inbox (+ detail), queries (+ detail), dispatch (+ detail), notifications |
+| Officer-in-Charge | `officer-in-charge` | 9 — dashboard, queries (+ detail), assignments (+ detail), approvals (+ detail), notifications, reports |
+| Assigned Official | `assigned-official` | 7 — dashboard, queries (+ detail), my work, drafting (+ detail), notifications |
+| Reviewer | `reviewer` | 7 — dashboard, queries (+ detail), my work, reviews (+ detail), notifications |
 | Admin | `admin` | 14 — operational + the admin console, **excluding System Settings** |
 | Super Admin | `super-admin` | all 28 |
 
+Six roles, and no seventh for the inquirer: an inquirer is external, holds no account and signs in to
+nothing, so there is no `inquirer` slug and no `/inquirer/*` route.
+
 Examples: `/front-officer/queries/QRY-2026-00001`, `/reviewer/reviews`,
-`/super-admin/administration/settings`, `/inquirer/compose`.
+`/super-admin/administration/settings`.
 
 `ProtectedRoute` waits for `authReady`, redirects a signed-out visitor to `/login` (preserving the
 attempted path), then calls `isRouteAllowedForRole`. A denial renders an explicit "Access
@@ -185,8 +188,7 @@ already imports the client through `authService`, so importing back would close 
 |---|---|
 | Dashboards, queries, my work, assignments, drafting, reviews, approvals, dispatch, notifications | The workflow store, hydrated from `GET /queries` — **server-side** |
 | Approvals → **Approve** | `POST /queries/:queryId/final-approval`, then a re-hydration. Not a state mirror: the server records the approval, sends the response and closes the case, and the store reads back what it did |
-| Raise Enquiry | `GET /emails/config` for identities; `POST /attachments` then `POST /emails/enquiry` |
-| IPC Mailbox | `GET /mailbox/messages`, `GET /mailbox/decisions`, `POST /mailbox/messages/:id/accept`, `POST /mailbox/messages/:id/decision` (rejections), `POST /mailbox/messages/:id/ingested`, `DELETE /mailbox/messages/:id` |
+| IPC Mailbox | `GET /mailbox/messages`, `GET /mailbox/messages/:id`, `POST /mailbox/sync`, `GET /mailbox/decisions`, `POST /mailbox/messages/:id/accept`, `POST /mailbox/messages/:id/decision` (rejections), `POST /mailbox/messages/:id/ingested`, `DELETE /mailbox/messages/:id` |
 | Admin overview / activity / email / AI | `GET /audit`, `/audit/summary` — **server-side** |
 | Admin settings | `GET /health`, `GET /audit/summary`, `GET /emails/config` |
 | Admin users / divisions / categories | Static constants — no API exists for these yet |

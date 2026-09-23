@@ -40,20 +40,26 @@ See [03-stakeholders-and-roles.md](./03-stakeholders-and-roles.md) for the full 
 
 ## 2.5 System Boundaries
 
-In scope and **built**: the frontend shell and role-generated routing, real authentication and
-RBAC, email ingestion/dispatch, AI-assisted summary/assignment/drafting, server-side persistence of
-Query Cases, the mailbox and the audit trail, attachments, the workflow state-transition engine with
-dynamic review levels, in-app notifications and toasts, and the administration console.
+In scope and **built**: the frontend shell and role-generated routing, real authentication, RBAC and
+case-level authorization, email ingestion/dispatch, AI-assisted summary/assignment/drafting,
+server-side persistence of Query Cases, the mailbox and the audit trail, attachments, the workflow
+state-transition engine with dynamic review levels, in-app notifications and toasts, and the
+administration console.
 
 In scope but **not yet built**:
 
-- **Case-level authorization** — Query Cases and their workflow steps are in MongoDB behind
-  `/api/v1/queries`, but every signed-in role can read every case and every attachment.
-- **Per-user credentials** — accounts are seeded from source and share one development password.
-- **Transfer and pullback** — implemented in the store but deliberately disabled pending client
-  answers.
+- **Workflow-state authorization** — `verifyAction` enforces which roles may ever perform an action;
+  whether the case was in a state that allowed it is still decided in the client store.
+- **A mutable user directory** — each account has its own credential, but the directory itself is a
+  source-code constant, so an account cannot be added or deactivated without a redeploy.
+- **Transfer and pullback policy** — both actions are **live**, not disabled. What is outstanding is
+  the client's sign-off on who may act, from which stages, and what happens to completed reviews; the
+  implementation picked defaults. See
+  [workflow/workflow-rules.md](../workflow/workflow-rules.md).
 - **Production notifications** (email/SMS out to users) — in-app notifications and toasts exist.
-- **NIC government email** — blocked at Phase 0; see [../NIC_EMAIL_PHASE0.md](../NIC_EMAIL_PHASE0.md).
+- **NICeMail SMTP** — the IMAP/SMTP transport is written and selectable but still awaiting an
+  application-specific password; see [../NIC_EMAIL_PHASE0.md](../NIC_EMAIL_PHASE0.md). The
+  operator-signed-in browser session is the working NICeMail channel.
 
 See [14-open-questions-and-client-clarifications.md](./14-open-questions-and-client-clarifications.md)
 for what still needs client confirmation.

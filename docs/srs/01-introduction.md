@@ -13,14 +13,16 @@ This document specifies the system as a whole. It is a **requirements** document
 built today, see [docs/HANDOFF.md](../HANDOFF.md) and the two READMEs.
 
 Delivered since this was first written: real authentication (JWT in an httpOnly cookie with
-role-based route guards), the email pipeline (mock and Gmail transports, inbox ingestion,
-acknowledgement, forwarding, dispatch), AI integration (Pravah Gemma grounded in an indexed IPC
-corpus), server-side persistence (MongoDB for Query Cases, the mailbox and the audit trail),
-attachments, and the workflow state-transition engine with dynamic review levels.
+role-based route guards) and **case-level authorization**, the email pipeline (mock and NICeMail
+transports, inbox ingestion, acknowledgement, forwarding, dispatch), AI integration (Pravah Gemma
+grounded in an indexed IPC corpus), server-side persistence (MongoDB for Query Cases, the mailbox
+and the audit trail), attachments, and the workflow state-transition engine with dynamic review
+levels.
 
-Still outstanding: **case-level authorization** — Query Cases now live in MongoDB behind
-`/api/v1/queries`, but nothing yet checks a case against the user reading it — and the items still
-awaiting client sign-off in
+Still outstanding: the **workflow-state half** of authorization — `verifyAction` enforces which
+roles may ever perform an action, but not whether the case was in a state that allowed it — token
+revocation, a user directory that can be changed without a redeploy, and the items still awaiting
+client sign-off in
 [14-open-questions-and-client-clarifications.md](./14-open-questions-and-client-clarifications.md).
 
 ## 1.3 Objectives
@@ -52,6 +54,8 @@ awaiting client sign-off in
   before the workflow engine, real email integration, and real AI integration are built.
 - **MongoDB (via Mongoose)** is the database. An earlier assumption that PostgreSQL would be used
   was not carried through — there is no PostgreSQL client in the project.
-- The system is used internally by IPC staff. Inquirers were originally assumed to be external and
-  not to log in; the implementation gives the Inquirer role an in-app account with a dashboard, a
-  Raise Enquiry form and read access to their own cases.
+- The system is used internally by IPC staff. Inquirers are **external**: a member of the public
+  emails the Front Office mailbox, is read off the `From` header at intake, holds no account and
+  never signs in. An implementation that briefly gave the inquirer an in-app account — a dashboard,
+  a Raise Enquiry form and read access to their own cases — has been reverted, so the original
+  assumption stands.

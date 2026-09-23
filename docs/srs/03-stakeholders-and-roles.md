@@ -11,12 +11,15 @@
 | `ASSIGNED_OFFICIAL` | Drafts the response for an assigned query.                               |
 | `REVIEWER`          | Reviews a draft at one review level.                                     |
 
-| `INQUIRER`          | The party who submitted the query. Raises enquiries and tracks their own cases. |
-
-`INQUIRER` sits outside the internal approval hierarchy shown below, but **is a signed-in role** in
-the implementation: it holds a dashboard, a Raise Enquiry form and read access to its own cases
-(`ROLE_SECTIONS[INQUIRER]` in `frontend/src/constants/permissions.js`). An earlier draft of this
-document said inquirers do not log in; that is no longer accurate. Seven roles in total.
+**Six roles, and the inquirer is not one of them.** An inquirer is a **stakeholder but not an
+account**: a member of the public who emails the Front Office mailbox, whose name and address are
+read off the `From` header at intake, and who signs in to nothing. An implementation that briefly
+made `INQUIRER` a seventh signing-in role — with a dashboard, a Raise Enquiry form and read access
+to its own cases — has been reverted; `ROLES` in `frontend/src/constants/roles.js` and
+`backend/src/constants/roles.js` now list exactly the six above, and there are no `/inquirer/*`
+routes. See
+[14-open-questions-and-client-clarifications.md](./14-open-questions-and-client-clarifications.md#roles)
+for the sign-off this narrowing still needs.
 
 ## 3.2 Role Hierarchy
 
@@ -45,13 +48,13 @@ workflow action (assign, draft, review, transfer, pull back, approve, dispatch) 
 
 ## 3.3 Mock Users
 
-Thirteen development identities are seeded from `backend/src/constants/users.js` (mirrored for
+Twelve development identities are seeded from `backend/src/constants/users.js` (mirrored for
 display in `frontend/src/constants/mockUsers.js`, which the backend file is authoritative over).
-These are development identities only, not real IPC employees:
+These are development identities only, not real IPC employees, and every address is on
+`@ipc.example`, which RFC 2606 reserves and which cannot receive mail:
 
 | ID | Name | Role |
 | --- | --- | --- |
-| USR-0001 | Abhinash Pritiraj | INQUIRER |
 | USR-0002 | Bhumika Makker | FRONT_OFFICE |
 | USR-0003 | Jatin Rawat | OFFICER_IN_CHARGE |
 | USR-0004 | Neha Singh | ASSIGNED_OFFICIAL |
@@ -68,12 +71,21 @@ These are development identities only, not real IPC employees:
 Note `Rawat Jatin` (USR-0009) and `Jatin Rawat` (USR-0003) are **different people** — a deliberate
 near-collision the test suite pins, so name-matching code cannot conflate them.
 
-**The INQUIRER row is not the inquirer.** A real inquirer is any member of the public who emails the
-Front Office mailbox; they hold no account here and sign in to nothing. Their name and address are
-read off the incoming message and stored on the case, so the system supports arbitrarily many
-inquirers against one mailbox. USR-0001 exists only to exercise the in-app "Raise Enquiry" test
-harness.
+**No row here is the inquirer.** A real inquirer is any member of the public who emails the Front
+Office mailbox; they hold no account here and sign in to nothing. Their name and address are read off
+the incoming message and stored on the case, so the system supports arbitrarily many inquirers
+against one mailbox. There used to be a `USR-0001` / `INQUIRER` row; it existed only to exercise the
+in-app "Raise Enquiry" harness, and both are gone.
 
-There is a real login screen; all accounts share the development password `QMS_SEED_PASSWORD`. Full
-detail, including each role's landing dashboard and section access, is in
-[docs/auth.md](../auth.md).
+A thirteenth account, `USR-0014`, is added from configuration rather than listed above when
+`NIC_BROWSER_MAILBOX=true`: a second `FRONT_OFFICE` identity that signs in as `NIC_EMAIL` and owns
+the NICeMail mailbox.
+
+There is a real login screen, and **each account has its own credential**, resolved per account in
+that order: `QMS_PASSWORDS_FILE` (a JSON file of userId → password, kept outside the repository),
+then `QMS_PASSWORD_<USER_ID>`. Accounts do **not** share one password. `QMS_SEED_PASSWORD` is a
+credential source only in the shared mode that the per-account hashes replaced —
+`QMS_ALLOW_SHARED_PASSWORD=true` turns it on, `false` off, and left unset it is on outside
+production whenever `QMS_SEED_PASSWORD` is non-empty, in which case that one secret opens every
+account including `SUPER_ADMIN`. Full detail, including each role's landing dashboard and section
+access, is in [docs/auth.md](../auth.md).

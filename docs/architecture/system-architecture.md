@@ -9,9 +9,8 @@ flowchart LR
     API --> DB[("MongoDB\nQuery Cases + workflow steps\nmailbox + audit")]
     API --> Disk[("Disk\nattachments")]
     API --> AI["Pravah Gemma\nsummary / recommend / draft"]
-    API --> Mail["Gmail API\nsend + inbox read"]
-    API -.Phase 0 blocked.-> NIC["NICeMail\nIMAP / SMTP"]
-    API -.->|CDP, selectors uncalibrated| NICWeb["Operator-signed-in Chrome\nNICeMail web: second\nFront Office mailbox"]
+    API -.awaiting an app password.-> NIC["NICeMail\nIMAP / SMTP"]
+    API -->|CDP| NICWeb["Operator-signed-in Chrome\nNICeMail web: second\nFront Office mailbox"]
 
     AI --> Corpus[("IPC knowledge index\nsrc/data/ipcKnowledge.json")]
 ```
@@ -48,15 +47,15 @@ flowchart LR
     I1["Inquirer A"] --> MB
     I2["Inquirer B"] --> MB
     I3["…anyone, any address"] --> MB
-    MB["Front Office mailbox\n(the one authenticated account)"] --> List["GET /mailbox/messages\nlisted, not registered"]
+    MB["Front Office mailbox\n(one address, no sender filter)"] --> List["GET /mailbox/messages\nlisted, not registered"]
     List --> Gate{"Front Officer\naccepts or rejects"}
     Gate -->|accept| Case["Query Case + Case ID\nAI summary stored on the case\nacknowledgement to the sender\nforward to the Officer-in-Charge\nPENDING_ASSIGNMENT"]
     Gate -->|reject| Rec["MailboxDecision only\nno case, no acknowledgement"]
 ```
 
-- **Arrival is not registration.** The Gmail search is `in:inbox [is:unread] to:(<front office
-  address>)` with **no sender filter**, so an enquiry from an unknown member of the public is never
-  discarded before anyone sees it. Polling only counts what is waiting and says so.
+- **Arrival is not registration.** A mailbox read is filtered by **recipient only** — the Front
+  Office address — and carries **no sender filter**, so an enquiry from an unknown member of the
+  public is never discarded before anyone sees it. Polling only counts what is waiting and says so.
 - **The accept is what creates everything, in one server call.**
   `POST /mailbox/messages/:messageId/accept` mints the Case ID, creates the case, records the
   `ACCEPTED` decision, stores the sender parsed from the `From` header as the inquirer, summarises
@@ -90,14 +89,17 @@ flowchart LR
 account signs in as `NIC_EMAIL`, and its inbox is the NICeMail mailbox, read by the browser agent
 through the operator's signed-in Chrome over CDP and stored in MongoDB. Mail is routed by the
 mailbox it arrived in, not by sender, and both mailboxes feed the same accept and the same workflow.
-The accept records the mailbox on the case as `sourceMailbox`, server-side; a NICeMail case's
-acknowledgement, final response and their retries go out through the signed-in NICeMail tab, and the
-forward to the Officer-in-Charge stays on `EMAIL_TRANSPORT`. The browser code is imported lazily, so
-the backend starts without Chrome. A send whose Send was pressed but not confirmed is reported as
-**unconfirmed** — not recorded, and never treated as delivered — because a retry could reach the
-inquirer twice. The agent's selectors have not yet been calibrated against the live NICeMail page;
-see [NIC_BROWSER_AGENT.md §17](../NIC_BROWSER_AGENT.md#17-two-front-office-mailboxes) for the flow
-and its open items.
+The accept records the mailbox on the case as `sourceMailbox`, server-side, and **all three** of a
+NICeMail case's emails — acknowledgement, forward to the Officer-in-Charge and final response — plus
+their retries go out through the signed-in NICeMail tab. That rule is stated normatively in
+[backend/README.md](../../backend/README.md#which-channel-a-cases-mail-goes-out-through). The browser
+code is imported lazily, so the backend starts without Chrome. A send whose Send was pressed but not
+confirmed is reported as **unconfirmed** — not recorded, and never treated as delivered — because a
+retry could reach the inquirer twice. The reading selectors and the compose form are calibrated and
+verified against the live mailbox; the attachment-reading keys and `ccToggle` are not, and the agent
+refuses an uncalibrated key before the page is touched. See
+[NIC_BROWSER_AGENT.md §17](../NIC_BROWSER_AGENT.md#17-two-front-office-mailboxes) for the flow and
+its open items.
 
 ## Components
 
@@ -122,8 +124,9 @@ and its open items.
 2. Sign-in posts to `POST /auth/login`; the server sets an httpOnly `qms.session` cookie which the
    browser then attaches automatically — including to `<img>` and `<iframe>` attachment URLs, which
    could not carry an auth header.
-3. Express applies `helmet` → `cors(credentials)` → `morgan` → `express.json()` → `cookie-parser` →
-   routes → `notFound` → `errorHandler`. Each route declares its own `verifyToken` →
+3. Express applies `helmet` → `cors(credentials)` → `compression` → `morgan` → `express.json()` →
+   `cookie-parser` → two rate limiters (login, then the whole API) → routes → `notFound` →
+   `errorHandler`, with `trust proxy` set first under `NODE_ENV=production`. Each route declares its own `verifyToken` →
    `verifyRole`/`verifyAction` chain; there is no global guard.
 4. Workflow actions run through the client store, which validates role + state, commits the
    transition, appends an audit event, and posts the delta to `POST /queries/persist`.

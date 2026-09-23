@@ -11,6 +11,12 @@
 > This document remains the authoritative record of the gate and of how to test it. The
 > mailbox address is configurable (`NIC_EMAIL`) and is not hardcoded anywhere in the source, so
 > moving to `lab.ipc@gov.in` is a one-variable change.
+>
+> **Scope.** This gate is about the IMAP/SMTP path only. The same mailbox is also reached a second
+> way, added since: a Chrome session an operator signs in to by hand, driven over CDP, holding no
+> credential of its own — read and send were both exercised against the live mailbox on 2026-09-22
+> ([docs/NIC_BROWSER_AGENT.md](NIC_BROWSER_AGENT.md)). It neither satisfies this gate nor replaces
+> it.
 
 **This is a gate, not a formality.** The plan's viability rests on one question that documentation
 cannot answer for a specific account:
@@ -201,5 +207,6 @@ Send to `support@gov.in`, copying your Delegated Administrator.
 ## Related
 
 - Full assessment and architecture: the approved NIC integration plan.
-- Existing Gmail equivalent: `npm run gmail:preflight`, `docs/EMAIL_MANUAL_TEST.md`.
-- Current security posture: `backend/README.md` § "Security status: NOT production-ready".
+- The Gmail equivalent this was written alongside: `npm run gmail:preflight`,
+  `docs/EMAIL_MANUAL_TEST.md`. Both the script and the Gmail transport have since been removed.
+- Current security posture: `backend/README.md` § "Security status".
