@@ -1,19 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import request from 'supertest';
 
-/**
- * What the Front Office sees when the mailbox cannot be reached.
- *
- * In a live test the machine's DNS resolver failed intermittently. Every poll
- * answered 500 — a server fault, for what was really an unavailable dependency —
- * and the page turned each one into a toast that never closed, so the Front
- * Officer collected a wall of identical errors for a single outage, and the
- * backend log collected one stack trace per poll.
- *
- * So: 503 while it is unreachable, 502 when the credential itself is refused,
- * and one log line and one audit row per *outage* rather than per poll.
- */
-
 const store = vi.hoisted(() => ({ list: null }));
 
 vi.mock('../services/email/mailbox/index.js', () => ({
@@ -104,7 +91,6 @@ describe('GET /mailbox/messages when the mailbox is unreachable', () => {
 
     for (let i = 0; i < 5; i += 1) await poll();
 
-    // One line in the log and one row in the trail — not five of each.
     expect(warn.mock.calls.filter(([line]) => String(line).includes('is unreachable'))).toHaveLength(1);
     expect(auditRows('SYNC_FAILED')).toHaveLength(1);
     expect(auditRows('SYNC_FAILED')[0].details).toMatchObject({ source: 'nic' });

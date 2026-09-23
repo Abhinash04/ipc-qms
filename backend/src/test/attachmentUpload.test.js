@@ -45,7 +45,7 @@ describe('POST /api/v1/attachments', () => {
   });
 
   it('rejects an oversize file', async () => {
-    const oversize = Buffer.alloc(11 * 1024 * 1024); // > default 10MB
+    const oversize = Buffer.alloc(11 * 1024 * 1024);
     const res = await request(app)
       .post('/api/v1/attachments').set(AUTH)
       .attach('files', oversize, { filename: 'huge.pdf', contentType: 'application/pdf' });

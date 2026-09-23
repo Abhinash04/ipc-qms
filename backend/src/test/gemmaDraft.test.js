@@ -488,11 +488,6 @@ describe('POST /api/v1/ai/draft', () => {
   });
 
   it('returns the sectioned draft shape', async () => {
-    // The model is unreachable here, so the endpoint answers from its
-    // deterministic fallback. Mocked explicitly rather than left to a real
-    // request to gemma.test.invalid: that call sits inside a 12s
-    // GEMMA_TIMEOUT_MS abort window and overruns vitest's 5s budget whenever
-    // DNS does not fail instantly.
     global.fetch = vi.fn().mockRejectedValue(new Error('model unreachable'));
 
     const response = await request(app).post('/api/v1/ai/draft').set(AUTH).send(MULTI);
@@ -505,8 +500,6 @@ describe('POST /api/v1/ai/draft', () => {
   });
 
   it('returns the model-generated draft when the model answers', async () => {
-    // Both model calls are mocked — the decomposition, then the draft itself —
-    // so the endpoint's success path runs without touching the network.
     mockCalls(
       decomposition(['What is the legal status of the Indian Pharmacopoeia?']),
       draftReply([
@@ -527,13 +520,9 @@ describe('POST /api/v1/ai/draft', () => {
 
     const { draft } = response.body;
 
-    // The discriminator: these two are what separate a real model answer from
-    // the deterministic fallback the sibling test above exercises.
     expect(draft.aiGenerated).toBe(true);
     expect(draft.fallback).toBe(false);
 
-    // The model's own content survives the endpoint intact — a fallback would
-    // have substituted its own subject and body.
     expect(draft.subject).toBe('Response');
     expect(draft.answers).toHaveLength(1);
     expect(draft.answers[0].topic).toBe('Legal status of IP monographs');

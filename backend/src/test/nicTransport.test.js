@@ -4,16 +4,6 @@ import { EMAIL_TRANSPORTS, MAILBOX_SOURCES, validateEmailConfig } from '../confi
 import * as nicTransport from '../services/email/transports/nicTransport.js';
 import * as mailbox from '../services/email/mailbox/index.js';
 
-/**
- * NICeMail as a selectable transport, kept distinct from the two other
- * NICeMail mechanisms:
- *   - services/email/nic/actions.js — the verification surface behind
- *     /api/v1/nic/* and `npm run nic:verify`, permanently confined to
- *     NIC_TEST_RECIPIENT.
- *   - services/email/nic/browser/  — the CDP browser agent, which is not in
- *     the request path and is never selected by EMAIL_TRANSPORT.
- */
-
 const NIC_KEYS = [
   'NIC_EMAIL',
   'NIC_IMAP_HOST',
@@ -99,7 +89,6 @@ describe('the NIC_ALLOW_OUTBOUND interlock', () => {
     for (const value of ['1', 'yes', 'TRUE', 'true ', '']) {
       process.env.NIC_ALLOW_OUTBOUND = value;
       const sender = vi.fn();
-      // 'true ' is trimmed and therefore allowed; everything else is refused.
       if (value.trim() === 'true') continue;
       await expect(nicTransport.send(message, { sender })).rejects.toThrow();
     }
@@ -146,8 +135,6 @@ describe('MAILBOX_SOURCE=nic', () => {
     mailbox.useAuto();
 
     expect(mailbox.describe().backend).toBe('nic');
-    // A real mailbox cannot be deposited into or cleared — mail arrives in it by
-    // genuinely being sent. This is what stops mockTransport trying.
     expect(mailbox.supportsDelivery()).toBe(false);
   });
 });

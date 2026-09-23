@@ -1,27 +1,3 @@
-/**
- * An in-memory stand-in for the Mongoose models a test replaces.
- *
- * The suite runs without MongoDB, so tests that are about persistence swap
- * individual model files for these. What matters is that the stand-in behaves
- * like MongoDB where the code under test depends on it:
- *
- *   - every operation applies atomically, in one synchronous step, once the
- *     caller awaits it — so concurrent requests interleave only at `await`
- *     points, exactly where they would against a real server;
- *   - unique keys are enforced on insert and upsert, raising E11000 — the whole
- *     once-only guarantee of the outbox and of one-case-per-message rests on it;
- *   - query operators ($in, $lt, $ne, $type, …) and update operators ($set,
- *     $setOnInsert, $inc, $push with $each/$slice, $max, $unset) behave as the
- *     driver's do for the shapes this codebase uses;
- *   - `findOneAndUpdate` returns the document before the update unless
- *     `returnDocument: 'after'`, like Mongoose;
- *   - rows are handed out by value, so a `.lean()` result cannot mutate the
- *     store.
- *
- * Use one instance per test file (`memoryDb` below — the module registry is
- * per file) and `reset()` it in `beforeEach`.
- */
-
 const read = (doc, path) => path.split('.').reduce((node, key) => node?.[key], doc);
 
 function write(doc, path, value) {
@@ -80,7 +56,7 @@ function matchesCondition(actual, condition) {
       case '$regex':
         return new RegExp(operand, condition.$options || '').test(String(actual ?? ''));
       case '$options':
-        return true; // read by $regex
+        return true;
       default:
         throw new Error(`memoryDb: unsupported query operator ${op}`);
     }
@@ -95,9 +71,6 @@ const matches = (row, filter = {}) =>
 function applyUpdate(doc, update, inserted) {
   const ops = isOperatorObject(update) ? update : { $set: update };
 
-  // MongoDB refuses one path under two operators — `$set` and `$setOnInsert`
-  // both naming `inquirer`, say — whether or not the document is inserted. A
-  // stand-in that merged them instead would pass writes the driver rejects.
   const named = new Set();
   for (const fields of Object.values(ops)) {
     for (const path of Object.keys(fields ?? {})) {
@@ -147,7 +120,6 @@ function project(doc, projection) {
   if (!doc || !projection || typeof projection !== 'object') return doc;
   const included = Object.entries(projection).filter(([, on]) => on);
   if (!included.length) {
-    // An exclusion projection: everything but the named fields.
     const out = clone(doc);
     for (const path of Object.keys(projection)) unset(out, path);
     return out;
@@ -160,7 +132,6 @@ function project(doc, projection) {
   return out;
 }
 
-/** A thenable query: `.sort()`, `.select()`, `.skip()`, `.limit()` and `.lean()` chain, and awaiting it runs it. */
 function query(run) {
   const state = { sort: null, projection: null, limit: null, skip: 0 };
   const self = {
@@ -178,7 +149,6 @@ function query(run) {
     },
     select(spec) {
       if (typeof spec === 'string') {
-        // "a b" includes those fields; "-a" excludes one, as Mongoose reads it.
         state.projection = Object.fromEntries(
           spec
             .split(/\s+/)
@@ -213,12 +183,6 @@ function duplicateKeyError(model, field, value) {
 export function createMemoryDb() {
   const collections = new Map();
 
-  /**
-   * @param {string} name
-   * @param {{ unique?: string[], uniqueWhenString?: string[] }} [options]
-   *        `unique` — unique for every value; `uniqueWhenString` — a partial
-   *        unique index on `{ $type: 'string' }`, which ignores null.
-   */
   function model(name, { unique = [], uniqueWhenString = [] } = {}) {
     if (collections.has(name)) return collections.get(name).api;
 
@@ -250,7 +214,6 @@ export function createMemoryDb() {
 
     const find = (filter, sort) => sortRows(rows.filter((row) => matches(row, filter)), sort);
 
-    /** The first matching row, updated in place — or inserted, when `upsert`. */
     function updateFirst(filter, update, options = {}) {
       let row = find(filter, options.sort)[0];
       const before = clone(row);
@@ -347,7 +310,6 @@ export function createMemoryDb() {
       },
       async createCollection() {},
       async syncIndexes() {},
-      /** Test-only: every row, by value. */
       all() {
         return rows.map(clone);
       },
@@ -362,7 +324,6 @@ export function createMemoryDb() {
     reset() {
       collections.forEach(({ rows }) => rows.splice(0));
     },
-    /** Every row of one collection, by value — for assertions. */
     rows(name) {
       return (collections.get(name)?.rows || []).map(clone);
     },

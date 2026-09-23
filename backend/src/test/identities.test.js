@@ -41,11 +41,6 @@ describe('identity configuration', () => {
     expect(identity.name).toBe('Someone Else');
   });
 
-  /**
-   * The directory is published to every signed-in user. It carries who each
-   * role is and nothing else — no credential of any kind, whatever a future
-   * transport decides to keep on an identity.
-   */
   it('publishes only role, name and address', () => {
     for (const identity of publicDirectory()) {
       expect(Object.keys(identity).sort()).toEqual(['email', 'name', 'role']);
@@ -96,11 +91,6 @@ describe('sender identity comes from the acting stakeholder', () => {
   });
 });
 
-/**
- * NICeMail is one mailbox, not one account per role, so there is no per-role
- * credential to borrow and no per-role fallback to get wrong. The configured
- * name alone decides the transport.
- */
 describe('transport resolution is name-driven', () => {
   it('gives every role the same transport', async () => {
     for (const role of Object.values(IDENTITY_ROLES)) {
@@ -112,7 +102,6 @@ describe('transport resolution is name-driven', () => {
   it('reaches a real transport only when EMAIL_TRANSPORT names one', async () => {
     expect((await emailService.getTransport('mock')).name).toBe('mock');
     expect((await emailService.getTransport('nic')).name).toBe('nic');
-    // A name no longer supported is the mock, never a half-configured send.
     expect((await emailService.getTransport('gmail')).name).toBe('mock');
   });
 
@@ -159,12 +148,6 @@ describe('mailbox source selection', () => {
   });
 });
 
-/**
- * Everything under src/scripts touches something the application must not:
- * the live mailbox, a real browser session, or the live model. They are run by
- * hand, by an operator who meant to. An import from the application would put
- * one of them on the request path.
- */
 describe('the operator scripts are standalone', () => {
   it('are never imported by the application', async () => {
     const { readFileSync, readdirSync, statSync } = await import('node:fs');
@@ -196,17 +179,10 @@ describe('the operator scripts are standalone', () => {
 });
 
 describe('sending while the mailbox is a read-only NICeMail IMAP inbox', () => {
-  // Regression: mockTransport deposited a copy of every outgoing message into
-  // the IPC mailbox. A real mailbox is read-only and its deliver() throws, so
-  // EVERY send through this transport returned HTTP 500 — POST /emails/response
-  // most visibly. MAILBOX_SOURCE=nic is the remaining read-only source.
   const ORIGINAL_SOURCE = process.env.MAILBOX_SOURCE;
 
   beforeEach(() => {
     process.env.MAILBOX_SOURCE = 'nic';
-    // test/setup.js pins the in-memory store for the whole suite. Release the
-    // pin here, or MAILBOX_SOURCE is ignored and these tests would pass without
-    // ever touching the path that broke.
     mailbox.useAuto();
   });
 
@@ -255,7 +231,6 @@ describe('sending while the mailbox is a read-only NICeMail IMAP inbox', () => {
       body: 'x',
     });
 
-    // The send succeeded; the deposit was skipped rather than attempted.
     expect(mailbox.supportsDelivery()).toBe(false);
   });
 });

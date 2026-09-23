@@ -1,34 +1,11 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import request from 'supertest';
 
-/**
- * Accepting an incoming message: the whole intake sequence in one server call.
- *
- * What this file is really about is the half-finished states. Minting a Case ID
- * and creating a case is local and reliable; acknowledging the sender and
- * forwarding to the Officer-in-Charge both talk to a mail server and both fail
- * independently. The contract is that a failure there costs the step, never the
- * case — so the endpoint answers 200 with the failed step named, and pressing ✓
- * again finishes what did not complete without repeating what did.
- *
- * The rest of the suite runs with DATABASE_URL blank, which answers 503 before
- * anything reaches a model. Persistence is the whole subject here, so the
- * models are replaced with an in-memory stand-in and the connection is reported
- * as up. `vi.mock` is hoisted above the imports, so the stand-in is in place
- * before any module captures its references.
- */
-
-// Only `isConnected` is replaced: the real module still registers the mongoose
-// connection listeners the rest of the app imports it for.
 vi.mock('../config/db.js', async (importOriginal) => ({
   ...(await importOriginal()),
   isConnected: () => true,
 }));
 
-// Mocked one model file at a time rather than models/index.js, so the real
-// barrel keeps re-exporting the models this path does not touch. The stand-in
-// (support/memoryDb.js) enforces the unique keys the intake relies on: one case
-// per incoming message, one ledger row per case email.
 vi.mock('../models/QueryCase.js', async () => ({
   QueryCase: (await import('./support/memoryDb.js')).memoryDb.model('QueryCase', {
     unique: ['queryId'],
@@ -50,7 +27,6 @@ vi.mock('../models/EmailThread.js', async () => ({
 vi.mock('../models/AuditEvent.js', async () => ({
   AuditEvent: (await import('./support/memoryDb.js')).memoryDb.model('AuditEvent'),
 }));
-// The forward tells the Officer-in-Charge in-app as well as by email.
 vi.mock('../models/Notification.js', async () => ({
   Notification: (await import('./support/memoryDb.js')).memoryDb.model('Notification'),
 }));
@@ -81,11 +57,9 @@ import {
   AuditEvent,
 } from '../models/index.js';
 
-/** The person who actually wrote in — never a configured address. */
 const SENDER = 'Ravi Kumar <ravi@pharma.example>';
 const SENDER_EMAIL = 'ravi@pharma.example';
 
-/** What `vitest.config.mjs` configures as the seeded inquirer identity. */
 const CONFIGURED_INQUIRER = 'inquirer@test.invalid';
 
 const incoming = (overrides = {}) => ({
@@ -112,8 +86,6 @@ let forwardSpy;
 
 beforeEach(() => {
   db.reset();
-  // Spied rather than stubbed: EMAIL_TRANSPORT=mock already keeps real mail out
-  // of the suite, and the call counts are themselves part of the contract.
   ackSpy = vi.spyOn(emailService, 'sendAcknowledgement');
   forwardSpy = vi.spyOn(emailService, 'forwardToOfficerInCharge');
 });
@@ -137,9 +109,6 @@ describe('POST /mailbox/messages/:messageId/accept — an unseen message', () =>
   });
 
   it('records the inquirer as whoever wrote in, not a configured address', async () => {
-    // The bug this pins: the case used to carry the seeded inquirer identity,
-    // so every enquiry looked as though it came from the same person and the
-    // reply went to an address that had never asked anything.
     const res = await accept('msg-ravi-1');
     const stored = await QueryCase.findOne({ queryId: res.body.queryId }).lean();
 
@@ -174,26 +143,14 @@ describe('POST /mailbox/messages/:messageId/accept — an unseen message', () =>
     expect(decision).toMatchObject({ decision: 'ACCEPTED', queryId: res.body.queryId });
   });
 
-  /**
-   * The forward has to reach the Officer-in-Charge specifically — "a FORWARD
-   * record exists" is not the same claim. This used to be asserted in the
-   * browser suite against a stub, which proved only that the stub returned what
-   * the stub was told to return.
-   */
   it('addresses the forward to the Officer-in-Charge', async () => {
     await accept('msg-ravi-1');
 
     const [forward] = await messagesOfType('FORWARD');
     expect(forward.to).toContain('officer@test.invalid');
-    // Not back to the person who wrote in.
     expect(forward.to).not.toContain(SENDER_EMAIL);
   });
 
-  /**
-   * The audit trail is the record an inspector reads, so its order is part of
-   * the contract, not an implementation detail: an acknowledgement logged before
-   * the case was registered would describe a sequence that never happened.
-   */
   it('writes the intake history in order, attributed to the acting officer', async () => {
     const res = await accept('msg-ravi-1');
 
@@ -204,27 +161,12 @@ describe('POST /mailbox/messages/:messageId/accept — an unseen message', () =>
     expect(history).toEqual([
       'QUERY_RECEIVED',
       'QUERY_REGISTERED',
-      // The mailbox message → case link, the one row that carries both ids.
       'CASE_ASSOCIATED',
-      /**
-       * The summary is generated and stored on the case here, before either
-       * email goes out. It used to be produced inside the forward, for the
-       * covering note only, and audited from there — which is why this row used
-       * to sit between the acknowledgement and the forward. The summary was
-       * never written to the case, so every accepted enquiry read
-       * `aiSummary: null` while the trail claimed one had been generated.
-       *
-       * Its position is asserted, not tolerated: it has to land before the
-       * forward, because the forward is now handed this summary rather than
-       * computing a second one.
-       */
       'AI_SUMMARY_GENERATED',
       'ACKNOWLEDGEMENT_SENT',
       'QUERY_FORWARDED',
     ]);
 
-    // Taken from the session, never from the request body — an actor a caller
-    // can name is an actor a caller can impersonate.
     const registered = (await AuditEvent.find({ queryId: res.body.queryId }).lean()).find(
       (event) => event.action === 'QUERY_REGISTERED',
     );
@@ -233,11 +175,6 @@ describe('POST /mailbox/messages/:messageId/accept — an unseen message', () =>
   });
 });
 
-/**
- * The summary the Officer-in-Charge is mailed and the summary stored on the
- * case have to be the same object. They were not: one was computed inside the
- * forward for its covering note, and the case kept `null`.
- */
 describe('the AI summary', () => {
   it('is stored on the case, not only mailed', async () => {
     const res = await accept('msg-ravi-1');
@@ -248,12 +185,6 @@ describe('the AI summary', () => {
     expect(stored.aiSummary.generatedAt).toEqual(expect.any(String));
   });
 
-  /**
-   * `GEMMA_API_URL` is blank across this suite (vitest.config.mjs), so the
-   * model is never reached and the deterministic stand-in answers instead. The
-   * status has to say so — a fallback presented as the model's work is worse
-   * than no summary, because nobody goes looking for it.
-   */
   it('says when it is the deterministic fallback rather than the model', async () => {
     const res = await accept('msg-ravi-1');
 
@@ -266,17 +197,12 @@ describe('the AI summary', () => {
   it('is generated once and handed to the forward, not computed twice', async () => {
     await accept('msg-ravi-1');
 
-    // The forward receives the stored summary, so it does not make its own
-    // call — and the trail holds one AI row, not two.
     expect(forwardSpy).toHaveBeenCalledWith(expect.objectContaining({ aiSummary: expect.any(Object) }));
     expect(
       (await AuditEvent.find({ action: 'AI_SUMMARY_GENERATED' }).lean()).length,
     ).toBe(1);
   });
 
-  /**
-   * The user's §9: an AI outage costs the summary, never the enquiry.
-   */
   it('keeps the case when generation throws, and records the failure', async () => {
     vi.spyOn(gemmaService, 'generateSummary').mockRejectedValue(new Error('Gemma unreachable'));
 
@@ -286,7 +212,6 @@ describe('the AI summary', () => {
     expect(res.body).toMatchObject({ created: true, aiSummaryStatus: 'FAILED' });
     expect(res.body.errors).toContainEqual({ step: 'aiSummary', error: 'Gemma unreachable' });
 
-    // The case, its id, the acknowledgement and the forward all survive.
     const stored = await QueryCase.findOne({ queryId: res.body.queryId }).lean();
     expect(stored.workflowState).toBe('PENDING_ASSIGNMENT');
     expect(stored.aiSummary).toMatchObject({ status: 'FAILED', error: 'Gemma unreachable' });
@@ -309,8 +234,6 @@ describe('the AI summary', () => {
     expect(second.body.aiSummaryStatus).toBe('FALLBACK');
     const stored = await QueryCase.findOne({ queryId: first.body.queryId }).lean();
     expect(stored.aiSummary.status).toBe('FALLBACK');
-
-    // Nothing else was repeated.
     expect(await QueryCase.find({}).lean()).toHaveLength(1);
     expect(await messagesOfType('ACKNOWLEDGEMENT')).toHaveLength(1);
     expect(await messagesOfType('FORWARD')).toHaveLength(1);
@@ -329,7 +252,6 @@ describe('the AI summary', () => {
 
 describe('Case ID numbering', () => {
   it('numbers cases sequentially from one, off the server-side counter', async () => {
-    // The counter used to live in the browser, so two tabs minted the same id.
     const first = await accept('msg-ravi-1');
     const second = await accept('msg-priya-1', incoming({ from: 'Priya <priya@lab.example>' }));
 
@@ -356,21 +278,11 @@ describe('accepting the same message twice', () => {
     expect(await QueryCase.find({}).lean()).toHaveLength(1);
     expect(await messagesOfType('ACKNOWLEDGEMENT')).toHaveLength(1);
     expect(await messagesOfType('FORWARD')).toHaveLength(1);
-
-    // The assertion that matters to the person who wrote in: they were emailed
-    // once, and the Officer-in-Charge received the case once.
     expect(ackSpy).toHaveBeenCalledTimes(1);
     expect(forwardSpy).toHaveBeenCalledTimes(1);
   });
 });
 
-/**
- * Two officers (or one impatient double click) accepting the same message.
- *
- * Nothing about intake is atomic across documents, so each guard has to hold on
- * its own: the case by a unique index on the message id, the acknowledgement and
- * the forward by the outbox's claim.
- */
 describe('two accepts of the same message at once', () => {
   it('opens one case, and sends one acknowledgement and one forward', async () => {
     const [first, second] = await Promise.all([
@@ -383,13 +295,10 @@ describe('two accepts of the same message at once', () => {
     expect(await messagesOfType('FORWARD')).toHaveLength(1);
     expect(ackSpy).toHaveBeenCalledTimes(1);
     expect(forwardSpy).toHaveBeenCalledTimes(1);
-
-    // Both are answered, and both name the same case.
     expect(first.status).toBe(200);
     expect(second.status).toBe(200);
     expect(first.body.queryId).toBe(second.body.queryId);
 
-    // The registration is recorded once, by whichever request created the case.
     const history = (await AuditEvent.find({ queryId: first.body.queryId }).lean()).map((e) => e.action);
     expect(history.filter((action) => action === 'QUERY_REGISTERED')).toHaveLength(1);
     expect(history.filter((action) => action === 'CASE_ASSOCIATED')).toHaveLength(1);
@@ -402,8 +311,6 @@ describe('a step that fails', () => {
 
     const res = await accept('msg-ravi-1');
 
-    // 200, not 500: a case that exists but was not acknowledged is a state an
-    // operator can recover from. A 500 would lose the Case ID as well.
     expect(res.status).toBe(200);
     expect(res.body).toMatchObject({ created: true, acknowledged: false, forwarded: true });
     expect(res.body.errors).toContainEqual(
@@ -414,12 +321,6 @@ describe('a step that fails', () => {
     expect(stored.workflowState).toBe('PENDING_ASSIGNMENT');
   });
 
-  /**
-   * A NICeMail browser send can fail after Send was pressed, when nothing on
-   * screen confirms the message left. That is not an ordinary failure — the
-   * inquirer may already have it — and the page has to be able to tell, or it
-   * offers a retry that emails them twice. So the flag has to survive the trip.
-   */
   it('marks an unconfirmed acknowledgement distinctly, and records none', async () => {
     ackSpy.mockRejectedValue(
       Object.assign(new Error('NICeMail may have sent this message but did not confirm it in time.'), {
@@ -434,7 +335,6 @@ describe('a step that fails', () => {
     expect(res.body.errors).toContainEqual(
       expect.objectContaining({ step: 'acknowledgement', unconfirmed: true }),
     );
-    // Nothing recorded, so nothing claims the inquirer was told.
     expect(await messagesOfType('ACKNOWLEDGEMENT')).toHaveLength(0);
   });
 
@@ -447,13 +347,6 @@ describe('a step that fails', () => {
     expect(failure.unconfirmed).toBeUndefined();
   });
 
-  /**
-   * A failed acknowledgement used to leave no trace but the toast the Front
-   * Officer saw once. The case page's retry audits its failures, and final
-   * approval audits a failed dispatch; accept is where most acknowledgements
-   * are sent. For an unconfirmed one this row is the only lasting record that
-   * the inquirer may already have it — and it shows in the case's history.
-   */
   const sendFailures = async (queryId) =>
     (await AuditEvent.find({ queryId }).lean()).filter((event) => event.action === 'EMAIL_SEND_FAILED');
 
@@ -512,9 +405,6 @@ describe('a step that fails', () => {
 
     const stored = await QueryCase.findOne({ queryId: first.body.queryId }).lean();
     expect(stored.workflowState).toBe('PENDING_ASSIGNMENT');
-
-    // The point of the retry: the step that failed is re-attempted, the step
-    // that succeeded is not. The sender does not get a second email.
     expect(ackSpy).toHaveBeenCalledTimes(1);
     expect(await messagesOfType('ACKNOWLEDGEMENT')).toHaveLength(1);
     expect(await messagesOfType('FORWARD')).toHaveLength(1);
@@ -543,8 +433,6 @@ describe('POST /mailbox/messages/:messageId/accept — authorization', () => {
       const res = await accept('msg-ravi-1', incoming(), role);
       expect(res.status).toBe(403);
     }
-
-    // Nothing reached the mailbox on the way to being refused.
     expect(await QueryCase.find({}).lean()).toHaveLength(0);
   });
 });

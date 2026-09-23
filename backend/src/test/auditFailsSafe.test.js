@@ -1,18 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-/**
- * The fail-safe contract: a failed audit write must never propagate into the
- * caller.
- *
- * An email that was genuinely sent is still sent whether or not Mongo accepted
- * the record, so rolling the action back — or letting the exception escape —
- * would turn a bookkeeping failure into a correspondence failure.
- *
- * Exercising the Mongo branch needs both a connected database and a failing
- * write, neither of which the default suite configuration has, so both are
- * mocked here. `vi.mock` is hoisted above the imports, so the mocks are in
- * place before auditService captures its references.
- */
 vi.mock('../config/db.js', () => ({
   isConnected: () => true,
   mongoose: { Schema: class {}, model: () => ({}), models: {} },

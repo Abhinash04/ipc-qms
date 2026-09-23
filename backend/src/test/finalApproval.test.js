@@ -1,31 +1,11 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import request from 'supertest';
 
-/**
- * Final approval, and the response that answers the inquirer.
- *
- * The subject here is the ordering. The Officer-in-Charge's decision must
- * survive a mail server being down, and the case must not read CLOSED unless a
- * response genuinely went out — those pull in opposite directions, which is why
- * the approval is written before the send and the closure after it.
- *
- * This is also where a 403 used to live: the browser recorded the approval and
- * then called `/emails/response` itself, from the approving officer's session,
- * against an endpoint only the Front Office may use. The permission is
- * unchanged; the work moved to something that already holds it.
- *
- * The rest of the suite runs with DATABASE_URL blank and answers 503 before
- * reaching a model, so the models are stood in and the connection reported as
- * up — the same harness as acceptMessage.test.js.
- */
-
 vi.mock('../config/db.js', async (importOriginal) => ({
   ...(await importOriginal()),
   isConnected: () => true,
 }));
 
-// The in-memory stand-in (support/memoryDb.js) enforces the unique keys the
-// once-only send rests on — above all `dispatchKey` on the outbox ledger.
 vi.mock('../models/QueryCase.js', async () => ({
   QueryCase: (await import('./support/memoryDb.js')).memoryDb.model('QueryCase', { unique: ['queryId'] }),
 }));
@@ -71,10 +51,8 @@ import {
 
 const QUERY_ID = 'QRY-2026-00001';
 
-/** The person who actually wrote in. Never a configured address. */
 const INQUIRER_EMAIL = 'ravi@pharma.example';
 
-/** What vitest.config.mjs configures, so a test can prove it was NOT used. */
 const CONFIGURED_INQUIRER = 'inquirer@test.invalid';
 
 const approve = (queryId = QUERY_ID, role = ROLES.OFFICER_IN_CHARGE, body = {}) =>
@@ -83,7 +61,6 @@ const approve = (queryId = QUERY_ID, role = ROLES.OFFICER_IN_CHARGE, body = {}) 
     .set(authHeader(role))
     .send(body);
 
-/** A case that has been drafted, reviewed and is waiting on the OIC. */
 async function caseAwaitingApproval(overrides = {}) {
   await QueryCase.create({
     queryId: QUERY_ID,
@@ -121,8 +98,6 @@ let sendSpy;
 
 beforeEach(async () => {
   db.reset();
-  // EMAIL_TRANSPORT=mock keeps real mail out of the suite; the spy is here for
-  // the call counts and for the failure cases, which are the point of the file.
   sendSpy = vi.spyOn(emailService, 'sendResponse');
   await caseAwaitingApproval();
 });
@@ -201,16 +176,6 @@ describe('POST /queries/:queryId/final-approval — the happy path', () => {
   });
 });
 
-/**
- * The half of the contract that matters most: a case must never read CLOSED
- * when the inquirer has not been answered.
- */
-/**
- * A NICeMail browser send pressed Send and saw no confirmation in time. The
- * response may be in the inquirer's inbox, or may not. That is the one failure
- * where the usual advice — retry — is exactly wrong, so it must read
- * differently everywhere a person would act on it.
- */
 describe('when the send is unconfirmed', () => {
   beforeEach(() => {
     sendSpy.mockRejectedValue(
@@ -250,15 +215,6 @@ describe('when the send is unconfirmed', () => {
   });
 });
 
-/**
- * The failure this whole path was rebuilt for.
- *
- * In a live test the Officer-in-Charge pressed Approve four times while the
- * first send hung for 22 seconds on a failing DNS lookup. Each request read
- * "no response recorded yet" and sent; the inquirer received the same answer
- * three times. Overlapping requests are the normal case for a slow send, not an
- * exotic one, so they are what these tests do.
- */
 describe('when approve is pressed more than once', () => {
   it('sends one response for three overlapping requests', async () => {
     const [first, second, third] = await Promise.all([approve(), approve(), approve()]);
@@ -266,13 +222,11 @@ describe('when approve is pressed more than once', () => {
     expect(sendSpy).toHaveBeenCalledTimes(1);
     expect(await messagesOfType('OUTGOING_RESPONSE')).toHaveLength(1);
 
-    // One decision, one send, one closure — however many times it was asked for.
     const history = await actions();
     expect(history.filter((action) => action === 'FINAL_APPROVAL_GRANTED')).toHaveLength(1);
     expect(history.filter((action) => action === 'RESPONSE_DISPATCHED')).toHaveLength(1);
     expect(history.filter((action) => action === 'QUERY_CLOSED')).toHaveLength(1);
 
-    // And none of the three is told the case failed.
     for (const res of [first, second, third]) {
       expect(res.status).toBe(200);
       expect(res.body.approved).toBe(true);
@@ -291,12 +245,6 @@ describe('when approve is pressed more than once', () => {
     expect(await messagesOfType('OUTGOING_RESPONSE')).toHaveLength(1);
   });
 
-  /**
-   * The send that failed finished last, so its "not emailed" answer was what
-   * the officer saw for a case that had in fact been answered and closed. The
-   * ledger is what the reply is read from now, so a losing request reports the
-   * state of the email rather than the fate of its own attempt.
-   */
   it('does not report a failure for a response another request sent', async () => {
     let attempt = 0;
     sendSpy.mockImplementation(async () => {
@@ -346,10 +294,6 @@ describe('when the response cannot be sent', () => {
     expect(await messagesOfType('OUTGOING_RESPONSE')).toHaveLength(0);
   });
 
-  /**
-   * The transport's own EMAIL_SEND_FAILED rows carry no queryId, so a failure
-   * cannot be traced back to the case it belonged to. This one can.
-   */
   it('records the failure against the case', async () => {
     await approve();
 
@@ -372,24 +316,11 @@ describe('when the response cannot be sent', () => {
     expect(retry.body).toMatchObject({ dispatched: true, workflowState: 'CLOSED' });
     expect(await messagesOfType('OUTGOING_RESPONSE')).toHaveLength(1);
 
-    // The decision was taken once, so it is recorded once.
     const granted = (await actions()).filter((a) => a === 'FINAL_APPROVAL_GRANTED');
     expect(granted).toHaveLength(1);
   });
 });
 
-/**
- * `getTransport` falls back to the mock when a role holds no usable credential,
- * and the mock returns an ordinary success. That is deliberate — it is what
- * lets the mocked tail of a development workflow run — and it is exactly why
- * this path has to check: on a deployment configured for real mail, a mock
- * result means the Front Office credential is missing or revoked, and closing
- * the case on it would tell the officer an inquirer had been answered who had
- * not been.
- *
- * The suite runs with EMAIL_TRANSPORT=mock, where a mock result IS delivery, so
- * the deployment setting is flipped for these two cases and restored after.
- */
 describe('when the transport quietly degrades to the mock', () => {
   const MOCK_RESULT = {
     transport: 'mock',
@@ -430,12 +361,6 @@ describe('when the transport quietly degrades to the mock', () => {
     expect(res.body).toMatchObject({ dispatched: true, workflowState: 'CLOSED' });
   });
 
-  /**
-   * The channel is the case's, not the deployment's. A NICeMail case sends
-   * through the browser whatever EMAIL_TRANSPORT says, so a mock result there
-   * means the browser never sent it — and accepting it would close the case
-   * and tell the inquirer they had been answered.
-   */
   it('refuses a mock result for a NICeMail case even under EMAIL_TRANSPORT=mock', async () => {
     env.EMAIL_TRANSPORT = 'mock';
     await QueryCase.updateOne(
@@ -501,10 +426,6 @@ describe('a case that is not ready', () => {
   });
 });
 
-/**
- * DISPATCH remains a Front Office permission. What changed is who does the
- * sending, not who may.
- */
 describe('POST /queries/:queryId/final-approval — authorization', () => {
   it('refuses an unauthenticated caller', async () => {
     const res = await request(app).post(`/api/v1/queries/${QUERY_ID}/final-approval`).send({});

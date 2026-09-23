@@ -5,14 +5,6 @@ import { authHeader } from './helpers/auth.js';
 import { ROLES } from '../constants/roles.js';
 import { mailboxDecisionSchema } from '../validators/mailboxSchemas.js';
 
-/**
- * The validation gate between "mail arrived" and "a case exists".
- *
- * The suite runs with DATABASE_URL blank (vitest.config.mjs), so anything that
- * reaches the model answers 503. That is enough to pin what matters at this
- * layer: who may decide, what the schema admits, and that the actor cannot be
- * supplied by the caller.
- */
 const PATH = '/api/v1/mailbox/messages/msg-1/decision';
 const ACCEPT = { decision: 'ACCEPTED', queryId: 'QRY-2026-00001' };
 
@@ -72,9 +64,6 @@ describe('the decision schema', () => {
   });
 
   it('strips an actor supplied by the caller', () => {
-    // The whole point: a decision whose actor the caller names is a decision
-    // the caller can attribute to someone else. The server fills it from the
-    // session.
     const parsed = mailboxDecisionSchema.parse({
       decision: 'REJECTED',
       reason: 'Advertisement',

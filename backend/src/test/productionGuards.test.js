@@ -5,16 +5,6 @@ import { authHeader } from './helpers/auth.js';
 import { ROLES } from '../constants/roles.js';
 import * as mailbox from '../services/email/mailbox/index.js';
 
-/**
- * Two endpoints exist for development and the suites: one fabricates an inbound
- * message, the other wipes the mailbox. On a live server they are a way to
- * invent an enquiry or destroy the Front Office's inbox, so a production
- * deployment refuses them whatever the caller's role.
- *
- * NODE_ENV is stubbed rather than set on `env`, which is the point of the
- * call-time `isProduction()` in config/env.js: the snapshot taken at import
- * cannot see a stub.
- */
 const RECEIVE = '/api/v1/mailbox/receive';
 const RESET = '/api/v1/mailbox';
 const MESSAGE = { from: 'ravi@pharma.example', subject: 'Query', body: 'Body' };
@@ -62,8 +52,6 @@ describe('the same endpoints outside production', () => {
   it('reaches the mailbox rather than the guard', async () => {
     const res = await request(app).post(RECEIVE).set(authHeader(ROLES.SUPER_ADMIN)).send(MESSAGE);
 
-    // The suite runs with no database, so the store answers on its own terms.
-    // Anything but the 409 proves the request was not refused by environment.
     expect(res.status).not.toBe(409);
   });
 });

@@ -3,16 +3,6 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-/**
- * No query in the backend passes Mongoose's deprecated `new` or `returnOriginal`.
- *
- * Mongoose 9 deprecates both for findOneAndUpdate() and findOneAndReplace() in
- * favour of `returnDocument`, and warns on every execution rather than once per
- * process — so one stray option put a warning in the backend log for every
- * request that reached it, two per final approval. The unit tests run against
- * stand-in models that never reach Mongoose and so cannot see the warning; this
- * reads the source instead.
- */
 const BACKEND = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 
 function sourceFiles(dir) {

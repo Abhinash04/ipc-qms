@@ -7,19 +7,12 @@ import { reset as resetCredentials } from '../services/auth/credentials.js';
 import { AUTH, authHeader } from './helpers/auth.js';
 import { ROLES } from '../constants/roles.js';
 
-/**
- * Per-account passwords, from src/test/fixtures/passwords.json, which
- * vitest.config.mjs points QMS_PASSWORDS_FILE at. They are DISTINCT on purpose:
- * a suite where every account shared one secret could not tell a working login
- * apart from the defect that per-account hashes replaced.
- */
 const PASSWORD = 'test-pw-superadmin-0008';
 const SUPER_ADMIN = 'admin@ipc.example';
 
 const OFFICIAL = 'neha.singh@ipc.example';
 const OFFICIAL_PASSWORD = 'test-pw-official-0004';
 
-/** The `Set-Cookie` entry for the session, or undefined. */
 const sessionCookie = (res) =>
   (res.headers['set-cookie'] || []).find((entry) => entry.startsWith(`${authConfig.COOKIE_NAME}=`));
 
@@ -71,7 +64,6 @@ describe('POST /auth/login', () => {
       .post('/api/v1/auth/login')
       .send({ email: SUPER_ADMIN, password: 'not-the-password' });
 
-    // Distinguishing the two would enumerate valid accounts.
     expect(unknown.status).toBe(wrong.status);
     expect(unknown.body.error).toBe(wrong.body.error);
   });
@@ -81,15 +73,6 @@ describe('POST /auth/login', () => {
     expect(res.status).toBe(400);
   });
 
-  /**
-   * The regression for the audit's highest-severity finding.
-   *
-   * verifyCredentials used to compare every submitted password against a single
-   * process-wide hash of QMS_SEED_PASSWORD that did not depend on the account
-   * findByEmail had just resolved. Anyone holding any account could therefore
-   * sign in as SUPER_ADMIN with their own password, and the role claim in the
-   * issued JWT is the sole input to every verifyRole gate downstream.
-   */
   it('does not accept one account password for a different account', async () => {
     const res = await request(app)
       .post('/api/v1/auth/login')
@@ -106,8 +89,6 @@ describe('POST /auth/login', () => {
     expect(official.status).toBe(200);
     expect(official.body.user).toMatchObject({ id: 'USR-0004', role: 'ASSIGNED_OFFICIAL' });
 
-    // ...and the reverse pairing fails, so the first assertion is not passing
-    // for the old reason (any password opening any account).
     const crossed = await request(app)
       .post('/api/v1/auth/login')
       .send({ email: OFFICIAL, password: PASSWORD });
@@ -149,15 +130,6 @@ describe('GET /auth/me', () => {
   });
 });
 
-/**
- * The staff directory, served to a signed-in caller.
- *
- * Groundwork for moving the client's bundled directory
- * (frontend/src/constants/mockUsers.js) behind a session. That module reaches
- * the browser BEFORE authentication, so the account list and every login
- * address in it are readable by an unauthenticated visitor; the frontend half
- * of that change is not done yet, and the audit finding stays open until it is.
- */
 describe('GET /auth/users', () => {
   it('401s with no session cookie', async () => {
     expect((await request(app).get('/api/v1/auth/users')).status).toBe(401);
@@ -174,10 +146,6 @@ describe('GET /auth/users', () => {
     expect(serialised).not.toMatch(/password|hash|secret/i);
   });
 
-  // The least-privileged role there is, so a 200 here means the route carries no
-  // role gate at all. It named INQUIRER until that role was removed, at which
-  // point `authHeader(undefined)` fell through to its SUPER_ADMIN default and
-  // this quietly asserted nothing the test above had not already covered.
   it('is readable by any role — it is a directory, not an admin console', async () => {
     const res = await request(app).get('/api/v1/auth/users').set(authHeader(ROLES.REVIEWER));
     expect(res.status).toBe(200);
@@ -189,7 +157,6 @@ describe('POST /auth/logout', () => {
     const res = await request(app).post('/api/v1/auth/logout').set(AUTH);
 
     expect(res.status).toBe(200);
-    // An expiry in the past is how a cookie is removed.
     expect(sessionCookie(res)).toMatch(/Expires=Thu, 01 Jan 1970|Max-Age=0/i);
   });
 
@@ -209,13 +176,6 @@ describe('auth configuration', () => {
     );
   });
 
-  /**
-   * QMS_SEED_PASSWORD is no longer required on its own — it is a credential
-   * source only under QMS_ALLOW_SHARED_PASSWORD=true. What IS required is a
-   * credential for every seeded account, checked at boot so a missing one is a
-   * named startup failure rather than a user who is told "Invalid email or
-   * password" and has no way to tell why.
-   */
   it('requires a credential for every seeded account', () => {
     vi.stubEnv('QMS_PASSWORDS_FILE', '');
     resetCredentials();

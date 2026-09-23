@@ -6,7 +6,6 @@ import env, { validateEmailConfig } from '../config/env.js';
 import * as emailService from '../services/email/emailService.js';
 import * as mockTransport from '../services/email/transports/mockTransport.js';
 import * as mailbox from '../services/email/mailbox/index.js';
-/** An enquiry arriving in the Front Office mailbox, as the reader stores it. */
 const arrive = (subject) =>
   request(app)
     .post('/api/v1/mailbox/receive').set(AUTH)
@@ -34,8 +33,6 @@ describe('email configuration', () => {
       expect.stringContaining('EMAIL_TRANSPORT must be one of'),
     );
 
-    // gmail was a transport and a mailbox source until the NICeMail agent
-    // replaced both. A configuration still naming it must fail, not fall back.
     expect(validateEmailConfig({ ...env, EMAIL_TRANSPORT: 'gmail' })).toContainEqual(
       expect.stringContaining('EMAIL_TRANSPORT must be one of: mock, nic'),
     );
@@ -50,13 +47,6 @@ describe('email configuration', () => {
     expect(validateEmailConfig(env)).toEqual([]);
   });
 
-  /**
-   * The defaults are development defaults: mock sends nothing while reporting
-   * success, and identities.js falls back to unroutable @example.com. Both are
-   * right locally and catastrophic in production — the first closes cases
-   * nobody was told about — so production is refused at boot rather than
-   * discovered at the first send.
-   */
   describe('production refuses a configuration that cannot really send', () => {
     afterEach(() => {
       vi.unstubAllEnvs();
@@ -80,7 +70,6 @@ describe('email configuration', () => {
       expect(inProduction({ config: { EMAIL_TRANSPORT: 'mock' } }).join(' ')).toMatch(
         /needs a real outbound channel/,
       );
-      // The browser agent is one, so it satisfies the rule on its own.
       const withAgent = inProduction({
         config: { EMAIL_TRANSPORT: 'mock' },
         envs: { NIC_BROWSER_MAILBOX: 'true', NIC_EMAIL: 'lab@ipc.gov.in', NIC_BROWSER_TEST_RECIPIENT: 'test@ipc.gov.in' },
@@ -99,11 +88,6 @@ describe('email configuration', () => {
     });
   });
 
-  /**
-   * browserConfig.testRecipient falls back to NIC_EMAIL, so a deployment that
-   * sets neither test-recipient variable has an interlock that reports itself
-   * closed while permitting mail to the mailbox itself.
-   */
   it('requires a test recipient while the outbound interlock is closed', () => {
     vi.stubEnv('NIC_BROWSER_MAILBOX', 'true');
     vi.stubEnv('NIC_EMAIL', 'lab@ipc.gov.in');
@@ -135,7 +119,6 @@ describe('email configuration', () => {
 });
 
 describe('mock mailbox determinism', () => {
-  /** Any send deposits a copy into the local mailbox; this is the surviving one. */
   const deposit = (subject) =>
     emailService.sendAcknowledgement({ to: 'front-office@test.invalid', queryId: subject });
 
@@ -199,11 +182,6 @@ describe('email HTTP endpoints', () => {
     expect(res.body.participants.map((p) => p.role)).toEqual(['FRONT_OFFICE', 'OFFICER_IN_CHARGE']);
   });
 
-  /**
-   * EMAIL_TRANSPORT describes one channel. A NICeMail case is answered through
-   * the browser agent whatever it says, so a read-only admin page that saw
-   * only the transport would call a live .gov.in deployment silent.
-   */
   it('GET /emails/config reports the NICeMail channel as well as the transport', async () => {
     const quiet = await request(app).get('/api/v1/emails/config').set(AUTH);
     expect(quiet.body).toMatchObject({ nicBrowserMailbox: false, outboundAllowed: false });
@@ -219,7 +197,6 @@ describe('email HTTP endpoints', () => {
       outboundAllowed: true,
     });
 
-    // Posture, not credentials: no address and nothing secret is added.
     expect(JSON.stringify(live.body)).not.toMatch(/lab@ipc\.gov\.in/);
     vi.unstubAllEnvs();
   });
@@ -254,13 +231,10 @@ describe('email HTTP endpoints', () => {
       .post('/api/v1/emails/acknowledgement').set(AUTH)
       .send({ to: 'inquirer@test.invalid', queryId: 'QRY-2026-00001' });
 
-    // The IPC mailbox still holds only the enquiry; re-polling it can never
-    // register the acknowledgement as a new query.
     const ipcInbox = await mailbox.list('front-office@test.invalid');
     expect(ipcInbox).toHaveLength(1);
     expect(ipcInbox[0].subject).toBe('Loop check');
 
-    // It was delivered to the inquirer instead.
     const inquirerInbox = await mailbox.list('inquirer@test.invalid');
     expect(inquirerInbox).toHaveLength(1);
     expect(inquirerInbox[0].subject).toContain('Acknowledgement of Query Received');
@@ -319,8 +293,6 @@ describe('mailbox HTTP endpoints', () => {
 
     const missing = await request(app).delete('/api/v1/mailbox/messages/MSG-99999').set(AUTH);
     expect(missing.status).toBe(404);
-    // Prove the route was actually matched: the catch-all 404 answers with
-    // {error:'Not Found', path}, which would otherwise pass the status check.
     expect(missing.body).toEqual({ error: 'Message not found', messageId: 'MSG-99999' });
   });
 

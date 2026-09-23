@@ -149,10 +149,6 @@ describe('determinism (binding constraint)', () => {
 });
 
 describe('recipient keying', () => {
-  // Regression: the acknowledgement is addressed with the sender string taken
-  // from the incoming mail ("Name <addr>"), so delivering under that raw string
-  // put it in a second, unreachable inbox — list() looked it up by bare address
-  // and found nothing.
   it('treats "Name <addr>" and the bare address as one inbox', async () => {
     await mailbox.deliver({
       to: 'Abhinash Pritiraj <abhinash.pritiraj@pharma.example>',

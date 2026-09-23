@@ -2,12 +2,6 @@ import { describe, it, expect, afterEach, vi } from 'vitest';
 
 import { sendTrace, traceSink } from '../services/email/sendTrace.js';
 
-/**
- * The per-send log lines. They carry addresses and subjects on purpose — that
- * is what an operator traces a send by — and must never carry a credential,
- * or become the reason a send fails.
- */
-
 afterEach(() => {
   vi.restoreAllMocks();
 });

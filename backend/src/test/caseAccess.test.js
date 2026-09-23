@@ -1,16 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { ROLES } from '../constants/roles.js';
 
-/**
- * The membership authority, in isolation.
- *
- * The suite runs with DATABASE_URL blank, so `isConnected()` is false and every
- * scoped lookup would refuse. Both the connection and the models are stubbed
- * here so the per-role rules can be asserted directly — which is the right
- * level for them anyway: these are pure predicates, and the HTTP layer is
- * covered separately in caseDeltaAuthorization.test.js.
- */
-
 const connected = { value: true };
 
 vi.mock('../config/db.js', () => ({
@@ -45,16 +35,6 @@ describe('roles that see everything', () => {
     await expect(isPartyToCase(user(role), 'QRY-2026-99999')).resolves.toBe(true);
   });
 
-  /**
-   * The highest-consequence mistake available in this module.
-   *
-   * A SUPER_ADMIN is party to no case in the data sense — they are named on no
-   * assignment, no review and no inquirer record. If the role branch were to
-   * fall through to a membership query, they would resolve to the EMPTY set and
-   * every dashboard in the application would go blank, while /queries/reset —
-   * the recovery tool — kept working. Asserting that no query was issued pins
-   * the early return, not merely its result.
-   */
   it.each(everything)('%s is resolved without querying the database', async (role) => {
     await visibleQueryIds(user(role));
 
@@ -108,12 +88,6 @@ describe('ASSIGNED_OFFICIAL', () => {
     expect(QueryCase.distinct).toHaveBeenCalledWith('queryId', { currentAssigneeId: 'USR-0004' });
   });
 
-  /**
-   * Deliberately wider than the client's `isAssignedTo`, which tests only the
-   * CURRENT step. Without this an official loses sight of a case they drafted
-   * the moment it moves to a reviewer — history included — which reads as data
-   * loss to the person it happens to.
-   */
   it('keeps a case they worked once it has moved on to someone else', async () => {
     WorkflowStep.distinct.mockResolvedValue(['QRY-DRAFTED-EARLIER']);
     QueryCase.distinct.mockResolvedValue([]);
@@ -137,11 +111,6 @@ describe('scopeFilter', () => {
     });
   });
 
-  /**
-   * The filter and the predicate must agree on the same fixture — that
-   * agreement is the reason membership resolves to one id set rather than to
-   * two separately written rules.
-   */
   it('agrees with isPartyToCase on the same fixture', async () => {
     WorkflowStep.distinct.mockResolvedValue(['QRY-A']);
     Review.distinct.mockResolvedValue([]);

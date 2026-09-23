@@ -2,24 +2,6 @@ import { describe, it, expect, vi } from 'vitest';
 
 import { connect, isSessionLost, isWaitTimeout } from '../services/email/nic/browser/cdp.js';
 
-/**
- * The raw CDP client, against a fake socket.
- *
- * The bug this file exists for: the backend used to reach Chrome through
- * Playwright's `connectOverCDP`, whose connect waits on every page target in
- * the browser and whose driver keeps the process alive afterwards. From inside
- * an HTTP request that is indistinguishable from a hang. So the one property
- * every case below is really asking about is the same one: can any call here
- * outlive its timeout?
- *
- * The transport is the injection seam — `(endpoint, { timeoutMs }) => WebSocket`
- * — so nothing opens a socket and nothing reaches a browser.
- */
-
-/**
- * A WebSocket-shaped fake. `respond` decides what the browser answers; return
- * undefined to answer nothing at all, which is how a hang is staged.
- */
 function fakeSocket({ respond = () => ({}), open = true, delayMs = 0 } = {}) {
   const listeners = { open: [], message: [], close: [], error: [] };
   const sent = [];
@@ -34,8 +16,6 @@ function fakeSocket({ respond = () => ({}), open = true, delayMs = 0 } = {}) {
     send: (raw) => {
       const frame = JSON.parse(raw);
       sent.push(frame);
-      // Asynchronously, as a real socket answers — after a real delay when asked,
-      // since a reply that lands in a microtask can never lose a race to a timer.
       const answer = () => {
         const result = respond(frame);
         if (result === undefined) return;
@@ -49,7 +29,6 @@ function fakeSocket({ respond = () => ({}), open = true, delayMs = 0 } = {}) {
       socket.readyState = 3;
       emit('close', {});
     },
-    /** Push a session event, the way Chrome reports a tab going away. */
     emitEvent: (frame) => emit('message', { data: JSON.stringify(frame) }),
     openNow: () => {
       socket.readyState = 1;
@@ -62,7 +41,6 @@ function fakeSocket({ respond = () => ({}), open = true, delayMs = 0 } = {}) {
 
 const transportFor = (socket) => async () => socket;
 
-/** A browser that answers attach, then whatever `evaluate` is told to return. */
 function fakeBrowser({ values = [], sessionId = 'S1', delayMs = 0 } = {}) {
   let call = 0;
   return fakeSocket({
@@ -99,8 +77,6 @@ describe('connecting', () => {
   });
 
   it('closes the socket it opened when the handshake fails, rather than leaking one per attach', async () => {
-    // Nothing escapes a failed connect(), so no caller could close this socket
-    // — and the inbox sync retries every 30 seconds.
     const socket = fakeSocket({ open: false });
 
     await expect(
@@ -169,8 +145,6 @@ describe('protocol errors', () => {
     const client = await connect('x', { transport: transportFor(socket), timeoutMs: 100 });
     const session = await client.attach('T1');
 
-    // A silent `undefined` is indistinguishable from "not ready yet", which is
-    // exactly how a poll turns into a hang.
     await expect(session.evaluate('boom()')).rejects.toThrow(/TypeError: x is not a function/);
   });
 });
@@ -216,10 +190,6 @@ describe('a session', () => {
   });
 
   it('ends a wait on a fast page that never gets there in its own tagged timeout', async () => {
-    // The page answers falsy within a few milliseconds, every time. The last
-    // poll used to start after the deadline with a 1ms budget and time out as a
-    // request — an untagged error, which the reader rightly rethrows, so a
-    // genuinely empty inbox synced as a failure.
     const socket = fakeBrowser({ values: [false], delayMs: 3 });
     const client = await connect('x', { transport: transportFor(socket), timeoutMs: 1000 });
     const session = await client.attach('T1');
@@ -230,8 +200,6 @@ describe('a session', () => {
   });
 
   it("bounds each poll by the wait's own deadline, not by the request timeout", async () => {
-    // A page that stops answering altogether. Each poll gets the time left in
-    // the wait (with a short floor), not the 5s request timeout.
     const socket = fakeSocket({
       respond: (frame) => (frame.method === 'Target.attachToTarget' ? { result: { sessionId: 'S1' } } : undefined),
     });
@@ -242,7 +210,6 @@ describe('a session', () => {
     const error = await session.waitFor('ready', { timeout: 50, every: 1 }).catch((failure) => failure);
 
     expect(error.message).toMatch(/did not answer within/);
-    // A dead page is a failed read, not an empty folder.
     expect(isWaitTimeout(error)).toBe(false);
     expect(Date.now() - started).toBeLessThan(3000);
   });
@@ -252,12 +219,10 @@ describe('a session', () => {
     const client = await connect('x', { transport: transportFor(socket), timeoutMs: 100 });
     const session = await client.attach('T1');
 
-    // Chrome's memory saver can discard a hidden background tab mid-run.
     socket.emitEvent({ method: 'Target.detachedFromTarget', params: { sessionId: 'S1' } });
 
     const error = await session.evaluate('1').catch((failure) => failure);
     expect(error.message).toMatch(/closed or crashed/);
-    // Tagged, so a lookup cannot mistake a dead tab for a selector that matched nothing.
     expect(isSessionLost(error)).toBe(true);
   });
 
@@ -282,7 +247,6 @@ describe('a session', () => {
 
     const { expression } = socket.sent.at(-1).params;
     expect(expression).toBe(`(${((n, k) => k.plusOne(n)).toString()})(6, (${kit.toString()})())`);
-    // The kit changes the expression and nothing else: no domain, no auto-attach.
     const methods = socket.sent.map((frame) => frame.method);
     expect(methods.filter((method) => method.endsWith('.enable') || method.startsWith('Target.set'))).toEqual([]);
   });
@@ -297,7 +261,6 @@ describe('closing the agent tab', () => {
       respond: (frame) => {
         if (frame.method === 'Target.closeTarget') {
           attempts += 1;
-          // The live failure: success is reported while the tab stays open.
           if (attempts > 1) open.delete('T1');
           return { result: { success: true } };
         }
@@ -334,8 +297,6 @@ describe('what it enables on a target', () => {
     await session.evaluate('1 + 1');
     await session.close();
 
-    // Runtime.evaluate, Page.navigate and Input.* all answer on a bare flat
-    // session; enabling Network or Log only buys events nobody reads.
     const enables = socket.sent.filter((frame) => frame.method.endsWith('.enable'));
     expect(enables).toEqual([]);
   });
@@ -346,8 +307,6 @@ describe('what it enables on a target', () => {
 
     await client.attach('T1');
 
-    // No setAutoAttach, no discovery: the operator's other tabs are never
-    // attached to, which is what made Playwright's connect stall on them.
     const touched = socket.sent.map((frame) => frame.method);
     expect(touched).not.toContain('Target.setAutoAttach');
     expect(touched).not.toContain('Target.setDiscoverTargets');

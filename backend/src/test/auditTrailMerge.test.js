@@ -1,24 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import request from 'supertest';
 
-/**
- * Two ideas ported from Aakash's branch (origin/aakash, 5539f7b) when it was
- * merged into this one, and the one property of his that deliberately was not.
- *
- * His branch moved workflow history into its own `WorkflowAuditEvent`
- * collection, upserted on `auditId`, and cleared it on `/queries/reset`. The
- * merge kept a single `AuditEvent` store instead — the case history has to
- * include what the server itself writes during intake and final approval — and
- * carried over what was right about his:
- *
- *   - a retried delta must not write a second row for the same event;
- *   - a reset must take the deleted cases' history with it.
- *
- * What was not carried over is the upsert. Audit ids are minted by a browser's
- * counter, so two tabs can issue the same one for different events, and an
- * upsert on the id alone would silently replace one event with the other.
- */
-
 const db = vi.hoisted(() => {
   const collections = new Map();
 
@@ -74,7 +56,6 @@ vi.mock('../models/Notification.js', () => ({ Notification: db.model('Notificati
 vi.mock('../models/EmailMessage.js', () => ({ EmailMessage: db.model('EmailMessage') }));
 vi.mock('../models/EmailThread.js', () => ({ EmailThread: db.model('EmailThread') }));
 vi.mock('../models/QueryCounter.js', () => ({ QueryCounter: db.model('QueryCounter') }));
-// The reset clears the send ledger too — Case IDs restart after it.
 vi.mock('../models/OutboundEmail.js', async (importOriginal) => ({
   ...(await importOriginal()),
   OutboundEmail: db.model('OutboundEmail'),
@@ -99,7 +80,6 @@ const persist = (auditEvent) =>
     .set(authHeader(ROLES.OFFICER_IN_CHARGE))
     .send({ auditEvent });
 
-/** Only the rows a persist wrote — sign-ins and the like are recorded too. */
 const workflowRows = () => AuditEvent.rows.filter((row) => row.queryId);
 
 beforeEach(() => {
@@ -114,7 +94,6 @@ describe('POST /queries/persist — one row per event', () => {
     expect(workflowRows()[0]).toMatchObject({
       auditId: 'AUD-00007',
       action: 'QUERY_ASSIGNED',
-      // From the session, never the body.
       actorRole: ROLES.OFFICER_IN_CHARGE,
     });
   });
@@ -126,12 +105,6 @@ describe('POST /queries/persist — one row per event', () => {
     expect(workflowRows()).toHaveLength(1);
   });
 
-  /**
-   * The property his upsert did not have. Two tabs minting from the same
-   * counter both issue AUD-00007; these are two real events, and both must
-   * survive — the second must neither be dropped as a "duplicate" nor
-   * overwrite the first.
-   */
   it('keeps a different event that happens to carry the same id', async () => {
     await persist(EVENT);
     await persist({
@@ -170,12 +143,6 @@ describe('POST /queries/reset — the history goes with the cases', () => {
     expect(AuditEvent.rows.filter((row) => row.queryId)).toHaveLength(0);
   });
 
-  /**
-   * Aakash's reset cleared a collection that held case history and nothing
-   * else. Here it is one collection, and the rows with no case — sign-ins,
-   * authorization denials, transport failures — are the compliance trail. A
-   * reset of workflow data is not a reason to erase who did what.
-   */
   it('keeps the compliance trail — rows that belong to no case', async () => {
     await AuditEvent.create({ action: 'LOGIN_SUCCEEDED', queryId: null });
     await AuditEvent.create({ action: 'AUTHORIZATION_DENIED', queryId: null });
@@ -195,13 +162,6 @@ describe('POST /queries/reset — the history goes with the cases', () => {
     expect(AuditEvent.rows.map((row) => row.action)).toContain('QUERY_STATE_RESET');
   });
 
-  /**
-   * Seeded history arrives in the client's words (`event`, `at`) and is stored
-   * in the compliance model's (`action`, `timestamp`). The `actorType` has to
-   * be one the model's enum accepts — writing 'USER' is the original bug both
-   * branches set out to fix: the validation failure was swallowed and every
-   * workflow event vanished.
-   */
   it('restores seeded history in the stored shape', async () => {
     await reset({ auditEvents: [EVENT] });
 

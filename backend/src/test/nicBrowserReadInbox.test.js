@@ -14,44 +14,13 @@ import {
   toMessage,
 } from '../services/email/nic/browser/readInbox.js';
 
-/**
- * `readInbox` itself runs against a fake session (below), never a browser: the
- * whole of the browser is `session.evaluate` / `session.waitFor`, so replacing
- * those two is enough to drive the reader through an outcome and ask what it
- * reported.
- */
 const agent = vi.hoisted(() => ({ session: null, queued: 0 }));
 
 vi.mock('../services/email/nic/browser/session.js', () => ({
   withNicemail: async (work) => work(agent.session),
-  // The reader stops early when something else is waiting for the browser, so
-  // this has to be here — and `agent.queued` is what lets a test drive it.
   pending: () => agent.queued,
 }));
 
-/**
- * What the reader makes of the mailbox DOM.
- *
- * No browser: the functions under test are the ones the agent serialises INTO
- * the page, so they can be run here against a stand-in document — a structural
- * copy of the live mailbox, with every selector that was calibrated against it
- * resolving to the nodes it resolved to there. Sender names, addresses and
- * subjects are invented; nothing from a real mailbox is in this file.
- *
- * The cases are the traps the calibration pass found, each of which produces a
- * plausible-looking message rather than an error:
- *
- *   - the open row's id is `t` + the message id, so a row looked up by id
- *     disappears exactly while its unread state is being restored;
- *   - the sender and each recipient render TWICE, collapsed and expanded, so
- *     reading every match doubles every address;
- *   - Zoho omits the Cc row entirely rather than leaving it empty;
- *   - the list row's date is "11:19 AM" — no day, no year — while the open
- *     message carries a fully qualified one.
- */
-
-/** One element. `children` maps a selector to what it resolves to, which is how
- *  a calibrated selector is recorded without shipping a CSS engine. */
 function element({ id = '', classes = [], attrs = {}, text = '', html, href = null, children = {} } = {}) {
   return {
     id,
@@ -67,11 +36,8 @@ function element({ id = '', classes = [], attrs = {}, text = '', html, href = nu
 }
 
 const MESSAGE_ID = '1789731183817027200';
-/** The pane is addressed by the id of the message the agent asked for, so a
- *  container the pane kept from the last message cannot be read by mistake. */
 const MESSAGE_SELECTOR = SELECTORS.previewMessageById(MESSAGE_ID);
 
-/** The collapsed copy carries the bare address, the expanded one the name. */
 const senderNodes = (address, name) => [
   element({ attrs: { 'data-eid': address }, classes: ['jsCollDisp'], text: address }),
   element({ attrs: { 'data-eid': address }, classes: ['jsExedDisp'], text: `${name} <${address}>` }),
@@ -86,7 +52,6 @@ const headerRow = (label, addresses) =>
           children: {
             '[data-eid]': addresses.flatMap((address) => [
               element({ attrs: { 'data-eid': address } }),
-              // The expanded copy of the same recipient.
               element({ attrs: { 'data-eid': address } }),
             ]),
           },
@@ -109,7 +74,6 @@ function openMessage({
   const rows = [headerRow('To', to)];
   if (cc) rows.push(headerRow('Cc', cc));
   if (bcc) rows.push(headerRow('Bcc', bcc));
-  // Present on every message, and never an address row.
   rows.push(headerRow('Security', []));
 
   return element({
@@ -136,7 +100,6 @@ const listRow = ({ id, subject, senderAddress, senderName, unread = true, cells 
     },
   });
 
-/** The page-side functions read the global `document`, as they do in the app. */
 const withDocument = (children) => {
   globalThis.document = element({ children });
 };
@@ -144,7 +107,6 @@ const withDocument = (children) => {
 afterEach(() => {
   delete globalThis.document;
   agent.session = null;
-  // The default: this sync is the only unit, so nothing yields.
   agent.queued = 1;
   vi.restoreAllMocks();
 });
@@ -168,8 +130,6 @@ describe('reading the message list', () => {
       ],
     });
 
-    // The envelope button's aria-label reads "Mark emails as unread" on read
-    // and unread rows alike, so it is not a state signal.
     expect(listRows(SELECTORS).map((row) => row.unread)).toEqual([true, false]);
   });
 
@@ -277,11 +237,6 @@ describe('reading the open message', () => {
     expect(extractOpenMessage({ sel: SELECTORS, messageSelector: MESSAGE_SELECTOR }).timestampText).toBe('11:19 AM');
   });
 
-  /**
-   * The pane holds more than one node carrying the message's id — a stub and
-   * the message — and the stub comes first in document order. Taking the first
-   * match would store an empty body for a message that has one.
-   */
   it('reads the container that has the body, not the first one with the id', () => {
     const stub = element({ id: `zm_Container_m${MESSAGE_ID}` });
     withDocument({ [MESSAGE_SELECTOR]: [stub, openMessage({ body: 'Placeholder enquiry body.' })] });
@@ -329,12 +284,6 @@ describe('the timestamp', () => {
     expect(parseReceivedAt('Mon, 21 Sep 2026 11:19:09 AM +0530')).toBe('2026-09-21T05:49:09.000Z');
   });
 
-  /**
-   * The list row's date is "11:19 AM" for today's mail: no day, no year. It is
-   * never used as the timestamp — a message parsed into the wrong year sorts to
-   * the bottom of an inbox that then looks empty — and an unparseable one
-   * becomes "now" rather than an Invalid Date the store would reject.
-   */
   it('falls back to now rather than storing an unparseable date', () => {
     const before = Date.now();
 
@@ -361,8 +310,6 @@ describe('building the stored message', () => {
     expect(build().from).toBe('Anita Rao <anita.rao@example.invalid>');
   });
 
-  /** A sender who set no display name is common in this mailbox; the list row
-   *  carries one even when the open message does not. */
   it('falls back to the list row for a display name the message does not show', () => {
     expect(build({ name: '' }).from).toBe('Anita Rao <anita.rao@example.invalid>');
   });
@@ -376,8 +323,6 @@ describe('building the stored message', () => {
   });
 
   it('takes the subject from the list row, because the pane hides its own copy', () => {
-    // `.zmMHdrSumTitle` holds the same string but sits in a collapsed row with
-    // zero width, so it is read from the visible list row instead.
     expect(build().subject).toBe('Query about labelling');
   });
 
@@ -385,11 +330,6 @@ describe('building the stored message', () => {
     expect(build().providerMessageId).toBe(MESSAGE_ID);
   });
 
-  /**
-   * A sender with no address must never reach `inquirer.email`: the
-   * acknowledgement would be addressed to a display name. readInbox keeps only
-   * the messages whose `from` has an "@", and this is what that check sees.
-   */
   it('produces a from with no @ when no address could be read, so the reader can drop it', () => {
     const built = build({ address: '' });
 
@@ -446,14 +386,6 @@ describe('the semantic view', () => {
   });
 });
 
-/**
- * A stand-in for the agent's tab, for driving readInbox() itself.
- *
- * The page-side helpers are module-private, so each is recognised by its
- * function name — the handle session.evaluate would serialise. `waitFor` fails
- * on a falsy answer with the real tagged timeout, exactly as cdp.js does, so the
- * reader cannot tell this session from a browser that simply never got there.
- */
 function fakeSession(overrides = {}) {
   const handlers = {
     inboxIsActive: () => true,
@@ -502,8 +434,6 @@ const unreadRows = (...ids) =>
 
 describe('readInbox — what a failed read looks like', () => {
   it('reports a dead agent tab as a failed read, not as an empty inbox', async () => {
-    // The user's original symptom: swallowed here, this became
-    // { ok: true, stored: 0 } and the inbox showed no mail and no warning.
     agent.session = fakeSession({
       rowCounts: () => {
         throw new Error('The NICeMail agent tab was closed or crashed.');
@@ -514,14 +444,12 @@ describe('readInbox — what a failed read looks like', () => {
   });
 
   it('still reads an empty folder as an empty inbox', async () => {
-    // A folder with nothing in it never fills: the wait's own deadline is the answer.
     agent.session = fakeSession({ rowCounts: () => null });
 
     await expect(readInbox()).resolves.toEqual({ messages: [], failures: [], remaining: 0 });
   });
 
   it('restores every other message when one restore click fails, and names the one it could not', async () => {
-    // The settle waits are deliberate, and not what this case is about.
     const realSetTimeout = globalThis.setTimeout;
     vi.spyOn(globalThis, 'setTimeout').mockImplementation((fn, _ms, ...args) => realSetTimeout(fn, 0, ...args));
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
@@ -538,13 +466,11 @@ describe('readInbox — what a failed read looks like', () => {
         clicked.push(id);
         return id !== failing;
       },
-      // Only the row whose control could not be pressed is still read.
       readAmong: ({ rows }) => rows.map(([id]) => id).filter((id) => id === failing),
     });
 
     const { messages } = await readInbox();
 
-    // The first sync opens its batch oldest first.
     expect(messages.map((message) => message.providerMessageId)).toEqual([...ids].reverse());
     expect(new Set(clicked)).toEqual(new Set(ids));
     expect(warn).toHaveBeenCalledTimes(1);
@@ -555,13 +481,11 @@ describe('readInbox — what a failed read looks like', () => {
   });
 });
 
-/** Rows already read in Zoho, so no unread restore — and no settle waits — follow. */
 const readRows = (...ids) =>
   ids.map((id) => ({ providerMessageId: id, unread: false, subject: `Subject ${id}`, senderName: 'Placeholder Sender' }));
 
 const id = (n) => String(100000000000000 + n);
 
-/** A session that records which messages were opened, in order. */
 function recordingSession(rows, overrides = {}) {
   const opened = [];
   const session = fakeSession({
@@ -579,8 +503,6 @@ function recordingSession(rows, overrides = {}) {
 
 describe('readInbox — which rows it opens', () => {
   it('opens only what is above the deepest stored row, oldest first — never the backlog below it', async () => {
-    // Newest first: two new, one stored, one that failed last time, one
-    // stored, then the backlog from before the first sync.
     const rows = readRows(id(9), id(8), id(7), id(6), id(5), id(4), id(3));
     const { session, opened } = recordingSession(rows);
     agent.session = session;
@@ -597,7 +519,6 @@ describe('readInbox — which rows it opens', () => {
 
     await readInbox({ max: 2 });
 
-    // Oldest first, so a read cut short leaves the rest above what it stored.
     expect(opened).toEqual([id(4), id(5)]);
   });
 
@@ -611,16 +532,9 @@ describe('readInbox — which rows it opens', () => {
     expect(result.remaining).toBe(1);
   });
 
-  /**
-   * A sync of 20 messages was measured at 91 s against the live mailbox, and it
-   * holds the one serialised browser session for all of it. A send arriving a
-   * second in used to wait the whole way. The sync gives way instead: partial
-   * reads are already normal, `remaining` says so, and the next poll continues.
-   */
   it('stops early when something else is waiting for the browser', async () => {
     const { session, opened } = recordingSession(readRows(id(9), id(8), id(7), id(6)));
     agent.session = session;
-    // One unit is this sync; a second means somebody is queued behind it.
     agent.queued = 2;
 
     const result = await readInbox({ max: 4 });
@@ -641,8 +555,6 @@ describe('readInbox — which rows it opens', () => {
   });
 
   it('tries a row that failed before again, even below newer stored mail — after the untried ones', async () => {
-    // id(7) failed last time and id(8), newer, was stored: without the retry
-    // set the stored row would be the cut-off and id(7) would never come back.
     const { session, opened } = recordingSession(readRows(id(9), id(8), id(7), id(6)));
     agent.session = session;
 
@@ -660,7 +572,6 @@ describe('readInbox — which rows it opens', () => {
 
     const result = await readInbox({ skip: new Set([id(1)]) });
 
-    // Three bad, then one from the other end, which reads — so the rest go on.
     expect(opened).toEqual([id(2), id(3), id(4), id(6), id(5)]);
     expect(result.messages.map((message) => message.providerMessageId)).toEqual([id(6), id(5)]);
     expect(result.failures.map((failure) => failure.providerMessageId)).toEqual(bad);
@@ -727,7 +638,6 @@ describe('readInbox — one message at a time', () => {
     agent.session = session;
 
     await expect(readInbox()).rejects.toMatchObject({ stage: 'ui', failures: expect.any(Array) });
-    // Three, then one from the other end of the batch before giving up.
     expect(opened).toHaveLength(4);
   });
 
@@ -771,7 +681,6 @@ describe('readInbox — one message at a time', () => {
 describe('attachments', () => {
   const PDF = Buffer.from('%PDF-1.4 placeholder').toString('base64');
 
-  /** One message carrying these attachment entries; downloads answered by `download`. */
   async function readWith(entries, download) {
     const downloads = vi.fn(download);
     const { session } = recordingSession(readRows(id(1)), {
@@ -818,12 +727,6 @@ describe('attachments', () => {
     expect(attachments[0].materializeError).toMatch(/limit/);
   });
 
-  /**
-   * The size a message shows is the sender's claim. Checking only that would
-   * let anyone who mails the published intake address write a file of any size
-   * to the attachment store by understating it, so the real length settles it
-   * and nothing is stored when it is over the limit.
-   */
   it('refuses a file that under-declares its size but arrives oversize', async () => {
     const oversize = Buffer.alloc((env.ATTACHMENT_MAX_FILE_MB + 1) * 1024 * 1024).toString('base64');
 
@@ -833,8 +736,6 @@ describe('attachments', () => {
     );
 
     expect(downloads).toHaveBeenCalled();
-    // A null attachmentId is the proof nothing was written: the store call
-    // sits after this check, so reaching it would have produced an id.
     expect(attachments[0]).toMatchObject({ attachmentId: null, materializeError: expect.stringMatching(/limit/i) });
   });
 

@@ -1,20 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { ROLES } from '../constants/roles.js';
 
-/**
- * The real, unmocked seam — now a real check.
- *
- * It was a deliberate no-op while the backend had no authentication: it
- * confirmed a session existed, which `verifyToken` had already established one
- * line earlier, and the middleware named for access control performed none. Any
- * signed-in account could read any attachment by id, and GET /queries handed
- * every caller the ids.
- *
- * It now resolves the owning case and admits only a principal party to it. The
- * store and the case-membership service are stubbed here so the branches can be
- * driven directly; the store's own behaviour is covered in attachmentStore.test.js.
- */
-
 const store = { getMetadata: vi.fn() };
 vi.mock('../services/attachments/attachmentStore.js', () => store);
 
@@ -49,7 +35,6 @@ beforeEach(() => {
 
 describe('fail-closed basics', () => {
   it('rejects with 401 when no authenticated user reached it', async () => {
-    // A route that forgot verifyToken must break loudly, not silently open.
     const next = await run({ headers: {} });
 
     expect(next).toHaveBeenCalledTimes(1);
@@ -85,11 +70,6 @@ describe('reading an attachment that belongs to a case', () => {
     expect(await run({ user: OFFICIAL, params: { id: 'att_x' } })).toHaveBeenCalledWith();
   });
 
-  /**
-   * The finding this file exists for. Before the fix this call returned the
-   * bytes of any document on any case to any signed-in account — and the ids
-   * were enumerable, because GET /queries handed every caller the whole list.
-   */
   it('refuses a principal who is not', async () => {
     store.getMetadata.mockResolvedValue(meta);
     party.value = false;
@@ -108,12 +88,6 @@ describe('reading an attachment that belongs to a case', () => {
   });
 });
 
-/**
- * NICeMail saves an attachment against the NICeMail message id, and Accept
- * stores that message under its mailbox id (NICB-…) with the NICeMail id as its
- * providerMessageId — so a lookup by sourceMessageId alone never finds the
- * case, and everyone but the Front Office was refused the attachment.
- */
 describe('an attachment saved from a NICeMail message', () => {
   const NIC_ID = '1790067280420134900';
   const meta = { attachmentId: 'att_nic', queryId: null, uploadedBy: null, providerMessageId: NIC_ID };
@@ -139,11 +113,6 @@ describe('an attachment saved from a NICeMail message', () => {
 });
 
 describe('an attachment with no case yet', () => {
-  /**
-   * A real population, not an edge case: mail ingestion saves a file before the
-   * Front Office accepts the message and a case exists, and older sidecars
-   * predate `uploadedBy` entirely.
-   */
   it('admits the uploader to their own', async () => {
     store.getMetadata.mockResolvedValue({ queryId: null, uploadedBy: 'USR-0005' });
 
@@ -172,10 +141,6 @@ describe('an attachment with no case yet', () => {
 });
 
 describe('uploading', () => {
-  /**
-   * No queryId is required — a file can be uploaded before the case it belongs
-   * to exists, and requiring one would break that.
-   */
   it('allows an upload that names no case', async () => {
     expect(await run({ user: OUTSIDER, body: {} })).toHaveBeenCalledWith();
   });

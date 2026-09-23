@@ -10,16 +10,6 @@ import {
   requireElement,
 } from '../services/email/nic/browser/selectors.js';
 
-/**
- * The selector registry's own guarantees, with a fake session that only
- * records what was asked of the page.
- *
- * The compose button once named `tpbr-snd-nw-btn`, measured live as the
- * toolbar's hidden "Send selected email conversations in outbox immediately".
- * A hidden element still counts as a match, so the first step of every send
- * would have pressed it.
- */
-
 const fakeSession = (count = 1) => ({ evaluate: vi.fn(async () => count), send: vi.fn(async () => ({})) });
 
 describe('compose selector', () => {

@@ -6,15 +6,6 @@ import { ROLES, ACTOR_TYPES } from '../constants/roles.js';
 import { CAPABILITIES, can, capabilitiesFor } from '../constants/capabilities.js';
 import { WORKFLOW_ACTION, roleCanPerform } from '../constants/workflowActions.js';
 
-/**
- * The authorization half of the chain in .claude/backend-rules.md:
- * 401 = no session, 403 = a session that may not do this.
- *
- * Allowed roles are asserted as "not 403" rather than as a success status,
- * because several of these endpoints legitimately answer 400 for an empty
- * body. What matters here is that authorization did not stop them.
- */
-
 const as = (role) => authHeader(role);
 
 describe('401 — no session at all', () => {
@@ -40,8 +31,6 @@ describe('401 — no session at all', () => {
 });
 
 describe('403 — a session without the role', () => {
-  // Enquiries arrive as email in the Front Office mailbox; there is no
-  // endpoint that sends one, for any role.
   it('has no enquiry endpoint left to authorise', async () => {
     for (const role of [ROLES.REVIEWER, ROLES.FRONT_OFFICE, ROLES.SUPER_ADMIN]) {
       expect((await request(app).post('/api/v1/emails/enquiry').set(as(role)).send({})).status).toBe(404);

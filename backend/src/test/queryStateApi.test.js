@@ -5,16 +5,6 @@ import { authHeader } from './helpers/auth.js';
 import { ROLES } from '../constants/roles.js';
 import { persistTransitionSchema } from '../validators/queryStateSchemas.js';
 
-/**
- * The workflow-state sync API shipped with no tests at all, which is how a
- * counter written as an object into a Number field, an audit actor taken from
- * the request body, and an unguarded "delete every collection" route all
- * reached main together.
- *
- * The suite runs with DATABASE_URL blank (vitest.config.mjs), so anything that
- * reaches a model answers 503. That is enough to pin the things that matter
- * here: who is allowed through, and what the schema lets past.
- */
 describe('/api/v1/queries — authorization', () => {
   it('rejects an unauthenticated caller on every route', async () => {
     const calls = [
@@ -29,14 +19,6 @@ describe('/api/v1/queries — authorization', () => {
     }
   });
 
-  /**
-   * Hydration is a FILTER, not a refusal.
-   *
-   * Every role uses the store, so neither route can carry a role allow-list;
-   * what changed is that GET /queries now returns only the cases the caller is
-   * party to (services/authz/caseAccess.js) rather than all of them. A narrowed
-   * role still gets 200, with less in it.
-   */
   it('refuses no signed-in role the hydration route', async () => {
     for (const role of [ROLES.ASSIGNED_OFFICIAL, ROLES.FRONT_OFFICE, ROLES.REVIEWER]) {
       const read = await request(app).get('/api/v1/queries').set(authHeader(role));
@@ -44,11 +26,6 @@ describe('/api/v1/queries — authorization', () => {
     }
   });
 
-  /**
-   * A delta that sets no protected value authorizes nothing, so it is not a
-   * denial for anyone. Turning these into 403s would break ordinary work to
-   * prove a point.
-   */
   it('refuses no signed-in role an empty delta', async () => {
     for (const role of [ROLES.ASSIGNED_OFFICIAL, ROLES.FRONT_OFFICE, ROLES.REVIEWER]) {
       const write = await request(app)
@@ -59,16 +36,6 @@ describe('/api/v1/queries — authorization', () => {
     }
   });
 
-  /**
-   * ...but a delta that DOES set a protected value is authorized, and with no
-   * database the guard refuses outright rather than letting it through.
-   *
-   * The refusal itself cannot be asserted here: deciding whether a value is
-   * being CHANGED requires the stored case, so those rules are unit-tested in
-   * caseDeltaAuthorization.test.js. What this pins is that the route is guarded
-   * at all — it used to carry verifyToken and a body schema and nothing else,
-   * so an Inquirer, a member of the public, could set any case to any state.
-   */
   it('does not let a protected write through unauthorized when the store is down', async () => {
     const res = await request(app)
       .post('/api/v1/queries/persist')
@@ -79,11 +46,6 @@ describe('/api/v1/queries — authorization', () => {
     expect(res.body.error).toMatch(/access cannot be determined/i);
   });
 
-  /**
-   * The point of this file. /queries/reset deletes every case, workflow step,
-   * review, response version, notification and email record in the system, and
-   * it used to be reachable by anyone holding any session.
-   */
   it('refuses /queries/reset to every role except SUPER_ADMIN', async () => {
     const denied = [
       ROLES.ASSIGNED_OFFICIAL,
@@ -115,20 +77,6 @@ describe('/api/v1/queries — storage availability', () => {
   });
 });
 
-/**
- * The regression suite for a real data-loss incident.
- *
- * `auditEvent.details` was typed here as an object, because that is how
- * `models/AuditEvent.js` declares it. The client sends a human-readable
- * string. The result was a 400 on every workflow transition, so nothing the
- * Front Office did reached MongoDB — the app looked like it worked because the
- * browser held the state until the tab closed.
- *
- * It survived endpoint testing because the payload used there was written by
- * hand and omitted `details`. The counterpart to these tests is
- * `frontend/src/test/persistContract.test.js`, which asserts the same shapes
- * against deltas captured from real store transitions rather than typed out.
- */
 describe('/api/v1/queries/persist — the client contract', () => {
   it('accepts audit details as a string, which is what the client sends', () => {
     const parsed = persistTransitionSchema.parse({
@@ -157,9 +105,6 @@ describe('/api/v1/queries/persist — the client contract', () => {
   });
 
   it('keeps the fields that link a case back to its email', () => {
-    // Every one of these was silently dropped. `z.object` strips rather than
-    // rejects, so the loss was invisible: the request succeeded and the data
-    // was gone.
     const parsed = persistTransitionSchema.parse({
       query: {
         queryId: 'QRY-2026-00001',
@@ -184,14 +129,6 @@ describe('/api/v1/queries/persist — the client contract', () => {
     });
   });
 
-  /**
-   * The Officer-in-Charge returning a draft for revision from final approval.
-   *
-   * There is no review level open at that point, so the client sends
-   * `stepId: null` — and the schema declared it a required string, which 400ed
-   * the whole delta: the case update and the audit event went down with the
-   * review. `returnForRevisionFromApproval` in the workflow store.
-   */
   it('accepts a review raised from final approval, which has no step', () => {
     const parsed = persistTransitionSchema.parse({
       auditEvent: { event: 'REVISION_REQUESTED', queryId: 'QRY-2026-00001' },
@@ -213,19 +150,12 @@ describe('/api/v1/queries/persist — the client contract', () => {
     expect(parsed.addReviews[0]).toMatchObject({
       stepId: null,
       reviewerId: null,
-      // The reviewer's actual words. The schema said `comments`; the client has
-      // always written `comment`, so every review comment was stripped in
-      // silence and the stored rows all read empty.
       comment: 'Please cite the monograph.',
       responseId: 'RESP-00002',
       version: 'v2',
     });
   });
 
-  /**
-   * `status` is the lock `saveDraftVersion` checks before allowing an edit.
-   * Stripping it meant final approval held only until the tab was reloaded.
-   */
   it('keeps the final-approval lock on a response version', () => {
     const parsed = persistTransitionSchema.parse({
       auditEvent: { event: 'FINAL_APPROVAL_GRANTED', queryId: 'QRY-2026-00001' },
@@ -251,11 +181,6 @@ describe('/api/v1/queries/persist — the client contract', () => {
     });
   });
 
-  /**
-   * The trail needs a stable key, and the client's id is the only one a
-   * client-originated event has. Stripping it left `AuditHistoryCard` keying
-   * every hydrated row on `undefined`.
-   */
   it('keeps the client id on an audit event', () => {
     const parsed = persistTransitionSchema.parse({
       auditEvent: {
@@ -269,11 +194,6 @@ describe('/api/v1/queries/persist — the client contract', () => {
     expect(parsed.auditEvent.auditId).toBe('AUD-00013');
   });
 
-  /**
-   * The one field the schema genuinely requires. One call site omitted it and
-   * the delta went out with the key missing entirely, because `JSON.stringify`
-   * drops an undefined value — so this is what a 400 looked like from the wire.
-   */
   it('rejects an audit event with no name, naming the field', () => {
     const result = persistTransitionSchema.safeParse({
       auditEvent: { auditId: 'AUD-00013', queryId: 'QRY-2026-00001', details: 'A summary.' },
@@ -284,8 +204,6 @@ describe('/api/v1/queries/persist — the client contract', () => {
   });
 
   it('accepts a whole transition delta shaped exactly as the store emits one', () => {
-    // The end-to-end shape, not a field at a time — this is the assertion that
-    // would have caught the incident.
     const result = persistTransitionSchema.safeParse({
       query: {
         queryId: 'QRY-2026-00001',

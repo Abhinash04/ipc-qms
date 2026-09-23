@@ -1,18 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import request from 'supertest';
 
-/**
- * The NICeMail browser mailbox as a second Front Office mailbox.
- *
- * No browser anywhere: the reader and the sender are replaced at their module
- * boundary, so these tests are about what the QMS does with mail the agent
- * hands it — routing to the right Front Officer, storing each message once,
- * and answering the inquirer through the mailbox the enquiry came in on.
- *
- * Models are replaced with the in-memory stand-in in support/memoryDb.js, as
- * acceptMessage.test.js does.
- */
-
 vi.mock('../config/db.js', async (importOriginal) => ({
   ...(await importOriginal()),
   isConnected: () => true,
@@ -67,7 +55,6 @@ vi.mock('../models/Notification.js', async () => ({
   Notification: (await import('./support/memoryDb.js')).memoryDb.model('Notification'),
 }));
 
-// The browser itself. Nothing here may reach Chrome.
 const browser = vi.hoisted(() => ({ sendMail: null }));
 vi.mock('../services/email/nic/browser/sendMail.js', () => ({
   sendMail: (...args) => browser.sendMail(...args),
@@ -90,16 +77,12 @@ import { QueryCase, ResponseVersion } from '../models/index.js';
 import { traceSink } from '../services/email/sendTrace.js';
 
 const NIC_ADDRESS = 'nic-mailbox@test.invalid';
-// USR-0014's own password, from src/test/fixtures/passwords.json. The NIC
-// Front Office is config-derived (constants/users.js), but it resolves its
-// credential by user id like every other account.
 const NIC_PASSWORD = 'test-pw-nic-frontoffice-0014';
 const INQUIRER = 'Ravi Kumar <ravi@pharma.example>';
 
 const cookieFor = (user) => ({ Cookie: `${authConfig.COOKIE_NAME}=${signToken(user)}` });
 const primaryFrontOffice = () => USERS.find((user) => user.role === ROLES.FRONT_OFFICE);
 
-/** What the browser reader hands back for one inbox message. */
 const read = (providerMessageId, overrides = {}) => ({
   providerMessageId,
   from: INQUIRER,
@@ -154,18 +137,6 @@ describe('the second Front Office', () => {
   });
 });
 
-/**
- * Dev login is a password-less switch between seeded demo accounts. The
- * NICeMail Front Office is not a demo account: its inbox is the live .gov.in
- * mailbox, and its session can make the browser agent send. NODE_ENV defaults
- * to "development" and the server listens on every interface, so without this
- * refusal anyone who could reach the port could read official mail.
- *
- * The suite runs with NODE_ENV=test, where dev login answers 404 before it
- * looks at anything — a test that only checked "not 200" would pass without
- * reaching the refusal. `env.NODE_ENV` is fixed when the module loads, so it is
- * set on the config object for these cases and put back after.
- */
 describe('signing in as the NICeMail Front Office', () => {
   let nodeEnv;
 
@@ -218,7 +189,6 @@ describe('syncing the NICeMail inbox', () => {
     await nicMailbox.sync(NIC_ADDRESS, { reader });
 
     expect(db.rows('MailboxMessage')).toHaveLength(2);
-    // Already-stored ids are handed to the reader, so it does not reopen them.
     expect([...reader.mock.calls[2][0].skip]).toEqual(['row-1', 'row-2']);
   });
 
@@ -291,7 +261,6 @@ describe('accepting a NICeMail message', () => {
     await nicMailbox.sync(NIC_ADDRESS, { reader: async () => [read('row-1')] });
     const [stored] = await nicMailbox.list(NIC_ADDRESS);
 
-    // The client body is ignored for a browser-read message: the stored record is the enquiry.
     const res = await acceptAs(nicFrontOfficeUser(), stored.mailboxMessageId, {
       from: 'forged@example.com',
       subject: 'forged',
@@ -305,11 +274,9 @@ describe('accepting a NICeMail message', () => {
     expect(caseRow.subject).toBe('Enquiry row-1');
     expect(caseRow.sourceMailbox).toEqual({ source: 'nic-browser', address: NIC_ADDRESS });
 
-    // The acknowledgement went out through the browser session, to the inquirer.
     expect(browser.sendMail).toHaveBeenCalledTimes(1);
     expect(browser.sendMail.mock.calls[0][0].to).toEqual(['ravi@pharma.example']);
 
-    // A retry creates nothing new and does not acknowledge twice.
     await acceptAs(nicFrontOfficeUser(), stored.mailboxMessageId);
     expect(db.rows('QueryCase')).toHaveLength(1);
     expect(browser.sendMail).toHaveBeenCalledTimes(1);
@@ -383,8 +350,6 @@ describe('outbound mail follows the case mailbox', () => {
       sourceMailbox: nicCase,
     });
 
-    // The From is what the compose form is checked against before Send: record
-    // anything else and the case names an account that did not send it.
     expect(sent).toMatchObject({ transport: 'nic-browser', from: `Eco-Clubs Front Office <${NIC_ADDRESS}>` });
     expect(browser.sendMail).toHaveBeenCalledTimes(1);
   });
@@ -406,13 +371,9 @@ describe('outbound mail follows the case mailbox', () => {
       subject: 's',
       body: 'b',
       sourceMailbox: nicCase,
-      // A ref, as intake stores it — the bytes are fetched by the fail-closed
-      // gate, never supplied by the caller.
       attachments: [{ attachmentId: stored.attachmentId }],
     });
 
-    // What attachFiles stages and hands to Chrome by path. The forward is the
-    // only case email that carries attachments at all.
     expect(browser.sendMail.mock.calls[0][0].attachments).toMatchObject([
       { filename: 'spec.pdf', mimeType: 'application/pdf', content },
     ]);
@@ -437,13 +398,6 @@ describe('outbound mail follows the case mailbox', () => {
     await expect(nicBrowserTransport.send(message)).resolves.toMatchObject({ transport: 'nic-browser' });
   });
 
-  /**
-   * The interlock confines the mailbox to one test recipient, which the
-   * Officer-in-Charge's address is not — so with the forward on the browser,
-   * intake could not complete at all without opening the mailbox to every
-   * address on the internet first. NIC_ALLOW_INTERNAL_FORWARD widens it by
-   * exactly one configured internal address, and only for the forward.
-   */
   describe('the internal-forward allowance', () => {
     const forward = () =>
       emailService.forwardToOfficerInCharge({
@@ -480,8 +434,6 @@ describe('outbound mail follows the case mailbox', () => {
     it('does not widen the acknowledgement to the inquirer', async () => {
       vi.stubEnv('NIC_ALLOW_INTERNAL_FORWARD', 'true');
 
-      // The allowance is for internal mail. External mail stays confined to
-      // the test recipient until the main interlock opens.
       await expect(
         emailService.sendAcknowledgement({
           to: 'stranger@public.example',
@@ -493,20 +445,7 @@ describe('outbound mail follows the case mailbox', () => {
     });
   });
 
-  /**
-   * The case page's retry buttons. They reach the email endpoints directly,
-   * not through accept or final approval, and those endpoints used to send
-   * with no mailbox at all — so a NICeMail case whose acknowledgement or
-   * response had failed was retried through whatever EMAIL_TRANSPORT named,
-   * which at the time was a different provider entirely: out of the wrong
-   * mailbox, past the NICeMail interlock, to a member of the public.
-   */
   describe('the case page retry buttons', () => {
-    /**
-     * An approved case, as the retry finds it. Everything the retry sends comes
-     * from here — the inquirer, the subject, the approved text — because the
-     * request may name only which case, never who is written to or what with.
-     */
     const storeCase = async (queryId, sourceMailbox) => {
       await QueryCase.create({
         queryId,
@@ -525,7 +464,6 @@ describe('outbound mail follows the case mailbox', () => {
       });
     };
 
-    /** The retry goes to the inquirer stored on the case — the body cannot redirect it. */
     it('sends to the inquirer on the case, whatever the request names', async () => {
       await storeCase('QRY-2026-00012', nicCase);
 
@@ -578,7 +516,6 @@ describe('outbound mail follows the case mailbox', () => {
       expect(browser.sendMail).not.toHaveBeenCalled();
     });
 
-    /** The mailbox is the case's, never the caller's to choose. */
     it('ignores a mailbox named in the request body', async () => {
       await storeCase('QRY-2026-00010', null);
 
@@ -597,12 +534,6 @@ describe('outbound mail follows the case mailbox', () => {
       expect(browser.sendMail).not.toHaveBeenCalled();
     });
 
-    /**
-     * A retry can itself end unconfirmed. The stand-in throws what sendMail
-     * throws then (nicBrowserSendMail.test.js pins that shape); this pins that
-     * the endpoint hands it to the page intact — the warning and the flag, not
-     * a bare 500 — since the page is where the next retry would be pressed.
-     */
     it('hands an unconfirmed send to the page with its warning, not a bare 500', async () => {
       await storeCase('QRY-2026-00011', nicCase);
       browser.sendMail = vi.fn(async () => {
@@ -622,11 +553,6 @@ describe('outbound mail follows the case mailbox', () => {
       expect(res.body.unconfirmed).toBe(true);
     });
 
-    /**
-     * "504" alone sent the last investigation to the database. The step the
-     * browser stopped at, what it ran into and what the page showed now travel
-     * with the error — to the page, and onto the case's outbound record.
-     */
     it('names the step a NICeMail send stopped at, in the answer and on the record', async () => {
       await storeCase('QRY-2026-00013', nicCase);
       browser.sendMail = vi.fn(async () => {
@@ -683,7 +609,6 @@ describe('outbound mail follows the case mailbox', () => {
       expect(second.status).toBe(200);
       expect(second.body).toMatchObject({ outcome: 'ALREADY_SENT', providerMessageId: '1790056208843134900' });
       expect(browser.sendMail).toHaveBeenCalledTimes(1);
-      // The browser hears every step, so they can be logged.
       expect(browser.sendMail.mock.calls[0][1].onStage).toEqual(expect.any(Function));
     });
 

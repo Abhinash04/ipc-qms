@@ -8,15 +8,6 @@ import {
   MESSAGES,
 } from '../services/email/nic/browser/attach.js';
 
-/**
- * Attach-layer tests.
- *
- * No browser and no socket: `attachToNicemail` takes a `connect` seam, the
- * same injection pattern nicImap.js uses for `createClient`. vitest.config.mjs
- * additionally points NIC_CDP_ENDPOINT at an unroutable address so an
- * un-stubbed call fails instantly rather than hanging or reaching a real Chrome.
- */
-
 const page = ({ url = 'https://mail.gov.in/inbox', title = 'Inbox — NIC eMail', password = false } = {}) => ({
   url: () => url,
   title: async () => title,
@@ -25,7 +16,6 @@ const page = ({ url = 'https://mail.gov.in/inbox', title = 'Inbox — NIC eMail'
   }),
 });
 
-/** A fake CDP browser exposing the contexts/pages shape Playwright returns. */
 const fakeBrowser = (pages) => ({
   contexts: () => [{ pages: () => pages }],
   isConnected: () => true,
@@ -47,16 +37,6 @@ describe('tab identification', () => {
     expect(scoreTab({ url: 'https://news.example.com', title: 'Mail news' })).toBe(0);
   });
 
-  /**
-   * The pattern must match the HOST, not appear anywhere in the URL.
-   *
-   * Tab selection used to be `url.includes(pattern)` over the whole lowercased
-   * URL, so each of these matched — and with an `/inbox` path segment the
-   * mailbox bonus took them to 15, ABOVE the operator's genuine tab at 10. The
-   * agent then drove the attacker's page: typing recipients, subject and body
-   * into it and handing it the resolved attachment bytes on a send, and storing
-   * whatever it rendered as real mailbox intake on a read.
-   */
   it('ignores a host that merely ends with a configured pattern', () => {
     expect(scoreTab({ url: 'https://mail.gov.in.attacker.example/inbox', title: 'Inbox' })).toBe(0);
     expect(scoreTab({ url: 'https://mgovcloud.in.evil.test/mail', title: 'NIC Mail' })).toBe(0);
@@ -98,7 +78,6 @@ describe('tab identification', () => {
     const login = scoreTab({ url: 'https://mail.gov.in/login', title: 'Sign in' });
     const mailbox = scoreTab({ url: 'https://mail.gov.in/inbox', title: 'Inbox' });
 
-    // Still > 0 so the caller can say "not authenticated" rather than "no tab".
     expect(login).toBeGreaterThan(0);
     expect(login).toBeLessThan(mailbox);
   });
@@ -162,8 +141,6 @@ describe('attachToNicemail', () => {
 
     await attachToNicemail({ connect });
 
-    // Exactly one attempt, and it is an attach. Anything else would mean a
-    // fresh, unauthenticated browser was opened — which defeats the point.
     expect(connect).toHaveBeenCalledTimes(1);
   });
 
@@ -230,8 +207,6 @@ describe('attachToNicemail', () => {
 
     await attachToNicemail({ connect: async () => browser });
 
-    // close() on a CDP-connected browser disconnects; it must still be called
-    // so the session is not left dangling.
     expect(close).toHaveBeenCalledTimes(1);
   });
 });

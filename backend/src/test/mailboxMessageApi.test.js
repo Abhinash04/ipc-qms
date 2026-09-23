@@ -1,15 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import request from 'supertest';
 
-/**
- * The mailbox message API: search and paging on the list, one message in
- * full, its attachments through it, QMS-local read state and a manual sync.
- *
- * Models are the in-memory stand-in (support/memoryDb.js). The browser reader
- * and sender are replaced at their module boundary — nothing here reaches
- * Chrome.
- */
-
 vi.mock('../config/db.js', async (importOriginal) => ({
   ...(await importOriginal()),
   isConnected: () => true,
@@ -109,7 +100,6 @@ const read = (providerMessageId, overrides = {}) => ({
 
 const pdfEntry = (attachmentId) => ({ id: attachmentId, name: 'application.pdf', filename: 'application.pdf', mimeType: 'application/pdf', size: 20, sizeKb: 1, attachmentId });
 
-/** Two stored NICeMail messages, the newer one carrying a saved PDF. */
 async function seed() {
   await attachmentStore.saveWithId(ATT_A, {
     buffer: Buffer.from('%PDF-1.4 placeholder'),

@@ -7,18 +7,6 @@ import { pageKit } from '../services/email/nic/browser/pageKit.js';
 import { SELECTORS, locate } from '../services/email/nic/browser/selectors.js';
 import { formState, openDialogs } from '../services/email/nic/browser/sendMail.js';
 
-/**
- * The page-side resolver against a real DOM.
- *
- * The expressions are built by the real cdp.js and evaluated inside a JSDOM
- * window, the way Chrome evaluates them: as source text, in the page's own
- * realm. Nothing from this module's scope can reach them there, so a page
- * function that leaned on a closure would fail here exactly as it would live.
- *
- * JSDOM does no layout, so every element is given a 10×10 box; "hidden" below
- * always comes from styles or aria-hidden, as it does in the real app.
- */
-
 async function pageSession(html) {
   const dom = new JSDOM(`<!doctype html><body>${html}</body>`, { runScripts: 'outside-only' });
   dom.window.HTMLElement.prototype.getBoundingClientRect = () => ({
@@ -41,7 +29,6 @@ async function pageSession(html) {
           result = { result: {}, exceptionDetails: { exception: { description: String(error) } } };
         }
       }
-      // Through JSON, as the protocol carries it: a DOM node cannot come back as a value.
       const reply = JSON.stringify({ id: frame.id, result });
       queueMicrotask(() => listeners.message.forEach((listener) => listener({ data: reply })));
     },
@@ -52,7 +39,6 @@ async function pageSession(html) {
   return { dom, document: dom.window.document, session };
 }
 
-/** How an entry resolves, straight from the kit. */
 const resolved = (session, entry) =>
   session.evaluate(
     (spec, kit) => {
@@ -157,12 +143,8 @@ describe('beyond the light DOM', () => {
 });
 
 describe('the compose trap', () => {
-  // Measured live: the toolbar's hidden "send outbox now" button carried the
-  // testid the compose selector used to name.
   const TRAP =
     '<button data-testid="tpbr-snd-nw-btn" aria-label="Send selected email conversations in outbox immediately" style="display:none">Send now</button>';
-  // A copy, so the lookup is not refused as an UNCALIBRATED spec: this is about
-  // what the entry itself resolves to once calibration lets it be used.
   const compose = () => ({ ...SELECTORS.composeButton });
 
   it('clicks New Mail and never the hidden outbox button', async () => {
@@ -200,9 +182,6 @@ describe('the compose trap', () => {
 });
 
 describe('the compose form, as the live one is built', () => {
-  // Copied from the live form (npm run nic:browser:calibrate, 2026-09-22),
-  // trimmed to what the entries depend on. The editor is the body of a
-  // same-origin iframe; the hidden outbox button is still in the toolbar.
   const FORM = `
     <button data-testid="tpbr-snd-nw-btn" aria-label="Send selected email conversations in outbox immediately" style="display:none">Send now</button>
     <button data-testid="com_cur_from_address" aria-label="From nic.mailbox@example.invalid">nic.mailbox@example.invalid</button>
@@ -274,9 +253,6 @@ describe('the compose form, as the live one is built', () => {
 
   it('fills the subject so a React-controlled input registers the change', async () => {
     const { dom, document, session } = await composeForm();
-    // React's value tracking, in miniature: its own instance setter records
-    // every write it sees, and an input event that finds the value unchanged
-    // since then is dropped — a plain `.value =` would leave the field empty.
     const input = document.querySelector('[placeholder="Subject"]');
     const native = Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, 'value');
     let tracked = '';
@@ -302,8 +278,6 @@ describe('the compose form, as the live one is built', () => {
 });
 
 describe('the survey dialog, as every new NICeMail tab shows it', () => {
-  // Shaped as the live page reported it: a visible role=dialog with its text
-  // and two buttons, next to the compose form and a live region.
   const PAGE = `
     <div role="dialog">
       <p>Email Satisfaction Survey for the new NICeMail Services. Participate now!</p>
