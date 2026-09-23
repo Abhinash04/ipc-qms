@@ -1,5 +1,6 @@
 import browserConfig from '../../../../config/browserConfig.js';
 import { attachToNicemail, release, MESSAGES } from './attach.js';
+import { connect as cdpConnect } from './cdp.js';
 import { SELECTORS } from './selectors.js';
 
 /**
@@ -209,6 +210,31 @@ async function runExclusive(work, { connect } = {}) {
     }
   } finally {
     await release(browser);
+  }
+}
+
+/**
+ * Close any tab this process still owns. Called on the way out.
+ *
+ * Without it a restart — a deploy, a crash, Ctrl-C — orphans whatever tab was
+ * open at the time, and nothing afterwards knows it exists. Connects directly
+ * rather than through `attachToNicemail`, because cleaning up must not depend on
+ * the operator still having a NICeMail tab open.
+ *
+ * Best effort and bounded by the CDP timeout: a browser that has already gone
+ * took its tabs with it, which is the outcome we wanted anyway.
+ */
+export async function closeAgentTabs({ connect = cdpConnect } = {}) {
+  if (ourTargets.size === 0) return;
+
+  let client = null;
+  try {
+    client = await connect();
+    await sweepOurTabs(client);
+  } catch {
+    // Nothing to report to: the process is on its way out.
+  } finally {
+    await client?.disconnect?.().catch(() => {});
   }
 }
 

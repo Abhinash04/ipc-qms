@@ -169,6 +169,13 @@ async function shutdown(signal) {
 
   try {
     await new Promise((resolve) => server.close(resolve));
+    // Before the database, because it talks to Chrome and Chrome may be gone:
+    // a tab left open here is one nothing afterwards knows about, and it would
+    // sit in the operator's window competing to be mistaken for their own.
+    // Imported here rather than at the top so a deployment with the agent off
+    // never loads the browser modules at all.
+    const { closeAgentTabs } = await import('./services/email/nic/browser/session.js');
+    await closeAgentTabs();
     await disconnectDb();
     console.log('[qms] shutdown complete');
     process.exit(0);

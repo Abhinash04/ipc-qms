@@ -27,7 +27,7 @@ import browserConfig from '../config/browserConfig.js';
  * `active` flag on models/User.js, which the auth path does not yet read.
  */
 export const USERS = [
-  { id: 'USR-0002', name: 'Bhumika Makker', role: ROLES.FRONT_OFFICE, email: 'bhumika.makker@ipc.example', divisionId: 'DIV-004' },
+  { id: 'USR-0002', name: 'Front Office (primary mailbox)', role: ROLES.FRONT_OFFICE, email: 'front.office@ipc.example', divisionId: 'DIV-004' },
   { id: 'USR-0003', name: 'Jatin Rawat', role: ROLES.OFFICER_IN_CHARGE, email: 'jatin.rawat@ipc.example', divisionId: 'DIV-001' },
   { id: 'USR-0004', name: 'Neha Singh', role: ROLES.ASSIGNED_OFFICIAL, email: 'neha.singh@ipc.example', divisionId: 'DIV-005' },
   { id: 'USR-0009', name: 'Rawat Jatin', role: ROLES.ASSIGNED_OFFICIAL, email: 'rawat.jatin@ipc.example', divisionId: 'DIV-003' },

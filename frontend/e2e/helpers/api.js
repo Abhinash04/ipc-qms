@@ -16,7 +16,13 @@ function userForRole(role) {
   return user;
 }
 
-/** Bhumika Makker (USR-0002) — the Front Officer whose inbox this is. */
+/**
+ * The primary-mailbox Front Officer (USR-0002), whose inbox this is.
+ *
+ * NOT the NICeMail Front Office (USR-0014): that account is config-derived, is
+ * absent unless NIC_BROWSER_MAILBOX is on, and reads a live government mailbox.
+ * The e2e suite runs against the local mock mailbox, which is this one.
+ */
 export const FRONT_OFFICE_USER = userForRole(ROLES.FRONT_OFFICE);
 
 /** System Administrator (USR-0008) — POST /mailbox/receive is SUPER_ADMIN only. */

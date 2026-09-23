@@ -19,7 +19,7 @@ vi.mock('@/services/api/mailboxService');
 const s = () => useWorkflowStore.getState();
 
 const ABHINASH = EXTERNAL_INQUIRER;
-const BHUMIKA = findUserById('USR-0002');
+const FRONT_OFFICE = findUserById('USR-0002');
 const JATIN = findUserById('USR-0003');
 const NEHA = findUserById('USR-0004');
 const RAWAT = findUserById('USR-0009');
@@ -29,7 +29,7 @@ function incomingEnquiry(overrides = {}) {
     mailboxMessageId: '18f2a1b2c3d4e5f6',
     providerMessageId: '18f2a1b2c3d4e5f6',
     providerThreadId: '18f2a1b2c3d4e5f6',
-    to: BHUMIKA.email,
+    to: FRONT_OFFICE.email,
     from: `${ABHINASH.name} <${ABHINASH.email}>`,
     subject: 'Clarification on monograph revision and impurity limits',
     body: '1. Product specifications\n2. Applicable monograph\n3. Analytical documentation',
@@ -56,7 +56,7 @@ const fakeResponse = caseMail.sendResponse;
 
 const fakeMailLeg = ({ to, subject, body }) =>
   Promise.resolve({
-    from: BHUMIKA.email,
+    from: FRONT_OFFICE.email,
     to: [to].flat(),
     subject,
     body,
@@ -74,7 +74,7 @@ const finalApproval = (send = fakeMailLeg) =>
   fakeFinalApprovalEndpoint({ send, actor: JATIN.name });
 
 /**
- * Bhumika's mailbox acknowledges Abhinash — a server call now, so this asks the
+ * The Front Office mailbox acknowledges Abhinash — a server call now, so this asks the
  * endpoint and re-reads the case exactly as the store does. The addresses the
  * assertions check are the server's choice: the Front Office mailbox it sends
  * from, and the inquirer stored on the case at intake.
@@ -102,8 +102,16 @@ beforeEach(async () => {
  * private inbox.
  */
 describe('the seeded directory', () => {
-  it('holds Bhumika and Jatin as the Front Office and Officer-in-Charge', () => {
-    expect(BHUMIKA).toMatchObject({ role: ROLES.FRONT_OFFICE, email: 'bhumika.makker@ipc.example' });
+  it('names the Front Office by its post, not by a person', () => {
+    // USR-0002 carried a named individual until the Front Office became the
+    // NICeMail account. It is the PRIMARY-mailbox Front Officer now — the one
+    // that exists whether or not the browser agent is switched on — so it is
+    // named for the post it holds rather than for whoever happens to hold it.
+    expect(FRONT_OFFICE).toMatchObject({
+      role: ROLES.FRONT_OFFICE,
+      email: 'front.office@ipc.example',
+    });
+    expect(FRONT_OFFICE.name).not.toMatch(/makker/i);
     expect(JATIN).toMatchObject({ role: ROLES.OFFICER_IN_CHARGE, email: 'jatin.rawat@ipc.example' });
   });
 
@@ -157,7 +165,7 @@ describe('the seeded directory', () => {
   });
 });
 
-describe('1–3. Abhinash → Bhumika creates one stable Query Case', () => {
+describe('1–3. Abhinash → the Front Office creates one stable Query Case', () => {
   it('creates the case from the incoming email, linked to the provider ids', () => {
     const { queryId, threadId, created } = s().ingestEmail(incomingEnquiry());
 
@@ -173,7 +181,7 @@ describe('1–3. Abhinash → Bhumika creates one stable Query Case', () => {
     expect(message.sourceMessageId).toBe('18f2a1b2c3d4e5f6');
     expect(message.providerThreadId).toBe('18f2a1b2c3d4e5f6');
     expect(message.direction).toBe(EMAIL_DIRECTION.INBOUND);
-    expect(message.to).toEqual([BHUMIKA.email]);
+    expect(message.to).toEqual([FRONT_OFFICE.email]);
   });
 
   it('keeps the same Query ID when the same mail is polled again', () => {
@@ -203,15 +211,15 @@ describe('1–3. Abhinash → Bhumika creates one stable Query Case', () => {
   });
 });
 
-describe('4. Bhumika acknowledges Abhinash on the same thread', () => {
-  it('records the acknowledgement as sent by Bhumika, to Abhinash', async () => {
+describe('4. the Front Office acknowledges Abhinash on the same thread', () => {
+  it('records the acknowledgement as sent by the Front Office, to Abhinash', async () => {
     const { queryId, threadId } = s().ingestEmail(incomingEnquiry());
     const outcome = await acknowledge(queryId);
 
     const ack = s().emailMessages.find((m) => m.emailType === EMAIL_TYPE.ACKNOWLEDGEMENT);
 
     expect(outcome.outcome).toBe('SENT');
-    expect(ack.from).toContain(BHUMIKA.email);
+    expect(ack.from).toContain(FRONT_OFFICE.email);
     expect(ack.to).toEqual([ABHINASH.email]);
     expect(ack.direction).toBe(EMAIL_DIRECTION.OUTBOUND);
     expect(ack.threadId).toBe(threadId);
@@ -228,16 +236,16 @@ describe('4. Bhumika acknowledges Abhinash on the same thread', () => {
   });
 });
 
-describe('5–6. Bhumika forwards to Jatin, same case throughout', () => {
-  it('sends the forward from Bhumika to Jatin on the same thread', async () => {
+describe('5–6. the Front Office forwards to Jatin, same case throughout', () => {
+  it('sends the forward from the Front Office to Jatin on the same thread', async () => {
     const { queryId, threadId } = s().ingestEmail(incomingEnquiry());
     await acknowledge(queryId);
-    s().verifyQuery(queryId, BHUMIKA);
+    s().verifyQuery(queryId, FRONT_OFFICE);
 
-    await s().forwardToOic(queryId, BHUMIKA, fakeForward);
+    await s().forwardToOic(queryId, FRONT_OFFICE, fakeForward);
 
     const forward = s().emailMessages.find((m) => m.emailType === EMAIL_TYPE.FORWARD);
-    expect(forward.from).toContain(BHUMIKA.email);
+    expect(forward.from).toContain(FRONT_OFFICE.email);
     expect(forward.to).toEqual([JATIN.email]);
     expect(forward.threadId).toBe(threadId);
     expect(forward.subject).toContain(queryId);
@@ -247,8 +255,8 @@ describe('5–6. Bhumika forwards to Jatin, same case throughout', () => {
 
   it('records who forwarded to whom in the audit trail', async () => {
     const { queryId } = s().ingestEmail(incomingEnquiry());
-    s().verifyQuery(queryId, BHUMIKA);
-    await s().forwardToOic(queryId, BHUMIKA, fakeForward);
+    s().verifyQuery(queryId, FRONT_OFFICE);
+    await s().forwardToOic(queryId, FRONT_OFFICE, fakeForward);
 
     const entry = s()
       .getAudit(queryId)
@@ -260,7 +268,7 @@ describe('5–6. Bhumika forwards to Jatin, same case throughout', () => {
      * the server writes it and a name copied into prose can disagree with the
      * row it describes.
      */
-    expect(entry.actor).toBe(BHUMIKA.name);
+    expect(entry.actor).toBe(FRONT_OFFICE.name);
     expect(entry.details).toContain('Officer-in-Charge');
 
     const forwarded = s().emailMessages.find(
@@ -271,8 +279,8 @@ describe('5–6. Bhumika forwards to Jatin, same case throughout', () => {
 
   it('7. forwarding never creates a second Query Case', async () => {
     const { queryId } = s().ingestEmail(incomingEnquiry());
-    s().verifyQuery(queryId, BHUMIKA);
-    await s().forwardToOic(queryId, BHUMIKA, fakeForward);
+    s().verifyQuery(queryId, FRONT_OFFICE);
+    await s().forwardToOic(queryId, FRONT_OFFICE, fakeForward);
 
     expect(s().queries.map((q) => q.queryId)).toEqual([queryId]);
   });
@@ -315,14 +323,14 @@ describe('5–6. Bhumika forwards to Jatin, same case throughout', () => {
   });
 });
 
-describe('8. RBAC for Bhumika and Jatin', () => {
-  it('lets Bhumika verify and forward, but not assign', async () => {
+describe('8. RBAC for the Front Office and the OIC', () => {
+  it('lets the Front Office verify and forward, but not assign', async () => {
     const { queryId } = s().ingestEmail(incomingEnquiry());
 
-    s().verifyQuery(queryId, BHUMIKA);
-    await s().forwardToOic(queryId, BHUMIKA, fakeForward);
+    s().verifyQuery(queryId, FRONT_OFFICE);
+    await s().forwardToOic(queryId, FRONT_OFFICE, fakeForward);
 
-    expect(() => s().assignQuery(queryId, NEHA.id, BHUMIKA)).toThrow(/may not perform ASSIGN/);
+    expect(() => s().assignQuery(queryId, NEHA.id, FRONT_OFFICE)).toThrow(/may not perform ASSIGN/);
   });
 
   it('lets Jatin assign, but not verify or forward', async () => {
@@ -330,7 +338,7 @@ describe('8. RBAC for Bhumika and Jatin', () => {
 
     expect(() => s().verifyQuery(queryId, JATIN)).toThrow(/may not perform VERIFY/);
 
-    s().verifyQuery(queryId, BHUMIKA);
+    s().verifyQuery(queryId, FRONT_OFFICE);
     await expect(s().forwardToOic(queryId, JATIN, fakeForward)).rejects.toThrow(
       /may not perform FORWARD/,
     );
@@ -347,8 +355,8 @@ describe('8. RBAC for Bhumika and Jatin', () => {
 describe('9–10. Jatin assigns a mock official and the mocked tail completes', () => {
   it('offers an advisory recommendation that Jatin is free to override', async () => {
     const { queryId } = s().ingestEmail(incomingEnquiry());
-    s().verifyQuery(queryId, BHUMIKA);
-    await s().forwardToOic(queryId, BHUMIKA, fakeForward);
+    s().verifyQuery(queryId, FRONT_OFFICE);
+    await s().forwardToOic(queryId, FRONT_OFFICE, fakeForward);
 
     const recommendation = s().recommendAssigneeFor(queryId);
     expect(recommendation.userId).toBeTruthy();
@@ -365,8 +373,8 @@ describe('9–10. Jatin assigns a mock official and the mocked tail completes', 
     const { queryId } = s().ingestEmail(incomingEnquiry());
     await acknowledge(queryId);
 
-    s().verifyQuery(queryId, BHUMIKA);
-    await s().forwardToOic(queryId, BHUMIKA, fakeForward);
+    s().verifyQuery(queryId, FRONT_OFFICE);
+    await s().forwardToOic(queryId, FRONT_OFFICE, fakeForward);
     s().assignQuery(queryId, NEHA.id, JATIN);
 
     await s().generateAiDraft(queryId, NEHA);
@@ -382,7 +390,7 @@ describe('9–10. Jatin assigns a mock official and the mocked tail completes', 
     expect(s().getQuery(queryId).workflowState).toBe(WORKFLOW_STATE.CLOSED);
 
     const actors = s().getAudit(queryId).map((a) => a.actor);
-    expect(actors).toContain(BHUMIKA.name);
+    expect(actors).toContain(FRONT_OFFICE.name);
     expect(actors).toContain(JATIN.name);
 
     const thread = s().emailMessages.filter((m) => m.queryId === queryId);
@@ -396,15 +404,15 @@ describe('9–10. Jatin assigns a mock official and the mocked tail completes', 
 
     const response = thread.at(-1);
     expect(response.to).toEqual([ABHINASH.email]);
-    expect(response.from).toContain(BHUMIKA.email);
+    expect(response.from).toContain(FRONT_OFFICE.email);
   });
 
   it('a failed forward leaves the case where it was, for retry', async () => {
     const { queryId } = s().ingestEmail(incomingEnquiry());
-    s().verifyQuery(queryId, BHUMIKA);
+    s().verifyQuery(queryId, FRONT_OFFICE);
 
     const failing = () => Promise.reject(new Error('mail send failed'));
-    await expect(s().forwardToOic(queryId, BHUMIKA, failing)).rejects.toThrow(/mail send failed/);
+    await expect(s().forwardToOic(queryId, FRONT_OFFICE, failing)).rejects.toThrow(/mail send failed/);
 
     expect(s().getQuery(queryId).workflowState).toBe(WORKFLOW_STATE.FRONT_OFFICE_VERIFICATION);
     expect(s().emailMessages.filter((m) => m.emailType === EMAIL_TYPE.FORWARD)).toHaveLength(0);
@@ -416,7 +424,7 @@ describe('9–10. Jatin assigns a mock official and the mocked tail completes', 
  *
  * This suite used to assert that one email registered, acknowledged, verified
  * AND forwarded itself with nobody involved. The gate is still the point: mail
- * arriving changes nothing until Bhumika accepts it. What accepting then does
+ * arriving changes nothing until the Front Officer accepts it. What accepting then does
  * is no longer split across two clicks — it is one server call that registers,
  * acknowledges and forwards, and the browser orchestrates none of it.
  */
@@ -447,7 +455,7 @@ describe('intake — mail waits for the Front Officer', () => {
 
   /** What the background poll does: look, and report. Nothing else. */
   async function checkMailbox() {
-    useAuthStore.setState({ currentUser: BHUMIKA });
+    useAuthStore.setState({ currentUser: FRONT_OFFICE });
     const { result } = renderHook(() => useMailboxIngestion());
     let outcome;
     await act(async () => {
@@ -458,7 +466,7 @@ describe('intake — mail waits for the Front Officer', () => {
 
   /** What the tick does. */
   async function acceptEnquiry() {
-    useAuthStore.setState({ currentUser: BHUMIKA });
+    useAuthStore.setState({ currentUser: FRONT_OFFICE });
     const { result } = renderHook(() => useMailboxIngestion());
     let outcome;
     await act(async () => {
@@ -490,7 +498,7 @@ describe('intake — mail waits for the Front Officer', () => {
     expect(outcome.acknowledged).toBe(true);
     expect(outcome.forwarded).toBe(true);
 
-    // Accepting used to stop here so Bhumika could forward separately. It was
+    // Accepting used to stop here so the Front Officer could forward separately. It was
     // never a second judgement — every accepted enquiry goes to Jatin — and the
     // gap left a case sitting where nobody had been told about it.
     expect(s().getQuery('QRY-2026-00001').workflowState).toBe(
@@ -509,7 +517,7 @@ describe('intake — mail waits for the Front Officer', () => {
     // The accept endpoint writes this trail against the Front Officer's own
     // session. This tab used to mint its own QUERY_RECEIVED and
     // AI_SUMMARY_GENERATED here and must now add nothing at all. The order, and
-    // Bhumika as the acting officer, are asserted in
+    // the Front Officer as the acting officer, are asserted in
     // backend/src/test/acceptMessage.test.js.
     expect(s().getAudit('QRY-2026-00001').map((a) => a.event)).toEqual([
       AUDIT_EVENT.QUERY_RECEIVED,
@@ -534,7 +542,7 @@ describe('intake — mail waits for the Front Officer', () => {
     ]);
     expect(new Set(thread.map((m) => m.threadId))).toEqual(new Set([query.threadId]));
 
-    expect(thread[0].to).toEqual([BHUMIKA.email]);
+    expect(thread[0].to).toEqual([FRONT_OFFICE.email]);
     // The acknowledgement goes back to whoever wrote in; the forward to Jatin.
     expect(thread[1].to).toEqual([ABHINASH.email]);
     expect(thread[2].to).toEqual([JATIN.email]);
@@ -553,7 +561,7 @@ describe('intake — mail waits for the Front Officer', () => {
     // The second click went with the second judgement: FORWARD is valid only at
     // FRONT_OFFICE_VERIFICATION, so a case the server already forwarded cannot
     // be forwarded again from here.
-    await expect(s().forwardToOic('QRY-2026-00001', BHUMIKA)).rejects.toThrow(
+    await expect(s().forwardToOic('QRY-2026-00001', FRONT_OFFICE)).rejects.toThrow(
       /may not perform FORWARD/,
     );
     expect(mailboxService.forwardQuery).not.toHaveBeenCalled();
@@ -570,7 +578,7 @@ describe('intake — mail waits for the Front Officer', () => {
     expect(outcome.forwarded).toBe(false);
     expect(outcome.errors).toEqual([{ step: 'forward', error: 'mail send failed' }]);
 
-    await expect(s().forwardToOic('QRY-2026-00001', BHUMIKA)).rejects.toThrow(
+    await expect(s().forwardToOic('QRY-2026-00001', FRONT_OFFICE)).rejects.toThrow(
       /mail send failed/,
     );
 
@@ -648,8 +656,8 @@ describe('final approval dispatches automatically', () => {
   async function readyForApproval() {
     const { queryId } = s().ingestEmail(incomingEnquiry());
     await acknowledge(queryId);
-    s().verifyQuery(queryId, BHUMIKA);
-    await s().forwardToOic(queryId, BHUMIKA, fakeForward);
+    s().verifyQuery(queryId, FRONT_OFFICE);
+    await s().forwardToOic(queryId, FRONT_OFFICE, fakeForward);
     s().assignQuery(queryId, NEHA.id, JATIN);
     await s().generateAiDraft(queryId, NEHA);
     s().saveDraftVersion(queryId, 'The approved wording.', NEHA);
@@ -671,14 +679,14 @@ describe('final approval dispatches automatically', () => {
     expect(s().getQuery(queryId).workflowState).toBe(WORKFLOW_STATE.CLOSED);
   });
 
-  it('3–5. sends from Bhumika to Abhinash on the existing case and thread', async () => {
+  it('3–5. sends from the Front Office to Abhinash on the existing case and thread', async () => {
     const queryId = await readyForApproval();
     const threadId = s().getQuery(queryId).threadId;
 
     await s().grantFinalApproval(queryId, JATIN, finalApproval());
 
     const sent = s().emailMessages.find((m) => m.emailType === EMAIL_TYPE.OUTGOING_RESPONSE);
-    expect(sent.from).toContain(BHUMIKA.email);
+    expect(sent.from).toContain(FRONT_OFFICE.email);
     expect(sent.to).toEqual([ABHINASH.email]);
     expect(sent.queryId).toBe(queryId);
     expect(sent.threadId).toBe(threadId);
@@ -717,7 +725,7 @@ describe('final approval dispatches automatically', () => {
     const queryId = await readyForApproval();
     await s().grantFinalApproval(queryId, JATIN, finalApproval(failing)).catch(() => {});
 
-    const outcome = await s().dispatchResponse(queryId, BHUMIKA, fakeResponse);
+    const outcome = await s().dispatchResponse(queryId, FRONT_OFFICE, fakeResponse);
 
     expect(outcome.dispatched).toBe(true);
     expect(s().getQuery(queryId).workflowState).toBe(WORKFLOW_STATE.CLOSED);
@@ -796,7 +804,7 @@ describe('final approval dispatches automatically', () => {
   it('still refuses a non-OIC approver, and a wrong role on retry', async () => {
     const queryId = await readyForApproval();
 
-    await expect(s().grantFinalApproval(queryId, BHUMIKA, finalApproval())).rejects.toThrow(
+    await expect(s().grantFinalApproval(queryId, FRONT_OFFICE, finalApproval())).rejects.toThrow(
       /may not perform FINAL_APPROVE/,
     );
 
@@ -852,8 +860,8 @@ describe('assignment recommendation weighs expertise', () => {
 
   it('remains advisory — the OIC assigns whoever they choose', async () => {
     const { queryId } = s().ingestEmail(incomingEnquiry({ subject: 'Sterility testing' }));
-    s().verifyQuery(queryId, BHUMIKA);
-    await s().forwardToOic(queryId, BHUMIKA, fakeForward);
+    s().verifyQuery(queryId, FRONT_OFFICE);
+    await s().forwardToOic(queryId, FRONT_OFFICE, fakeForward);
 
     const recommended = s().recommendAssigneeFor(queryId).userId;
 

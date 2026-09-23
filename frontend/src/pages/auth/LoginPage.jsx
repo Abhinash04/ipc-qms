@@ -31,6 +31,16 @@ export function LoginPage() {
   const [devOpen, setDevOpen] = useState(false);
 
   /**
+   * The NICeMail Front Office address, for the dev sign-in list below.
+   *
+   * From configuration because that account is not in the directory: the server
+   * builds it from NIC_EMAIL and it does not exist when NIC_BROWSER_MAILBOX is
+   * off. Left unset, the entry is simply not offered. It is an address, not a
+   * credential — and the list it sits in is stripped from a production build.
+   */
+  const nicFrontOfficeEmail = (import.meta.env.VITE_NIC_FRONT_OFFICE_EMAIL || "").trim();
+
+  /**
    * A session whose role this build no longer knows has nowhere to go.
    *
    * roleHome falls back to the login path for an unrecognised role, so sending
@@ -280,6 +290,51 @@ export function LoginPage() {
 
                 {devOpen && (
                   <div className="absolute bottom-full left-0 right-0 mb-2 z-30 max-h-72 overflow-y-auto rounded-2xl border border-slate-200/90 bg-white shadow-xl shadow-slate-900/10 p-1.5">
+                    {/**
+                     * The NICeMail Front Office, and it is NOT a quick login.
+                     *
+                     * That account reads a live .gov.in mailbox and its session
+                     * can make the browser agent send, so `POST /auth/dev-login`
+                     * refuses it — 403, audited — and must keep refusing it.
+                     * Offering it here as one click would only produce that
+                     * error. So this fills the address in and hands over to the
+                     * password form, which is the one way in.
+                     *
+                     * The address comes from configuration rather than the
+                     * directory: the account is built from NIC_EMAIL on the
+                     * server and does not exist at all when the agent is off.
+                     */}
+                    {nicFrontOfficeEmail && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEmail(nicFrontOfficeEmail);
+                          setPassword("");
+                          setDevOpen(false);
+                          setError(null);
+                          document.getElementById("login-password")?.focus();
+                        }}
+                        className="w-full flex items-center gap-3 px-3 py-2.5 mb-1.5 rounded-xl border border-emerald-200/80 bg-emerald-50/60 hover:bg-emerald-50 text-left transition-colors cursor-pointer group"
+                      >
+                        <div className="w-9 h-9 rounded-full bg-linear-to-br from-emerald-500 to-teal-500 text-white text-[12.5px] font-black flex items-center justify-center shrink-0 shadow-sm">
+                          EC
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className="text-[14.5px] font-black text-slate-800 truncate group-hover:text-emerald-700">
+                              Eco-Clubs Front Office
+                            </span>
+                            <span className="px-2 py-0.5 rounded-full bg-emerald-100 border border-emerald-200 text-[10px] font-black tracking-wide text-emerald-700 uppercase shrink-0">
+                              NICeMail
+                            </span>
+                          </div>
+                          <div className="text-[12.5px] font-semibold text-slate-400 truncate">
+                            {nicFrontOfficeEmail} · needs its password
+                          </div>
+                        </div>
+                      </button>
+                    )}
+
                     {MOCK_USERS.map((user) => (
                       <button
                         key={user.id}

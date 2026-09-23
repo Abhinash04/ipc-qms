@@ -24,7 +24,7 @@ const clientRow = {
   auditId: 'AUD-00007',
   queryId: 'QRY-2026-00001',
   event: 'QUERY_REGISTERED',
-  actor: 'Bhumika Makker',
+  actor: 'Front Office (primary mailbox)',
   at: '2026-09-17T09:05:00.000Z',
   details: 'Front Office verified the query details and attachments.',
 };
@@ -50,7 +50,7 @@ describe('the audit card renders both shapes of an audit row', () => {
 
     expect(screen.getByText('QUERY REGISTERED')).toBeInTheDocument();
     expect(screen.getByText('QUERY RECEIVED')).toBeInTheDocument();
-    expect(screen.getByText(/Bhumika Makker/)).toBeInTheDocument();
+    expect(screen.getByText(/Front Office \(primary mailbox\)/)).toBeInTheDocument();
     expect(screen.getByText(/FRONT_OFFICE/)).toBeInTheDocument();
 
     expect(screen.getByText(clientRow.details)).toBeInTheDocument();
