@@ -5,14 +5,14 @@ export const MOCK_USERS = [
     id: 'USR-0002',
     name: 'Bhumika Makker',
     role: ROLES.FRONT_OFFICE,
-    email: 'bhoomikamakker@gmail.com',
+    email: 'bhumika.makker@ipc.example',
     divisionId: 'DIV-004',
   },
   {
     id: 'USR-0003',
     name: 'Jatin Rawat',
     role: ROLES.OFFICER_IN_CHARGE,
-    email: 'rawatjatin436@gmail.com',
+    email: 'jatin.rawat@ipc.example',
     divisionId: 'DIV-001',
   },
   {

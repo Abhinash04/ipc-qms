@@ -20,7 +20,7 @@ vi.mock('@/services/api/mailboxService', () => ({
     transport: 'mock',
     ipcQueryEmail: 'ipc-query-mock@example.com',
     ipcReplyFrom: { email: 'arnd@example.com', name: 'AR&D Division' },
-    inquirer: { email: 'abhinash.pritiraj@gmail.com', name: 'Abhinash Pritiraj' },
+    inquirer: { email: 'abhinash.pritiraj@pharma.example', name: 'Abhinash Pritiraj' },
   }),
   fetchMailboxMessages: vi.fn().mockResolvedValue({ messages: [] }),
   fetchMailboxDecisions: vi.fn().mockResolvedValue({ decisions: [] }),
@@ -47,7 +47,7 @@ const fakeForward = caseMail.forwardQuery;
 const enquiry = () => ({
   mailboxMessageId: 'MSG-TRF-00001',
   to: 'ipc-query-mock@example.com',
-  from: 'Abhinash Pritiraj <abhinash.pritiraj@gmail.com>',
+  from: 'Abhinash Pritiraj <abhinash.pritiraj@pharma.example>',
   subject: 'Transfer Functionality Verification Test Query',
   body: 'Testing transfer query between assigned officials.',
   receivedAt: '2026-08-18T09:00:00.000Z',

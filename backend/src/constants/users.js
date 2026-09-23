@@ -9,6 +9,14 @@ import browserConfig from '../config/browserConfig.js';
  * services/auth/credentials.js from QMS_PASSWORDS_FILE or a per-account
  * environment variable.
  *
+ * NO REAL ADDRESSES EITHER. Every address here is `@ipc.example`, which RFC 2606
+ * reserves and which cannot receive mail. Two of them were named individuals'
+ * personal accounts, which put personal data in the repository and meant a sign-in
+ * identity doubled as somebody's private inbox. Where mail actually goes is a
+ * deployment setting — FRONT_OFFICE_EMAIL, OFFICER_IN_CHARGE_EMAIL and NIC_EMAIL,
+ * read through config/identities.js and config/browserConfig.js — and never this
+ * file.
+ *
  * Mirrors frontend/src/constants/mockUsers.js, which remains the frontend's
  * display directory for other users' names. The two must agree on id, email
  * and role; this file is the authority for authentication.
@@ -19,8 +27,8 @@ import browserConfig from '../config/browserConfig.js';
  * `active` flag on models/User.js, which the auth path does not yet read.
  */
 export const USERS = [
-  { id: 'USR-0002', name: 'Bhumika Makker', role: ROLES.FRONT_OFFICE, email: 'bhoomikamakker@gmail.com', divisionId: 'DIV-004' },
-  { id: 'USR-0003', name: 'Jatin Rawat', role: ROLES.OFFICER_IN_CHARGE, email: 'rawatjatin436@gmail.com', divisionId: 'DIV-001' },
+  { id: 'USR-0002', name: 'Bhumika Makker', role: ROLES.FRONT_OFFICE, email: 'bhumika.makker@ipc.example', divisionId: 'DIV-004' },
+  { id: 'USR-0003', name: 'Jatin Rawat', role: ROLES.OFFICER_IN_CHARGE, email: 'jatin.rawat@ipc.example', divisionId: 'DIV-001' },
   { id: 'USR-0004', name: 'Neha Singh', role: ROLES.ASSIGNED_OFFICIAL, email: 'neha.singh@ipc.example', divisionId: 'DIV-005' },
   { id: 'USR-0009', name: 'Rawat Jatin', role: ROLES.ASSIGNED_OFFICIAL, email: 'rawat.jatin@ipc.example', divisionId: 'DIV-003' },
   { id: 'USR-0010', name: 'Meera Iyer', role: ROLES.ASSIGNED_OFFICIAL, email: 'meera.iyer@ipc.example', divisionId: 'DIV-006' },

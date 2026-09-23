@@ -48,7 +48,7 @@ const ACK_RESULT = {
   providerMessageId: 'ack-1',
 };
 
-const message = (n, subject, from = 'Abhinash Pritiraj <abhinash.pritiraj@gmail.com>') => ({
+const message = (n, subject, from = 'Abhinash Pritiraj <abhinash.pritiraj@pharma.example>') => ({
   mailboxMessageId: `MSG-0000${n}`,
   to: 'ipc-query-mock@example.com',
   from,

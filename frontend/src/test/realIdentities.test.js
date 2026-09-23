@@ -90,10 +90,21 @@ beforeEach(async () => {
   await s().resetDemo();
 });
 
-describe('the real identities', () => {
-  it('holds Bhumika and Jatin as the two real stakeholders', () => {
-    expect(BHUMIKA).toMatchObject({ role: ROLES.FRONT_OFFICE, email: 'bhoomikamakker@gmail.com' });
-    expect(JATIN).toMatchObject({ role: ROLES.OFFICER_IN_CHARGE, email: 'rawatjatin436@gmail.com' });
+/**
+ * The seeded directory.
+ *
+ * This described "the real identities" while two accounts carried named
+ * individuals' personal Gmail addresses, and pinned those addresses so they
+ * could not drift. They are gone: every account is on the reserved
+ * `@ipc.example` domain, and the assertions below pin that instead — which is
+ * now the property worth defending, because it is the one that keeps personal
+ * data out of the repository and stops a sign-in identity doubling as somebody's
+ * private inbox.
+ */
+describe('the seeded directory', () => {
+  it('holds Bhumika and Jatin as the Front Office and Officer-in-Charge', () => {
+    expect(BHUMIKA).toMatchObject({ role: ROLES.FRONT_OFFICE, email: 'bhumika.makker@ipc.example' });
+    expect(JATIN).toMatchObject({ role: ROLES.OFFICER_IN_CHARGE, email: 'jatin.rawat@ipc.example' });
   });
 
   it('holds no account for the inquirer — they email in and never sign in', () => {
@@ -101,18 +112,16 @@ describe('the real identities', () => {
     expect(ABHINASH.id).toBeNull();
   });
 
-  it('holds Rawat Jatin as a MOCK Assigned Official — no Gmail account', () => {
+  it('holds Rawat Jatin as an Assigned Official, distinct from the OIC', () => {
     expect(RAWAT).toMatchObject({ id: 'USR-0009', role: ROLES.ASSIGNED_OFFICIAL });
     expect(RAWAT.email).toBe('rawat.jatin@ipc.example');
-    expect(RAWAT.email).not.toMatch(/gmail/);
   });
 
-  it('gives every Assigned Official expertise and no real identity', () => {
+  it('gives every Assigned Official expertise', () => {
     const officials = MOCK_USERS.filter((u) => u.role === ROLES.ASSIGNED_OFFICIAL);
 
     expect(officials.length).toBeGreaterThanOrEqual(5);
     for (const official of officials) {
-      expect(official.email, `${official.name} must stay mock`).toMatch(/@ipc\.example$/);
       expect(official.expertise?.length, `${official.name} needs expertise`).toBeGreaterThan(0);
     }
   });
@@ -127,14 +136,16 @@ describe('the real identities', () => {
     expect(new Set(addresses).size).toBe(addresses.length);
   });
 
-  it('leaves every user without a real identity on a mock address', () => {
-
-    const realAddresses = new Set([BHUMIKA.email, JATIN.email]);
-    const stillMock = MOCK_USERS.filter((u) => !realAddresses.has(u.email));
-
-    expect(stillMock.length).toBeGreaterThan(0);
-    for (const user of stillMock) {
-      expect(user.email, `${user.name} must stay mock`).toMatch(/@ipc\.example$/);
+  /**
+   * The rule the whole file exists for now: not one address in the directory can
+   * receive mail. `@ipc.example` is reserved by RFC 2606, so an account that
+   * acquires a routable address — a real colleague's, or a real IPC one — fails
+   * here rather than at the first send.
+   */
+  it('puts every account on a reserved, unroutable domain', () => {
+    expect(MOCK_USERS.length).toBeGreaterThan(0);
+    for (const user of MOCK_USERS) {
+      expect(user.email, `${user.name} must stay unroutable`).toMatch(/@ipc\.example$/);
     }
   });
 

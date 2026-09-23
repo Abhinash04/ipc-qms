@@ -20,7 +20,7 @@ vi.mock('@/services/api/healthService', () => ({
 
 vi.mock('@/services/api/mailboxService');
 
-const INQUIRER = 'Abhinash Pritiraj <abhinash.pritiraj@gmail.com>';
+const INQUIRER = 'Abhinash Pritiraj <abhinash.pritiraj@pharma.example>';
 
 const MESSAGE = {
   mailboxMessageId: 'MSG-00001',
@@ -32,7 +32,7 @@ const MESSAGE = {
 };
 
 /** The address the enquiry was written from, which is where the ACK goes. */
-const INQUIRER_EMAIL = 'abhinash.pritiraj@gmail.com';
+const INQUIRER_EMAIL = 'abhinash.pritiraj@pharma.example';
 
 /** The Front Office mailbox the server sends from. */
 const FRONT_OFFICE = MOCK_USERS.find((u) => u.role === ROLES.FRONT_OFFICE).email;
@@ -76,7 +76,7 @@ beforeEach(async () => {
     transport: 'mock',
     ipcQueryEmail: 'ipc-query-mock@example.com',
     ipcReplyFrom: { email: 'arnd-ipc-mock@example.com', name: 'AR&D Division' },
-    inquirer: { email: 'abhinash.pritiraj@gmail.com', name: 'Abhinash Pritiraj' },
+    inquirer: { email: 'abhinash.pritiraj@pharma.example', name: 'Abhinash Pritiraj' },
   });
 
   useAuthStore.setState({ currentUser: findUserById('USR-0008') });

@@ -15,7 +15,7 @@ vi.mock('@/services/api/mailboxService', () => ({
     transport: 'mock',
     ipcQueryEmail: 'ipc-query-mock@example.com',
     ipcReplyFrom: { email: 'arnd-ipc-mock@example.com', name: 'AR&D Division' },
-    inquirer: { email: 'abhinash.pritiraj@gmail.com', name: 'Abhinash Pritiraj' },
+    inquirer: { email: 'abhinash.pritiraj@pharma.example', name: 'Abhinash Pritiraj' },
   }),
   fetchMailboxMessages: vi.fn().mockResolvedValue({ messages: [] }),
   fetchMailboxMessage: vi.fn().mockResolvedValue(null),
@@ -60,7 +60,7 @@ beforeAll(async () => {
   WALKTHROUGH_ID = store.ingestEmail({
     mailboxMessageId: 'MSG-00001',
     to: 'ipc-query-mock@example.com',
-    from: 'Abhinash Pritiraj <abhinash.pritiraj@gmail.com>',
+    from: 'Abhinash Pritiraj <abhinash.pritiraj@pharma.example>',
     subject: 'Clarification on monograph revision timelines',
     body: 'Please confirm the revised submission window.',
     receivedAt: '2026-08-17T09:00:00.000Z',
@@ -69,7 +69,7 @@ beforeAll(async () => {
   ADVANCED_ID = store.ingestEmail({
     mailboxMessageId: 'MSG-00002',
     to: 'ipc-query-mock@example.com',
-    from: 'Abhinash Pritiraj <abhinash.pritiraj@gmail.com>',
+    from: 'Abhinash Pritiraj <abhinash.pritiraj@pharma.example>',
     subject: 'Query on impurity threshold reporting',
     body: 'Seeking guidance on reporting thresholds.',
     receivedAt: '2026-08-17T10:00:00.000Z',

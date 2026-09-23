@@ -20,7 +20,7 @@ vi.mock('@/services/api/mailboxService', () => ({
   deleteMailboxMessage: vi.fn().mockResolvedValue({ deleted: true }),
   sendAcknowledgement: vi.fn().mockResolvedValue({
     from: 'fo@test.invalid',
-    to: ['abhinash.pritiraj@gmail.com'],
+    to: ['abhinash.pritiraj@pharma.example'],
     subject: 'Acknowledgement of Query Received',
     body: 'Received.',
     sentAt: '2026-08-26T09:30:00.000Z',

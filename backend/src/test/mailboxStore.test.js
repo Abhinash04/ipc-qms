@@ -24,7 +24,7 @@ describe('facade behaviour is identical regardless of backend', () => {
   it('delivers, lists and marks ingested', async () => {
     const delivered = await mailbox.deliver({
       to: 'ipc-query-mock@example.com',
-      from: 'abhinash.pritiraj@gmail.com',
+      from: 'abhinash.pritiraj@pharma.example',
       subject: 'Facade test',
       body: 'Body',
       receivedAt: '2026-08-17T09:00:00.000Z',
@@ -155,13 +155,13 @@ describe('recipient keying', () => {
   // and found nothing.
   it('treats "Name <addr>" and the bare address as one inbox', async () => {
     await mailbox.deliver({
-      to: 'Abhinash Pritiraj <abhinash.pritiraj@gmail.com>',
+      to: 'Abhinash Pritiraj <abhinash.pritiraj@pharma.example>',
       from: 'arnd-ipc-mock@example.com',
       subject: 'Acknowledgement',
     });
 
-    expect(await mailbox.list('abhinash.pritiraj@gmail.com')).toHaveLength(1);
-    expect(await mailbox.list('Abhinash Pritiraj <abhinash.pritiraj@gmail.com>')).toHaveLength(1);
+    expect(await mailbox.list('abhinash.pritiraj@pharma.example')).toHaveLength(1);
+    expect(await mailbox.list('Abhinash Pritiraj <abhinash.pritiraj@pharma.example>')).toHaveLength(1);
     expect(await mailbox.stats()).toEqual({ recipients: 1, messages: 1 });
   });
 
@@ -172,13 +172,13 @@ describe('recipient keying', () => {
 
   it('can mark a message ingested using either address form', async () => {
     await mailbox.deliver({
-      to: 'Abhinash Pritiraj <abhinash.pritiraj@gmail.com>',
+      to: 'Abhinash Pritiraj <abhinash.pritiraj@pharma.example>',
       from: 'x@example.com',
       subject: 'A',
     });
 
     const marked = await mailbox.markIngested(
-      'Abhinash Pritiraj <abhinash.pritiraj@gmail.com>',
+      'Abhinash Pritiraj <abhinash.pritiraj@pharma.example>',
       'MSG-00001',
     );
     expect(marked.ingested).toBe(true);
