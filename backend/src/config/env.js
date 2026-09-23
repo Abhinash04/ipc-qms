@@ -8,8 +8,8 @@ import { validateNicConfig } from './nicConfig.js';
  *
  * `ENV_FILE=.env.e2e npm start` is how the end-to-end suite points the server
  * at its own database and the mock mail transport without touching a
- * developer's `.env` — which on this machine is configured for a real Gmail
- * account. Order is the whole mechanism: dotenv never overwrites a variable
+ * developer's `.env` — which is configured against a real mailbox.
+ * Order is the whole mechanism: dotenv never overwrites a variable
  * that is already set, so the overlay wins on every key it declares and `.env`
  * still supplies the secrets the overlay deliberately omits (JWT_SECRET,
  * QMS_SEED_PASSWORD). Unset, this is exactly the single `.env` load it replaced.
@@ -44,10 +44,9 @@ const env = {
   IPC_ACK_FROM_EMAIL: process.env.IPC_ACK_FROM_EMAIL || 'arnd-ipc-mock@example.com',
   IPC_ACK_FROM_NAME: process.env.IPC_ACK_FROM_NAME || 'AR&D Division',
 
-  // INQUIRER_EMAIL / INQUIRER_NAME used to be mirrored here and had zero
-  // consumers. They are still read — by config/identities.js, through the
-  // dynamic `process.env[`${role}_EMAIL`]` — but an inquirer is now whoever
-  // sent the mail, so there is no single configured address to surface.
+  // There is no configured inquirer address. An inquirer is whoever the mail
+  // arrived from, read off the message at intake — INQUIRER_EMAIL and
+  // INQUIRER_NAME were mirrored here once and nothing consumes them now.
 
   // `??`, not `||`: an explicitly empty GEMMA_API_URL means "no LLM configured"
   // and must stay empty, which is how the suite keeps off the network. With `||`
@@ -64,7 +63,7 @@ const env = {
   // ── Attachments ──────────────────────────────────────────────────────────
   // Disk is the only store that works whether or not Mongo is connected
   // (Mongo is optional here — see config/db.js) and is what can feed real
-  // bytes into a Gmail MIME multipart.
+  // bytes to a transport at send time.
   // Resolved against the backend package root rather than process.cwd(), so a
   // relative override names the same directory however the process was
   // launched. Resolving against the cwd let `backend/storage/attachments` —
@@ -73,8 +72,8 @@ const env = {
   // through unchanged, which is what the test harness relies on.
   ATTACHMENT_DIR: path.resolve(BACKEND_ROOT, process.env.ATTACHMENT_DIR || 'storage/attachments'),
   ATTACHMENT_MAX_FILE_MB: parseInt(process.env.ATTACHMENT_MAX_FILE_MB || '10', 10),
-  // Smaller than the 25MB Gmail cap on purpose: base64 inflates payload size
-  // by ~33%, and the cap is on the *encoded* message.
+  // Smaller than a typical 25MB provider cap on purpose: base64 inflates
+  // payload size by ~33%, and such caps are on the *encoded* message.
   ATTACHMENT_MAX_TOTAL_MB: parseInt(process.env.ATTACHMENT_MAX_TOTAL_MB || '15', 10),
   ATTACHMENT_MAX_FILES: parseInt(process.env.ATTACHMENT_MAX_FILES || '10', 10),
 };

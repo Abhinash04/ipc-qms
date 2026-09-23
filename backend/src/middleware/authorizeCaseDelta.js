@@ -19,7 +19,7 @@ import { isConnected } from '../config/db.js';
  *
  * This route takes a whole case document and `$set`s it. It used to carry
  * `verifyToken` and a body schema and nothing else, so any signed-in account —
- * including the seeded INQUIRER, who is a member of the public — could rewrite
+ * including one with no part in the case — could rewrite
  * any case in the system: set its workflow state, replace the approved response
  * text, name the inquirer it would be mailed to, and delete its workflow steps.
  * `services/workflow/finalApproval.js` then reads exactly those stored fields to
@@ -27,10 +27,11 @@ import { isConnected } from '../config/db.js';
  *
  * ## Why there is no verifyRole here
  *
- * Every role legitimately writes through this route: the INQUIRER raises portal
- * enquiries, the REVIEWER records decisions, the ASSIGNED_OFFICIAL saves
- * drafts. A role allow-list containing all of them denies nothing while looking
- * like a control. The substance is the two layers below.
+ * Every role legitimately writes through this route: the REVIEWER records
+ * decisions, the ASSIGNED_OFFICIAL saves drafts, the Front Office and the
+ * Officer-in-Charge move cases along. A role allow-list containing all of them
+ * denies nothing while looking like a control. The substance is the two layers
+ * below.
  *
  * ## Two checks, both against STORED state
  *
@@ -93,9 +94,9 @@ export function protectedValueViolations(user, body, stored = {}) {
       } else if (creating) {
         /**
          * A new case opens at RECEIVED, and that is not a transition anybody
-         * needs an action for — an Inquirer raising a portal enquiry holds no
-         * workflow action at all. WHO may create a case is decided separately,
-         * by creationViolation below.
+         * needs an action for — intake creates it before anyone has acted on
+         * it. WHO may create a case is decided separately, by
+         * creationViolation below.
          */
         if (query.workflowState !== WORKFLOW_STATE.RECEIVED && !everything) {
           violations.push('query.workflowState');

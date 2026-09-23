@@ -11,7 +11,7 @@ import { WORKFLOW_STATE, RESPONSE_STATUS } from './workflowStates.js';
  *
  * Gating on the value rather than the field is what gives the check teeth.
  * "`workflowState` requires one of thirteen actions" is barely a constraint;
- * "`workflowState: 'ASSIGNED'` requires ASSIGN" denies an INQUIRER outright.
+ * "`workflowState: 'ASSIGNED'` requires ASSIGN" denies a reviewer outright.
  *
  * Checked with the existing roleCanPerform() from constants/workflowActions.js,
  * so this introduces no second authorization vocabulary to keep in step.
