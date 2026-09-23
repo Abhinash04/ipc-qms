@@ -102,10 +102,11 @@ router.post(
 );
 
 // Lets the inbox show what has already been accepted or rejected. Necessary
-// because under MAILBOX_SOURCE=gmail the message itself carries no QMS state.
+// because a message read from a real mailbox carries no QMS state of its own.
 router.get('/mailbox/decisions', verifyToken, verifyRole(FRONT_OFFICE_ONLY), listDecisions);
 
-// Trashes the message in the real account when MAILBOX_SOURCE=gmail.
+// Removes the message from the Front Office inbox. The NICeMail store marks it
+// removed rather than deleting it, so a later sync does not bring it back.
 router.delete(
   '/mailbox/messages/:messageId',
   verifyToken,

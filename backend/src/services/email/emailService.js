@@ -75,6 +75,22 @@ function getEmailConfig() {
   return {
     transport: env.EMAIL_TRANSPORT,
 
+    /**
+     * The other channel, which EMAIL_TRANSPORT says nothing about.
+     *
+     * A case that arrived in the NICeMail mailbox is answered through the
+     * browser agent whatever the transport is set to, so a deployment can run
+     * EMAIL_TRANSPORT=mock and still send real mail from a .gov.in account.
+     * Without these two a read-only admin page can only report the transport,
+     * and would call that deployment silent — which is how the settings page
+     * came to promise "nothing leaves this machine" on a live mailbox.
+     *
+     * Booleans, not addresses or credentials: enough to state the posture,
+     * nothing worth withholding.
+     */
+    nicBrowserMailbox: browserConfig.mailboxEnabled,
+    outboundAllowed: outboundAllowed(),
+
     // Where an enquiry is addressed. With real stakeholders this is the Front
     // Officer; IPC_QUERY_EMAIL remains the shared mock mailbox address.
     ipcQueryEmail: frontOffice?.email || env.IPC_QUERY_EMAIL,

@@ -222,6 +222,31 @@ describe('email HTTP endpoints', () => {
     expect(res.body.inquirer.email).toBe('inquirer@test.invalid');
   });
 
+  /**
+   * EMAIL_TRANSPORT describes one channel. A NICeMail case is answered through
+   * the browser agent whatever it says, so a read-only admin page that saw
+   * only the transport would call a live .gov.in deployment silent.
+   */
+  it('GET /emails/config reports the NICeMail channel as well as the transport', async () => {
+    const quiet = await request(app).get('/api/v1/emails/config').set(AUTH);
+    expect(quiet.body).toMatchObject({ nicBrowserMailbox: false, outboundAllowed: false });
+
+    vi.stubEnv('NIC_BROWSER_MAILBOX', 'true');
+    vi.stubEnv('NIC_EMAIL', 'lab@ipc.gov.in');
+    vi.stubEnv('NIC_ALLOW_OUTBOUND', 'true');
+
+    const live = await request(app).get('/api/v1/emails/config').set(AUTH);
+    expect(live.body).toMatchObject({
+      transport: 'mock',
+      nicBrowserMailbox: true,
+      outboundAllowed: true,
+    });
+
+    // Posture, not credentials: no address and nothing secret is added.
+    expect(JSON.stringify(live.body)).not.toMatch(/lab@ipc\.gov\.in/);
+    vi.unstubAllEnvs();
+  });
+
   it('POST /emails/enquiry sends and returns the stored message', async () => {
     const res = await request(app)
       .post('/api/v1/emails/enquiry').set(AUTH)

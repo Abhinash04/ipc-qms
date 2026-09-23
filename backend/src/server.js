@@ -32,11 +32,12 @@ function describeConfiguration() {
   const frontOffice = identityForRole(IDENTITY_ROLES.FRONT_OFFICE);
   const store = mailbox.describe();
 
-  // Named per transport rather than "gmail or else mock": a boot line that
+  // Named per transport rather than "real or else mock": a boot line that
   // reports the wrong transport is worse than no boot line, and an operator
-  // reads this to confirm what a restart actually changed.
+  // reads this to confirm what a restart actually changed. Note that it
+  // describes EMAIL_TRANSPORT only — NICeMail cases are sent by the agent
+  // reported two lines below, whatever this says.
   const TRANSPORT_LABELS = {
-    [EMAIL_TRANSPORTS.GMAIL]: 'Gmail (real sends)',
     [EMAIL_TRANSPORTS.NIC]: outboundAllowed()
       ? 'NICeMail SMTP (real sends)'
       : `NICeMail SMTP — confined to NIC_TEST_RECIPIENT (set NIC_ALLOW_OUTBOUND=true to release)`,
