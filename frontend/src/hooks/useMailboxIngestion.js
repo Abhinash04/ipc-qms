@@ -111,8 +111,8 @@ export function useMailboxIngestion() {
       return result;
     } catch (error) {
       /**
-       * The server's reason — "the gmail mailbox could not be reached: …
-       * ENOTFOUND … the poll keeps retrying" — rather than axios's "Request
+       * The server's reason — "the mailbox could not be reached: … the poll
+       * keeps retrying" — rather than axios's "Request
        * failed with status code 503", which tells the Front Officer nothing
        * about whether anyone needs to do something.
        */

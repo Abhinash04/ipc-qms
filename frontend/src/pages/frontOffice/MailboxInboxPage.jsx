@@ -154,9 +154,9 @@ function describeAccept(result, message) {
  *
  * Two mailboxes report this. The NICeMail one is filled by an agent reading a
  * signed-in Chrome tab, and a failed read is answered 200 with whatever was
- * already stored plus a `sync` that says why. A Gmail poll that cannot reach
- * Google answers 503 and reports the outage the same way, since the last
- * listing is still on screen and still worth showing.
+ * already stored plus a `sync` that says why. A mailbox read over IMAP answers
+ * 503 instead and reports the outage the same way, since the last listing is
+ * still on screen and still worth showing.
  *
  * Standing here rather than in a toast is the point: an outage lasts as long as
  * it lasts, and one banner that clears itself beats a toast every thirty
@@ -200,9 +200,9 @@ function MailboxOfflineNotice({ reason }) {
           Mailbox server offline / unreachable
         </p>
         <p className="mt-1 text-[12.5px] font-medium text-rose-700 leading-relaxed">
-          {/* The server's own reason when it gave one — a credential Gmail
-              refused says something quite different from a backend that is not
-              running, and the Front Officer can act on only one of them. */}
+          {/* The server's own reason when it gave one — a mailbox that
+              refused the session says something quite different from a backend
+              that is not running, and the Front Officer can act on only one. */}
           {reason ||
             'Could not connect to the backend mailbox service. Please verify backend is running (`npm start` in `/backend`).'}
         </p>
@@ -926,9 +926,9 @@ export function MailboxInboxPage() {
   });
 
   /**
-   * Decisions are a separate read because under MAILBOX_SOURCE=gmail the
-   * message is a live view of a real account and carries no QMS state — there
-   * is nowhere on it to record that it was rejected.
+   * Decisions are a separate read because a message read from a real mailbox
+   * carries no QMS state of its own — there is nowhere on it to record that it
+   * was rejected.
    */
   const decisions = useQuery({
     queryKey: ["mailbox", "decisions"],

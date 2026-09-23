@@ -88,9 +88,9 @@ export default defineConfig({
        * `reuseExistingServer: true` adopts whatever is already on :5000,
        * including its database and its mail transport. That nearly happened
        * here: a backend left running from an earlier session was on that port
-       * configured for MAILBOX_SOURCE=gmail against the development database,
-       * so the suite would have read a real inbox and written its test cases
-       * into real data. Refusing to start is a two-second fix; the other
+       * pointed at a real mailbox and the development database, so the suite
+       * would have read live mail and written its test cases into real
+       * data. Refusing to start is a two-second fix; the other
        * outcome is not visible until afterwards.
        */
       reuseExistingServer: false,

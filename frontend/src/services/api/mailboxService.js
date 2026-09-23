@@ -98,8 +98,8 @@ export async function acceptMailboxMessage(mailboxMessageId, message) {
 
 /**
  * Decisions already taken, so the inbox can show what was accepted or rejected.
- * Needed as a separate read because under MAILBOX_SOURCE=gmail the message is a
- * live view of a real account and carries no QMS state of its own.
+ * Needed as a separate read because a message read from a real mailbox carries
+ * no QMS state of its own.
  */
 export async function fetchMailboxDecisions() {
   const { data } = await axiosClient.get('/mailbox/decisions');
