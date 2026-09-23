@@ -2,7 +2,7 @@ import { createHash } from 'crypto';
 import browserConfig from '../../../../config/browserConfig.js';
 import * as attachmentStore from '../../../attachments/attachmentStore.js';
 import { SUPPORTED_TYPES, extensionOf, limits, validateFile } from '../../../attachments/attachmentPolicy.js';
-import { withNicemail } from './session.js';
+import { withNicemail, pending as browserPending } from './session.js';
 import { isSessionLost, isWaitTimeout } from './cdp.js';
 import { SELECTORS, locate } from './selectors.js';
 
@@ -723,11 +723,30 @@ export async function readInbox({
       const failures = [];
       /** Opened by the agent and unread before it was — to be put back. */
       const opened = [];
+      /** Set when the loop gave way to a waiting send rather than finishing. */
+      let yielded = false;
       const queue = [...chosen];
       let probed = false;
 
       try {
         while (queue.length) {
+          /**
+           * Stop early when somebody else is waiting for the browser.
+           *
+           * One sync of `syncMax` messages was measured at 91 s — every message
+           * is a real page interaction, and they all hold the single serialised
+           * session. A send arriving a second into that waits the whole of it,
+           * which is a person watching a spinner while a background convenience
+           * finishes. Partial syncs are already the normal case: `remaining` is
+           * reported, and the next poll picks up where this stopped.
+           *
+           * `> 1` because this sync is itself counted.
+           */
+          if (browserPending() > 1) {
+            yielded = true;
+            break;
+          }
+
           const row = queue.shift();
           if (row.unread) opened.push(row.providerMessageId);
 
@@ -771,9 +790,11 @@ export async function readInbox({
        * saw "No Mail in the IPC Mailbox", and nothing anywhere said the agent
        * could not read the page.
        */
-      if (chosen.length && !messages.length) throw readFault(failures);
+      if (chosen.length && !messages.length && !yielded) throw readFault(failures);
 
-      return { messages, failures, remaining };
+      // Rows this sync chose and did not get to are not lost: they are still
+      // newer than anything stored, so the next sync chooses them again.
+      return { messages, failures, remaining: remaining + queue.length };
     },
     { connect },
   );

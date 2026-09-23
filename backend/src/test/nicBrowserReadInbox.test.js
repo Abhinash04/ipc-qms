@@ -20,10 +20,13 @@ import {
  * those two is enough to drive the reader through an outcome and ask what it
  * reported.
  */
-const agent = vi.hoisted(() => ({ session: null }));
+const agent = vi.hoisted(() => ({ session: null, queued: 0 }));
 
 vi.mock('../services/email/nic/browser/session.js', () => ({
   withNicemail: async (work) => work(agent.session),
+  // The reader stops early when something else is waiting for the browser, so
+  // this has to be here — and `agent.queued` is what lets a test drive it.
+  pending: () => agent.queued,
 }));
 
 /**
@@ -141,6 +144,8 @@ const withDocument = (children) => {
 afterEach(() => {
   delete globalThis.document;
   agent.session = null;
+  // The default: this sync is the only unit, so nothing yields.
+  agent.queued = 1;
   vi.restoreAllMocks();
 });
 
@@ -604,6 +609,35 @@ describe('readInbox — which rows it opens', () => {
 
     expect(opened).toEqual([id(7), id(8)]);
     expect(result.remaining).toBe(1);
+  });
+
+  /**
+   * A sync of 20 messages was measured at 91 s against the live mailbox, and it
+   * holds the one serialised browser session for all of it. A send arriving a
+   * second in used to wait the whole way. The sync gives way instead: partial
+   * reads are already normal, `remaining` says so, and the next poll continues.
+   */
+  it('stops early when something else is waiting for the browser', async () => {
+    const { session, opened } = recordingSession(readRows(id(9), id(8), id(7), id(6)));
+    agent.session = session;
+    // One unit is this sync; a second means somebody is queued behind it.
+    agent.queued = 2;
+
+    const result = await readInbox({ max: 4 });
+
+    expect(opened).toEqual([]);
+    expect(result.messages).toEqual([]);
+    expect(result.failures).toEqual([]);
+  });
+
+  it('reads the whole batch when it is the only thing using the browser', async () => {
+    const { session, opened } = recordingSession(readRows(id(9), id(8)));
+    agent.session = session;
+    agent.queued = 1;
+
+    await readInbox({ max: 4 });
+
+    expect(opened).toEqual([id(8), id(9)]);
   });
 
   it('tries a row that failed before again, even below newer stored mail — after the untried ones', async () => {
