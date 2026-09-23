@@ -32,8 +32,8 @@ function readEnvFile(file) {
  *
  * `ENV_FILE` is what the server reads them by: backend/src/config/env.js loads
  * that file before .env, and dotenv never overwrites a variable already set, so
- * .env.e2e wins on every key it declares while .env still supplies JWT_SECRET
- * and QMS_SEED_PASSWORD, which it deliberately omits.
+ * .env.e2e wins on every key it declares. JWT_SECRET is the one thing it
+ * deliberately omits and inherits, because it is a real secret.
  *
  * The values are also parsed here and passed through `webServer.env`, so the
  * runner knows the database name it is about to assert against without opening
@@ -42,15 +42,27 @@ function readEnvFile(file) {
 const backendEnv = readEnvFile(path.join(BACKEND_ROOT, '.env.e2e'));
 
 /**
- * The suite signs in with the shared seed password. It is never hard-coded: it
- * comes from the environment, falling back to the backend's own .env — the same
- * file the server reads it from, and already a prerequisite for the server to
- * boot at all.
+ * Per-account sign-in credentials, for the server AND for this process.
+ *
+ * Both halves of the suite need them: the server authenticates against them, and
+ * the browser types them into the login form. They come from one file so the two
+ * cannot disagree — the same fixture the unit suite uses.
+ *
+ * Absolute, because `.env.e2e` can only carry a path relative to backend/ and
+ * the test process runs from frontend/. Published to process.env as well as to
+ * webServer.env, and it wins over the `.env.e2e` line by being already set.
+ *
+ * This replaced a fallback that read QMS_SEED_PASSWORD out of the developer's
+ * own backend/.env. That worked only because NODE_ENV is development here —
+ * the one mode where an unset QMS_ALLOW_SHARED_PASSWORD still lets a single
+ * secret open every account. The suite would have broken the moment that
+ * default changed, for a reason nothing in it mentioned.
  */
-if (!process.env.QMS_SEED_PASSWORD) {
-  const seeded = readEnvFile(path.join(BACKEND_ROOT, '.env')).QMS_SEED_PASSWORD;
-  if (seeded) process.env.QMS_SEED_PASSWORD = seeded;
+const PASSWORDS_FIXTURE = path.join(BACKEND_ROOT, 'src', 'test', 'fixtures', 'passwords.json');
+if (!fs.existsSync(PASSWORDS_FIXTURE)) {
+  throw new Error(`The e2e credential fixture is missing: ${PASSWORDS_FIXTURE}`);
 }
+process.env.QMS_PASSWORDS_FILE = PASSWORDS_FIXTURE;
 
 export default defineConfig({
   testDir: './e2e',
@@ -80,7 +92,7 @@ export default defineConfig({
     {
       command: 'npm start',
       cwd: BACKEND_ROOT,
-      env: { ...backendEnv, ENV_FILE: '.env.e2e' },
+      env: { ...backendEnv, ENV_FILE: '.env.e2e', QMS_PASSWORDS_FILE: PASSWORDS_FIXTURE },
       port: 5000,
       /**
        * Never reuse a backend this suite did not start — not even locally.

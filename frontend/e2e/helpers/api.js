@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { expect } from '@playwright/test';
 
 // The backend's own user directory, imported rather than copied: it is the
@@ -37,20 +38,48 @@ export const ASSIGNED_OFFICIAL_USER = userForRole(ROLES.ASSIGNED_OFFICIAL);
 export const REVIEWER_USER = userForRole(ROLES.REVIEWER);
 
 /**
- * The shared sign-in password for every seeded account.
+ * One account's sign-in password, from the file the server authenticates
+ * against.
  *
- * Read from the environment, never written down here. playwright.config.js
- * fills it in from backend/.env when the shell does not already carry it.
+ * Every account has its own, so there is nothing to share and no single secret
+ * that opens the suite. playwright.config.js resolves QMS_PASSWORDS_FILE to an
+ * absolute path and publishes it to this process as well as to the server, so
+ * both halves read the same fixture and cannot disagree.
+ *
+ * It used to be one QMS_SEED_PASSWORD read out of the developer's own
+ * backend/.env, which only worked because NODE_ENV is development here — the
+ * one mode where an unset QMS_ALLOW_SHARED_PASSWORD still lets a single secret
+ * open every account.
  */
-export function seedPassword() {
-  const password = process.env.QMS_SEED_PASSWORD;
-  if (!password) {
+let passwordsCache = null;
+
+function passwords() {
+  if (passwordsCache) return passwordsCache;
+
+  const file = (process.env.QMS_PASSWORDS_FILE || '').trim();
+  if (!file) {
     throw new Error(
-      'QMS_SEED_PASSWORD is not set. Every seeded account signs in with it; ' +
-        'set it in backend/.env or export it before running the e2e suite.',
+      'QMS_PASSWORDS_FILE is not set. playwright.config.js sets it — run the suite ' +
+        'with `npm run test:e2e` rather than invoking a spec directly.',
     );
   }
+  passwordsCache = JSON.parse(readFileSync(file, 'utf8'));
+  return passwordsCache;
+}
+
+export function passwordFor(user) {
+  const password = passwords()[user.id];
+  if (!password) {
+    throw new Error(`No password for ${user.id} (${user.email}) in ${process.env.QMS_PASSWORDS_FILE}`);
+  }
   return password;
+}
+
+/** The seeded account that signs in with this address. */
+function userForEmail(email) {
+  const user = USERS.find((candidate) => candidate.email.toLowerCase() === String(email).toLowerCase());
+  if (!user) throw new Error(`No seeded user has the address ${email}`);
+  return user;
 }
 
 /**
@@ -119,7 +148,7 @@ export async function acceptViaApi(request, mailboxMessageId, message = {}) {
 export async function signInThroughUi(page, email) {
   await page.goto('/login');
   await page.getByLabel('Email', { exact: true }).fill(email);
-  await page.getByLabel('Password', { exact: true }).fill(seedPassword());
+  await page.getByLabel('Password', { exact: true }).fill(passwordFor(userForEmail(email)));
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
 
   // roleHome(FRONT_OFFICE) — /<role slug>/dashboard. Landing on it is the
