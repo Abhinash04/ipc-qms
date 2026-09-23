@@ -33,7 +33,8 @@ const router = express.Router();
  *   - GET /queries is filtered to the cases the caller is party to, by
  *     services/authz/caseAccess.js. The four roles whose scope is "everything"
  *     (Front Office, Officer-in-Charge, Admin, Super Admin) still see all of
- *     them; an Inquirer sees their own enquiry.
+ *     them; an Assigned Official and a Reviewer see only the cases they are
+ *     party to, and any other role sees none.
  *   - POST /queries/persist runs middleware/authorizeCaseDelta.js, which checks
  *     the values the delta sets against the caller's workflow actions, and then
  *     checks every case it touches against the caller's scope as stored BEFORE

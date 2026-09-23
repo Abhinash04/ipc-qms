@@ -7,12 +7,17 @@ import { validateNicConfig } from './nicConfig.js';
  * An overlay file first, then `.env` for whatever it did not name.
  *
  * `ENV_FILE=.env.e2e npm start` is how the end-to-end suite points the server
- * at its own database and the mock mail transport without touching a
- * developer's `.env` — which is configured against a real mailbox.
+ * at its own database and its own mail settings without touching a developer's
+ * `.env` — which is configured against a real mailbox.
  * Order is the whole mechanism: dotenv never overwrites a variable
  * that is already set, so the overlay wins on every key it declares and `.env`
- * still supplies the secrets the overlay deliberately omits (JWT_SECRET,
- * QMS_SEED_PASSWORD). Unset, this is exactly the single `.env` load it replaced.
+ * still supplies whatever the overlay does not name. Which is also the trap: a
+ * key the overlay omits is inherited from `.env`, so the overlay pins the mail
+ * variables to empty values rather than leaving them out. Unset, this is exactly
+ * the single `.env` load it replaced.
+ *
+ * ENV_FILE itself cannot come from a `.env` line — it is read here, before the
+ * first dotenv.config() — so it has to be set in the environment.
  */
 if (process.env.ENV_FILE) dotenv.config({ path: process.env.ENV_FILE });
 dotenv.config();
@@ -22,9 +27,13 @@ const BACKEND_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), 
 
 /**
  * `nic` is the NICeMail IMAP/SMTP path — the direct mail protocols, configured
- * by the NIC_* variables and validated below. It is not the NICeMail browser
- * agent, which drives an authenticated web session over CDP, is never selected
- * here, and is not part of the request path at all.
+ * by the NIC_* variables and validated below.
+ *
+ * It is not the NICeMail browser agent, which drives an authenticated web
+ * session over CDP and is never named here: a case that arrived through the
+ * agent's mailbox sends all three of its emails back through that same session
+ * whatever EMAIL_TRANSPORT says. So this setting governs every case that did
+ * not, and NIC_BROWSER_MAILBOX below switches the agent on.
  */
 const EMAIL_TRANSPORTS = { MOCK: 'mock', NIC: 'nic' };
 const MAILBOX_SOURCES = { AUTO: 'auto', NIC: 'nic' };

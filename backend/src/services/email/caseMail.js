@@ -92,13 +92,15 @@ function requireReal(sent, channel = env.EMAIL_TRANSPORT) {
 const transportLabel = (sourceMailbox) =>
   sourceMailbox?.source === 'nic-browser' ? 'nic-browser' : env.EMAIL_TRANSPORT;
 
-/** What to do about a send that may have gone out, for this case's mailbox. */
-function uncertainAdvice(sourceMailbox) {
-  if (transportLabel(sourceMailbox) === EMAIL_TRANSPORTS.GMAIL) {
-    return 'The Gmail Sent folder is checked automatically before anything is sent again.';
-  }
-  return 'Check the Sent folder before retrying, then record whether it was sent.';
-}
+/**
+ * What to do about a send that may have gone out.
+ *
+ * The same for every channel, because none of them settles this by itself. The
+ * Gmail transport used to search its own Sent folder and reconcile an uncertain
+ * send with no human involved; nothing that survives it can, so an UNCERTAIN
+ * send is now always somebody's work item.
+ */
+const UNCERTAIN_ADVICE = 'Check the Sent folder before retrying, then record whether it was sent.';
 
 /**
  * The one artefact of a kind for a case. Written once: an existing record — from
@@ -181,7 +183,7 @@ function acknowledgementPlan(query, actor) {
         error: describeFailure(error),
         details:
           delivery === DELIVERY.UNCERTAIN
-            ? `The acknowledgement to ${to} may have been sent but was not confirmed. ${uncertainAdvice(sourceMailbox)}`
+            ? `The acknowledgement to ${to} may have been sent but was not confirmed. ${UNCERTAIN_ADVICE}`
             : `The acknowledgement to ${to} could not be sent.`,
       });
     },
@@ -285,7 +287,7 @@ async function forwardPlan(query, actor, source = null) {
         error: describeFailure(error),
         details:
           delivery === DELIVERY.UNCERTAIN
-            ? `The forward to the Officer-in-Charge may have been sent but was not confirmed. ${uncertainAdvice(sourceMailbox)}`
+            ? `The forward to the Officer-in-Charge may have been sent but was not confirmed. ${UNCERTAIN_ADVICE}`
             : 'The forward to the Officer-in-Charge could not be sent.',
       });
       // An uncertain forward leaves the case short of PENDING_ASSIGNMENT with
@@ -298,7 +300,7 @@ async function forwardPlan(query, actor, source = null) {
           queryId,
           recipientRole: 'FRONT_OFFICE',
           title: `${queryId} forward not confirmed`,
-          message: `${queryId}: the forward to the Officer-in-Charge may already have gone out. ${uncertainAdvice(sourceMailbox)}`,
+          message: `${queryId}: the forward to the Officer-in-Charge may already have gone out. ${UNCERTAIN_ADVICE}`,
           type: 'WARNING',
           at: now(),
         }).catch(() => {});
@@ -404,7 +406,7 @@ async function responsePlan(query, actor) {
         result: AUDIT_RESULTS.FAILURE,
         error: describeFailure(error),
         details: unconfirmed
-          ? `The approved response to ${to} may have been sent but was not confirmed. The case stays ready for dispatch. ${uncertainAdvice(sourceMailbox)}`
+          ? `The approved response to ${to} may have been sent but was not confirmed. The case stays ready for dispatch. ${UNCERTAIN_ADVICE}`
           : `The approved response to ${to} could not be sent. The case stays ready for dispatch.`,
       });
 
@@ -414,7 +416,7 @@ async function responsePlan(query, actor) {
         recipientRole: 'FRONT_OFFICE',
         title: unconfirmed ? `${queryId} may have been sent` : `${queryId} could not be sent`,
         message: unconfirmed
-          ? `${queryId}: the response may already have gone out. ${uncertainAdvice(sourceMailbox)}`
+          ? `${queryId}: the response may already have gone out. ${UNCERTAIN_ADVICE}`
           : `${queryId} is approved but the response did not go out. Retry from the Dispatch page.`,
         type: 'WARNING',
         at: now(),

@@ -1,12 +1,14 @@
 /**
  * Every NICeMail UI selector the browser agent uses, in one place.
  *
- * The reading selectors below were calibrated against the live mailbox: each
- * one was matched, counted and cross-checked in the running app, and the
- * comment on it records what it resolved to. The composing selectors were NOT
- * — opening a compose form would have been a write on a real government
- * mailbox — so they are listed in UNCALIBRATED and the failure message says so
- * rather than reporting a guess as a missing element.
+ * Nearly all of these were calibrated against the live mailbox: each one was
+ * matched, counted and cross-checked in the running app, and the comment on it
+ * records what it resolved to. Three were not, because the live mailbox never
+ * presented them — `ccToggle` (the Cc field is already open, so the toggle that
+ * reveals it is hidden), `attachmentEntry` and `listRowAttachment` (no message
+ * in 312 live rows carried an attachment). Those three are listed in
+ * UNCALIBRATED and the failure message says so rather than reporting a guess as
+ * a missing element.
  *
  * NICeMail is Zoho, and Zoho's class names are generated; where an accessible
  * role or a `data-testid` exists it is preferred, and a build-hashed CSS-module
