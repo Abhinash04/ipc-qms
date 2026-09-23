@@ -27,7 +27,7 @@ const BACKEND_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), 
  * here, and is not part of the request path at all.
  */
 const EMAIL_TRANSPORTS = { MOCK: 'mock', GMAIL: 'gmail', NIC: 'nic' };
-const MAILBOX_SOURCES = { AUTO: 'auto', GMAIL: 'gmail', NIC: 'nic' };
+const MAILBOX_SOURCES = { AUTO: 'auto', NIC: 'nic' };
 
 const env = {
   PORT: process.env.PORT || 5000,

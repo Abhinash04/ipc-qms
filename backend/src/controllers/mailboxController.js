@@ -81,7 +81,9 @@ function mailboxUnavailable(error, { source, label }) {
     return Object.assign(
       new Error(
         `The ${label} rejected the Front Office credential: ${describeError(error)}. ` +
-          (source === 'gmail' ? 'Run `npm run gmail:preflight` to check it.' : 'Re-authenticate the mailbox.'),
+          (source === 'nic-browser'
+            ? 'Sign in to that mailbox in the dedicated Chrome, then retry.'
+            : 'Re-authenticate the mailbox.'),
       ),
       { status: HTTP_STATUS.BAD_GATEWAY, details: { retryable: false, sync: health.snapshot() } },
     );

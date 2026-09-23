@@ -780,4 +780,7 @@ export async function readInbox({
   );
 }
 
-export { asHeader, listRows, extractOpenMessage };
+// readAttachments is exported for the suite: it enforces the attachment policy
+// on the one ingest path a member of the public drives, so the size and type
+// rules are tested against it directly rather than through a whole sync.
+export { asHeader, listRows, extractOpenMessage, readAttachments };

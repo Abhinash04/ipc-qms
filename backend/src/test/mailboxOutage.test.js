@@ -18,7 +18,7 @@ const store = vi.hoisted(() => ({ list: null }));
 
 vi.mock('../services/email/mailbox/index.js', () => ({
   list: (...args) => store.list(...args),
-  describe: () => ({ backend: 'gmail', persistence: "the Front Officer's real Gmail inbox" }),
+  describe: () => ({ backend: 'nic', persistence: 'the NICeMail mailbox over IMAP, read-only' }),
   forUser: async () => null,
   supportsDelivery: () => false,
   get: async () => null,
@@ -50,7 +50,7 @@ const poll = () =>
 const auditRows = (action) => memoryDb.rows('AuditEvent').filter((row) => row.action === action);
 
 const unreachable = () =>
-  Object.assign(new Error('request to https://gmail.googleapis.com/… failed, reason: getaddrinfo ENOTFOUND'), {
+  Object.assign(new Error('request to https://mail.mgovcloud.in/… failed, reason: getaddrinfo ENOTFOUND'), {
     code: 'ENOTFOUND',
   });
 
@@ -93,7 +93,7 @@ describe('GET /mailbox/messages when the mailbox is unreachable', () => {
 
     expect(res.status).toBe(502);
     expect(res.body.error).toMatch(/rejected the Front Office credential/i);
-    expect(res.body.error).toMatch(/preflight/);
+    expect(res.body.error).toMatch(/Re-authenticate the mailbox/);
     expect(res.body.retryable).toBe(false);
   });
 
@@ -107,7 +107,7 @@ describe('GET /mailbox/messages when the mailbox is unreachable', () => {
     // One line in the log and one row in the trail — not five of each.
     expect(warn.mock.calls.filter(([line]) => String(line).includes('is unreachable'))).toHaveLength(1);
     expect(auditRows('SYNC_FAILED')).toHaveLength(1);
-    expect(auditRows('SYNC_FAILED')[0].details).toMatchObject({ source: 'gmail' });
+    expect(auditRows('SYNC_FAILED')[0].details).toMatchObject({ source: 'nic' });
   });
 
   it('records the recovery, with what the outage cost', async () => {
@@ -123,7 +123,7 @@ describe('GET /mailbox/messages when the mailbox is unreachable', () => {
     expect(res.status).toBe(200);
     expect(res.body.sync).toMatchObject({ ok: true });
     expect(auditRows('SYNC_RECOVERED')).toHaveLength(1);
-    expect(auditRows('SYNC_RECOVERED')[0].details).toMatchObject({ failures: 2, source: 'gmail' });
+    expect(auditRows('SYNC_RECOVERED')[0].details).toMatchObject({ failures: 2, source: 'nic' });
     expect(log.mock.calls.some(([line]) => String(line).includes('reachable again'))).toBe(true);
   });
 
@@ -152,7 +152,7 @@ describe('GET /health', () => {
 
     expect(res.status).toBe(200);
     expect(res.body.status).toBe('healthy');
-    expect(res.body.mailbox).toMatchObject({ source: 'gmail', ok: false });
+    expect(res.body.mailbox).toMatchObject({ source: 'nic', ok: false });
     expect(res.body.ai).toMatchObject({ configured: expect.any(Boolean) });
     expect(res.body.database).toMatchObject({ connected: true });
   });

@@ -12,11 +12,6 @@ import {
   publicDirectory,
   IDENTITY_ROLES,
 } from '../config/identities.js';
-import {
-  toMailboxMessage,
-  inboxQuery,
-  isEligibleEnquiry,
-} from '../services/email/mailbox/gmailInboxReader.js';
 
 const ORIGINAL_ENV = { ...process.env };
 
@@ -231,80 +226,39 @@ describe('email HTTP surface', () => {
   });
 });
 
-describe('gmail inbox reader — message mapping', () => {
-  const gmailMessage = {
-    id: '18f2a1b2c3d4e5f6',
-    threadId: '18f2a1b2c3d4e5f6',
-    internalDate: '1755500000000',
-    labelIds: ['INBOX', 'UNREAD'],
-    payload: {
-      headers: [
-        { name: 'From', value: 'Abhinash Pritiraj <inquirer@test.invalid>' },
-        { name: 'To', value: 'front-office@test.invalid' },
-        { name: 'Subject', value: 'Clarification on monograph revision' },
-      ],
-      body: { data: Buffer.from('Dear Madam,\n\nPlease clarify.').toString('base64') },
-    },
-  };
-
-  it('uses Gmail ids so dedupe keys on the real message and thread', () => {
-    const mapped = toMailboxMessage(gmailMessage, 'front-office@test.invalid');
-
-    expect(mapped.mailboxMessageId).toBe('18f2a1b2c3d4e5f6');
-    expect(mapped.providerMessageId).toBe('18f2a1b2c3d4e5f6');
-    expect(mapped.providerThreadId).toBe('18f2a1b2c3d4e5f6');
-  });
-
-  it('decodes the headers and body into the shape ingestion expects', () => {
-    const mapped = toMailboxMessage(gmailMessage, 'front-office@test.invalid');
-
-    expect(mapped.from).toBe('Abhinash Pritiraj <inquirer@test.invalid>');
-    expect(mapped.subject).toBe('Clarification on monograph revision');
-    expect(mapped.body).toContain('Please clarify.');
-    expect(mapped.receivedAt).toBe(new Date(1755500000000).toISOString());
-  });
-
-  it('treats Gmail UNREAD as "not yet registered"', () => {
-    expect(toMailboxMessage(gmailMessage, 'x').ingested).toBe(false);
-
-    const read = { ...gmailMessage, labelIds: ['INBOX'] };
-    expect(toMailboxMessage(read, 'x').ingested).toBe(true);
-  });
-
-  it('reads a multipart body', () => {
-    const multipart = {
-      ...gmailMessage,
-      payload: {
-        headers: gmailMessage.payload.headers,
-        parts: [
-          { mimeType: 'text/plain', body: { data: Buffer.from('plain text part').toString('base64') } },
-          { mimeType: 'text/html', body: { data: Buffer.from('<p>html</p>').toString('base64') } },
-        ],
-      },
-    };
-
-    expect(toMailboxMessage(multipart, 'x').body).toBe('plain text part');
-  });
-});
-
 describe('mailbox source selection', () => {
-  it('stays on the local mailbox unless Gmail polling is explicitly requested', () => {
+  it('stays on the local mailbox unless another source is explicitly requested', () => {
     expect(mailbox.describe().backend).toBe('in-memory');
   });
 });
 
-describe('preflight is a standalone script', () => {
-  it('is never imported by the application', async () => {
+/**
+ * Everything under src/scripts touches something the application must not:
+ * the live mailbox, a real browser session, or the live model. They are run by
+ * hand, by an operator who meant to. An import from the application would put
+ * one of them on the request path.
+ */
+describe('the operator scripts are standalone', () => {
+  it('are never imported by the application', async () => {
     const { readFileSync, readdirSync, statSync } = await import('node:fs');
-    const { join } = await import('node:path');
+    const { join, basename } = await import('node:path');
+
+    const scripts = readdirSync('src/scripts')
+      .filter((entry) => entry.endsWith('.js'))
+      .map((entry) => basename(entry, '.js'));
+    expect(scripts.length).toBeGreaterThan(0);
 
     const offenders = [];
     const walk = (dir) => {
       for (const entry of readdirSync(dir)) {
         const full = join(dir, entry);
-        if (statSync(full).isDirectory()) { if (entry !== 'test') walk(full); }
-        else if (entry.endsWith('.js') && !full.includes('gmailPreflight')) {
-          if (readFileSync(full, 'utf8').includes('gmailPreflight')) offenders.push(full);
+        if (statSync(full).isDirectory()) {
+          if (entry !== 'test' && entry !== 'scripts') walk(full);
+        } else if (entry.endsWith('.js')) {
+          const source = readFileSync(full, 'utf8');
+          for (const script of scripts) {
+            if (source.includes(`scripts/${script}`)) offenders.push(`${full} -> ${script}`);
+          }
         }
       }
     };
@@ -314,137 +268,15 @@ describe('preflight is a standalone script', () => {
   });
 });
 
-describe('an enquiry may arrive from anyone, addressed to the Front Officer', () => {
-  // Intake is N:1 — many external inquirers, one Front Office mailbox. Nobody
-  // registers or authenticates before writing in, so the sender cannot be a
-  // filter. What stops the Front Officer's private mail becoming a case is not
-  // a sender allow-list any more: it is that arriving mail creates nothing at
-  // all until she accepts it.
-
-  it('asks Gmail for mail addressed to the Front Officer, from anyone', () => {
-    expect(inboxQuery()).toBe('in:inbox is:unread to:(front-office@test.invalid)');
-    expect(inboxQuery({ unreadOnly: false })).toBe('in:inbox to:(front-office@test.invalid)');
-  });
-
-  it('carries no from: clause — a sender allow-list would silently drop real enquiries', () => {
-    expect(inboxQuery()).not.toContain('from:');
-    expect(inboxQuery({ unreadOnly: false })).not.toContain('from:');
-  });
-
-  it('accepts a message from an address nobody has ever seen', () => {
-    const fromStranger = (to) => isEligibleEnquiry({ from: 'A Stranger <new@example.com>', to });
-
-    expect(fromStranger('front-office@test.invalid')).toBe(true);
-    expect(fromStranger('Front Office <front-office@test.invalid>')).toBe(true);
-    // Several recipients, the Front Officer among them.
-    expect(fromStranger('someone@else.invalid, front-office@test.invalid')).toBe(true);
-  });
-
-  it('still requires the message to be addressed to the Front Officer', () => {
-    // Mail merely cc'd to her, or sent to another of her addresses, is not an
-    // enquiry to IPC. This is the one filter that remains.
-    expect(
-      isEligibleEnquiry({ from: 'anyone@example.com', to: 'someone@else.invalid' }),
-    ).toBe(false);
-    expect(isEligibleEnquiry({ from: 'anyone@example.com', to: '' })).toBe(false);
-  });
-});
-
-describe('attachment metadata', () => {
-  const withAttachment = {
-    id: 'msg-att-1',
-    threadId: 'thread-att-1',
-    internalDate: '1755500000000',
-    labelIds: ['INBOX', 'UNREAD'],
-    payload: {
-      headers: [
-        { name: 'From', value: 'Test Inquirer <inquirer@test.invalid>' },
-        { name: 'Subject', value: 'Enquiry with a specification sheet' },
-      ],
-      parts: [
-        { mimeType: 'text/plain', body: { data: Buffer.from('See attached.').toString('base64') } },
-        {
-          mimeType: 'application/pdf',
-          filename: 'specification.pdf',
-          body: { attachmentId: 'ANGjdJ_att_1', size: 204800 },
-        },
-      ],
-    },
-  };
-
-  /**
-   * `declaredSize` is the raw byte count from the Gmail part, carried alongside
-   * the rounded `sizeKb` so the attachment policy has something it can enforce
-   * a limit with — sizeKb is rounded and floored at 1, so it cannot be. It is
-   * internal plumbing: materialiseAttachments strips it before the record is
-   * stored, and the real length of the downloaded bytes is what finally decides.
-   */
-  it('records name, type and size for each attachment', () => {
-    const mapped = toMailboxMessage(withAttachment, 'front-office@test.invalid');
-
-    expect(mapped.attachments).toEqual([
-      {
-        id: 'ANGjdJ_att_1',
-        name: 'specification.pdf',
-        mimeType: 'application/pdf',
-        sizeKb: 200,
-        declaredSize: 204800,
-      },
-    ]);
-  });
-
-  it('stores no file content — only the handle needed to fetch it later', () => {
-    const mapped = toMailboxMessage(withAttachment, 'front-office@test.invalid');
-    const serialised = JSON.stringify(mapped.attachments);
-
-    expect(serialised).not.toContain('data');
-    expect(mapped.attachments[0]).not.toHaveProperty('content');
-    expect(mapped.attachments[0]).not.toHaveProperty('body');
-  });
-
-  it('leaves the list empty when there is nothing attached', () => {
-    const plain = {
-      ...withAttachment,
-      payload: { headers: withAttachment.payload.headers, body: { data: Buffer.from('hi').toString('base64') } },
-    };
-    expect(toMailboxMessage(plain, 'x').attachments).toEqual([]);
-  });
-
-  it('finds attachments nested inside a multipart body', () => {
-    const nested = {
-      ...withAttachment,
-      payload: {
-        headers: withAttachment.payload.headers,
-        parts: [
-          {
-            mimeType: 'multipart/mixed',
-            parts: [
-              {
-                mimeType: 'image/png',
-                filename: 'diagram.png',
-                body: { attachmentId: 'att-nested', size: 51200 },
-              },
-            ],
-          },
-        ],
-      },
-    };
-
-    expect(toMailboxMessage(nested, 'x').attachments).toEqual([
-      { id: 'att-nested', name: 'diagram.png', mimeType: 'image/png', sizeKb: 50, declaredSize: 51200 },
-    ]);
-  });
-});
-
-describe('sending while the mailbox is a real Gmail inbox', () => {
+describe('sending while the mailbox is a read-only NICeMail IMAP inbox', () => {
   // Regression: mockTransport deposited a copy of every outgoing message into
-  // the IPC mailbox. With MAILBOX_SOURCE=gmail that store is read-only and its
-  // deliver() throws, so EVERY send through this transport returned HTTP 500 —
-  // POST /emails/response most visibly.
+  // the IPC mailbox. A real mailbox is read-only and its deliver() throws, so
+  // EVERY send through this transport returned HTTP 500 — POST /emails/response
+  // most visibly. MAILBOX_SOURCE=nic is the remaining read-only source.
   const ORIGINAL_SOURCE = process.env.MAILBOX_SOURCE;
 
   beforeEach(() => {
-    process.env.MAILBOX_SOURCE = 'gmail';
+    process.env.MAILBOX_SOURCE = 'nic';
     // test/setup.js pins the in-memory store for the whole suite. Release the
     // pin here, or MAILBOX_SOURCE is ignored and these tests would pass without
     // ever touching the path that broke.

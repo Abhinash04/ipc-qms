@@ -5,7 +5,7 @@ import { connectDb, disconnectDb } from './config/db.js';
 import browserConfig from './config/browserConfig.js';
 import { IDENTITY_ROLES, identityForRole } from './config/identities.js';
 import * as mailbox from './services/email/mailbox/index.js';
-import { outboundAllowed } from './services/email/nic/outboundGuard.js';
+import { outboundAllowed, internalForwardAllowed } from './services/email/nic/outboundGuard.js';
 
 // All imports are hoisted in ESM, so they are grouped here rather than being
 // interleaved with the startup checks below as the CommonJS version was. The
@@ -51,18 +51,16 @@ function describeConfiguration() {
     ? `${frontOffice.name} <${frontOffice.email}>`
     : env.IPC_QUERY_EMAIL;
 
-  const source =
-    store.backend === 'gmail'
-      ? `${frontOffice?.name || 'Front Officer'}'s Gmail inbox`
-      : store.persistence;
+  const source = store.persistence;
 
-  // The NICeMail browser agent sends the acknowledgement and final response of
-  // every case from the NICeMail mailbox, whatever EMAIL_TRANSPORT says, so it
-  // is reported on its own line. Read from config only: the agent itself is
-  // never loaded at boot, and Chrome is not contacted.
+  // The NICeMail browser agent sends every case email of a NICeMail case from
+  // the NICeMail mailbox, whatever EMAIL_TRANSPORT says, so it is reported on
+  // its own line. Read from config only: the agent itself is never loaded at
+  // boot, and Chrome is not contacted.
   const nicAgent = browserConfig.mailboxEnabled
-    ? `on — ${browserConfig.mailboxAddress} via CDP ${browserConfig.cdpEndpoint}; sends the acknowledgement ` +
-      `and final response of NICeMail cases (timeout ${browserConfig.timeoutMs} ms)`
+    ? `on — ${browserConfig.mailboxAddress} via CDP ${browserConfig.cdpEndpoint}; sends the acknowledgement, ` +
+      `the forward to the Officer-in-Charge and the final response of NICeMail cases ` +
+      `(timeout ${browserConfig.timeoutMs} ms)`
     : null;
 
   // The browser agent's side of the NIC_ALLOW_OUTBOUND interlock. (NICeMail
@@ -71,7 +69,8 @@ function describeConfiguration() {
     ? null
     : outboundAllowed()
       ? 'OPEN — NIC_ALLOW_OUTBOUND=true: NICeMail browser sends may reach any recipient'
-      : `closed — NICeMail browser sends confined to ${browserConfig.testRecipient || '(no test recipient set)'}`;
+      : `closed — NICeMail browser sends confined to ${browserConfig.testRecipient || '(no test recipient set)'}` +
+        (internalForwardAllowed() ? ', plus OFFICER_IN_CHARGE_EMAIL for the internal forward' : '');
 
   return { transport, recipient, source, nicAgent, guard };
 }

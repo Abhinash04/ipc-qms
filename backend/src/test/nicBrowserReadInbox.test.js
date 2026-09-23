@@ -1,5 +1,6 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
 
+import env from '../config/env.js';
 import { SELECTORS } from '../services/email/nic/browser/selectors.js';
 import { waitTimeout } from '../services/email/nic/browser/cdp.js';
 import {
@@ -781,6 +782,26 @@ describe('attachments', () => {
 
     expect(downloads).not.toHaveBeenCalled();
     expect(attachments[0].materializeError).toMatch(/limit/);
+  });
+
+  /**
+   * The size a message shows is the sender's claim. Checking only that would
+   * let anyone who mails the published intake address write a file of any size
+   * to the attachment store by understating it, so the real length settles it
+   * and nothing is stored when it is over the limit.
+   */
+  it('refuses a file that under-declares its size but arrives oversize', async () => {
+    const oversize = Buffer.alloc((env.ATTACHMENT_MAX_FILE_MB + 1) * 1024 * 1024).toString('base64');
+
+    const { attachments, downloads } = await readWith(
+      [{ filename: 'sneaky.pdf', href: 'https://example.invalid/att/9', sizeText: '1 KB' }],
+      () => ({ base64: oversize }),
+    );
+
+    expect(downloads).toHaveBeenCalled();
+    // A null attachmentId is the proof nothing was written: the store call
+    // sits after this check, so reaching it would have produced an id.
+    expect(attachments[0]).toMatchObject({ attachmentId: null, materializeError: expect.stringMatching(/limit/i) });
   });
 
   it('saves a supported file, sized by its bytes', async () => {
