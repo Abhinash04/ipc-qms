@@ -1,20 +1,10 @@
 import { readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
-/**
- * Bundle budget — run after `vite build` (`npm run build:check`).
- *
- * Thresholds are set from the measured build of 2026-09-15 (entry chunk
- * 253 kB raw after code splitting + lazy Dexie) with ~20% headroom. If this
- * fails, the likely cause is a static import that pulled a page, Dexie, or a
- * heavy library back into the entry chunk — check routes/routeElements.jsx is
- * still lazy and useWorkflowStore still loads services/db/db dynamically.
- */
 const ASSETS_DIR = new URL('../dist/assets', import.meta.url).pathname
-  .replace(/^\/([A-Za-z]:)/, '$1'); // strip leading slash on Windows paths
-
-const ENTRY_BUDGET_KB = 310; // entry (index-*.js) raw size
-const CHUNK_BUDGET_KB = 450; // any single chunk raw size
+  .replace(/^\/([A-Za-z]:)/, '$1'); 
+const ENTRY_BUDGET_KB = 310; 
+const CHUNK_BUDGET_KB = 450;
 
 const files = readdirSync(ASSETS_DIR).filter((f) => f.endsWith('.js'));
 const sizes = files.map((f) => ({ file: f, kb: statSync(join(ASSETS_DIR, f)).size / 1024 }));
