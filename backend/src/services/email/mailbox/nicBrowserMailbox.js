@@ -6,6 +6,7 @@ import { AUDIT_ACTIONS, AUDIT_RESULTS } from '../../../constants/auditActions.js
 import { ACTOR_TYPES } from '../../../constants/roles.js';
 import * as audit from '../../audit/auditService.js';
 import { readInbox } from '../nic/browser/readInbox.js';
+import { pending as browserPending } from '../nic/browser/session.js';
 import { normaliseAddress } from './address.js';
 import { searchFilter } from './messageView.js';
 
@@ -232,9 +233,20 @@ async function sync(address = browserConfig.mailboxAddress, { reader = readInbox
   return inFlight;
 }
 
-/** Start a sync in the background when the last one is older than the TTL. */
+/**
+ * Start a sync in the background when the last one is older than the TTL.
+ *
+ * Unless somebody is waiting on the browser. A sync and a send share one
+ * serialised session, and the Front Office inbox poll runs on every
+ * authenticated page at the same 30 s cadence as the TTL — so a sync is due on
+ * very nearly every tick, and a send arriving at the wrong moment queues behind
+ * a run that opens up to `syncMax` messages. A sync is a background convenience
+ * that will happen on the next poll regardless; a send is a person waiting for
+ * an email to leave. The send wins.
+ */
 function syncIfDue(address) {
   if (inFlight || Date.now() - lastSyncAt < browserConfig.syncTtlMs) return;
+  if (browserPending() > 0) return;
   sync(address);
 }
 

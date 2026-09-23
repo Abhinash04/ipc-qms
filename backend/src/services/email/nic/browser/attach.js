@@ -214,7 +214,7 @@ async function cdpBrowser(endpoint, { timeout } = {}) {
  * `connect` is the injection seam for tests, mirroring `createClient` in
  * nicImap.js. Production never passes it.
  */
-export async function attachToNicemail({ connect = null } = {}) {
+export async function attachToNicemail({ connect = null, exclude = null } = {}) {
   const connector = connect || cdpBrowser;
 
   let browser;
@@ -236,7 +236,21 @@ export async function attachToNicemail({ connect = null } = {}) {
     // Every context, not just the default one — the tab may live in any of them.
     const pages = browser.contexts().flatMap((context) => context.pages());
 
-    const candidates = pages.map((page) => ({ page, url: page.url(), title: '' }));
+    /**
+     * The agent's own tabs are never the proof of the session.
+     *
+     * They sit on the mail app's own host, so they score identically to the
+     * operator's real tab — 10 for the host, 2 for the title, and neither gets
+     * the path bonus because both put the mailbox route in the URL *hash*. A tie
+     * breaks on Chrome's enumeration order, so without this the agent could pick
+     * one of its own tabs as the signed-in mailbox, read `browserContextId` off
+     * it and, if Chrome had discarded it, open the new tab against a context
+     * that answers CDP but never renders.
+     */
+    const ours = exclude instanceof Set ? exclude : new Set(exclude || []);
+    const candidates = pages
+      .filter((page) => !ours.has(page.targetId))
+      .map((page) => ({ page, url: page.url(), title: '' }));
     for (const candidate of candidates) {
       try {
         candidate.title = await candidate.page.title();

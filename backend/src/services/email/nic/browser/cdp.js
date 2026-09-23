@@ -238,12 +238,60 @@ export async function connect(endpoint = browserConfig.cdpEndpoint, options = {}
    * A new tab. `browserContextId` keeps it in the operator's own profile, which
    * is what makes it share the cookies their manual sign-in produced — without
    * it Chrome may open the tab in a fresh, signed-out context.
+   *
+   * A timed-out create is NOT the same as a tab that was not created. The
+   * request is bounded like every other, and a late answer is dropped on the
+   * floor (see the message handler above) — but Chrome may well have made the
+   * tab anyway. Before this adopted it, the id was simply lost: the caller's
+   * `finally` had nothing to close, nothing else knew the tab existed, and it sat
+   * in the operator's window for the rest of the session. The inbox sync runs
+   * every syncTtlMs, so those accumulated.
+   *
+   * So: remember what was there, and if the create times out, look for what
+   * appeared. Matching on the context and the requested url is enough — the tab
+   * is made at `about:blank` and navigated afterwards, and a tab a human opened
+   * at exactly `about:blank` in the same profile in that window is worth closing
+   * anyway, being indistinguishable from ours.
    */
   async function createTarget(url, { background = true, browserContextId = null } = {}) {
     const params = { url, background };
     if (browserContextId) params.browserContextId = browserContextId;
-    const { targetId } = await send('Target.createTarget', params);
-    return targetId;
+
+    const before = await listTargets().catch(() => null);
+
+    try {
+      const { targetId } = await send('Target.createTarget', params);
+      return targetId;
+    } catch (error) {
+      const adopted = await adoptCreatedTarget(before, { url, browserContextId });
+      if (adopted) {
+        // Reported, never swallowed: the caller still gets its error and the
+        // send still fails, but the tab now has an owner that will close it.
+        error.adoptedTargetId = adopted;
+      }
+      throw error;
+    }
+  }
+
+  /** The page target that appeared since `before`, if exactly one did. */
+  async function adoptCreatedTarget(before, { url, browserContextId }) {
+    if (!Array.isArray(before)) return null;
+
+    const after = await listTargets().catch(() => null);
+    if (!after) return null;
+
+    const known = new Set(before.map((target) => target.targetId));
+    const appeared = after.filter(
+      (target) =>
+        target.type === 'page' &&
+        !known.has(target.targetId) &&
+        target.url === url &&
+        (!browserContextId || target.browserContextId === browserContextId),
+    );
+
+    // Exactly one, or none: two matches mean something else is opening tabs in
+    // this profile, and closing the wrong one is worse than leaving both.
+    return appeared.length === 1 ? appeared[0].targetId : null;
   }
 
   /**
@@ -261,8 +309,12 @@ export async function connect(endpoint = browserConfig.cdpEndpoint, options = {}
       // close a tab that was already gone.
       for (let check = 0; check < checks; check += 1) {
         const targets = await listTargets().catch(() => null);
-        if (!targets) return false;
-        if (!targets.some((target) => target.targetId === targetId)) return true;
+        // A read-back that itself failed proves nothing either way. It used to
+        // `return false` here, which abandoned every remaining attempt on one
+        // bad read and left a tab open that a second try would have closed.
+        if (targets) {
+          if (!targets.some((target) => target.targetId === targetId)) return true;
+        }
         await sleep(every);
       }
     }
