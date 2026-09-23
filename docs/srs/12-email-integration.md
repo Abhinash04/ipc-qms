@@ -194,7 +194,7 @@ acknowledged — and the case stays at `FRONT_OFFICE_VERIFICATION` for the manua
 
 **Security note:** the attachment endpoints require a session and a role, but **not a relationship
 to the case** — any authenticated user can read any attachment by id. See
-[backend/README.md](../../backend/README.md#security-status-authenticated-but-not-yet-case-scoped)
+[backend/README.md](../../backend/README.md#security-status-authenticated-and-case-scoped)
 for what is required before deployment.
 
 **Attachments fail closed on send.** Every referenced file is verified (existence, bytes, SHA-256)

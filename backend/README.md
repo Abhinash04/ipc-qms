@@ -8,17 +8,17 @@ throughout** (`"type": "module"`) — no TypeScript, no CommonJS.
 41 route registrations across ten resource routers: health, auth, emails, mailbox, AI, attachments,
 NIC, audit, queries and pullback. Session authentication (JWT in an httpOnly cookie) with role-based
 route guards and Zod request validation. MongoDB persistence for Query Cases, the workflow record,
-the mailbox and the audit trail. Three email transports — mock, Gmail OAuth and NICeMail SMTP — plus,
-with `NIC_BROWSER_MAILBOX=true`, a second Front Office mailbox in NICeMail, read and answered through
-an operator-signed-in Chrome session (see [NICeMail](#2-browser-agent-over-cdp--the-web-session)). A
-real LLM integration (Pravah Gemma) grounded in an indexed corpus of IPC guidance documents.
-Disk-backed attachment storage with fail-closed resolution on every outbound send.
+the mailbox and the audit trail. Two email transports — mock and NICeMail SMTP — plus, with `NIC_BROWSER_MAILBOX=true`, a second
+Front Office mailbox in NICeMail, read and answered through an operator-signed-in Chrome session
+(see [NICeMail](#2-browser-agent-over-cdp--the-web-session)). Case-level authorization on the
+workflow-sync route and on every attachment. A real LLM integration (Pravah Gemma) grounded in an
+indexed corpus of IPC guidance documents. Disk-backed attachment storage with fail-closed resolution
+on every outbound send.
 
-**Not implemented:** case-level authorization. Every route requires a session and most require a
-role, but no route checks whether *this* user owns *this* case — any signed-in user can read any
-attachment by id. The workflow-state half of `canPerform` is likewise still client-side: the server
-validates the shape of a transition and who may attempt it, not whether the case was in a state that
-allowed it. See [Security](#security-status-authenticated-but-not-yet-case-scoped).
+**Not implemented:** the workflow-state half of `canPerform` is still client-side — the server
+validates the shape of a transition, who may attempt it, and that the caller is party to the case,
+but not whether the case was in a state that allowed it. See
+[Security](#security-status-authenticated-and-case-scoped).
 
 ## Setup
 
@@ -49,7 +49,6 @@ Operational scripts:
 |---|---|
 | `npm run db:reset` | Clear the workflow state from MongoDB, keeping `users`. See [Resetting the workflow state](#resetting-the-workflow-state). |
 | `npm run ingest:ipc` | Rebuild `src/data/ipcKnowledge.json` from `docs/markdown/`. See [AI grounding](#ai-grounding-layer). |
-| `npm run gmail:preflight` | Per-identity Gmail OAuth check — verifies scopes and detects a disabled Gmail API. |
 | `npm run nic:preflight` | Read-only NICeMail IMAP/SMTP reachability + auth probe. Never marks mail read. |
 | `npm run nic:verify` | Live three-level NICeMail verification (read, send, receipt). Sends exactly one message, only to `NIC_TEST_RECIPIENT`. |
 | `npm run nic:browser:discover` | Read-only inspection of the NICeMail session over CDP: which document holds the mailbox, how the selector registry resolves, the mail rows, and a diagnosis. Flags after `--`: `--json`, `--rows=N`, `--show-addresses`, `--agent-tab`. |
@@ -151,8 +150,9 @@ endpoints that must not be retried blindly.
 | POST | `/mailbox/receive` | `verifyRole(SUPER_ADMIN)` |
 | DELETE | `/mailbox` | `verifyRole(SUPER_ADMIN)` |
 
-The two `SUPER_ADMIN` routes are destructive/injection utilities — under `MAILBOX_SOURCE=gmail` they
-operate on a real account.
+The two `SUPER_ADMIN` routes are destructive/injection utilities, and both refuse outright (409) when
+`NODE_ENV=production`. They exist for tests; against a live NICeMail mailbox they would act on
+somebody's real mail.
 
 **Which mailbox a request acts on is decided by who is signed in** (`resolveMailbox` in
 `controllers/mailboxController.js`). With `NIC_BROWSER_MAILBOX=true`, the Front Office user whose
@@ -203,7 +203,7 @@ the request whose insert created the case, so it appears once however many accep
 
 The body is the message as the inbox saw it — `from`, `to`, `cc`, `bcc`, `subject`, `body`,
 `receivedAt`, `providerMessageId`, `providerThreadId`, `attachments` (`validators/mailboxSchemas.js`).
-The server does not re-fetch the message: under `MAILBOX_SOURCE=gmail` that would be a second round
+The server does not re-fetch the message: for a live mailbox that would be a second round
 trip for data the client already holds. The exception is the NICeMail browser mailbox, whose messages
 are already stored server-side: the case is built from that record, the body is ignored, and an id
 not in that mailbox is **404**. What the body may **not** carry is the actor, the Case ID, the
@@ -353,9 +353,9 @@ Five things are enforced:
   `queryId`, so the unique index can never fire: a second case minted with the same id does not
   collide, it *replaces* the first and the original enquiry is gone. `createdAt` is the witness — a
   genuine update carries the one the case was created with, a collision from another tab carries its
-  own — so a mismatch is refused and the stored case kept. The email path no longer mints
-  client-side, but the in-app **Raise Enquiry** portal path still does, and this is the guard that
-  protects it.
+  own — so a mismatch is refused and the stored case kept. Nothing mints a Case ID client-side any
+  more — intake is one server call — so this is now a backstop rather than a live race. It is kept
+  because the failure it prevents is a silently lost enquiry.
 - **Counters merge with `$max`, never `$set`.** A client reports the counter it believes it holds,
   and that belief goes stale: a second tab, a reload against an empty read, a refused reset. A
   wholesale `$set` let a stale value overwrite the server's, and the next case then re-issued an id
@@ -514,12 +514,12 @@ incoming message, ignored by those that did not.
 > field raised a `CastError` that failed the entire persist — the two counters share a name but not
 > a shape, and now not a collection either.
 >
-> `MailboxDecision` is separate from `MailboxMessage` for a different reason: under
-> `MAILBOX_SOURCE=gmail` the mailbox is a live, read-only view of a real Gmail account. There is no
-> row to update and `MailboxMessage` is not even populated, so the decision has to survive
-> independently of whichever store the mailbox is read from. It is keyed by the stable provider
-> message id and carries a `from`/`subject`/`receivedAt` snapshot, so "what did she reject, and from
-> whom?" still has an answer once the mail itself has been archived.
+> `MailboxDecision` is separate from `MailboxMessage` for a different reason: when the mailbox is a
+> live NICeMail account it is a read-only view. There is no row to update and `MailboxMessage` is not
+> even populated, so the decision has to survive independently of whichever store the mailbox is read
+> from. It is keyed by the stable provider message id and carries a `from`/`subject`/`receivedAt`
+> snapshot, so "what was rejected, and from whom?" still has an answer once its owner has archived or
+> deleted the mail.
 
 Timestamps are stored as ISO-8601 **strings**, not `Date`. That is deliberate: ISO-8601 compares
 correctly as text, so the same `from`/`to` bounds work against Mongo and against the in-memory audit
@@ -548,31 +548,45 @@ credentials out of the connection string before printing it.
 
 ## Email pipeline
 
-`services/email/mailbox/index.js` is a duck-typed swap seam: four implementations
-(`mockIpcMailbox`, `mongoIpcMailbox`, `gmailInboxReader`, `nicInboxReader`) expose the same six
-functions (`deliver`, `list`, `markIngested`, `remove`, `reset`, `stats`), and the facade picks one
-at call time — forced override, then `MAILBOX_SOURCE=gmail`, then `MAILBOX_SOURCE=nic`, then Mongo
-if connected, else in-memory. `supportsDelivery()` is false for both Gmail and NICeMail, because a
-real inbox cannot be written into. The facade's `get(recipient, id)` uses a store's own lookup, or
-finds the message in its list. `mongoIpcMailbox` shares its collection with the NICeMail browser
-mailbox and never lists, changes, deletes or clears a `source: 'nic-browser'` row.
+`services/email/mailbox/index.js` is a duck-typed swap seam: three implementations
+(`mockIpcMailbox`, `mongoIpcMailbox`, `nicInboxReader`) expose the same six functions (`deliver`,
+`list`, `markIngested`, `remove`, `reset`, `stats`), and the facade picks one at call time — forced
+override, then `MAILBOX_SOURCE=nic`, then Mongo if connected, else in-memory. `supportsDelivery()`
+is false for NICeMail, because a real inbox cannot be written into. The facade's
+`get(recipient, id)` uses a store's own lookup, or finds the message in its list. `mongoIpcMailbox`
+shares its collection with the NICeMail browser mailbox and never lists, changes, deletes or clears
+a `source: 'nic-browser'` row.
 
-A fifth store, `nicBrowserMailbox`, is not chosen by `MAILBOX_SOURCE`: `mailbox.forUser(user)`
+A fourth store, `nicBrowserMailbox`, is not chosen by `MAILBOX_SOURCE`: `mailbox.forUser(user)`
 returns it only for the NICeMail Front Office (see
 [the second Front Office mailbox](#the-second-front-office-mailbox)), and it is imported on demand.
 
-`emailService.getTransport` is the second swap: mock, Gmail or NICeMail, resolved per sender
-identity via dynamic `import()` so `googleapis` and `nodemailer` are never evaluated on the mock
-path. A role missing its own Gmail refresh token falls back to the mock transport rather than
-borrowing another account's credentials. External mail on a case — the acknowledgement and the
-final response — is resolved one step earlier by `transportFor(sourceMailbox)`: a case whose
-`sourceMailbox.source` is `nic-browser` sends through `transports/nicBrowserTransport.js`, from the
-NICeMail Front Office (`senderFor`), and every other case falls through to `getTransport`. The
-forward to the Officer-in-Charge is internal and always uses `getTransport`.
+`nicInboxReader` is read-only: `nicImap` opens the folder with `readOnly: true`, so `deliver()` and
+`reset()` deliberately throw and nothing can even set `\Seen`. `mailbox/index.js` exposes
+`supportsDelivery()` so a caller checks before depositing.
 
-`gmailInboxReader` is read-only — `deliver()` and `reset()` deliberately throw, and `remove()` only
-trashes. It uses RFC 2183 `Content-Disposition` to tell a real attachment from an inline signature
-logo.
+### Which channel a case's mail goes out through
+
+One rule, and it is the case's, not the deployment's.
+
+A case remembers the mailbox its enquiry **arrived** in — `sourceMailbox`, `{ source, address }`,
+written by the server at intake and never by a client. `emailService.transportFor(sourceMailbox)`
+reads it:
+
+| `sourceMailbox.source` | Channel | Sender |
+|---|---|---|
+| `nic-browser` | `transports/nicBrowserTransport.js` — the operator's signed-in Chrome session | the NICeMail Front Office (`senderFor`) |
+| anything else, or null | `getTransport(EMAIL_TRANSPORT)` — `nic` or `mock` | `FRONT_OFFICE_*` |
+
+**All three** of a case's emails follow that rule: the acknowledgement, the final response **and the
+forward to the Officer-in-Charge**. The forward used to stay on `EMAIL_TRANSPORT` regardless,
+because that is where the legacy Gmail transport was. Once Gmail was removed, a NICeMail case that
+answered its inquirer through the browser but told the Officer-in-Charge through `EMAIL_TRANSPORT`
+would have been two channels — and the second one has no credential. Worse, while the browser
+interlock was closed, that forward escaped it entirely.
+
+`getTransport` resolves through dynamic `import()`, so `nodemailer` is never evaluated on the mock
+path, and an unknown transport name degrades to the mock rather than half-configuring a send.
 
 ### Intake is N:1, and gated by a person
 
@@ -592,9 +606,9 @@ many external inquirers ──> one Front Office mailbox ──> Front Officer v
 With `NIC_BROWSER_MAILBOX=true` there are two such Front Office mailboxes, each with its own Front
 Office account, feeding the same gate. Mail is routed by the mailbox it arrived in, never by sender.
 
-The Gmail query is `in:inbox [is:unread] to:(<front office address>)` and carries **no sender
-filter**. Anyone can write in: an enquiry from a member of the public the system has never seen
-reaches the Front Officer exactly like any other.
+A mailbox read is filtered by **recipient only** — the Front Office address — and carries **no
+sender filter**. Anyone can write in: an enquiry from a member of the public the system has never
+seen reaches the Front Officer exactly like any other.
 
 It used to filter on a single configured inquirer address, on the reasoning that an unqualified
 search over a real personal inbox would turn a friend's message or a receipt into a Query Case. That
@@ -648,13 +662,18 @@ four Approve clicks during one twenty-two-second send all read "no response yet"
 - **`UNCERTAIN`** — may have been delivered (HTTP 5xx, `ECONNRESET`, `ETIMEDOUT`, a client timeout,
   a NICeMail send pressed but unconfirmed). **Never retried automatically.**
 
-For Gmail an `UNCERTAIN` dispatch is reconciled against the Sent folder — `in:sent
-rfc822msgid:<id>`, falling back to a recipient-and-date search with an exact `Subject` and
-`Message-ID` comparison — and is only called `NOT_SENT` after a 60-second settle window. NICeMail
-and the mock cannot be checked, so a person answers instead:
+**No `UNCERTAIN` send settles itself.** `emailService.reconcileDelivery` asks the case's channel and
+every channel answers `UNKNOWN`: the legacy Gmail transport's Sent-folder search was the only
+implementation of `reconcile` that ever existed, neither NICeMail path can be asked, and the mock has
+nothing to say. The seam is kept — the outbox calls it on every uncertain send, and a transport that
+could verify its own Sent folder would slot straight in — but today a person answers:
 `POST /queries/:queryId/outbound/resolve` records `SENT` (bookkeeping runs as if it had sent; a
 final response closes the case) or `NOT_SENT` (unlocks the retry), audited as
 `EMAIL_DELIVERY_CONFIRMED` / `EMAIL_DELIVERY_DENIED`. Neither sends anything.
+
+That makes every `UNCERTAIN` dispatch a standing human work item. A case whose final response is
+`UNCERTAIN` sits at `READY_FOR_DISPATCH` until somebody looks in the Sent folder and says which it
+was, and nothing escalates it on its own.
 
 The `EmailMessage` ids are deterministic (`MSG-ACK-`/`MSG-FWD-`/`MSG-RESP-` + `queryId`), so a crash
 between sending and recording self-heals on the next attempt instead of duplicating, and a
@@ -672,15 +691,13 @@ A provider outage is an outage, not a stream of events. `services/email/mailbox/
 state: the first failure logs once and audits `SYNC_FAILED`, repeats are counted and logged at most
 once every five minutes, and recovery logs and audits `SYNC_RECOVERED` with the duration and the
 number of attempts. `GET /mailbox/messages` answers **503** with `{ error, retryable: true, sync }`
-and `Retry-After: 30` for a transient failure, **502** for an authentication failure (pointing at
-`npm run gmail:preflight`), and the state is repeated on `GET /health`. The UI shows one standing
-banner rather than one permanent toast per poll.
+and `Retry-After: 30` for a transient failure, **502** for an authentication failure, and the state
+is repeated on `GET /health`. The UI shows one standing banner rather than one permanent toast per
+poll.
 
-A steady-state Gmail poll is **two list calls** (inbox and `is:unread`) plus a `messages.get` only
-for ids not already in a 500-entry cache, at most four in flight, with concurrent identical polls
-coalesced. The Gmail client has a 30-second timeout. Previously a poll was one list plus up to 25
-parallel gets with no timeout, so a DNS outage meant 26 ten-second lookups per poll and 30–46-second
-polls.
+For the browser mailbox, a poll triggers a sync at most once every `NIC_BROWSER_SYNC_TTL_MS` and
+opens at most `NIC_BROWSER_SYNC_MAX` new messages, because every message read is a real page
+interaction in somebody's live mailbox and all of them queue behind the one serialised session.
 
 ## NICeMail: two separate mechanisms
 
@@ -905,38 +922,37 @@ as `FALLBACK`: real summaries, deterministically derived from the enquiry, and r
 
 ## Configuration
 
-`.env.example` is the authoritative reference and lists **every** variable the code reads, in nine
-groups: core, authentication, email transport, stakeholder identities, Gmail OAuth, NICeMail
-IMAP/SMTP, NICeMail browser agent, Pravah Gemma, attachments.
-
-**Boot-blocking** (`process.exit(1)`):
+`.env.example` is the authoritative reference and lists **every** variable the code reads. It ends
+with the full boot-refusal table; the rules most often hit are:
 
 | Variable | Rule |
 |---|---|
 | `JWT_SECRET` | required, ≥32 characters |
-| `QMS_SEED_PASSWORD` | required |
+| any account | must have a credential — `QMS_PASSWORDS_FILE`, `QMS_PASSWORD_<ID>`, or the shared mode explicitly enabled |
 | `DATABASE_URL` | required, and must be reachable, **when `NODE_ENV=production`** |
-| `EMAIL_TRANSPORT` | must be `mock`, `gmail` or `nic` |
-| `MAILBOX_SOURCE` | must be `auto`, `gmail` or `nic` |
+| `EMAIL_TRANSPORT` | must be `mock` or `nic`; `mock` is refused when `NODE_ENV=production` |
+| `MAILBOX_SOURCE` | must be `auto` or `nic` |
 | `SESSION_COOKIE_SAMESITE` | must be `lax`, `strict` or `none` |
-| `GMAIL_CLIENT_ID` / `_SECRET` | required **when** `EMAIL_TRANSPORT=gmail` |
-| `GMAIL_REFRESH_TOKEN_FRONT_OFFICE` | required when `EMAIL_TRANSPORT=gmail` — it is the only authenticated mailbox |
 | `NIC_EMAIL`, `NIC_IMAP_HOST`, `NIC_SMTP_HOST` | required when `EMAIL_TRANSPORT=nic` or `MAILBOX_SOURCE=nic` |
 | `NIC_EMAIL` | required when `NIC_BROWSER_MAILBOX=true`, and must differ from `FRONT_OFFICE_EMAIL` |
+| `NIC_BROWSER_TEST_RECIPIENT` | required while `NIC_ALLOW_OUTBOUND` is not `true` and the agent is on |
+| `NIC_ALLOW_INTERNAL_FORWARD=true` | requires a real `OFFICER_IN_CHARGE_EMAIL` |
+| a real channel | production needs `EMAIL_TRANSPORT=nic` or `NIC_BROWSER_MAILBOX=true` |
 
-**One mailbox is authenticated, and it is the Front Office's.** It is the only account the system
-reads from and the only one it sends as: acknowledgements, the forward to the Officer-in-Charge and
-the final dispatch all go out as the Front Officer, and inbox polling uses the same token. The
-NICeMail browser mailbox (`NIC_BROWSER_MAILBOX=true`) holds no credential here at all — it reads and
-sends through a Chrome session the operator signed in to by hand — and answers only the cases that
-arrived in it.
+**Nothing here is a mailbox password.** The NICeMail browser mailbox
+(`NIC_BROWSER_MAILBOX=true`) holds no credential at all — it reads and sends through a Chrome
+session the operator signed in to by hand, and answers only the cases that arrived in it. The SMTP
+path takes an app password, by file for preference. Inquirers are **external**: anyone can send an
+enquiry from their own mail client, and they authenticate to nothing here. The Officer-in-Charge is a
+**recipient**, addressed by `OFFICER_IN_CHARGE_EMAIL`; nothing ever sends as that role.
 
-There is deliberately no `GMAIL_REFRESH_TOKEN_INQUIRER` and no
-`GMAIL_REFRESH_TOKEN_OFFICER_IN_CHARGE`. Inquirers are **external** — anyone can send an enquiry from
-their own mail client, and they authenticate to nothing here. The Officer-in-Charge is a
-**recipient**, addressed by `OFFICER_IN_CHARGE_EMAIL`; nothing in the codebase ever sends as that
-role. `npm run gmail:preflight` fails only on the Front Office mailbox, and reports a stale token on
-any other role as configured-but-unused.
+**The outbound interlock.** `NIC_ALLOW_OUTBOUND` is a second key on a real government mailbox:
+until it is the exact string `true`, every real send is confined to one test recipient and a send to
+anyone else is refused before it is attempted — as a configuration error, so it is never retried.
+`NIC_ALLOW_INTERNAL_FORWARD=true` opens exactly one more address, `OFFICER_IN_CHARGE_EMAIL`, for the
+forward alone, re-derived server-side and never taken from a request. Without it, intake of a
+NICeMail case stops at the forward while the interlock is closed. It is a recipient allowance, not a
+second channel.
 
 NIC configuration is otherwise *not* asserted at boot — a deployment that only uses the diagnostic
 `/nic/*` endpoints starts normally, and NIC errors surface per-request as a `stage: 'config'`
@@ -994,18 +1010,19 @@ Also required:
 | `/queries/*` returns 503 | MongoDB not connected | as above. In development the rest of the API keeps working |
 | Browser reports a CORS failure | `CLIENT_URL` does not match the frontend's actual origin | set it exactly; `http://localhost:5173` ≠ `http://127.0.0.1:5173` |
 | 401 on every API call after sign-in | cookie not being sent | check `SESSION_COOKIE_SAMESITE`, and that the frontend uses `withCredentials` (it does by default) |
-| `gmail:preflight` → `invalid_grant` | the refresh token expired or was revoked | re-authorise that account. Not a code defect |
 | `nic:verify` → `Invalid credentials` / `535` | webmail password used instead of an app password | generate one at webmail → Security → App Passwords |
 | `nic:preflight` → `mail.gov.in` times out | those endpoints are not reachable from outside NICNET | use the `mgovcloud.in` pair, which is what `.env.example` configures |
 | `nic:browser:discover` → `Chrome is not available … (CDP endpoint answered HTTP 404)` (diagnosis `NO_CDP`); a sync → "not a Chrome DevTools endpoint" | another browser holds port 9222 | close it, or set `NIC_CDP_ENDPOINT` to a free port |
 | An agent or tool attached to the operator's NICeMail tab sees no mail rows, only `zmbtn__<hash>`-style classes | that tab is the Zoho Workplace shell; the mailbox is a cross-origin iframe with its own CDP target. `nic:browser:discover` reports it as `MAILBOX_IN_OOPIF` | nothing to fix for the QMS agent, which opens `NIC_WEBMAIL_APP_URL` in a tab of its own — [runbook §13](../docs/NIC_BROWSER_AGENT.md#why-an-agent-cannot-see-the-nicemail-elements) |
 | A NICeMail acknowledgement or response fails (HTTP 503/504, or the case page's notice) | the error ends in `[stage: <step>; cause: …; seen: …]`: the step the browser agent stopped at, what it ran into, and what the page showed. The backend log has every step as `ACK …` / `RESPONSE …` lines | a failure before `click_send` sent nothing and can be retried once the cause is fixed; from `click_send` on it is unconfirmed — check the NICeMail Sent folder first — [§13](../docs/NIC_BROWSER_AGENT.md#13-troubleshooting), [§17](../docs/NIC_BROWSER_AGENT.md#17-two-front-office-mailboxes) |
 | A NICeMail case's acknowledgement or response fails with `… has never been calibrated against the live NICeMail …` | the key it names is in `UNCALIBRATED`; the agent refuses it before touching the page, and nothing is sent. A backend started before 2026-09-22 still has every compose key there | restart the backend; for a key still uncalibrated, calibrate it live — [§17](../docs/NIC_BROWSER_AGENT.md#calibrating-the-selectors) |
-| IPC Mailbox shows **The mailbox could not be read** | the last sync failed; `sync.stage` or `sync.error` says why | for NICeMail, fix what the stage names — [runbook §13](../docs/NIC_BROWSER_AGENT.md#13-troubleshooting). For Gmail, see the DNS row below |
+| IPC Mailbox shows **The mailbox could not be read** | the last sync failed; `sync.stage` or `sync.error` says why | fix what the stage names — [runbook §13](../docs/NIC_BROWSER_AGENT.md#13-troubleshooting). For a name-resolution failure, see the DNS row below |
 | A send "may have been sent but did not confirm it in time" | the mailbox was asked to send and never confirmed; the dispatch is recorded `UNCERTAIN` | check the sending mailbox's **Sent** folder, then answer *It was sent* / *It was not sent* on the case or Dispatch page. **Do not retry first** — that is how a second copy reaches the inquirer |
-| `getaddrinfo ENOTFOUND gmail.googleapis.com` in the log, poll answers 503 | the machine's DNS resolver is failing intermittently — environmental, not a code defect | `nslookup gmail.googleapis.com` and `ping 8.8.8.8`. The app keeps the last listing on screen, backs off, and audits one `SYNC_FAILED` plus a `SYNC_RECOVERED` when it clears. A send that failed this way is classified `NOT_SENT` and is safe to retry |
+| `getaddrinfo ENOTFOUND <mail host>` in the log, poll answers 503 | the machine's DNS resolver is failing intermittently — environmental, not a code defect | `nslookup` that host and `ping 8.8.8.8`. The app keeps the last listing on screen, backs off, and audits one `SYNC_FAILED` plus a `SYNC_RECOVERED` when it clears. A send that failed this way is classified `NOT_SENT` and is safe to retry |
 | Gemma falls back to the deterministic draft | `GEMMA_API_URL` empty (intended in tests and E2E), or the host unreachable | `GET /health` reports `ai: { configured, lastSuccessAt, lastFailureAt, lastError }`; the log names the real cause (`fetch failed (ENOTFOUND …)`), not a silent fallback |
-| Backend refuses to start: `NIC_EMAIL must differ from FRONT_OFFICE_EMAIL …` / `NIC_EMAIL is required …` | `NIC_BROWSER_MAILBOX=true` with a missing or shared address | set `NIC_EMAIL` to the NICeMail mailbox, distinct from the Gmail Front Office |
+| Backend refuses to start: `NIC_EMAIL must differ from FRONT_OFFICE_EMAIL …` / `NIC_EMAIL is required …` | `NIC_BROWSER_MAILBOX=true` with a missing or shared address | set `NIC_EMAIL` to the NICeMail mailbox, distinct from `FRONT_OFFICE_EMAIL` |
+| Backend refuses to start: `No sign-in credential configured for: …` | an account has neither an entry in `QMS_PASSWORDS_FILE` nor a `QMS_PASSWORD_<ID>` | add it. The message names every account and the variable that would supply it |
+| A NICeMail send is refused with a message about the allowed recipient | the outbound interlock is closed and the address is not the test recipient | intended. For the forward to the Officer-in-Charge, set `NIC_ALLOW_INTERNAL_FORWARD=true`; to mail anyone, `NIC_ALLOW_OUTBOUND=true` |
 
 ## Tests
 
@@ -1019,7 +1036,7 @@ on a collision, so the code paths that exist only to handle that error are actua
 Tests that need concurrency (two accepts at once, three approvals at once) run against it.
 
 The harness is pinned so **nothing in the suite touches the network**: `GEMMA_API_URL=''`,
-all Gmail and NIC credentials blank, `DATABASE_URL=''`, and `NIC_CDP_ENDPOINT` pointed at an
+every NIC credential and host blank, `DATABASE_URL=''`, and `NIC_CDP_ENDPOINT` pointed at an
 unroutable address on purpose. `setup.js` forces the in-memory mailbox and gives **each test file
 its own temp attachment directory** — Vitest runs files concurrently across worker threads, and a
 single shared `ATTACHMENT_DIR` caused real cross-file races.
@@ -1043,7 +1060,7 @@ GET /api/v1/health
 
 Returns `200` with a small JSON payload confirming the service is up.
 
-## Security status: authenticated, but not yet case-scoped
+## Security status: authenticated and case-scoped
 
 ### What is enforced
 
@@ -1057,9 +1074,31 @@ The cookie, rather than an `Authorization` header, is what makes attachment prev
 download work: `attachmentUrl()` builds bare URLs for `<img>`, `<iframe>` and `<a download>`,
 and those cannot carry a header.
 
+**Case scope, on top of role.** A role allow-list naming every role denies nothing, and every role
+legitimately writes through `/queries/persist`, so the substance is per-case membership:
+
+- `services/authz/caseAccess.js` answers one question — which cases is this principal party to.
+  Front Office, Officer-in-Charge, Admin and Super Admin see everything; an Assigned Official and a
+  Reviewer see only the cases they are on; any other role sees none. `GET /queries` is filtered by
+  it.
+- `middleware/authorizeCaseDelta.js` guards `POST /queries/persist` with two checks, both against
+  state as **stored before** the delta: the protected values a role may set, and membership of every
+  case the delta touches — including cases reached through a stored row rather than named, which is
+  what stops a foreign workflow step being re-homed onto a case you are entitled to. Membership is
+  never read from the body, because the body writes the very fields membership is derived from.
+- `middleware/authorizeAttachmentAccess.js` resolves an attachment's owning case — through the
+  message it arrived on, when the attachment predates the case — and admits only a principal party to
+  it. An attachment with no case yet is readable by its uploader and by the roles that see
+  everything, and by nobody else.
+
+All three fail closed: no store means **503**, not a pass, because "cannot tell" must never widen to
+"allowed".
+
 Destructive routes are restricted to `SUPER_ADMIN`: `DELETE /api/v1/mailbox` and
-`POST /mailbox/receive`, because under `MAILBOX_SOURCE=gmail` they operate on a real account, and
-`POST /queries/reset`, because it deletes every case in the system.
+`POST /mailbox/receive`, because against a live mailbox they act on somebody's real mail, and
+`POST /queries/reset`, because it deletes every case in the system. The first two additionally refuse
+with **409** when `NODE_ENV=production`. `POST /queries/reset` does **not**, and it is the most
+destructive of the three — see [what is not enforced yet](#what-is-not-enforced-yet).
 
 Request bodies on `/queries/*` and `/queries/:id/pullback` are validated against Zod schemas by
 `middleware/validateBody.js`, which **replaces** `req.body` with the parsed result — validating
@@ -1076,8 +1115,9 @@ never lock its owner out), and 600 requests per minute across `/api/v1`. Behind 
 `NODE_ENV=production` so `trust proxy` is enabled and the limiter keys on the real client address
 rather than the proxy's.
 
-Required configuration — the server refuses to start without them: `JWT_SECRET` (≥32 chars)
-and `QMS_SEED_PASSWORD`, plus `DATABASE_URL` when `NODE_ENV=production`. See `.env.example`.
+Required configuration — the server refuses to start without it: `JWT_SECRET` (≥32 chars), a
+credential for every seeded account, and `DATABASE_URL` when `NODE_ENV=production`. The full list is
+the boot-refusal table at the end of `.env.example`.
 
 5xx responses carry a generic `Internal Server Error` outside development. The full message and
 stack go to stderr; a Mongoose error naming a collection or a driver error carrying a connection
@@ -1089,29 +1129,26 @@ Both guards fail closed with **401** if `req.user` is absent, so a route mis-wir
 
 ### What is NOT enforced yet
 
-1. **Case-level authorization.** Any *authenticated* user can read any attachment by id, and
-   `GET /queries` returns every case to every role. `authorizeAttachmentAccess` checks only that a
-   session exists. The Query Case records needed to check ownership now exist — this is no longer
-   blocked, only unimplemented. An Inquirer should reach only their own case and its attachments.
-2. **Workflow-state authorization.** `verifyAction` enforces the role half of the frontend's
+1. **Workflow-state authorization.** `verifyAction` enforces the role half of the frontend's
    `canPerform(role, action, state)`. The `ACTION_VALID_STATES` half is still client-side, so a
    permitted role is not blocked from acting on a case in the wrong state. `POST /queries/persist`
    validates the *shape* of a transition, not its legality.
-3. **Token revocation.** Tokens are stateless; logout clears the cookie but a copied token
+2. **Token revocation.** Tokens are stateless; logout clears the cookie but a copied token
    stays valid until it expires (`SESSION_TTL_SECONDS`, default 8h).
-4. **Real user provisioning.** Accounts are seeded from `src/constants/users.js` and all share
-   `QMS_SEED_PASSWORD`. This is a development mechanism, not a user store — replace it with
-   per-user credentials before production. See [`docs/auth.md`](../docs/auth.md).
-5. **Password-less dev login.** `POST /auth/dev-login` answers whenever `NODE_ENV=development` — the
+3. **Real user provisioning.** Accounts are seeded from `src/constants/users.js`. Each has its own
+   credential now, but the directory itself is a constant in source — there is no way to add or
+   deactivate an account without a redeploy, and `models/User.js`'s `active` flag is not read by the
+   auth path. See [`docs/auth.md`](../docs/auth.md).
+4. **Password-less dev login.** `POST /auth/dev-login` answers whenever `NODE_ENV=development` — the
    default when `NODE_ENV` is unset — and the process listens on all interfaces, so anyone who can
-   reach the port can sign in as any seeded account, including the primary Front Office, whose inbox
-   may be a real Gmail account under `MAILBOX_SOURCE=gmail`. Only the NICeMail Front Office is
-   refused (403, audited). Do not run a development-mode backend where untrusted hosts can reach it.
-6. **Case content decides what a mailbox sends.** `POST /queries/persist` has no role or case check,
-   so any signed-in role can edit a case's inquirer and response text — which, for a NICeMail case,
-   is what the official `.gov.in` mailbox sends and to whom. Mailbox pinning, too, does not cover
-   everything: the primary mailbox's `?recipient=` no longer reaches NICeMail rows, but its accept
-   still takes a message by id from the request body, and the decision routes are not scoped. See
+   reach the port can sign in as any seeded account. Only the NICeMail Front Office is refused (403,
+   audited). Do not run a development-mode backend where untrusted hosts can reach it.
+5. **`POST /queries/reset` in production.** It deletes every case in the system and, unlike the two
+   mailbox fixtures, has no production refusal. It is `SUPER_ADMIN`-only, which is the whole of its
+   protection.
+6. **Mailbox pinning is not complete.** The primary mailbox's `?recipient=` no longer reaches
+   NICeMail rows, but its accept still takes a message by id from the request body, and the decision
+   routes are not scoped. See
    [docs/NIC_BROWSER_AGENT.md §17](../docs/NIC_BROWSER_AGENT.md#known-limitations--open).
 
 Note also that `constants/capabilities.js` (NIC agent autonomy: read / prepare / send / destructive,
