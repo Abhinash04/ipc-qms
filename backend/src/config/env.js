@@ -83,6 +83,17 @@ const env = {
   ATTACHMENT_MAX_FILES: parseInt(process.env.ATTACHMENT_MAX_FILES || '10', 10),
 };
 
+/**
+ * Read at call time, not from the snapshot above.
+ *
+ * `env.NODE_ENV` is fixed when this module is imported, so a guard written
+ * against it cannot be exercised by `vi.stubEnv` and cannot see a value set
+ * after boot. The same reason services/email/mailbox/index.js reads
+ * MAILBOX_SOURCE through a function and every getter in config/browserConfig.js
+ * reads process.env directly.
+ */
+const isProduction = () => (process.env.NODE_ENV || env.NODE_ENV) === 'production';
+
 function validateEmailConfig(config = env) {
   const errors = [];
 
@@ -148,5 +159,5 @@ function assertValidEmailConfig(config = env) {
   }
 }
 
-export { EMAIL_TRANSPORTS, MAILBOX_SOURCES, validateEmailConfig, assertValidEmailConfig };
+export { EMAIL_TRANSPORTS, MAILBOX_SOURCES, isProduction, validateEmailConfig, assertValidEmailConfig };
 export default env;

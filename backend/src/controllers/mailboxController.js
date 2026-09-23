@@ -1,5 +1,5 @@
 import HTTP_STATUS from '../constants/httpStatus.js';
-import env from '../config/env.js';
+import env, { isProduction } from '../config/env.js';
 import { IDENTITY_ROLES, identityForRole } from '../config/identities.js';
 import * as audit from '../services/audit/auditService.js';
 import { AUDIT_ACTIONS } from '../constants/auditActions.js';
@@ -146,7 +146,28 @@ async function listMessages(req, res, next) {
   }
 }
 
+/**
+ * A development affordance, refused on a production deployment.
+ *
+ * Injecting mail and wiping the mailbox are how the suites and a local
+ * walkthrough get messages in and start clean. On a live server they are a way
+ * to fabricate an enquiry or destroy the Front Office's inbox, so the
+ * deployment refuses them whatever the caller's role. 409, not 403: Super Admin
+ * is the right role for both, it is the environment that forbids it.
+ *
+ * Checked here rather than in the route so a future route change cannot drop
+ * it, and so the refusal sits with the audit context.
+ */
+function refuseInProduction(res, endpoint) {
+  if (!isProduction()) return false;
+  res.status(HTTP_STATUS.CONFLICT).json({
+    error: `${endpoint} is a development affordance and is refused when NODE_ENV=production.`,
+  });
+  return true;
+}
+
 async function receiveMessage(req, res, next) {
+  if (refuseInProduction(res, 'POST /mailbox/receive')) return;
   try {
     const { to, from, subject, body, attachments, cc, bcc, receivedAt } = req.body || {};
     const message = await mailbox.deliver({
@@ -300,6 +321,7 @@ async function syncMailbox(req, res, next) {
 }
 
 async function resetMailbox(req, res, next) {
+  if (refuseInProduction(res, 'DELETE /mailbox')) return;
   try {
     await mailbox.reset();
     const stats = await mailbox.stats();

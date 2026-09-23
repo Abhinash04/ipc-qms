@@ -57,7 +57,8 @@ router.post('/mailbox/messages/:messageId/read', verifyToken, verifyRole(FRONT_O
 // Read the NICeMail inbox now rather than on the next poll. Background; 202.
 router.post('/mailbox/sync', verifyToken, verifyRole(FRONT_OFFICE_ONLY), syncMailbox);
 
-// Injects a message into the store — a development/testing affordance.
+// Injects a message into the store — a development/testing affordance, and
+// refused by the controller when NODE_ENV=production.
 router.post('/mailbox/receive', verifyToken, verifyRole(ROLES.SUPER_ADMIN), receiveMessage);
 
 router.post(
@@ -113,7 +114,7 @@ router.delete(
 );
 
 // The single most destructive endpoint in the API: no body, no confirmation,
-// wipes the whole store.
+// wipes the whole store. Refused by the controller when NODE_ENV=production.
 router.delete('/mailbox', verifyToken, verifyRole(ROLES.SUPER_ADMIN), resetMailbox);
 
 export default router;
