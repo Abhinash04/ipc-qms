@@ -21,7 +21,7 @@ import tls from 'tls';
  * command-line argument, because argv leaks into shell history and `ps`.
  *
  * Usage:
- *   npm run nic:preflight -- --email=contact.ecoclubs-edu@gov.in
+ *   npm run nic:preflight -- --email=<the NICeMail mailbox>
  *   NIC_EMAIL=... NIC_APP_PASSWORD_FILE=/run/secrets/nic npm run nic:preflight
  *   npm run nic:preflight                      # reachability probe only
  *
