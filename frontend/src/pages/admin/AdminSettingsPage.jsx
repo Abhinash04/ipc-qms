@@ -84,24 +84,71 @@ function AuditPanel({ audit }) {
   );
 }
 
+/**
+ * Two channels, reported separately, because they are independent.
+ *
+ * EMAIL_TRANSPORT carries mail for cases that did not arrive in the NICeMail
+ * mailbox. A case that did is answered by the browser agent from that account
+ * whatever the transport says — so a deployment can read `mock` here and still
+ * be sending real mail from a .gov.in address.
+ *
+ * This panel used to decide "real or not" by comparing the transport to
+ * 'gmail'. Once Gmail was removed that comparison could never be true, and the
+ * page told an administrator "Nothing leaves this machine" while NICeMail was
+ * sending live correspondence. The rule is now inverted: `mock` is the single
+ * case that delivers nothing, and an unrecognised transport is assumed to send
+ * rather than assumed to be safe.
+ */
+const TRANSPORT_HINT = {
+  mock: 'Delivers nothing — messages are kept in the local mailbox',
+  nic: 'Real mail leaves this machine — NICeMail SMTP',
+};
+
 function EmailPanel({ config }) {
-  const isRealTransport = config?.transport === 'gmail';
+  const transport = config?.transport || null;
+  const transportSends = Boolean(transport) && transport !== 'mock';
+  const agentOn = Boolean(config?.nicBrowserMailbox);
 
   return (
     <Panel title="Email" icon={CheckCircle2}>
       <Row
         label="Transport"
-        value={config?.transport || '—'}
-        tone={isRealTransport ? 'warn' : 'neutral'}
-        hint={isRealTransport ? 'Real mail leaves this machine' : 'Nothing leaves this machine'}
+        value={transport || '—'}
+        tone={transportSends ? 'warn' : 'neutral'}
+        hint={
+          transport
+            ? TRANSPORT_HINT[transport] || 'Unrecognised transport — assume real mail leaves this machine'
+            : 'Not reported by the server'
+        }
       />
+      <Row
+        label="NICeMail browser agent"
+        value={agentOn ? 'enabled' : 'disabled'}
+        tone={agentOn ? 'warn' : 'neutral'}
+        hint={
+          agentOn
+            ? 'Cases from the NICeMail mailbox are sent from that account, whatever the transport above says'
+            : 'No case is sent through NICeMail'
+        }
+      />
+      {agentOn && (
+        <Row
+          label="Outbound interlock"
+          value={config?.outboundAllowed ? 'open' : 'closed'}
+          tone={config?.outboundAllowed ? 'warn' : 'good'}
+          hint={
+            config?.outboundAllowed
+              ? 'NIC_ALLOW_OUTBOUND=true — NICeMail sends may reach any recipient'
+              : 'NICeMail sends are confined to the configured test recipient'
+          }
+        />
+      )}
       <Row label="Query recipient" value={config?.ipcQueryEmail || '—'} />
       {(config?.participants || []).map((participant) => (
         <Row
           key={participant.role}
           label={participant.name}
-          value={participant.canSendReal ? 'can send' : 'mock only'}
-          tone={participant.canSendReal ? 'good' : 'neutral'}
+          value={participant.role}
           hint={participant.email}
         />
       ))}
@@ -109,16 +156,22 @@ function EmailPanel({ config }) {
   );
 }
 
+/**
+ * Kept honest deliberately: an administrator reads this to know what the
+ * system does NOT do. The first two entries described the server as it was
+ * before case-level scoping existed, and understating what is enforced is the
+ * same kind of error as overstating it.
+ */
 const KNOWN_LIMITATIONS = [
   {
     label: 'Case authorization',
-    value: 'role-level only',
-    hint: 'Any signed-in user can read any attachment by id — Query Case ownership is not yet server-side',
+    value: 'enforced on reads',
+    hint: 'An attachment can only be read by someone party to its case; an upload can still name another case',
   },
   {
     label: 'Workflow enforcement',
-    value: 'client-side',
-    hint: 'The server validates the shape of a transition, not whether the workflow state allowed it',
+    value: 'partly server-side',
+    hint: 'Final approval and dispatch check the stored state; other transitions are checked for the role, not the state they came from',
   },
   {
     label: 'Session revocation',
