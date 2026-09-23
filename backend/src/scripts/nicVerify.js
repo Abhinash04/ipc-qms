@@ -1,39 +1,12 @@
-// dotenv must run before nicConfig.js snapshots process.env. ESM executes
-// dependencies in declaration order, so this import stays first.
 import 'dotenv/config';
 
 import { read_nicemail, send_nicemail, describeNicSetup } from '../services/email/nic/actions.js';
-
-/**
- * NICeMail agent verification.
- *
- *   Test A — READ : connect → authenticate → open mailbox → fetch a real email
- *   Test B — SEND : connect → authenticate → submit
- *   Receipt       : re-read the mailbox looking for the Message-ID just sent
- *
- * Every level is reported separately. Connectivity is not authentication,
- * authentication is not submission, and submission is not delivery — the whole
- * point of this script is to refuse to conflate them.
- *
- *   npm run nic:verify
- *
- * Sends one message, and only to NIC_TEST_RECIPIENT (the NIC mailbox itself by
- * default), so nothing reaches a third party.
- */
-
 const PASS = 'PASS';
 const FAIL = 'FAIL';
 const SKIP = 'SKIPPED (blocked by an earlier stage)';
-
-/** Stage ordering, so "reached fetch" implies connect and authenticate passed. */
 const READ_STAGES = ['connect', 'authenticate', 'open_mailbox', 'fetch'];
 const SEND_STAGES = ['connect', 'authenticate', 'submit'];
 
-/**
- * A stage passed if the run got past it. On failure `result.stage` names the
- * stage that failed, so every earlier stage passed and every later one is
- * untested rather than failed.
- */
 function grade(result, stages, stage) {
   const reached = stages.indexOf(result.stage);
   const asked = stages.indexOf(stage);

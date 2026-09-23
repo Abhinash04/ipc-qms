@@ -1,38 +1,5 @@
 import tls from 'tls';
-
-/**
- * NIC eMail (@gov.in) preflight — Phase 0 of the NIC integration plan.
- *
- * Answers the one question that decides whether the whole integration is
- * viable: can a HEADLESS SERVER authenticate to this mailbox over IMAP/SMTP?
- *
- * NIC is mid-migration between two platforms with incompatible credential
- * models for programmatic access:
- *   - legacy email.gov.in + Kavach → IMAP wants password + a ROTATING OTP,
- *     which an unattended backend cannot supply. Showstopper.
- *   - current mail.gov.in / NICeMail → IMAP accepts an application-specific
- *     password. Workable.
- * This script distinguishes the two empirically instead of guessing.
- *
- * READ-ONLY. It never sends a message, never appends, never deletes, and
- * uses IMAP EXAMINE (not SELECT) so it cannot even mark mail as read.
- *
- * The credential is read from a file path or a hidden prompt — never from a
- * command-line argument, because argv leaks into shell history and `ps`.
- *
- * Usage:
- *   npm run nic:preflight -- --email=<the NICeMail mailbox>
- *   NIC_EMAIL=... NIC_APP_PASSWORD_FILE=/run/secrets/nic npm run nic:preflight
- *   npm run nic:preflight                      # reachability probe only
- *
- * RUN THIS FROM THE ACTUAL DEPLOYMENT HOST. Government mail infrastructure
- * commonly restricts IMAP/SMTP to NICNET or allowlisted ranges, so a pass on
- * a developer laptop proves nothing about the server.
- */
-
 const TIMEOUT_MS = 12000;
-
-/** The two candidate endpoint pairs from current NIC documentation. */
 const CANDIDATES = [
   {
     label: 'A — mail.gov.in',
@@ -46,9 +13,6 @@ const CANDIDATES = [
   },
 ];
 
-/* ── credential handling ──────────────────────────────────────────────── */
-
-/** Replace the secret anywhere it might surface in server output. */
 const redact = (text, secret) =>
   secret ? String(text).split(secret).join('«redacted»') : String(text);
 
@@ -95,20 +59,12 @@ async function readPassword() {
   const file = process.env.NIC_APP_PASSWORD_FILE;
   if (file) {
     const { readFile } = await import('fs/promises');
-    // .trim() so a trailing newline from `echo >` does not corrupt the secret.
     return (await readFile(file, 'utf8')).trim();
   }
   if (!process.stdin.isTTY) return '';
   return promptHidden('  App-specific password (input hidden, not stored): ');
 }
 
-/* ── minimal line-oriented TLS client ─────────────────────────────────── */
-
-/**
- * Opens a TLS socket and exposes read-until/write. Deliberately hand-rolled:
- * Phase 0 must not pull in imapflow/nodemailer before we know whether the
- * integration is even possible.
- */
 function connectTls({ host, port }) {
   return new Promise((resolve, reject) => {
     const socket = tls.connect({ host, port, servername: host }, () => resolve(wrap(socket)));
@@ -143,7 +99,6 @@ function wrap(socket) {
     send(line) {
       socket.write(`${line}\r\n`);
     },
-    /** Resolve once `test(accumulated)` is satisfied. */
     until(test) {
       return new Promise((resolve, reject) => {
         if (test(buffer)) {
@@ -164,8 +119,6 @@ function wrap(socket) {
   };
 }
 
-/* ── probes ───────────────────────────────────────────────────────────── */
-
 async function probeReachable({ host, port }) {
   try {
     const conn = await connectTls({ host, port });
@@ -183,8 +136,6 @@ async function probeReachable({ host, port }) {
     return { ok: false, error: hint };
   }
 }
-
-/** IMAP quoted-string escaping per RFC 3501 §4.3. */
 const imapQuote = (value) => `"${String(value).replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
 
 async function probeImapLogin({ host, port }, email, password) {
@@ -200,8 +151,6 @@ async function probeImapLogin({ host, port }, email, password) {
       const line = (login.match(/^a1 (NO|BAD).*/m) || [login])[0].trim();
       return { ok: false, error: redact(line, password) };
     }
-
-    // EXAMINE, not SELECT — read-only, cannot set \Seen or alter any flag.
     conn.send('a2 EXAMINE INBOX');
     const examine = await conn.until((b) => /^a2 (OK|NO|BAD)/m.test(b));
     const exists = (examine.match(/^\* (\d+) EXISTS/m) || [])[1];
@@ -238,8 +187,7 @@ async function probeSmtpAuth({ host, port }, email, password) {
     conn.send(Buffer.from(password).toString('base64'));
     const result = await conn.until((b) => /^(235|5\d\d|4\d\d)/m.test(b));
 
-    conn.send('QUIT'); // No MAIL FROM / RCPT TO / DATA — nothing is ever sent.
-
+    conn.send('QUIT'); 
     if (/^235/m.test(result)) return { ok: true, mechanisms };
     return { ok: false, mechanisms, error: redact(result.trim().split('\n')[0], password) };
   } catch (error) {
@@ -249,12 +197,6 @@ async function probeSmtpAuth({ host, port }, email, password) {
   }
 }
 
-/* ── diagnosis ────────────────────────────────────────────────────────── */
-
-/**
- * The verdict that matters. A rejection mentioning OTP/Kavach/two-factor means
- * this mailbox still needs a rotating code, which no headless server can give.
- */
 function diagnoseAuthFailure(message) {
   const text = String(message).toLowerCase();
 
@@ -289,16 +231,12 @@ function diagnoseAuthFailure(message) {
   return { verdict: 'FAILED', note: 'See the server response above.' };
 }
 
-/* ── main ─────────────────────────────────────────────────────────────── */
-
 async function preflight() {
   const emailArg = process.argv.find((a) => a.startsWith('--email='));
   const email = (emailArg ? emailArg.slice('--email='.length) : process.env.NIC_EMAIL || '').trim();
 
   console.log('\nNIC eMail preflight — READ-ONLY. No message is composed, sent, or modified.');
   console.log('Run this from the DEPLOYMENT HOST; a laptop pass proves nothing about the server.\n');
-
-  // 1. Reachability — no credentials involved.
   console.log('── Reachability (TLS handshake)');
   const reachable = new Map();
   for (const candidate of CANDIDATES) {
@@ -322,7 +260,6 @@ async function preflight() {
     process.exit(1);
   }
 
-  // 2. Authentication — needs the address and an app password.
   if (!email) {
     console.log('\nNo address supplied, so the authentication check was skipped.');
     console.log('Re-run with:  npm run nic:preflight -- --email=you@gov.in\n');
@@ -363,7 +300,6 @@ async function preflight() {
     if (imap.ok && smtp.ok && !working) working = candidate;
   }
 
-  // 3. Verdict.
   console.log('\n────────────────────────────────────────');
   if (working) {
     console.log(`PREFLIGHT PASSED using ${working.label}`);

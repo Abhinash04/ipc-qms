@@ -1,30 +1,8 @@
 import 'dotenv/config';
-
 import { mkdir, writeFile } from 'fs/promises';
 import path from 'path';
-
 import browserConfig from '../config/browserConfig.js';
 import { formatReport, inspectBrowser } from '../services/email/nic/browser/inspect.js';
-
-/**
- * Read-only discovery against the live NICeMail session.
- *
- * Reports what Chrome is exposing, which document holds the mailbox and why
- * (a cross-origin iframe, shadow DOM, a list not rendered, …), what the
- * accessibility tree and the interactive elements look like, how every entry
- * in browser/selectors.js resolves, and the mail rows as the agent sees them —
- * then says what, if anything, stops the agent. See inspect.js.
- *
- * It clicks nothing, types nothing, navigates nowhere and sends nothing in any
- * tab of yours.
- *
- *   npm run nic:browser:discover
- *   npm run nic:browser:discover -- --json            also write the report to NIC_BROWSER_ARTIFACT_DIR
- *   npm run nic:browser:discover -- --rows=10         show more mail rows
- *   npm run nic:browser:discover -- --show-addresses  do not mask addresses
- *   npm run nic:browser:discover -- --agent-tab       also inspect the agent's own background tab,
- *                                                     which it opens and closes exactly as a sync does
- */
 
 const args = process.argv.slice(2);
 const flag = (name) => args.includes(`--${name}`);
