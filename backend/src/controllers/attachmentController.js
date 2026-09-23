@@ -6,7 +6,6 @@ import * as audit from '../services/audit/auditService.js';
 import { AUDIT_ACTIONS } from '../constants/auditActions.js';
 import { ACTOR_TYPES } from '../constants/roles.js';
 
-/** Who touched which document, and when. Never the bytes or the content. */
 const recordAttachment = (req, action, meta, { messageId = null } = {}) =>
   audit.record({
     action,
@@ -19,13 +18,6 @@ const recordAttachment = (req, action, meta, { messageId = null } = {}) =>
     details: { filename: meta.filename, mimeType: meta.mimeType, size: meta.size },
   });
 
-/**
- * Memory storage: files are validated and persisted through attachmentStore
- * (disk), never left on multer's own temp path. `limits` catches an oversize
- * single file before it is even fully buffered; attachmentPolicy catches
- * everything limits() cannot (type, combined total, file count is enforced
- * again here as a matching guard so the two never drift silently).
- */
 function buildUpload() {
   const { maxFileBytes, maxFiles } = limits();
   return multer({
@@ -71,9 +63,6 @@ async function uploadFiles(req, res, next) {
           filename: file.originalname,
           mimeType: file.mimetype,
           queryId: req.body?.queryId || null,
-          // From the session, never the body. This is what lets the uploader
-          // reach their own file in the window before it has a case id — see
-          // middleware/authorizeAttachmentAccess.js.
           uploadedBy: req.user?.id || null,
         }),
       ),
@@ -99,20 +88,6 @@ async function getMeta(req, res, next) {
   }
 }
 
-/**
- * Streams the raw bytes. `?download=1` asks for Content-Disposition:
- * attachment; anything else serves inline so the browser can preview it.
- *
- * Two headers matter here beyond content: helmet's defaults set
- * Cross-Origin-Resource-Policy: same-origin and X-Frame-Options: SAMEORIGIN,
- * both of which would silently block an <img>/<iframe> on the Vite dev
- * origin (5173) from loading bytes served from here (5000). This route opts
- * itself out of both — it is the one place in the API meant to be embedded
- * cross-origin by the app's own frontend.
- *
- * Shared by this route and the mailbox's message-scoped one, which checks
- * first that the attachment belongs to the message and passes its id on.
- */
 async function sendAttachment(req, res, attachmentId, { messageId = null } = {}) {
   const meta = await store.getMetadata(attachmentId);
   if (!meta) {

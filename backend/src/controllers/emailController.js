@@ -7,29 +7,12 @@ import { AUDIT_ACTIONS, AUDIT_RESULTS } from '../constants/auditActions.js';
 import { ACTOR_TYPES } from '../constants/roles.js';
 import { isConnected } from '../config/db.js';
 
-/**
- * The retry buttons — the case page's acknowledgement and forward, the
- * Dispatch page's response — send through caseMail whenever the database is up,
- * which is always in production (config/db.js refuses to start without it).
- *
- * That makes them the same guarded send as intake and final approval: at most
- * once per case, to the recipient stored on the case, with the content the case
- * holds. The request names the case (`queryId`) and nothing else — a `to`,
- * `subject` or `body` in it is ignored, so a retry cannot address the wrong
- * person or say something that was never approved.
- *
- * Without a database (development, in-memory) there is no ledger to guard with,
- * and the body-driven send below is kept, as every other in-memory fallback is.
- */
 const OUTCOME_STATUS = {
   [OUTCOMES.SENT]: HTTP_STATUS.CREATED,
   [OUTCOMES.ALREADY_SENT]: HTTP_STATUS.OK,
-  // Another request holds the send, or an earlier one may already have sent it.
   [OUTCOMES.IN_PROGRESS]: HTTP_STATUS.CONFLICT,
   [OUTCOMES.BLOCKED_UNCERTAIN]: HTTP_STATUS.CONFLICT,
-  // Provably not sent — the provider could not be reached. Retry is safe.
   [OUTCOMES.FAILED]: HTTP_STATUS.SERVICE_UNAVAILABLE,
-  // Sent or not, nobody can yet say. Nothing is retried blindly.
   [OUTCOMES.UNCERTAIN]: HTTP_STATUS.GATEWAY_TIMEOUT,
   NO_RECIPIENT: HTTP_STATUS.CONFLICT,
 };
@@ -50,11 +33,8 @@ function respondWithOutcome(res, { queryId, emailType, result }) {
     emailType,
     outcome: result.outcome,
     ...(ok ? {} : { error: OUTCOME_MESSAGE[result.outcome] || result.error || 'The email was not sent.' }),
-    // The step the send stopped at, when the transport works in steps.
     ...(result.stage ? { stage: result.stage } : {}),
     ...(result.retryable ? { retryable: true } : {}),
-    // Refused by configuration, not by the mailbox: a retry cannot succeed
-    // until an environment variable changes.
     ...(result.configuration ? { configuration: true } : {}),
     ...(result.outcome === OUTCOMES.UNCERTAIN || result.outcome === OUTCOMES.BLOCKED_UNCERTAIN
       ? { unconfirmed: true }
@@ -68,7 +48,6 @@ function respondWithOutcome(res, { queryId, emailType, result }) {
   });
 }
 
-/** Runs one guarded case send and answers with its outcome. */
 async function sendForCase(req, res, next, { emailType, send }) {
   const queryId = req.body?.queryId ?? null;
   if (!queryId) {
@@ -82,14 +61,6 @@ async function sendForCase(req, res, next, { emailType, send }) {
   }
 }
 
-/**
- * Every send is audited, successes and failures alike. A send that failed is
- * the record an administrator most needs — it is the difference between "the
- * inquirer was never told" and "we do not know what happened".
- *
- * Recorded: who, what, which case, how many recipients and attachments. Never
- * recorded: message bodies, addresses beyond a count, credentials.
- */
 const actorFrom = (req) => ({
   actorType: ACTOR_TYPES.HUMAN,
   actorId: req.user?.id ?? null,

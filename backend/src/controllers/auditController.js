@@ -1,17 +1,7 @@
 import HTTP_STATUS from '../constants/httpStatus.js';
 import * as audit from '../services/audit/auditService.js';
 
-/**
- * The audit read API — what makes the Administration console real rather than
- * decorative. Everything served here is a persisted record of something the
- * server actually did.
- *
- * Access is restricted to ADMIN and SUPER_ADMIN in routes/auditRoutes.js.
- */
-
 const MAX_LIMIT = 500;
-
-/** Query strings are always text; coerce and clamp rather than trusting them. */
 function readPaging(query) {
   const limit = Math.min(Math.max(parseInt(query.limit || '100', 10) || 100, 1), MAX_LIMIT);
   const offset = Math.max(parseInt(query.offset || '0', 10) || 0, 0);
@@ -63,7 +53,6 @@ async function getSummary(req, res, next) {
   }
 }
 
-/** Everything the server knows about one case, oldest first for a timeline. */
 async function getForQuery(req, res, next) {
   try {
     const events = await audit.list({ queryId: req.params.queryId, limit: MAX_LIMIT });

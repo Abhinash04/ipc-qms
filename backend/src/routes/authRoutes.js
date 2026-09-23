@@ -4,18 +4,10 @@ import { login, logout, me, users, devLogin } from '../controllers/authControlle
 
 const router = express.Router();
 
-// Public: login is how a session is obtained, and logout must still clear a
-// cookie whose token has already expired.
 router.post('/auth/login', login);
 router.post('/auth/logout', logout);
-
-// Development only — the controller 404s unless NODE_ENV=development.
 router.post('/auth/dev-login', devLogin);
-
 router.get('/auth/me', verifyToken, me);
-
-// The staff directory. Requires a session: it names every account and its role,
-// which is not something to hand an unauthenticated visitor.
 router.get('/auth/users', verifyToken, users);
 
 export default router;

@@ -13,67 +13,9 @@ import { ACTOR_TYPES } from '../constants/roles.js';
 import { QueryCase, WorkflowStep, Review, ResponseVersion } from '../models/index.js';
 import { isConnected } from '../config/db.js';
 
-/**
- * Authorization for POST /queries/persist — step 3 of the chain in
- * .claude/backend-rules.md, for the one route that had none.
- *
- * This route takes a whole case document and `$set`s it. It used to carry
- * `verifyToken` and a body schema and nothing else, so any signed-in account —
- * including one with no part in the case — could rewrite
- * any case in the system: set its workflow state, replace the approved response
- * text, name the inquirer it would be mailed to, and delete its workflow steps.
- * `services/workflow/finalApproval.js` then reads exactly those stored fields to
- * decide eligibility, pick the reply body and pick the recipient.
- *
- * ## Why there is no verifyRole here
- *
- * Every role legitimately writes through this route: the REVIEWER records
- * decisions, the ASSIGNED_OFFICIAL saves drafts, the Front Office and the
- * Officer-in-Charge move cases along. A role allow-list containing all of them
- * denies nothing while looking like a control. The substance is the two layers
- * below.
- *
- * ## Two checks, both against STORED state
- *
- * 1. PROTECTED VALUES — for each guarded field, compare the submitted value
- *    with the one already stored, and require the corresponding workflow action
- *    only when it actually CHANGES.
- *
- *    The comparison is the whole point. The client sends the entire case
- *    document on every transition, so an ordinary save resends the case's
- *    current `workflowState` and `currentAssigneeId` untouched. Treating the
- *    mere presence of a field as an attempt to set it refused every save whose
- *    resent value the caller's role could not itself have caused — an assigned
- *    official transferring a case sitting in ASSIGNED, for instance, since
- *    ASSIGNED is reached by the Officer-in-Charge's ASSIGN. A no-op is not a
- *    transition.
- *
- * 2. CASE SCOPE — resolved from the database AS IT STANDS BEFORE THE DELTA, and
- *    never from a value in the submitted body. This is the whole answer to the
- *    bootstrapping problem: membership is derived from fields this very route
- *    writes, so consulting the body would let a caller write themselves in and
- *    then be admitted on the strength of it.
- *
- * Failure is whole-delta, never per-element: a delta is one transition, and
- * applying the half that passes leaves a case incoherent — a state moved with
- * its steps dropped, or a review recorded against a transition that never
- * happened.
- */
-
-/** Pullback re-points a case to an earlier stage, so it can target any state. */
 const canPullBack = (role) => roleCanPerform(role, WORKFLOW_ACTION.PULLBACK);
-
 const permits = (role, actions) =>
   Array.isArray(actions) && actions.some((action) => roleCanPerform(role, action));
-
-/**
- * The field paths this role may not write, given what is submitted and what is
- * already stored. Empty means nothing objectionable.
- *
- * `stored` is `{ query, versionStatusById }` for the case being written, with
- * nulls when it does not exist yet (a creation). Pure — the middleware does the
- * reading — so the rules stay unit-testable without a database.
- */
 export function protectedValueViolations(user, body, stored = {}) {
   const role = user?.role;
   const everything = scopeKindForRole(role) === SCOPE_KIND.EVERYTHING;
@@ -86,26 +28,14 @@ export function protectedValueViolations(user, body, stored = {}) {
   if (query && typeof query === 'object') {
     if (typeof query.workflowState === 'string') {
       if (!(query.workflowState in STATE_REQUIRES_ACTION)) {
-        // An unrecognised state is refused here rather than in the schema, so a
-        // client on a newer build gets a 403 naming the field instead of a 400
-        // that rejects the entire delta over one value the server has not
-        // learned yet.
         violations.push('query.workflowState');
       } else if (creating) {
-        /**
-         * A new case opens at RECEIVED, and that is not a transition anybody
-         * needs an action for — intake creates it before anyone has acted on
-         * it. WHO may create a case is decided separately, by
-         * creationViolation below.
-         */
         if (query.workflowState !== WORKFLOW_STATE.RECEIVED && !everything) {
           violations.push('query.workflowState');
         }
       } else if (query.workflowState !== storedQuery.workflowState) {
         const required = STATE_REQUIRES_ACTION[query.workflowState];
         if (required === null) {
-          // Intake and operational overrides: no workflow action grants these,
-          // so they belong to the roles that already see every case.
           if (!everything) violations.push('query.workflowState');
         } else if (!permits(role, required) && !canPullBack(role)) {
           violations.push('query.workflowState');
@@ -113,12 +43,6 @@ export function protectedValueViolations(user, body, stored = {}) {
       }
     }
 
-    /**
-     * Naming the assignee is how a principal would write itself into a case's
-     * membership, so this is the direct anti-self-promotion rule — but only
-     * when the name actually changes. Clearing it is exempt: intake creates a
-     * case unassigned.
-     */
     const assignee = query.currentAssigneeId;
     if (typeof assignee === 'string' && assignee && assignee !== storedQuery?.currentAssigneeId) {
       if (!permits(role, ASSIGNEE_REQUIRES_ACTION)) violations.push('query.currentAssigneeId');
@@ -128,10 +52,6 @@ export function protectedValueViolations(user, body, stored = {}) {
   const versions = [...(body?.addVersions || []), ...(body?.upsertVersions || [])];
   for (const version of versions) {
     if (!version || typeof version.status !== 'string') continue;
-
-    // Resending a version's existing status is not setting it. Without this,
-    // every later save on a case carrying an approved response was refused for
-    // everyone but the Officer-in-Charge.
     const previous = stored?.versionStatusById?.get?.(version.responseId);
     if (previous === version.status) continue;
 
@@ -139,9 +59,6 @@ export function protectedValueViolations(user, body, stored = {}) {
     if (required === undefined) {
       violations.push('upsertVersions.status');
     } else if (required !== null && !permits(role, required)) {
-      // The final-approval lock. Approval is granted by
-      // POST /queries/:queryId/final-approval, which is gated on FINAL_APPROVE;
-      // this stops persist being a second, ungated way to set the same field.
       violations.push('upsertVersions.status');
     }
   }
@@ -149,7 +66,6 @@ export function protectedValueViolations(user, body, stored = {}) {
   return [...new Set(violations)];
 }
 
-/** The stored case and response-version statuses the value rules compare against. */
 async function storedStateFor(body) {
   const queryId = body?.query?.queryId;
   const responseIds = [...(body?.addVersions || []), ...(body?.upsertVersions || [])]
@@ -169,7 +85,6 @@ async function storedStateFor(body) {
   };
 }
 
-/** Every queryId named anywhere in the delta body. */
 function queryIdsInBody(body) {
   const ids = new Set();
   const add = (id) => {
@@ -187,17 +102,6 @@ function queryIdsInBody(body) {
   return ids;
 }
 
-/**
- * The cases the delta touches through a STORED row rather than by naming them.
- *
- * Two ways that happens, and both are load-bearing:
- *
- *  - `deleteStepIds` carries step ids with no queryId of their own.
- *  - an upsert keyed on a natural key (stepId, reviewId, responseId) may name
- *    one case in the body while the stored row belongs to another. Requiring
- *    party-to on the STORED parent as well is what stops a foreign step being
- *    re-homed onto a case you are entitled to.
- */
 async function storedParentIds(body) {
   const stepIds = [
     ...(body?.deleteStepIds || []),
@@ -218,8 +122,6 @@ async function storedParentIds(body) {
 }
 
 function deny(req, res, message, { fields = [], queryIds = [] } = {}) {
-  // A run of these against one account is what an attempted escalation looks
-  // like from the outside. Fire-and-forget, exactly as verifyRole does.
   void audit.record({
     action: AUDIT_ACTIONS.AUTHORIZATION_DENIED,
     result: AUDIT_RESULTS.DENIED,
@@ -229,8 +131,6 @@ function deny(req, res, message, { fields = [], queryIds = [] } = {}) {
     details: { method: req.method, path: req.originalUrl, fields, queryIds },
   });
 
-  // Field paths and case ids only. A delta carries case content, so no value
-  // from it may be echoed back.
   return res.status(HTTP_STATUS.FORBIDDEN).json({ error: message, fields, queryIds });
 }
 
@@ -244,8 +144,6 @@ async function authorizeCaseDelta(req, res, next) {
 
     const body = req.body || {};
 
-    // Both checks read stored state, so neither can run without the store. This
-    // is the fail-closed point: "cannot tell" must never widen to "allowed".
     if (!isConnected()) {
       return next(
         Object.assign(new Error('Case access cannot be determined: query storage is unavailable'), {
@@ -272,8 +170,6 @@ async function authorizeCaseDelta(req, res, next) {
     const touched = new Set([...named, ...parents]);
     if (!touched.size) return next();
 
-    // A queryId naming no stored case is a CREATION, not a case this caller has
-    // failed to be party to. Everything else must already be theirs.
     const existing = named.size
       ? new Set(await QueryCase.distinct('queryId', { queryId: { $in: [...named] } }))
       : new Set();
@@ -301,16 +197,6 @@ async function authorizeCaseDelta(req, res, next) {
   }
 }
 
-/**
- * Creating a case through this route: nobody scoped may.
- *
- * A case is created by the Front Office accepting a message in the mailbox,
- * which is a server-side intake, not a delta. The roles that reach this
- * function are the scoped ones — the officials and reviewers party to a case —
- * and letting either mint one would hand them an unbounded way to create cases
- * they are party to. The roles that legitimately create cases see everything
- * and returned before this point.
- */
 function creationViolation(user) {
   return {
     message: `${user.role} is not permitted to raise a case`,

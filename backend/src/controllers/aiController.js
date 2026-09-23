@@ -4,18 +4,6 @@ import * as audit from '../services/audit/auditService.js';
 import { AUDIT_ACTIONS, AUDIT_RESULTS } from '../constants/auditActions.js';
 import { ACTOR_TYPES } from '../constants/roles.js';
 
-/**
- * AI calls are audited so an administrator can answer the question that
- * actually matters: was this text written by the model, or by the deterministic
- * fallback after the endpoint failed to answer?
- *
- * `gemmaService` degrades silently by design — a timeout returns a fallback
- * rather than throwing — so without this record a run of total LLM outage is
- * indistinguishable from normal operation.
- *
- * Prompts and generated content are never recorded: only whether it worked,
- * how long it took, and whether it fell back.
- */
 async function recordAi({ req, action, startedAt, output, error = null }) {
   const fallback = Boolean(output?.fallback);
 
@@ -29,8 +17,6 @@ async function recordAi({ req, action, startedAt, output, error = null }) {
     error: error ? error.message : null,
     aiMetadata: {
       latencyMs: Date.now() - startedAt,
-      // `fallback: true` means the model did not answer and deterministic text
-      // was substituted — a success for the user, a failure for the model.
       fallback,
       aiGenerated: error ? false : !fallback,
     },
