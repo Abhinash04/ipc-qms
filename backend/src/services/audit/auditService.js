@@ -1,10 +1,12 @@
-import { isConnected } from '../../config/db.js';
+import { isConnected, isDatabaseConfigured } from '../../config/db.js';
 import { AuditEvent } from '../../models/AuditEvent.js';
 import { ACTOR_TYPES } from '../../constants/roles.js';
 import { AUDIT_RESULTS } from '../../constants/auditActions.js';
 
 const MAX_BUFFERED = 5000;
 let buffer = [];
+
+const persistent = () => isConnected() || isDatabaseConfigured();
 
 function toRecord(input) {
   return {
@@ -33,7 +35,7 @@ async function record(input) {
 
   const event = toRecord(input);
 
-  if (!isConnected()) {
+  if (!persistent()) {
     push(event);
     return { ...event, persisted: false };
   }
@@ -83,7 +85,7 @@ async function list(criteria = {}) {
   const { limit = 100, offset = 0 } = criteria;
   const buffered = buffer.filter((event) => matches(event, criteria));
 
-  if (!isConnected()) {
+  if (!persistent()) {
     return [...buffered].reverse().slice(offset, offset + limit);
   }
 
@@ -114,7 +116,7 @@ async function summary(criteria = {}) {
   const buffered = buffer.filter((event) => matches(event, criteria));
   const durability = describe();
 
-  if (!isConnected()) {
+  if (!persistent()) {
     return {
       total: buffered.length,
       byAction: tally(buffered, 'action'),
@@ -151,7 +153,7 @@ function resetBuffer() {
 }
 
 function describe() {
-  return isConnected()
+  return persistent()
     ? { backend: 'mongo', durable: true }
     : { backend: 'in-memory', durable: false };
 }

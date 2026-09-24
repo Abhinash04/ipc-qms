@@ -1,4 +1,4 @@
-import { isConnected } from '../../../config/db.js';
+import { isConnected, isDatabaseConfigured } from '../../../config/db.js';
 import env, { MAILBOX_SOURCES } from '../../../config/env.js';
 import * as memoryMailbox from './mockIpcMailbox.js';
 import * as mongoMailbox from './mongoIpcMailbox.js';
@@ -22,7 +22,7 @@ const mailboxSource = () =>
 function active() {
   if (forced) return forced;
   if (mailboxSource() === MAILBOX_SOURCES.NIC) return nicInbox;
-  return isConnected() ? mongoMailbox : memoryMailbox;
+  return isConnected() || isDatabaseConfigured() ? mongoMailbox : memoryMailbox;
 }
 
 function describe() {

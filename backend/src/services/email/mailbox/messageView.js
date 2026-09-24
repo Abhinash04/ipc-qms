@@ -1,5 +1,5 @@
 import env from '../../../config/env.js';
-import { isConnected } from '../../../config/db.js';
+import { isConnected, isDatabaseConfigured } from '../../../config/db.js';
 import { QueryCase } from '../../../models/QueryCase.js';
 import { DECISIONS, findDecisions } from './decisions.js';
 import { findTriages } from './triage.js';
@@ -58,7 +58,7 @@ export async function toMessageViews(messages, { keepsReadState = false } = {}) 
   let decisions = new Map();
   let cases = new Map();
   let triages = new Map();
-  if (ids.length && isConnected()) {
+  if (ids.length && (isConnected() || isDatabaseConfigured())) {
     [decisions, cases, triages] = await Promise.all([findDecisions(ids), casesFor(ids), findTriages(ids)]);
   }
 

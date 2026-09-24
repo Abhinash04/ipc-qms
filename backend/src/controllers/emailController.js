@@ -5,7 +5,7 @@ import { OUTCOMES } from '../services/email/outbox.js';
 import * as audit from '../services/audit/auditService.js';
 import { AUDIT_ACTIONS, AUDIT_RESULTS } from '../constants/auditActions.js';
 import { ACTOR_TYPES } from '../constants/roles.js';
-import { isConnected } from '../config/db.js';
+import { isConnected, isDatabaseConfigured } from '../config/db.js';
 
 const OUTCOME_STATUS = {
   [OUTCOMES.SENT]: HTTP_STATUS.CREATED,
@@ -20,6 +20,8 @@ const OUTCOME_STATUS = {
 const OUTCOME_MESSAGE = {
   [OUTCOMES.IN_PROGRESS]: 'This email is being sent by another request. Refresh in a moment.',
 };
+
+const ledgerAvailable = () => isConnected() || isDatabaseConfigured();
 
 const caseActor = (req) => ({ id: req.user?.id ?? null, role: req.user?.role ?? null });
 
@@ -91,7 +93,7 @@ function getConfig(req, res) {
 }
 
 async function sendAcknowledgement(req, res, next) {
-  if (isConnected()) {
+  if (ledgerAvailable()) {
     return sendForCase(req, res, next, { emailType: 'ACKNOWLEDGEMENT', send: caseMail.acknowledge });
   }
 
@@ -107,7 +109,7 @@ async function sendAcknowledgement(req, res, next) {
 }
 
 async function forwardQuery(req, res, next) {
-  if (isConnected()) {
+  if (ledgerAvailable()) {
     return sendForCase(req, res, next, { emailType: 'FORWARD', send: caseMail.forward });
   }
 
@@ -135,7 +137,7 @@ async function forwardQuery(req, res, next) {
 }
 
 async function sendResponse(req, res, next) {
-  if (isConnected()) {
+  if (ledgerAvailable()) {
     return sendForCase(req, res, next, { emailType: 'OUTGOING_RESPONSE', send: caseMail.dispatchResponse });
   }
 
