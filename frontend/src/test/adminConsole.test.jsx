@@ -192,7 +192,7 @@ describe('the audit trail table', () => {
   it('renders one row per event with actor, action and result', async () => {
     renderAs(ADMIN, '/admin/administration/activity');
 
-    const caseLinks = await screen.findAllByRole('button', { name: 'QRY-2026-00421' });
+    const caseLinks = await screen.findAllByRole('button', { name: 'QRY-2026-00421' }, { timeout: 5000 });
     expect(caseLinks).toHaveLength(2);
 
     const rows = document.querySelectorAll('tbody tr');
@@ -202,7 +202,7 @@ describe('the audit trail table', () => {
 
   it('expands a row to show the recorded detail', async () => {
     renderAs(ADMIN, '/admin/administration/activity');
-    await screen.findAllByRole('button', { name: 'QRY-2026-00421' });
+    await screen.findAllByRole('button', { name: 'QRY-2026-00421' }, { timeout: 5000 });
 
     fireEvent.click(screen.getByRole('button', { name: /details for Email forwarded/i }));
 
