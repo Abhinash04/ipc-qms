@@ -1,34 +1,11 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import request from 'supertest';
 
-/**
- * Two tabs, one Case ID.
- *
- * Every case write on /queries/persist is an upsert keyed on `queryId`, so the
- * unique index on that field can never fire: a second case carrying an id that
- * already exists does not collide, it *replaces* the stored one and the first
- * enquiry is gone without a trace. The email path no longer mints client-side,
- * but the portal still does, and two browsers hydrated at the same counter mint
- * the same number.
- *
- * `createdAt` is what tells the two apart — an update to a case carries the one
- * it was created with, a collision carries its own. The rest of the suite runs
- * with DATABASE_URL blank and answers 503 before reaching a model, so this file
- * stands the models in and reports the connection as up. `vi.mock` is hoisted
- * above the imports so the stand-in is in place before anything captures it.
- */
-
 vi.mock('../config/db.js', async (importOriginal) => ({
   ...(await importOriginal()),
   isConnected: () => true,
 }));
 
-/**
- * The stand-in in support/memoryDb.js. `.select()` and `$setOnInsert` are part
- * of the contract here, not decoration: the guard reads only `createdAt`, and
- * the inquirer is written on insert alone — a stand-in without either would
- * pass tests the real driver fails.
- */
 vi.mock('../models/QueryCase.js', async () => ({
   QueryCase: (await import('./support/memoryDb.js')).memoryDb.model('QueryCase', { unique: ['queryId'] }),
 }));
@@ -48,19 +25,12 @@ const CASE = {
   updatedAt: '2026-09-17T09:00:00.000Z',
 };
 
-/**
- * Posted as the Front Office, which is the role that drives intake. Note the
- * states used below are ones that role may actually set: since
- * middleware/authorizeCaseDelta.js landed, a delta naming a state the caller's
- * role holds no action for is refused with 403 before the collision guard runs.
- */
 const persist = (query) =>
   request(app)
     .post('/api/v1/queries/persist')
     .set(authHeader(ROLES.FRONT_OFFICE))
     .send({ query });
 
-/** Every stored case, by value. */
 const storedCases = () => memoryDb.rows('QueryCase');
 
 beforeEach(() => {
@@ -86,7 +56,6 @@ describe('/api/v1/queries/persist — one id, one case', () => {
     expect(storedCases()[0].workflowState).toBe('PENDING_ASSIGNMENT');
   });
 
-  /** The one that matters: a different enquiry arriving under the same id. */
   it('refuses to overwrite a different case that shares the id', async () => {
     await persist(CASE);
 
@@ -102,18 +71,11 @@ describe('/api/v1/queries/persist — one id, one case', () => {
     expect(res.status).toBe(409);
     expect(res.body).toMatchObject({ queryId: 'QRY-2026-00003' });
 
-    // The stored case is untouched — that is the whole point. Before the guard
-    // this read back as Priya's enquiry and Ravi's was unrecoverable.
     expect(storedCases()).toHaveLength(1);
     expect(storedCases()[0].subject).toBe('Dissolution profile clarification');
     expect(storedCases()[0].inquirer.email).toBe('ravi@pharma.example');
   });
 
-  /**
-   * A case stored before the guard existed has no `createdAt` to compare, and a
-   * client that omits it is not evidence of a collision. Refusing those would
-   * block ordinary writes to prove a point.
-   */
   it('allows the write when there is no createdAt to compare', async () => {
     await persist({ ...CASE, createdAt: undefined });
 

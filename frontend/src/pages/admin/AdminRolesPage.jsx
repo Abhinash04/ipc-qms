@@ -9,15 +9,6 @@ import { WORKFLOW_ACTION, canPerform } from '@/constants/workflowRules';
 import { WORKFLOW_STATE } from '@/constants/statusEnums';
 import { useRoutePaths } from '@/hooks/useRoutePaths';
 
-/**
- * The capability matrix.
- *
- * Rendered from the live permission tables — `sectionsForRole` and
- * `canPerform` — rather than from a hand-maintained list, so it cannot drift
- * from the rules the application actually enforces. Change a grant and this
- * page changes with it.
- */
-
 const ROLE_ORDER = [
   ROLES.SUPER_ADMIN,
   ROLES.ADMIN,
@@ -25,15 +16,12 @@ const ROLE_ORDER = [
   ROLES.OFFICER_IN_CHARGE,
   ROLES.ASSIGNED_OFFICIAL,
   ROLES.REVIEWER,
-  ROLES.INQUIRER,
 ];
 
-/** Section grants are static tables, so index them once instead of per matrix cell. */
 const SECTIONS_BY_ROLE = new Map(
   ROLE_ORDER.map((role) => [role, new Set(sectionsForRole(role))]),
 );
 
-/** A role may perform an action if it can in ANY state — the state machine narrows it further. */
 const roleHasAction = (role, action) =>
   Object.values(WORKFLOW_STATE).some((state) => canPerform(role, action, state));
 

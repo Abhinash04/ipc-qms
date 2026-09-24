@@ -15,6 +15,7 @@ import { EMAIL_DIRECTION, EMAIL_TYPE } from '@/constants/emailModel';
 import { fakeFinalApprovalEndpoint } from '@/test/fakeFinalApprovalEndpoint';
 import { installFakeCaseMail } from '@/test/fakeCaseMail';
 import * as mailboxService from '@/services/api/mailboxService';
+import { EXTERNAL_INQUIRER as INQUIRER } from '@/test/externalInquirer';
 
 vi.mock('@/services/api/mailboxService');
 
@@ -25,7 +26,6 @@ const OIC = findUserById('USR-0003');
 const OFFICIAL = findUserById('USR-0004');
 const REVIEWER_A = findUserById('USR-0005');
 const REVIEWER_B = findUserById('USR-0006');
-const INQUIRER = findUserById('USR-0001');
 const ADMIN = findUserById('USR-0007');
 
 const fakeSend = (payload) =>
@@ -38,19 +38,15 @@ const fakeSend = (payload) =>
     sentAt: '2026-08-18T12:00:00.000Z',
   });
 
-/**
- * Final approval is one server call now, so the mail leg is injected into the
- * endpoint rather than into the store — see src/test/fakeFinalApprovalEndpoint.js.
- */
 const finalApproval = (send = fakeSend) => fakeFinalApprovalEndpoint({ send });
 
-const failingSend = () => Promise.reject(new Error('Gmail unavailable'));
+const failingSend = () => Promise.reject(new Error('mail send failed'));
 
 function mailboxMessage(overrides = {}) {
   return {
     mailboxMessageId: 'MSG-00001',
     to: 'ipc-query-mock@example.com',
-    from: 'Abhinash Pritiraj <abhinash.pritiraj@gmail.com>',
+    from: `${INQUIRER.name} <${INQUIRER.email}>`,
     subject: 'Clarification on monograph revision and impurity limits',
     body:
       'Dear Sir/Madam,\n\n' +
@@ -92,9 +88,6 @@ async function runTo(stopAt, { reviewers = [REVIEWER_A], message } = {}) {
   if (stopAt === WORKFLOW_STATE.PENDING_FINAL_APPROVAL) return queryId;
 
   if (stopAt === WORKFLOW_STATE.READY_FOR_DISPATCH) {
-    // A send that fails is reported, not thrown: the approval stands, the
-    // response stays locked, and the case waits where the Front Office retry
-    // acts on it.
     await s().grantFinalApproval(queryId, OIC, finalApproval(failingSend));
     return queryId;
   }
@@ -108,8 +101,6 @@ const stateOf = (queryId) => s().getQuery(queryId).workflowState;
 beforeEach(async () => {
   await s().hydrate();
   await s().resetDemo();
-  // The acknowledgement and the forward are server calls now — their records,
-  // audit rows and state moves come back from the endpoint. See fakeCaseMail.js.
   installFakeCaseMail(mailboxService);
 });
 
@@ -155,9 +146,6 @@ describe('the complete lifecycle, end to end', () => {
     const query = s().getQuery(queryId);
     const messages = s().emailMessages.filter((m) => m.queryId === queryId);
 
-    // Four emails, all on the case's own thread: the enquiry, the
-    // acknowledgement to whoever sent it, the forward to the Officer-in-Charge,
-    // and the answer.
     expect(new Set(messages.map((m) => m.emailType))).toEqual(
       new Set([
         EMAIL_TYPE.INCOMING_QUERY,
@@ -186,7 +174,7 @@ describe('the complete lifecycle, end to end', () => {
       .find((v) => v.status === RESPONSE_STATUS.FINAL_APPROVED);
 
     expect(response.direction).toBe(EMAIL_DIRECTION.OUTBOUND);
-    expect(response.to).toEqual(['abhinash.pritiraj@gmail.com']);
+    expect(response.to).toEqual([INQUIRER.email]);
     expect(response.subject).toContain(queryId);
     expect(response.body).toBe(approved.content);
   });

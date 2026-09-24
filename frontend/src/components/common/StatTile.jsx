@@ -2,35 +2,21 @@ import { cn } from "@/utils/cn";
 import { activateOnKey } from "@/utils/a11y";
 import { DIRECTION_ICON, trendTone } from "@/components/common/trendTone";
 
-/**
- * Callers pass colours either as raw CSS (the dashboard uses gradients and
- * token `var(--…)` references) or as Tailwind classes (the admin consoles do).
- * Applying a class name through `style` silently does nothing, which is why
- * those tiles used to render with no colour at all — so each value is routed to
- * whichever channel can accept it.
- */
 const CSS_VALUE =
   /^(#|rgb|hsl|linear-gradient|radial-gradient|repeating-linear-gradient|repeating-radial-gradient|var\()/i;
 const isCssValue = (value) =>
   typeof value === "string" && CSS_VALUE.test(value.trim());
 
-/**
- * All the colour routing in one place, so the component body stays flat enough
- * to read. Pure — no state, no effects, so deliberately not a hook.
- */
 function resolveToneVisuals({ cardBg, cardBorder, numColor, accent, glow }) {
   const rootStyle = {};
   if (isCssValue(cardBg)) rootStyle.background = cardBg;
   if (isCssValue(cardBorder)) rootStyle.borderColor = cardBorder;
 
-  // Consumed by the sparkline, share bar and selected ring. The fallbacks keep
-  // the three non-dashboard callers, which pass no tone, rendering as before.
   const tone = accent || (isCssValue(numColor) ? numColor : null);
   if (tone) {
     rootStyle["--tone-accent"] = tone;
     rootStyle["--tone-ring"] = tone;
   }
-  // The card's own hue, for the drop shadow it casts on the page.
   if (glow) rootStyle["--tone-glow"] = glow;
 
   return {
@@ -42,12 +28,6 @@ function resolveToneVisuals({ cardBg, cardBorder, numColor, accent, glow }) {
   };
 }
 
-
-/**
- * Per-variant chrome. A table rather than a chain of ternaries in the render
- * body — the branching is what the complexity rule counts, and none of this
- * depends on anything but the variant.
- */
 const CHROME = {
   tinted: {
     shell:
@@ -55,8 +35,6 @@ const CHROME = {
     hover:
       "hover:shadow-[0_20px_40px_-16px_var(--tone-glow,rgba(15,23,42,0.45))]",
     ring: "ring-2 ring-inset ring-[color:var(--tone-ring,#3b82f6)]",
-    // slate-500 measures 3.3-3.9:1 on the darker gradient stop; slate-600
-    // clears 5.3:1 on every tone.
     label: "text-slate-600",
     caption: "text-slate-600",
     figure: "text-[40px] sm:text-[44px]",
@@ -79,19 +57,6 @@ const CHROME = {
 
 const chromeFor = (variant) => CHROME[variant === "tinted" ? "tinted" : "plain"];
 
-/**
- * Period-over-period change.
- *
- * On a saturated card the semantic green/red cannot carry on the surface
- * itself — it would neither pass contrast nor read as a hue. The chip inverts
- * instead: a near-white pill holding the coloured text, so good-versus-bad
- * survives at full strength.
- *
- * `neutral` covers metrics where neither direction is good or bad — a running
- * total. With no reading at all the slot still renders, as an em dash: an
- * absent chip made the card look like a different design rather than the same
- * design with nothing to report.
- */
 function TileTrend({ delta, higherIsWorse, neutral, comparisonLabel, chrome }) {
   if (!delta) {
     return (
@@ -128,20 +93,6 @@ function TileTrend({ delta, higherIsWorse, neutral, comparisonLabel, chrome }) {
   );
 }
 
-/**
- * Seven-day arrival trend, drawn as an area across the foot of the card.
- *
- * `preserveAspectRatio="none"` lets it fill any card width with no geometry
- * measurement at all — jsdom has no layout engine, and measuring would make the
- * tile untestable. `vectorEffect` cancels the stroke distortion the resulting
- * non-uniform scale would otherwise cause.
- *
- * `aria-hidden` with no `<title>` child: an SVG title contributes to
- * textContent, which the dashboard tests read as the tile's figure.
- *
- * With no arrivals it still draws its baseline. A baseline is chrome, not a
- * measurement — hiding it made an empty dashboard look like an older build.
- */
 function TileSparkline({ series, bold }) {
   const points =
     series && series.length > 1
@@ -207,16 +158,6 @@ function TileSparkline({ series, bold }) {
   );
 }
 
-/**
- * This bucket's share of everything in view, as a full-bleed bar on the card's
- * bottom edge.
- *
- * The percentage is exposed only through `role="img"` + `aria-label`: a visible
- * "NN%" text node would land in the tile's textContent, which the dashboard
- * tests read as the tile's figure.
- *
- * The empty groove renders even at zero — it is a container, not a claim.
- */
 function TileShareBar({ share, shareTotal, chrome }) {
   const pct = share == null ? 0 : Math.round(share * 100);
   const known = share != null && shareTotal > 0;
@@ -270,7 +211,6 @@ export function StatTile({
   selected = false,
 }) {
   const chrome = chromeFor(variant);
-  // The tinted card can carry a fuller chart than a plain white one.
   const boldChart = variant === "tinted";
   const { rootStyle, surfaceClass, borderClass, valueClass, valueStyle } =
     resolveToneVisuals({ cardBg, cardBorder, numColor, accent, glow });
@@ -288,13 +228,9 @@ export function StatTile({
         chrome.shell,
         surfaceClass,
         borderClass,
-        // MotionConfig only reaches framer-motion, so these transforms need
-        // their own reduced-motion guard.
         onClick &&
           "cursor-pointer motion-safe:hover:-translate-y-0.5 motion-safe:active:scale-[0.99]",
         onClick && chrome.hover,
-        // ring-inset, not ring-offset: .bento-card is overflow:hidden and clips
-        // an offset ring entirely.
         selected && chrome.ring,
         className,
       )}
@@ -303,8 +239,6 @@ export function StatTile({
       <TileSparkline series={series} bold={boldChart} />
 
       <div className="relative z-10 flex h-full w-full flex-col gap-2.5">
-        {/* Icon and label lead, so a row of tiles reads label-then-figure
-            rather than a line of numbers you have to decode afterwards. */}
         <div className="flex items-center gap-2">
           {Icon && (
             <div
@@ -317,10 +251,6 @@ export function StatTile({
             </div>
           )}
 
-          {/* A clickable KPI filter, not a document section — a heading here
-              breaks heading order (h1 → h3) on every dashboard, and would also
-              displace the query list's h2 that dashboard.test.jsx locates the
-              list panel by. */}
           <p
             data-slot="stat-label"
             className={cn(
@@ -340,12 +270,7 @@ export function StatTile({
           />
         </div>
 
-        {/* mt-auto pins the figure to the bottom so tiles of differing label
-            lengths still align their numbers across the row. */}
         <div className="mt-auto">
-          {/* Contract: this element holds the number and nothing else.
-              dashboard.test.jsx:77 reads it as Number(textContent.trim()), so a
-              separator, a suffix or a nested badge here breaks the suite. */}
           <div
             data-slot="stat-value"
             className={cn(

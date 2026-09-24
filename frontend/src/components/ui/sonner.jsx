@@ -5,11 +5,6 @@ import TriangleAlertIcon from "lucide-react/dist/esm/icons/triangle-alert";
 import OctagonXIcon from "lucide-react/dist/esm/icons/octagon-x";
 import Loader2Icon from "lucide-react/dist/esm/icons/loader-2";
 
-/**
- * The shadcn Toaster, with the `next-themes` dependency removed — this is a
- * Vite app with no dark mode, so the theme is fixed rather than read from a
- * provider that does not exist here.
- */
 const Toaster = ({ ...props }) => {
   return (
     <Sonner

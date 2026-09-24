@@ -1,30 +1,9 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
-/**
- * What sending through the NICeMail compose form reports, in each outcome.
- *
- * The callers' idempotency rests on it. The acknowledgement and the final
- * response are each recorded only once a send *succeeds*; a reported failure
- * leaves nothing recorded, so the next ✓ or Approve sends again. So:
- *
- *   - a message counts as sent only when the form closed AND it is in the Sent
- *     folder, newer than the press of Send — never on the click alone;
- *   - a failure before Send is a plain failure: the draft is discarded, nothing
- *     went, and a retry is safe;
- *   - a failure after Send cannot be read from the UI, and must say so, so the
- *     person retrying checks the Sent folder first.
- *
- * The browser is a fake page that behaves the way the calibrated Zoho form
- * does (npm run nic:browser:calibrate): New Mail opens the form, an address
- * typed into To and committed becomes a chip, Send closes the form and files
- * the message under Sent. The real selectors resolve against it by key.
- */
-
 const page = vi.hoisted(() => ({ state: null }));
 const browser = vi.hoisted(() => ({ opened: 0 }));
 
 vi.mock('../config/browserConfig.js', () => ({
-  // Short, so the "nothing happened" cases fail in milliseconds, not seconds.
   default: { timeoutMs: 60, mailboxAddress: 'nic-mailbox@test.invalid' },
 }));
 
@@ -50,21 +29,18 @@ const MESSAGE = {
 
 const FORM = ['toInput', 'ccInput', 'subjectInput', 'bodyEditor', 'fileInput', 'sendButton', 'discardButton', 'fromAddress'];
 
-/** NICeMail's survey dialog, as the live page shows it. */
 const SURVEY = {
   name: '',
   text: 'Email Satisfaction Survey for the new NICeMail Services. Participate now!',
   buttons: ['Close', 'Participate now!'],
 };
 
-/** The prompt Zoho raises on Send when the body reads like it expects a reply. */
 const FOLLOW_UP = {
   name: '',
   text: 'Add follow-up reminder? You can add follow-up reminder, as your message has below text. as soon as possible',
   buttons: ['Close', '10 minutes', 'Add Reminder and Send', 'Skip and Send'],
 };
 
-/** Which registry key a spec handed to the page is. */
 const keyOf = (spec) => Object.keys(SELECTORS).find((key) => JSON.stringify(SELECTORS[key]) === JSON.stringify(spec));
 
 function fakePage() {
@@ -79,21 +55,15 @@ function fakePage() {
     clicks: [],
     sends: [],
     chooser: null,
-    /** The survey dialog is open; `surveyCloses: false` makes its Close do nothing. */
     survey: false,
     surveyCloses: true,
-    /** Dialogs other than the survey. */
     dialogs: [],
-    /** What the form makes of a typed address — an autocomplete can pick another. */
     chipFor: (address) => address,
-    /** The follow-up reminder prompt is open, holding the message. */
     followUp: false,
-    /** The message leaves: the form closes and Sent has it. */
     deliver: () => {
       for (const key of FORM) state.present.delete(key);
       state.sent.unshift({ providerMessageId: `${Date.now()}141600`, subject: state.subject, senderAddress: `"Ravi"<${INQUIRER}>` });
     },
-    /** What pressing Send does. By default: the message goes. */
     onSend: () => state.deliver(),
   };
 
@@ -200,7 +170,6 @@ describe('composeEmail — a message that went out', () => {
 
     expect(result).toMatchObject({ ok: true, providerMessageId: page.state.sent[0].providerMessageId });
     expect(Date.parse(result.sentAt)).not.toBeNaN();
-    // Back on the Inbox afterwards, where the next sync expects the tab.
     expect(page.state.route).toBe(SELECTORS.folderRoute);
   });
 
@@ -231,6 +200,23 @@ describe('composeEmail — a message that went out', () => {
     expect(params.backendNodeId).toBe(7);
     expect(params.files).toHaveLength(1);
     expect(params.files[0]).toMatch(/reply\.pdf$/);
+  });
+
+  it('stages an attachment under its base name, whatever path the sender put in it', async () => {
+    await composeEmail({
+      ...MESSAGE,
+      attachments: [{ filename: '../../../escaped.pdf', content: Buffer.from('%PDF-1.4') }],
+    });
+
+    const [, params] = page.state.sends.find(([method]) => method === 'DOM.setFileInputFiles');
+    expect(params.files[0]).toMatch(/qms-nic-send-[^/\\]*[/\\]escaped\.pdf$/);
+    expect(params.files[0]).not.toMatch(/\.\./);
+  });
+
+  it('refuses an attachment whose filename is only a path', async () => {
+    await expect(
+      composeEmail({ ...MESSAGE, attachments: [{ filename: '../..', content: Buffer.from('x') }] }),
+    ).rejects.toThrow(/unusable filename/);
   });
 
   it('is still sendMail to the transport', () => {
@@ -365,8 +351,6 @@ describe('composeEmail — a message that may have gone out', () => {
   });
 
   it('does not take a message with the same subject sent a minute earlier as proof', async () => {
-    // A retried case, or a test re-run after a database reset: same subject,
-    // same recipient, and recent — but from before this press.
     page.state.sent = [{ providerMessageId: `${Date.now() - 60000}141600`, subject: MESSAGE.subject, senderAddress: INQUIRER }];
     page.state.onSend = () => {};
 

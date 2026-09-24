@@ -2,24 +2,17 @@ import { ROLES } from './roles';
 
 export const MOCK_USERS = [
   {
-    id: 'USR-0001',
-    name: 'Abhinash Pritiraj',
-    role: ROLES.INQUIRER,
-    email: 'abhinash.pritiraj@gmail.com',
-    divisionId: null,
-  },
-  {
     id: 'USR-0002',
-    name: 'Bhumika Makker',
+    name: 'Front Office (primary mailbox)',
     role: ROLES.FRONT_OFFICE,
-    email: 'bhoomikamakker@gmail.com',
+    email: 'front.office@ipc.example',
     divisionId: 'DIV-004',
   },
   {
     id: 'USR-0003',
     name: 'Jatin Rawat',
     role: ROLES.OFFICER_IN_CHARGE,
-    email: 'rawatjatin436@gmail.com',
+    email: 'jatin.rawat@ipc.example',
     divisionId: 'DIV-001',
   },
   {

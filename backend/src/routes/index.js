@@ -11,10 +11,6 @@ import pullbackRoutes from './pullbackRoutes.js';
 import queryRoutes from './queryRoutes.js';
 
 const router = express.Router();
-
-// Authentication is applied per route inside each router, not globally here,
-// so that GET /health and POST /auth/login stay public — see
-// .claude/backend-rules.md and middleware/verifyToken.js.
 router.use(healthRoutes);
 router.use(authRoutes);
 router.use(emailRoutes);

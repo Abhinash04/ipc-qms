@@ -12,8 +12,8 @@ export function AiRecommendationCard({ query, onAssign, currentAssigneeId, varia
 
   const [gemma, setGemma] = useState({ queryId: null, recs: null });
   const [loading, setLoading] = useState(false);
-  const [showAll, setShowAll] = useState(false); 
- 
+  const [showAll, setShowAll] = useState(false);
+
   const recommendations =
     (gemma.queryId === query?.queryId ? gemma.recs : null) ?? localRecommendations;
 
@@ -65,7 +65,6 @@ export function AiRecommendationCard({ query, onAssign, currentAssigneeId, varia
 
   return (
     <div className={outerClass}>
-      {/* Header Row */}
       <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-indigo-100">
         <div className="flex items-center gap-2.5">
           <div className="w-8 h-8 rounded-xl bg-purple-600 text-white flex items-center justify-center shadow-2xs">
@@ -128,7 +127,7 @@ export function AiRecommendationCard({ query, onAssign, currentAssigneeId, varia
                     {onAssign && (
                       <button
                         type="button"
-                        onClick={() => onAssign(rec.userId)} 
+                        onClick={() => onAssign(rec.userId)}
                         disabled={isAssigned}
                         className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[12px] font-bold transition-colors cursor-pointer disabled:opacity-70 disabled:cursor-not-allowed ${
                           isAssigned

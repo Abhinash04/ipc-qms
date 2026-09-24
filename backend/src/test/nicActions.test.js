@@ -11,15 +11,6 @@ import { ROLES } from '../constants/roles.js';
 import { redact, getPassword, describeCredential, invalidate } from '../services/email/nic/credentials.js';
 import { read_nicemail, send_nicemail } from '../services/email/nic/actions.js';
 
-/**
- * NICeMail action tests.
- *
- * No socket is ever opened: both actions take an injection seam, and
- * vitest.config.mjs blanks the NIC credential for the whole suite. The live
- * path is exercised only by `npm run nic:verify`, which is not a test file and
- * is never collected by `include: ['src/**\/*.test.js']`.
- */
-
 const NIC_ENV = {
   NIC_EMAIL: 'contact.test@gov.invalid',
   NIC_IMAP_HOST: 'imap.test.invalid',
@@ -27,9 +18,6 @@ const NIC_ENV = {
   NIC_TEST_RECIPIENT: 'contact.test@gov.invalid',
   NIC_APP_PASSWORD: 'test-app-password',
 };
-
-// nicConfig reads process.env through getters, so stubEnv alone is enough —
-// no module reload, and no re-importing imapflow/mailparser per test.
 
 beforeEach(() => {
   for (const [key, value] of Object.entries(NIC_ENV)) vi.stubEnv(key, value);
@@ -65,7 +53,6 @@ describe('credential handling', () => {
     vi.stubEnv('NIC_APP_PASSWORD_FILE', file);
     invalidate();
 
-    // Trailing newline from `echo >` must not become part of the secret.
     expect(await getPassword()).toBe('from-the-file');
     expect(describeCredential().source).toBe('NIC_APP_PASSWORD_FILE');
 
@@ -151,7 +138,6 @@ describe('read_nicemail', () => {
 
     const result = await read_nicemail({ createClient });
 
-    // The distinction that matters: the server was reached and refused us.
     expect(result.ok).toBe(false);
     expect(result.stage).toBe('authenticate');
     expect(result.error).toContain('AUTHENTICATIONFAILED');
@@ -218,7 +204,6 @@ describe('send_nicemail', () => {
 
     expect(result.ok).toBe(false);
     expect(result.stage).toBe('config');
-    // The guard must stop it before a transport is ever used.
     expect(sendMail).not.toHaveBeenCalled();
   });
 
@@ -251,7 +236,6 @@ describe('send_nicemail', () => {
 
     expect(result.stage).toBe('authenticate');
     expect(result.error).toContain('535');
-    // Nothing may be submitted once authentication has failed.
     expect(sendMail).not.toHaveBeenCalled();
   });
 
@@ -287,13 +271,6 @@ describe('send_nicemail', () => {
 });
 
 describe('the actions are reachable over HTTP, and gated', () => {
-  // This is what makes them agent-callable at runtime rather than only from a
-  // script.
-  //
-  // The NIC host is blanked for these cases specifically. The outer beforeEach
-  // supplies a working-looking config, and with it these requests would reach
-  // the connect stage and open a real socket. Blanking it makes the config
-  // guard trip first, so authorization is proven with no network involved.
   beforeEach(() => {
     vi.stubEnv('NIC_EMAIL', '');
     vi.stubEnv('NIC_IMAP_HOST', '');
@@ -320,22 +297,17 @@ describe('the actions are reachable over HTTP, and gated', () => {
   it('lets the Front Officer call read, reporting the stage rather than throwing', async () => {
     const res = await request(app).post('/api/v1/nic/read').set(authHeader(ROLES.FRONT_OFFICE)).send({});
 
-    // A failed action is a 200 carrying the stage — collapsing it into a 5xx
-    // would destroy the connect/authenticate/fetch distinction.
     expect(res.status).toBe(200);
     expect(res.body.ok).toBe(false);
     expect(res.body.stage).toBe('config');
   });
 
   it('exposes a non-secret status view', async () => {
-    // Configured here so the response reports a credential as present; the
-    // assertion below is that its VALUE never travels with it.
     vi.stubEnv('NIC_APP_PASSWORD', 'super-secret-value');
 
     const res = await request(app).get('/api/v1/nic/status').set(authHeader(ROLES.SUPER_ADMIN));
 
     expect(res.status).toBe(200);
-    // The source is named — that is the variable's name, not its contents.
     expect(res.body.credential).toEqual({ configured: true, source: 'NIC_APP_PASSWORD' });
     expect(JSON.stringify(res.body)).not.toContain('super-secret-value');
   });

@@ -1,16 +1,3 @@
-/**
- * An in-process stand-in for `@/services/api/queryCaseService`.
- *
- * Without it the suite makes real XHRs to localhost:5000 — the workflow store
- * hydrates through /queries, and nothing else mocks that module. Every call
- * failed, `queryState.js` fell back to its local mirror, and the assertions
- * still passed, which is how three tests named for surviving a reload ended up
- * reading back the same in-process object they had just written.
- *
- * So this is not a silencer. It keeps its own state and applies the same
- * upsert-by-id semantics as `backend/src/controllers/queryController.js`, which
- * makes `loadAll()` a genuine round trip through a boundary again.
- */
 
 const empty = () => ({
   queries: [],
@@ -21,8 +8,6 @@ const empty = () => ({
   notifications: [],
   emailMessages: [],
   emailThreads: [],
-  // One row per email a case owes someone — the server's record of whether it
-  // has been sent. Written by the case-mail endpoints, never by the client.
   outboundEmails: [],
   counters: null,
 });
@@ -63,9 +48,6 @@ export async function persistQueryTransition(delta = {}) {
   if (query?.queryId) upsert(state.queries, 'queryId', query);
   if (notification?.notificationId) upsert(state.notifications, 'notificationId', notification);
 
-  // The server derives the actor from the session and stores `action`; the
-  // client reads `event`. `loadAllQueries` maps back on the way out, so the
-  // fake returns the client shape for the same reason.
   if (auditEvent?.event) state.auditEvents.push(clone(auditEvent));
 
   for (const step of upsertSteps) upsert(state.workflowSteps, 'stepId', step);
@@ -87,18 +69,6 @@ export async function persistQueryTransition(delta = {}) {
   return { success: true };
 }
 
-/**
- * `useWorkflowStore` imports this as the default `approve` for
- * `grantFinalApproval`, and a default parameter is evaluated on entry — so the
- * export has to exist even for the calls that are about to be refused, or the
- * mock throws "No grantFinalApproval export" before `assertCan` ever runs and
- * every RBAC refusal fails for the wrong reason.
- *
- * It is deliberately inert. Approving for real needs the whole server sequence
- * — lock the version, send, close — and that lives in
- * `src/test/fakeFinalApprovalEndpoint.js`, which a test injects as the third
- * argument when it means to approve rather than to be refused.
- */
 export async function grantFinalApproval(queryId) {
   throw new Error(
     `fakeQueryApi: no final-approval endpoint was injected for ${queryId} — ` +
@@ -106,20 +76,10 @@ export async function grantFinalApproval(queryId) {
   );
 }
 
-/**
- * The send ledger, as the server would write it. `fakeCaseMail` calls this;
- * nothing in `src/` may, which is the point of the 409 the real persist answers
- * a client that tries.
- */
 export function recordOutbound(row) {
   upsert(state.outboundEmails, 'dispatchKey', { ...row, dispatchKey: `${row.emailType}:${row.queryId}` });
 }
 
-/**
- * Recording what the Sent folder actually contained is the case-mail
- * endpoint's job, and a page reaches it through this module rather than by
- * injection — so `installFakeCaseMail` registers its own here.
- */
 let outboundResolver = null;
 
 export function __setOutboundResolver(resolve) {
@@ -141,7 +101,6 @@ export async function resetQueries(seed = {}) {
   return { success: true };
 }
 
-/** Called from the global test setup so state does not leak between tests. */
 export function __resetFakeQueryApi() {
   state = empty();
   outboundResolver = null;

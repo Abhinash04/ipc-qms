@@ -5,14 +5,6 @@ import app from '../app.js';
 import * as mockTransport from '../services/email/transports/mockTransport.js';
 import * as store from '../services/attachments/attachmentStore.js';
 
-/**
- * The Forward-to-OIC fail-safe contract: the OIC must never receive a
- * message that looks complete but is silently missing a document. Any
- * unresolvable attachment must abort the forward BEFORE anything is sent —
- * verified here by spying on the transport itself, not just checking the
- * HTTP status.
- */
-
 beforeEach(async () => {
   await mockTransport.reset();
   await store.reset();
@@ -46,7 +38,7 @@ describe('forwarding fails closed on an unresolvable attachment', () => {
 
   it('a deleted .bin behind a valid .json -> 409, sends nothing', async () => {
     const good = await uploadFixture();
-    await store.remove(good.attachmentId); // deletes both files, simulating disk loss
+    await store.remove(good.attachmentId);
 
     const sendSpy = vi.spyOn(mockTransport, 'send');
 
@@ -61,14 +53,12 @@ describe('forwarding fails closed on an unresolvable attachment', () => {
 
   it('a corrupted attachment (checksum mismatch) -> 409, sends nothing', async () => {
     const good = await uploadFixture('corrupt-me.pdf');
-    // Overwrite the metadata's sha256 so the stored bytes no longer match.
     const meta = await store.getMetadata(good.attachmentId);
     await store.saveWithId(good.attachmentId, {
       buffer: Buffer.from('fixture bytes'),
       filename: meta.filename,
       mimeType: meta.mimeType,
     });
-    // Now hand-corrupt just the sidecar's checksum to simulate silent bit-rot.
     const corrupted = { ...(await store.getMetadata(good.attachmentId)), sha256: 'deadbeef'.repeat(8) };
     const fs = await import('fs/promises');
     const path = await import('path');

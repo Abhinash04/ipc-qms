@@ -1,15 +1,4 @@
-/**
- * A two-key interlock on an official government mailbox.
- *
- * Selecting a NICeMail transport is not enough on its own: until
- * NIC_ALLOW_OUTBOUND is explicitly `true`, sends are confined to one test
- * recipient. Misconfiguring one variable should not be able to start mailing
- * the public from a .gov.in address.
- *
- * Mirrors the interlock in transports/nicTransport.js (SMTP) for the
- * browser-agent transport, which names its own test-recipient variable but
- * must refuse in exactly the same way.
- */
+import { IDENTITY_ROLES, identityForRole } from '../../../config/identities.js';
 
 const outboundAllowed = () => String(process.env.NIC_ALLOW_OUTBOUND || '').trim() === 'true';
 
@@ -21,16 +10,44 @@ const sameAddress = (a, b) =>
     .trim()
     .toLowerCase();
 
-function assertRecipientAllowed(recipients, { testRecipient, variable, label }) {
+const internalForwardAllowed = () =>
+  String(process.env.NIC_ALLOW_INTERNAL_FORWARD || '').trim() === 'true';
+
+function allowedRecipients(testRecipient, internalForward) {
+  const allowed = [testRecipient];
+  if (!internalForward || !internalForwardAllowed()) return allowed;
+
+  const officer = identityForRole(IDENTITY_ROLES.OFFICER_IN_CHARGE)?.email;
+  if (officer) allowed.push(officer);
+  return allowed;
+}
+
+function assertRecipientAllowed(
+  recipients,
+  { testRecipient, variable, label, internalForward = false },
+) {
   if (outboundAllowed()) return;
 
-  const blocked = recipients.filter((address) => !sameAddress(address, testRecipient));
+  const allowed = allowedRecipients(testRecipient, internalForward);
+  const blocked = recipients.filter(
+    (address) => !allowed.some((permitted) => sameAddress(address, permitted)),
+  );
   if (!blocked.length) return;
 
-  throw new Error(
-    `${label} refused to send to ${blocked.join(', ')}. ` +
-      `Outbound mail is confined to ${variable} until NIC_ALLOW_OUTBOUND=true.`,
+  const confinement =
+    allowed.length > 1
+      ? `${variable} and OFFICER_IN_CHARGE_EMAIL`
+      : internalForward
+        ? `${variable} (set NIC_ALLOW_INTERNAL_FORWARD=true to also allow OFFICER_IN_CHARGE_EMAIL)`
+        : variable;
+
+  throw Object.assign(
+    new Error(
+      `${label} refused to send to ${blocked.join(', ')}. ` +
+        `Outbound mail is confined to ${confinement} until NIC_ALLOW_OUTBOUND=true.`,
+    ),
+    { configuration: true },
   );
 }
 
-export { outboundAllowed, assertRecipientAllowed };
+export { outboundAllowed, internalForwardAllowed, assertRecipientAllowed };

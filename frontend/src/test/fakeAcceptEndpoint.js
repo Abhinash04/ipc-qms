@@ -1,20 +1,3 @@
-/**
- * An in-process stand-in for `POST /mailbox/messages/:id/accept`.
- *
- * Accepting is one server call now: it mints the Case ID, creates the case,
- * records the ACCEPTED decision, acknowledges whoever wrote in and forwards to
- * the Officer-in-Charge. None of that can be proven from jsdom — it happens in
- * MongoDB, and `backend/src/test/acceptMessage.test.js` is where those rules
- * are asserted. What a frontend test can still prove is the client half: the
- * endpoint is called once per message, carrying that message, and the UI
- * reports back exactly what the server answered. This is the server that half
- * talks to.
- *
- * It writes the case through `fakeQueryApi` rather than into the store, because
- * `acceptMailboxMessage` re-reads `GET /queries` after a created case instead of
- * reconstructing it locally — anything seeded elsewhere is discarded by that
- * refresh.
- */
 
 import { persistQueryTransition } from '@/test/fakeQueryApi';
 import { buildSeedState } from '@/constants/mockDomain';
@@ -25,7 +8,6 @@ import { ROLES } from '@/constants/roles';
 
 const pad = (n) => String(n).padStart(5, '0');
 
-/** `Name <addr>` or a bare address → the address, as the server parses it. */
 const addressOf = (header) =>
   (String(header || '').match(/<([^>]+)>/)?.[1] ?? String(header || '')).trim();
 
@@ -111,14 +93,10 @@ async function writeCase({ queryId, sequence, mailboxMessageId, message, acknowl
       subject,
       description: message.body || '',
       source: 'Email',
-      // Whoever wrote in, read off the From header. No lookup, no configured
-      // inquirer address — that is the whole point of the server-side accept.
       inquirer: { id: null, name: nameOf(message.from), email: senderEmail },
       category: null,
       priority: PRIORITY.NORMAL,
       businessStatus: BUSINESS_STATUS.IN_PROGRESS,
-      // A forward that failed leaves the case exactly where the manual
-      // "Forward to Officer-in-Charge" button acts on it.
       workflowState: forwarded
         ? WORKFLOW_STATE.PENDING_ASSIGNMENT
         : WORKFLOW_STATE.FRONT_OFFICE_VERIFICATION,
@@ -133,8 +111,6 @@ async function writeCase({ queryId, sequence, mailboxMessageId, message, acknowl
     },
     addThreads: [{ threadId, queryId, subject, createdAt: receivedAt }],
     addMessages: messages,
-    // The in-app half of the forward: the case is at PENDING_ASSIGNMENT, and
-    // the Officer-in-Charge's queue has to say so.
     ...(forwarded
       ? {
           notification: {
@@ -146,9 +122,6 @@ async function writeCase({ queryId, sequence, mailboxMessageId, message, acknowl
           },
         }
       : {}),
-    // Server and client share one counter document, so the store must come back
-    // from the refresh knowing which ids are already spent — otherwise the next
-    // client-minted message id collides with the one written here.
     counters: { ...buildSeedState().counters, QRY: sequence, THREAD: sequence, MSG: sequence },
   });
 
@@ -166,15 +139,6 @@ async function writeCase({ queryId, sequence, mailboxMessageId, message, acknowl
   }
 }
 
-/**
- * Build one accept endpoint.
- *
- * `acknowledged` and `forwarded` are the two steps that can fail on their own
- * without losing the case; `errors` is what the server reports about them. The
- * returned function is safe to call twice with the same id — the second call is
- * answered from the decision already stored, which is what makes the real
- * endpoint safe to retry.
- */
 export function fakeAcceptEndpoint({ acknowledged = true, forwarded = true, errors = [] } = {}) {
   const issued = new Map();
   let minted = 0;

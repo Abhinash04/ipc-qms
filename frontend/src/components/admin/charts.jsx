@@ -1,23 +1,7 @@
 import { CHART_SERIES, CHART_SINGLE, CHART_TRACK, CHART_GRID } from '@/constants/chartPalette';
 
-/**
- * Small, dependency-free charts.
- *
- * Hand-rolled SVG/CSS rather than a charting library: three simple forms did
- * not justify a new runtime dependency, and the shapes here are a few lines of
- * geometry each.
- *
- * Every series is direct-labelled and legended — identity is never carried by
- * colour alone, which the validated palette explicitly requires.
- */
-
 const nf = new Intl.NumberFormat();
 
-/**
- * Composition of a whole. Direct labels and a 2px gap between arcs are not
- * decoration — they are the secondary encoding that makes the purple/green
- * pair legible to a deuteranopic reader.
- */
 export function StatusDonut({ data, title, emptyText = 'No data yet' }) {
   const total = data.reduce((sum, d) => sum + d.value, 0);
 
@@ -36,11 +20,8 @@ export function StatusDonut({ data, title, emptyText = 'No data yet' }) {
   const stroke = 22;
   const radius = (size - stroke) / 2;
   const circumference = 2 * Math.PI * radius;
-  // A 2px visual gap between neighbouring arcs, expressed in path units.
   const gap = 2;
 
-  // Cumulative start angle per slice, computed up front rather than mutated
-  // during the render pass.
   const starts = [];
   let runningLength = 0;
   for (const slice of data) {
@@ -89,8 +70,6 @@ export function StatusDonut({ data, title, emptyText = 'No data yet' }) {
           </text>
         </svg>
 
-        {/* The legend is mandatory at two or more series, and each row carries
-            its own number so the reading never depends on matching a hue. */}
         <ul className="m-0 min-w-40 flex-1 space-y-1.5 p-0">
           {data.map((slice, index) => (
             <li key={slice.label} className="flex items-center gap-2 text-[12.5px]">
@@ -112,7 +91,6 @@ export function StatusDonut({ data, title, emptyText = 'No data yet' }) {
   );
 }
 
-/** Magnitude over time. One measure, one hue, so no legend is needed. */
 export function VolumeBars({ data, title, emptyText = 'No activity recorded yet' }) {
   const max = Math.max(...data.map((d) => d.value), 0);
 
@@ -149,13 +127,6 @@ export function VolumeBars({ data, title, emptyText = 'No activity recorded yet'
   );
 }
 
-/**
- * Change over time. One measure, one hue, so no legend — the axis and the
- * point markers carry the reading.
- *
- * Takes the same `[{label, value}]` shape as VolumeBars, so either can render
- * the same series.
- */
 export function TrendLine({ data, title, emptyText = 'No activity recorded yet' }) {
   const max = Math.max(...data.map((d) => d.value), 0);
 
@@ -170,16 +141,12 @@ export function TrendLine({ data, title, emptyText = 'No activity recorded yet' 
     );
   }
 
-  // A viewBox with preserveAspectRatio="none" would distort the stroke, so the
-  // geometry is computed in real units and the svg scales by width only.
   const width = 320;
   const height = 132;
   const padding = { top: 10, right: 8, bottom: 4, left: 30 };
   const plotWidth = width - padding.left - padding.right;
   const plotHeight = height - padding.top - padding.bottom;
 
-  // Round the axis up so the top gridline is a readable number, never the
-  // raw maximum.
   const ceiling = max <= 5 ? 5 : Math.ceil(max / 5) * 5;
   const ticks = [ceiling, Math.round(ceiling / 2), 0];
 
@@ -235,8 +202,6 @@ export function TrendLine({ data, title, emptyText = 'No activity recorded yet' 
         ))}
       </svg>
 
-      {/* Labels sit outside the svg so they inherit the page's font stack and
-          wrap predictably at narrow widths. */}
       <div className="mt-1 flex pl-[9%]">
         {data.map((point) => (
           <span
@@ -251,11 +216,6 @@ export function TrendLine({ data, title, emptyText = 'No activity recorded yet' 
   );
 }
 
-/**
- * Where work accumulates. Stages of one measure, so a single hue with the
- * count and drop-off written on each row — the point is the gap between
- * stages, not the colour.
- */
 export function ProcessingFunnel({ stages, title, emptyText = 'No processing recorded yet' }) {
   const top = stages.length ? stages[0].value : 0;
 

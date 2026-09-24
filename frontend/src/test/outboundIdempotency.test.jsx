@@ -13,24 +13,10 @@ import * as mailboxService from '@/services/api/mailboxService';
 import * as queryCaseService from '@/services/api/queryCaseService';
 import { installFakeCaseMail } from '@/test/fakeCaseMail';
 import { fakeFinalApprovalEndpoint } from '@/test/fakeFinalApprovalEndpoint';
+import { EXTERNAL_INQUIRER as INQUIRER } from '@/test/externalInquirer';
 
 vi.mock('@/services/api/mailboxService');
 
-/**
- * One email per case, however many times it is asked for.
- *
- * A live test sent the same final response to one inquirer three times: the
- * first send hung for twenty-two seconds on a DNS failure, the officer pressed
- * Approve three more times, and every press was allowed through. The server is
- * the guard now — `backend/src/services/email/outbox.js`, pinned by
- * `backend/src/test/outbox.test.js` — and these are the client's share of it:
- * that a button cannot be pressed twice while it is working, that "already
- * sent" and "being sent" are reported as such rather than as failures, and that
- * a send nobody could confirm offers a way to record what happened instead of a
- * retry that could deliver a second copy.
- */
-
-const INQUIRER = findUserById('USR-0001');
 const FRONT_OFFICE = findUserById('USR-0002');
 const OIC = findUserById('USR-0003');
 const OFFICIAL = findUserById('USR-0004');
@@ -59,7 +45,6 @@ function renderAs(user, path) {
   );
 }
 
-/** A case approved and locked, waiting only for the response to go out. */
 async function readyForApproval(id) {
   const { queryId } = s().ingestEmail(enquiry(id), async () => null);
   await s().verifyQuery(queryId, FRONT_OFFICE);
@@ -87,10 +72,6 @@ describe('Approve cannot be pressed twice while it is working', () => {
   it('makes one request however many times it is clicked', async () => {
     const queryId = await readyForApproval();
 
-    /**
-     * A send that takes its time, which is the whole problem: the button stayed
-     * enabled and inviting for as long as the request was open.
-     */
     let release;
     const approve = vi.fn(async (...args) => {
       await new Promise((resolve) => {
@@ -131,8 +112,6 @@ describe('Approve cannot be pressed twice while it is working', () => {
     const queryId = await readyForApproval();
     const approve = vi.fn(fakeFinalApprovalEndpoint({ actor: OIC.name }));
 
-    // Three tabs, or three impatient presses that raced past the button's own
-    // guard. The store keeps one promise per case and hands it to all three.
     const [a, b, c] = await Promise.all([
       s().grantFinalApproval(queryId, OIC, approve),
       s().grantFinalApproval(queryId, OIC, approve),
@@ -151,7 +130,6 @@ describe('Approve cannot be pressed twice while it is working', () => {
 });
 
 describe('what the Dispatch page does with a send that failed', () => {
-  /** The case as final approval leaves it when the send did not go out. */
   const approvedButUnsent = async (id) => {
     const queryId = await readyForApproval(id);
     await s()
@@ -160,7 +138,7 @@ describe('what the Dispatch page does with a send that failed', () => {
         OIC,
         fakeFinalApprovalEndpoint({
           actor: OIC.name,
-          send: () => Promise.reject(new Error('getaddrinfo ENOTFOUND gmail.googleapis.com')),
+          send: () => Promise.reject(new Error('getaddrinfo ENOTFOUND mail.mgovcloud.in')),
         }),
       )
       .catch(() => {});
@@ -186,12 +164,6 @@ describe('what the Dispatch page does with a send that failed', () => {
   it('reports "already sent" as a closed case, not as a failure', async () => {
     const queryId = await approvedButUnsent();
 
-    /**
-     * Two presses that raced: both passed the client's checks, because at the
-     * moment each was made the case really was waiting to be dispatched. Only
-     * the server can break the tie, and it does — the loser is told the email
-     * has already gone rather than sending a second copy.
-     */
     const [first, second] = await Promise.all([
       s().dispatchResponse(queryId, FRONT_OFFICE),
       s().dispatchResponse(queryId, FRONT_OFFICE),
@@ -206,12 +178,6 @@ describe('what the Dispatch page does with a send that failed', () => {
     ).toHaveLength(1);
   });
 
-  /**
-   * The one case a retry must not be offered for. The mailbox was asked to
-   * send and never said whether it had, so pressing "retry" can put a second
-   * copy in the inquirer's inbox. What is offered instead is the pair of
-   * answers a look in the Sent folder produces.
-   */
   describe('a send nobody could confirm', () => {
     const unconfirmed = 'The mailbox did not confirm this send in time.';
 
@@ -261,7 +227,6 @@ describe('what the Dispatch page does with a send that failed', () => {
       renderAs(FRONT_OFFICE, `/front-officer/dispatch/${queryId}`);
       await screen.findByRole('button', { name: /It was not sent/ });
 
-      // The Sent folder was empty, so the send may happen — and does, once.
       installFakeCaseMail(mailboxService);
       vi.mocked(mailboxService.sendResponse).mockClear();
       fireEvent.click(screen.getByRole('button', { name: /It was not sent/ }));
@@ -300,7 +265,6 @@ describe('an acknowledgement nobody could confirm', () => {
         ),
       ).toHaveLength(1),
     );
-    // Recording it is not sending it.
     expect(mailboxService.sendAcknowledgement).toHaveBeenCalledTimes(1);
   });
 });

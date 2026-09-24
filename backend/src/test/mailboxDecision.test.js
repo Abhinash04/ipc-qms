@@ -5,14 +5,6 @@ import { authHeader } from './helpers/auth.js';
 import { ROLES } from '../constants/roles.js';
 import { mailboxDecisionSchema } from '../validators/mailboxSchemas.js';
 
-/**
- * The validation gate between "mail arrived" and "a case exists".
- *
- * The suite runs with DATABASE_URL blank (vitest.config.mjs), so anything that
- * reaches the model answers 503. That is enough to pin what matters at this
- * layer: who may decide, what the schema admits, and that the actor cannot be
- * supplied by the caller.
- */
 const PATH = '/api/v1/mailbox/messages/msg-1/decision';
 const ACCEPT = { decision: 'ACCEPTED', queryId: 'QRY-2026-00001' };
 
@@ -24,7 +16,6 @@ describe('POST /mailbox/messages/:messageId/decision — authorization', () => {
 
   it('is refused to every role except Front Office and Super Admin', async () => {
     const denied = [
-      ROLES.INQUIRER,
       ROLES.OFFICER_IN_CHARGE,
       ROLES.ASSIGNED_OFFICIAL,
       ROLES.REVIEWER,
@@ -47,7 +38,7 @@ describe('GET /mailbox/decisions', () => {
   it('is held to the same roles as the mailbox itself', async () => {
     expect((await request(app).get('/api/v1/mailbox/decisions')).status).toBe(401);
     expect(
-      (await request(app).get('/api/v1/mailbox/decisions').set(authHeader(ROLES.INQUIRER))).status,
+      (await request(app).get('/api/v1/mailbox/decisions').set(authHeader(ROLES.ASSIGNED_OFFICIAL))).status,
     ).toBe(403);
     expect(
       (await request(app).get('/api/v1/mailbox/decisions').set(authHeader(ROLES.FRONT_OFFICE)))
@@ -73,9 +64,6 @@ describe('the decision schema', () => {
   });
 
   it('strips an actor supplied by the caller', () => {
-    // The whole point: a decision whose actor the caller names is a decision
-    // the caller can attribute to someone else. The server fills it from the
-    // session.
     const parsed = mailboxDecisionSchema.parse({
       decision: 'REJECTED',
       reason: 'Advertisement',

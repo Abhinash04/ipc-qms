@@ -30,14 +30,15 @@ The two share no code and no credentials.
   which document holds the mailbox, its accessibility tree, how every entry in the selector
   registry resolves, the mail rows as the agent sees them, and a diagnosis (§12).
 - With `NIC_BROWSER_MAILBOX=true`: **reads** the NICeMail inbox into a second Front Office inbox,
-  and **sends** the acknowledgement and final response for cases that came from that mailbox.
-  A send counts only once it is proven: the compose form has closed and the message is in NICeMail's
-  Sent folder. See [§17](#17-two-front-office-mailboxes).
+  and **sends** all three emails of a case that came from that mailbox — the acknowledgement, the
+  forward to the Officer-in-Charge and the final response. A send counts only once it is proven: the
+  compose form has closed and the message is in NICeMail's Sent folder. See
+  [§17](#17-two-front-office-mailboxes).
 
 There is no separate agent process to start. The backend runs the agent on demand, only when the
-NICeMail Front Officer's inbox is polled or a case from that mailbox sends its acknowledgement or
-final response — whoever triggers the send. The agent's modules are imported at that point, never
-at boot. Browser work is serialised: one read or send at a time.
+NICeMail Front Officer's inbox is polled or a case from that mailbox sends one of its emails —
+whoever triggers the send. The agent's modules are imported at that point, never at boot. Browser
+work is serialised: one read or send at a time.
 
 ## 2. Architecture
 
@@ -186,7 +187,9 @@ cd backend
 Copy-Item .env.example .env     # skip if .env already exists
 ```
 
-The backend itself also needs `JWT_SECRET` and `QMS_SEED_PASSWORD` to start (see
+The backend itself also needs `JWT_SECRET` and a credential for every account — its entry in
+`QMS_PASSWORDS_FILE`, or `QMS_PASSWORD_<USER_ID>` — to start. `QMS_SEED_PASSWORD` is required only
+when the shared-password mode is explicitly on, which it must not be in production (see
 [backend/README.md](../backend/README.md)). The browser agent does not.
 
 Browser-agent variables. All are optional, and the defaults come from
@@ -200,6 +203,7 @@ Browser-agent variables. All are optional, and the defaults come from
 | `NIC_WEBMAIL_APP_URL` | `https://mail.mgovcloud.in/zm/` | The URL the agent opens in **its own** background tab. Not the operator's URL: on the workplace front door the mail UI is a cross-origin iframe with a debugging target of its own, which one session cannot drive; this URL serves the same mailbox as a single top-level document | yes |
 | `NIC_BROWSER_TIMEOUT_MS` | `20000` | The CDP connect, loading the work tab, and every wait inside a read or send — including how long a send waits for the compose form to close before it is reported **unconfirmed** (§17) | yes |
 | `NIC_BROWSER_TEST_RECIPIENT` | falls back to `NIC_TEST_RECIPIENT`, then `NIC_EMAIL` | The only address browser sends may reach until `NIC_ALLOW_OUTBOUND=true` | yes |
+| `NIC_ALLOW_INTERNAL_FORWARD` | `false` | `true` additionally allows `OFFICER_IN_CHARGE_EMAIL`, for the forward to the Officer-in-Charge alone, while `NIC_ALLOW_OUTBOUND` is still closed. A recipient allowance, not a second channel: the address is re-derived from configuration, never taken from a request. Read by `nic/outboundGuard.js`, and it requires a real `OFFICER_IN_CHARGE_EMAIL` at boot | yes |
 | `NIC_BROWSER_MAILBOX` | `false` | `true` makes NICeMail a second Front Office mailbox (§17). Only the exact string `true` enables it | yes |
 | `NIC_FRONT_OFFICE_NAME` | `NICeMail Front Office` | A display **name**, not an address: the second Front Office user's name and the name on the From line of its mail. Empty falls back to the default | yes |
 | `NIC_BROWSER_SYNC_TTL_MS` | `30000` | Minimum gap between inbox syncs | yes |
@@ -211,7 +215,13 @@ one.
 
 With `NIC_BROWSER_MAILBOX=true`, `NIC_EMAIL` is required and must differ from `FRONT_OFFICE_EMAIL`;
 the backend refuses to start otherwise. `NIC_ALLOW_OUTBOUND` (the IMAP/SMTP block's interlock) also
-governs browser sends.
+governs browser sends, and `NIC_ALLOW_INTERNAL_FORWARD` is the one allowance inside it — without it,
+intake of a NICeMail case stops at the forward while the interlock is closed.
+
+That allowance exists on the **browser channel only**. `transports/nicTransport.js` runs its own
+recipient check against `NIC_TEST_RECIPIENT` alone and never consults
+`NIC_ALLOW_INTERNAL_FORWARD`, so under `EMAIL_TRANSPORT=nic` with the interlock closed the forward is
+refused whatever that variable says.
 
 The backend test suite does not read these from your `.env`: `backend/vitest.config.mjs` pins every
 `NIC_BROWSER_*` variable, `NIC_FRONT_OFFICE_NAME`, the `NIC_WEBMAIL_*` patterns and
@@ -317,6 +327,53 @@ tab afterwards. Reading a message marks it read in Zoho, so every message that w
 agent opened it is marked unread again before the tab closes. If that tab lands on anything that looks like a sign-in step, the work stops with
 `NICeMail session expired. Please authenticate again in Chrome.` before any field is touched. The only
 things it types are the To/Cc/Subject/body of an outgoing case email.
+
+### The agent tab's lifecycle, and why it is tracked
+
+One tab per unit of work, opened at `about:blank`, navigated to the app URL, and closed again. It is
+not pooled: a fresh tab is a clean slate, and a half-filled compose form left over from a failed send
+is how the wrong text would go out.
+
+Closing it is best effort — it talks to a browser that may already be gone — so "we closed it" and
+"it is closed" are different facts, and the difference is held in a registry of target ids
+(`session.js`). Three things follow from that:
+
+- **A tab that would not close is closed before the next unit**, not left for the operator. The
+  sweep runs at the start of each unit, which is the one moment the agent is certainly connected and
+  certainly not mid-operation.
+- **A `Target.createTarget` that times out is adopted.** The request is bounded like every other and a
+  late answer is dropped, but Chrome may have made the tab anyway — so the target list is diffed
+  around the call and the id recovered. Before this it was lost, and the tab stayed open for the rest
+  of the session, once per failed sync.
+- **The agent's own tabs are excluded when it looks for your signed-in one.** A leaked agent tab sits
+  on the mail app's own host and scores *identically* to the operator's real tab: both earn the host
+  and title points, and neither earns the path bonus, because both put the mailbox route in the URL
+  hash. A tie breaks on Chrome's enumeration order, so without the exclusion the agent could take a
+  leaked — possibly discarded — tab as the proof of session and read its browser context.
+
+That last one is what made the final response fail while the acknowledgement and the forward
+succeeded. Chrome discards hidden background tabs, and a discarded tab answers CDP exactly as a
+healthy one does until an evaluate silently never returns. The response is simply the last of a case's
+three sends and ran against the most-degraded browser. Symptom:
+
+```
+RESPONSE RESULT  stage="open_browser_tab"
+    error="CDP Runtime.evaluate did not answer within 19719ms"
+```
+
+A value *below* `NIC_BROWSER_TIMEOUT_MS` and not a round number is the signature of a `waitFor`: it
+computes one deadline and gives each poll what is left of it, so `19719` means the page answered one
+poll quickly and then stopped answering for the whole remainder.
+
+**Recovery.** A tab that never renders the mailbox is discarded and the unit gets **one** fresh tab.
+That retry covers the setup only — opening a tab and loading the mailbox, which sends nothing. It is
+gated on whether the work had been entered, so a send that failed halfway is never attempted twice:
+from `click_send` onwards the message may already have gone.
+
+**A sync gives way to a send.** One sync of `NIC_BROWSER_SYNC_MAX` messages was measured at 91 s
+against the live mailbox, and it holds the single serialised session throughout. A sync will not start
+while browser work is pending, and one already running stops between messages; `remaining` reports
+what it left, and the next poll continues. A send is a person waiting.
 
 ## 10. How the Agent Connects (`attach.js`)
 
@@ -768,8 +825,8 @@ means the form stayed open with a dialog over it. The backend log has the full
 
 The dispatch is recorded `UNCERTAIN` in `outboundemails`, and that state **blocks the retry**: a
 retry could put a second copy in the recipient's inbox, which is the one outcome worse than the
-email not arriving. NICeMail cannot be searched the way Gmail's Sent folder can, so the answer has
-to come from a person.
+email not arriving. No channel here can search its own Sent folder for a message it may have sent,
+so the answer has to come from a person.
 
 1. Open the **Sent** folder in the dedicated Chrome and look for the message.
 2. **If it is there**, press **It was sent**. The QMS records the email exactly as a successful send
@@ -801,6 +858,11 @@ pair. Neither offers a plain retry while the dispatch is `UNCERTAIN`.
 The outbound interlock refused before the browser was touched; nothing was sent. Browser sends are
 confined to `NIC_BROWSER_TEST_RECIPIENT` until `NIC_ALLOW_OUTBOUND=true`. Expected while testing
 with any other inquirer address.
+
+The forward to the Officer-in-Charge is refused the same way, and the error names the allowance: set
+`NIC_ALLOW_INTERNAL_FORWARD=true` to open exactly `OFFICER_IN_CHARGE_EMAIL` alongside the test
+recipient. A refused forward leaves the case at `FRONT_OFFICE_VERIFICATION`, which is what
+`POST /emails/forward` acts on once the variable is set.
 
 ### `NICeMail session expired. Please authenticate again in Chrome.`
 
@@ -834,22 +896,32 @@ With `NIC_BROWSER_MAILBOX=true` a QMS account can read the live mailbox and make
 
 - **The NICeMail Front Office signs in with a password.** `POST /auth/dev-login` refuses that account
   with **403** (`This account reads a live NICeMail mailbox. Sign in with a password.`) and audits the
-  attempt as `LOGIN_FAILED` / `denied`. It signs in through `POST /auth/login` with
-  `QMS_SEED_PASSWORD`.
+  attempt as `LOGIN_FAILED` / `denied`. It signs in through `POST /auth/login` with its own
+  credential — its entry in `QMS_PASSWORDS_FILE`, or `QMS_PASSWORD_USR_0014`.
 - **Dev login remains open for every other seeded account.** It answers whenever
   `NODE_ENV=development` — the default when `NODE_ENV` is unset — and the backend listens on all
   interfaces, so anyone who can reach the port can sign in without a password as any other seeded
-  user. That includes the primary Front Office, whose inbox is a real Gmail account under
-  `MAILBOX_SOURCE=gmail`. This development-mode exposure pre-dates the NICeMail mailbox and is not
-  fixed: do not run a development-mode backend where untrusted hosts can reach it.
+  user. That includes the primary Front Office, whose inbox is whatever `MAILBOX_SOURCE` selects —
+  a real mailbox, read over IMAP, under `MAILBOX_SOURCE=nic`. This development-mode exposure
+  pre-dates the NICeMail mailbox and is not fixed: do not run a development-mode backend where
+  untrusted hosts can reach it.
 - **Outbound mail is confined** to `NIC_BROWSER_TEST_RECIPIENT` until `NIC_ALLOW_OUTBOUND=true` —
-  the same two-key interlock as NIC SMTP.
-- **What the official mailbox sends is not locked to the case.** `POST /queries/persist` has no role
-  or case check, so any signed-in role can edit a case's inquirer and its response text — which, for
-  a NICeMail case, decide what the `.gov.in` mailbox sends and to whom. The retry endpoints,
-  `POST /emails/acknowledgement` and `POST /emails/response`, take the mailbox from the stored case
-  but the recipient — and for a response, the subject, body and attachments — from the request body;
-  they are limited to Front Office and Super Admin. Both pre-date the NICeMail mailbox.
+  the same two-key interlock as NIC SMTP, with `NIC_ALLOW_INTERNAL_FORWARD` the one allowance inside
+  it, for the forward to the Officer-in-Charge alone.
+- **What the official mailbox sends is not locked to the case.** `POST /queries/persist` is guarded by
+  `middleware/authorizeCaseDelta.js`, but that bounds *which* cases a principal reaches, not what it
+  may write inside one — and for the Front Office, Officer-in-Charge, Admin and Super Admin it bounds
+  nothing at all, because those four see every case. So any of them, and any scoped role party to the
+  case, can edit its inquirer and its response text, which for a NICeMail case decide what the
+  `.gov.in` mailbox sends and to whom.
+- **The retry endpoints take the body only when MongoDB is down.** With a database connected,
+  `POST /emails/acknowledgement` and `POST /emails/response` pass straight to `caseMail` and read
+  nothing from the request but `queryId` — recipient, subject, body and attachments all come from the
+  stored case, and the send goes through the at-most-once ledger. Without a database they fall back to
+  a path that does take the recipient, subject, body and attachments from the request and has no
+  ledger behind it. That fallback cannot apply to a NICeMail case, which needs the stored
+  `sourceMailbox` to route at all, but it is why the endpoints are limited to Front Office and Super
+  Admin.
 - **Mailbox isolation does not cover accept or the decision routes** — see §17, open items.
 
 ## 15. Production Considerations
@@ -905,8 +977,8 @@ With `NIC_BROWSER_MAILBOX=true`, IPC-QMS runs two Front Office mailboxes at once
 **same** workflow:
 
 ```text
-Gmail mailbox (FRONT_OFFICE_EMAIL)            NICeMail mailbox (NIC_EMAIL)
-   │ gmailInboxReader (MAILBOX_SOURCE)           │ browser agent → raw CDP (cdp.js)
+Primary mailbox (FRONT_OFFICE_EMAIL)          NICeMail mailbox (NIC_EMAIL)
+   │ MAILBOX_SOURCE: auto (Mongo) or nic (IMAP)  │ browser agent → raw CDP (cdp.js)
    │                                             │ nicBrowserMailbox: stored in MongoDB, once
    ↓                                             ↓
  FRONT_OFFICE_* user's inbox                  NICeMail Front Office user's inbox
@@ -915,24 +987,25 @@ Gmail mailbox (FRONT_OFFICE_EMAIL)            NICeMail mailbox (NIC_EMAIL)
       Case + Case ID → MongoDB → AI summary → ACK → forward to OIC → … → final response → CLOSED
 ```
 
-| | Gmail case | NICeMail case |
+| | Primary-mailbox case | NICeMail case |
 |---|---|---|
 | Inbox shown to | the `FRONT_OFFICE_EMAIL` user | the user who signs in as `NIC_EMAIL` |
 | Inquirer | the incoming `From` | the incoming `From` |
-| Case field `sourceMailbox` | `{ source: 'gmail', … }` | `{ source: 'nic-browser', address: NIC_EMAIL }` |
-| Acknowledgement / final response | `EMAIL_TRANSPORT` (Gmail) | NICeMail browser session |
+| Case field `sourceMailbox` | `{ source: 'mongo' / 'in-memory' / 'nic', … }` | `{ source: 'nic-browser', address: NIC_EMAIL }` |
+| Acknowledgement / final response | `EMAIL_TRANSPORT` | NICeMail browser session |
 | Their retries from the case / Dispatch page | `EMAIL_TRANSPORT` | NICeMail browser session |
-| Forward to Officer-in-Charge | `EMAIL_TRANSPORT` | `EMAIL_TRANSPORT` (internal, unchanged) |
+| Forward to Officer-in-Charge | `EMAIL_TRANSPORT` | NICeMail browser session |
 
 - **Routing is by mailbox, not sender.** Whatever arrives in the NICeMail mailbox belongs to the
   user whose sign-in address is `NIC_EMAIL`, and that user cannot be pointed at another mailbox.
   Case lists stay shared, as before.
 - **The case remembers its mailbox.** `sourceMailbox` is written by the server at accept, from the
   signed-in user's mailbox — never from the request — and `POST /queries/persist` cannot change or
-  clear it. The acknowledgement, the final response and their retries (`POST /emails/acknowledgement`,
-  and `POST /emails/response` with its optional `queryId`, which the client sends) all read it from
-  the stored case, so a NICeMail case is answered from NICeMail whichever user triggers the send. A
-  case with no `sourceMailbox` — portal-raised, or older than the field — uses `EMAIL_TRANSPORT`.
+  clear it. All three of a case's emails read it from the stored case, retries included
+  (`POST /emails/acknowledgement`, and `POST /emails/response` with its optional `queryId`, which the
+  client sends), so a NICeMail case is answered from NICeMail whichever user triggers the send. A
+  case with no `sourceMailbox` — older than the field — uses `EMAIL_TRANSPORT`. The rule itself is
+  in [backend/README.md, *Which channel a case's mail goes out through*](../backend/README.md#which-channel-a-cases-mail-goes-out-through).
 - **Division of work.** The agent only reads mail and hands back plain message data, or types and
   sends one message it is given. Validation, case creation, the Case ID, AI summary, the workflow
   and closure all stay in the QMS, unchanged.
@@ -941,7 +1014,8 @@ Gmail mailbox (FRONT_OFFICE_EMAIL)            NICeMail mailbox (NIC_EMAIL)
   container (`zm_Container_m<id>`) carry, measured live. A row whose id is not such an id is skipped,
   never hashed. The index is unique and the writes insert-only. However often the inbox is polled, a
   message is stored once. A message the Front Office already ingested or removed is never reset or
-  brought back while its stored row exists. Accepting it twice reuses the same case, as for Gmail.
+  brought back while its stored row exists. Accepting it twice reuses the same case, as it does for
+  the primary mailbox.
 - **When reading happens.** The NICeMail Front Officer's inbox poll (every 30 s) starts a background
   sync at most every `NIC_BROWSER_SYNC_TTL_MS`; nobody signed in as that user, no sync. **Sync now**
   on the IPC Mailbox page (`POST /mailbox/sync`) starts one at once, unless one is running or the
@@ -958,8 +1032,9 @@ Gmail mailbox (FRONT_OFFICE_EMAIL)            NICeMail mailbox (NIC_EMAIL)
   became with that case's status. Opening it marks it read **in the QMS only**; NICeMail's own read
   state is never touched.
 - **Sending guard.** Browser sends are confined to `NIC_BROWSER_TEST_RECIPIENT` until
-  `NIC_ALLOW_OUTBOUND=true`, the same two-key interlock as NIC SMTP. The transport refuses Bcc rather
-  than dropping it. A send that fails before Send is pressed — a refused recipient, an uncalibrated
+  `NIC_ALLOW_OUTBOUND=true`, the same two-key interlock as NIC SMTP; `NIC_ALLOW_INTERNAL_FORWARD=true`
+  opens exactly `OFFICER_IN_CHARGE_EMAIL` inside it, for the forward alone. The transport refuses Bcc
+  rather than dropping it. A send that fails before Send is pressed — a refused recipient, an uncalibrated
   control, a selector not found — has sent nothing: the ACK stays unsent (✓ again, or the case
   page's retry) or the case stays at `READY_FOR_DISPATCH`, never falsely closed.
 - **What is checked before Send** (`composeEmail`, `browser/sendMail.js`). Before a tab is opened:
@@ -1055,12 +1130,11 @@ Gmail mailbox (FRONT_OFFICE_EMAIL)            NICeMail mailbox (NIC_EMAIL)
   page replace their retry buttons with **It was sent** / **It was not sent — send it**, which
   settle the dispatch through `POST /queries/:queryId/outbound/resolve` and are audited as
   `EMAIL_DELIVERY_CONFIRMED` / `EMAIL_DELIVERY_DENIED`. What to do: §13.
-- **NICeMail cannot be reconciled automatically; Gmail can.** A Gmail `UNCERTAIN` dispatch is
-  checked against the Sent folder before anyone is asked — `in:sent rfc822msgid:<id>`, with a
-  recipient-and-date fallback compared on the exact `Subject` and `Message-ID` — and settles itself
-  where the answer is unambiguous. For NICeMail the agent looks in Sent once, straight after pressing
-  Send; once a dispatch is `UNCERTAIN` nothing looks again, so the human answer is the mechanism, not
-  a fallback.
+- **No `UNCERTAIN` dispatch settles itself.** The outbox asks the case's channel on every uncertain
+  send (`emailService.reconcileDelivery`) and every channel answers `UNKNOWN`: the legacy Gmail
+  transport's Sent-folder search was the only implementation of `reconcile` that ever existed. The
+  agent looks in Sent once, straight after pressing Send; once a dispatch is `UNCERTAIN` nothing
+  looks again, so the human answer is the mechanism, not a fallback.
 
 ### How a sync reads the inbox
 
@@ -1260,6 +1334,7 @@ NIC_EMAIL=contact.ecoclubs-edu@gov.in       # the mailbox, and the second Front 
 NIC_FRONT_OFFICE_NAME=Eco-Clubs Front Office
 NIC_BROWSER_TEST_RECIPIENT=<your test inquirer address>
 NIC_ALLOW_OUTBOUND=false                    # true only when real inquirers may be answered
+NIC_ALLOW_INTERNAL_FORWARD=false            # true also allows the forward to OFFICER_IN_CHARGE_EMAIL
 ```
 
 `NIC_EMAIL` must differ from `FRONT_OFFICE_EMAIL` (the backend refuses to start otherwise), and
@@ -1268,27 +1343,28 @@ that account in the dedicated Chrome — see §15 for what else follows `NIC_EMA
 
 ### Testing both paths
 
-**Test 1 — Gmail.** From an external address, mail `FRONT_OFFICE_EMAIL`. Sign in as the
-`FRONT_OFFICE_EMAIL` user. The mail is in their inbox and **not** in the NICeMail Front Office's.
-Accept → case, AI summary, ACK from Gmail, forward to OIC → continue the workflow to closure. The
-final response goes from Gmail.
+**Test 1 — the primary mailbox.** From an external address, mail `FRONT_OFFICE_EMAIL`. Sign in as
+the `FRONT_OFFICE_EMAIL` user. The mail is in their inbox and **not** in the NICeMail Front Office's.
+Accept → case, AI summary, ACK through `EMAIL_TRANSPORT`, forward to OIC → continue the workflow to
+closure. The final response goes out the same way.
 
 **Test 2 — NICeMail.** Keep `NIC_ALLOW_OUTBOUND=false` for this test, so the acknowledgement can
 only go to the test inquirer. A backend started before compose was calibrated still refuses the
 acknowledgement with the *never been calibrated* error (§13); restart it.
 1. Close Brave or any other program on port 9222. Start the dedicated Chrome and sign in to NICeMail.
 2. From the test inquirer address (`NIC_BROWSER_TEST_RECIPIENT`), mail `NIC_EMAIL`.
-3. Sign in to IPC-QMS as `NIC_EMAIL` with `QMS_SEED_PASSWORD` (dev login refuses this account). Within
+3. Sign in to IPC-QMS as `NIC_EMAIL` with that account's own credential (dev login refuses it). Within
    about a minute the message appears, or shortly after **Sync now**. Reloading repeatedly shows it
-   once. If the page shows **NICeMail could not be read**, fix what its stage names (§13) before going
+   once. If the page shows **The mailbox could not be read**, fix what its stage names (§13) before going
    on.
 4. Accept → one case with `sourceMailbox.source = 'nic-browser'`. The ACK appears in NICeMail's
    **Sent** folder, addressed to the inquirer, and its `outboundemails` record is `SENT` with that
    Sent row's id as `providerMessageId`. Accepting again sends nothing. The forward to the OIC goes
-   out as before.
+   out through the same NICeMail session, so with `NIC_ALLOW_OUTBOUND=false` it needs
+   `NIC_ALLOW_INTERNAL_FORWARD=true`.
 5. Continue the workflow to final approval. The final response is sent from NICeMail and the case
    closes.
-6. The mail never appears in the Gmail Front Office's inbox.
+6. The mail never appears in the primary Front Office's inbox.
 
 If a toast, banner or notification says a send **may already have been sent**, the send is
 unconfirmed: check NICeMail's **Sent** folder before any retry (§13). A blind retry of a message that
@@ -1335,8 +1411,9 @@ None of these is fixed. Each is a way the NICeMail mailbox can go wrong in opera
   also clears the decisions.
 - **Two concurrent accepts can acknowledge twice.** Both can pass the "already acknowledged?" check
   before either records one — the browser queue makes that window long — and both send.
-- **Any signed-in role can edit a case's inquirer and response text** through `/queries/persist`.
+- **Any role party to a case can edit its inquirer and response text** through `/queries/persist`.
+  `authorizeCaseDelta` bounds *which* cases a principal reaches, not what it may write inside one.
   Pre-existing, but for a NICeMail case it decides what the official mailbox sends (§14).
-- **An unconfirmed send cannot be recorded as sent**, and the flag is not stored on the case. After
-  an unconfirmed accept or approval, the case page and Dispatch page still offer a plain retry; only
-  the audit history says the send may have gone out (§13).
+- **An unconfirmed send is a standing human work item.** Nothing settles it: the dispatch sits
+  `UNCERTAIN` in `outboundemails` until somebody looks in the Sent folder and answers through
+  `POST /queries/:queryId/outbound/resolve`, and nothing escalates it on its own (§13).

@@ -15,11 +15,6 @@ const PAGE_SIZE = 50;
 
 const EMPTY = { action: '', actorType: '', result: '', queryId: '', from: '', to: '' };
 
-/**
- * Seeds the filters from the URL, so a link like `?result=failure` from the
- * Administration overview arrives with that filter already applied. Only the
- * known keys are read; anything else in the query string is ignored.
- */
 function filtersFromSearch(searchParams) {
   const seeded = { ...EMPTY };
   for (const key of Object.keys(EMPTY)) {
@@ -29,14 +24,6 @@ function filtersFromSearch(searchParams) {
   return seeded;
 }
 
-/**
- * The Audit & Activity Center — who did what, when, to which query, and what
- * happened afterward.
- *
- * Filtering happens on the server (the API takes the same parameters), so the
- * table is a page of the real collection rather than a filtered slice of
- * whatever happened to be fetched first.
- */
 export function AdminActivityPage() {
   const paths = useRoutePaths();
   const navigate = useNavigate();
@@ -81,7 +68,6 @@ export function AdminActivityPage() {
       />
 
       <div className="rounded-3xl border border-slate-200/80 bg-white p-5 shadow-sm">
-        {/* Filters in one row above the table. */}
         <div className="mb-4 flex flex-wrap items-end gap-2.5">
           <label className="flex flex-col gap-1">
             <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Event</span>

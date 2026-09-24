@@ -28,7 +28,6 @@ vi.mock('@/services/api/mailboxService', () => ({
     transport: 'mock',
     ipcQueryEmail: 'ipc-query-mock@example.com',
     ipcReplyFrom: { email: 'arnd@example.com', name: 'AR&D Division' },
-    inquirer: { email: 'abhinash.pritiraj@gmail.com', name: 'Abhinash Pritiraj' },
   }),
   fetchMailboxMessages: vi.fn().mockResolvedValue({ messages: [] }),
   fetchMailboxMessage: vi.fn().mockResolvedValue(null),
@@ -39,17 +38,18 @@ vi.mock('@/services/api/mailboxService', () => ({
   recordMailboxDecision: vi.fn().mockResolvedValue({ alreadyDecided: false }),
   markMessageIngested: vi.fn().mockResolvedValue({ ingested: true }),
   deleteMailboxMessage: vi.fn().mockResolvedValue({ deleted: true }),
-  sendEnquiry: vi.fn().mockResolvedValue({ providerMessageId: 'mock-msg-1' }),
   sendAcknowledgement: vi.fn().mockResolvedValue({ providerMessageId: 'mock-msg-2' }),
 }));
 
 const USER_FOR_ROLE = Object.fromEntries(
-  ['USR-0001', 'USR-0002', 'USR-0003', 'USR-0004', 'USR-0005', 'USR-0007', 'USR-0008']
+  ['USR-0002', 'USR-0003', 'USR-0004', 'USR-0005', 'USR-0007', 'USR-0008']
     .map(findUserById)
     .map((user) => [user.role, user]),
 );
 
 const ALL_ROLES = Object.values(ROLES);
+
+const REMOVED_ROLE = 'INQUIRER';
 
 function renderAt(path) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -103,7 +103,6 @@ describe('the route gate agrees with the grant table', () => {
   });
 
   it('refuses a section the role was never granted, even under its own slug', () => {
-    expect(isRouteAllowedForRole(ROLES.INQUIRER, '/inquirer/dispatch')).toBe(false);
     expect(isRouteAllowedForRole(ROLES.REVIEWER, '/reviewer/approvals')).toBe(false);
     expect(isRouteAllowedForRole(ROLES.FRONT_OFFICE, '/front-officer/drafting')).toBe(false);
   });
@@ -116,6 +115,7 @@ describe('the route gate agrees with the grant table', () => {
 
   it('refuses an unknown role and an unknown path', () => {
     expect(isRouteAllowedForRole('DIRECTOR', '/reviewer/reviews')).toBe(false);
+    expect(isRouteAllowedForRole(REMOVED_ROLE, '/inquirer/queries')).toBe(false);
     expect(isRouteAllowedForRole(ROLES.REVIEWER, '/nonsense')).toBe(false);
   });
 });
@@ -130,25 +130,26 @@ describe('navigation is derived from the grants, never a second list', () => {
     }
   });
 
-  it('offers the inquirer only their own two pages', () => {
-    expect(navItemsForRole(ROLES.INQUIRER).map((i) => i.label)).toEqual([
-      'Dashboard',
-      'Raise Enquiry',
-    ]);
-  });
-
-  it('does not offer Notifications to a role that was never granted it', () => {
-    expect(roleHasSection(ROLES.INQUIRER, SECTION.NOTIFICATIONS)).toBe(false);
-    expect(navItemsForRole(ROLES.INQUIRER).map((i) => i.section)).not.toContain(
-      SECTION.NOTIFICATIONS,
+  it('offers the Reviewer only the sections their grant names', () => {
+    expect(navItemsForRole(ROLES.REVIEWER).map((i) => i.label)).toEqual(
+      sectionsForRole(ROLES.REVIEWER)
+        .filter((section) => SECTIONS[section].nav)
+        .map((section) => SECTIONS[section].label),
     );
   });
 
-  it('offers Raise Enquiry only to the inquirer and Super Admin', () => {
-    const offered = ALL_ROLES.filter((role) =>
-      navItemsForRole(role).some((i) => i.section === SECTION.COMPOSE),
-    );
-    expect(offered.sort()).toEqual([ROLES.INQUIRER, ROLES.SUPER_ADMIN].sort());
+  it('offers nothing to a role the grant table does not name', () => {
+    expect(roleHasSection(REMOVED_ROLE, SECTION.NOTIFICATIONS)).toBe(false);
+    expect(navItemsForRole(REMOVED_ROLE)).toEqual([]);
+  });
+
+  it('offers no Raise Enquiry section to any role, Super Admin included', () => {
+    expect(SECTION.COMPOSE).toBeUndefined();
+    expect(Object.values(SECTIONS).some((section) => section.segment === 'compose')).toBe(false);
+
+    for (const role of ALL_ROLES) {
+      expect(navItemsForRole(role).map((item) => item.label), role).not.toContain('Raise Enquiry');
+    }
   });
 
   it('unknown or missing role gets no navigation at all', () => {
@@ -169,20 +170,17 @@ describe('path resolution', () => {
       '/front-officer/queries/:queryId',
     );
     expect(sectionPath(ROLES.SUPER_ADMIN, SECTION.USERS)).toBe('/super-admin/users');
-    expect(sectionPath(ROLES.INQUIRER, SECTION.COMPOSE)).toBe('/inquirer/compose');
-    expect(sectionPath(ROLES.INQUIRER, SECTION.QUERY_DETAIL)).toBe('/inquirer/queries/:queryId');
+    expect(sectionPath(ROLES.REVIEWER, SECTION.QUERY_DETAIL)).toBe('/reviewer/queries/:queryId');
   });
 
-  it('lets the inquirer open a query detail URL under their own slug only', () => {
-    expect(isRouteAllowedForRole(ROLES.INQUIRER, '/inquirer/queries/QRY-2026-00001')).toBe(true);
-    expect(isRouteAllowedForRole(ROLES.INQUIRER, '/front-officer/queries/QRY-2026-00001')).toBe(
-      false,
-    );
+  it('lets a role open a query detail URL under their own slug only', () => {
+    expect(isRouteAllowedForRole(ROLES.REVIEWER, '/reviewer/queries/QRY-2026-00001')).toBe(true);
+    expect(isRouteAllowedForRole(ROLES.REVIEWER, '/front-officer/queries/QRY-2026-00001')).toBe(false);
   });
 
   it('exposes only granted sections, so an ungranted link cannot be built', () => {
-    const paths = pathsForRole(ROLES.INQUIRER);
-    expect(paths.COMPOSE).toBe('/inquirer/compose');
+    const paths = pathsForRole(ROLES.REVIEWER);
+    expect(paths[SECTION.QUERY_DETAIL]).toBe('/reviewer/queries/:queryId');
     expect(paths[SECTION.DISPATCH]).toBeUndefined();
   });
 

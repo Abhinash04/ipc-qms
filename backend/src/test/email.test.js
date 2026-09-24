@@ -6,6 +6,11 @@ import env, { validateEmailConfig } from '../config/env.js';
 import * as emailService from '../services/email/emailService.js';
 import * as mockTransport from '../services/email/transports/mockTransport.js';
 import * as mailbox from '../services/email/mailbox/index.js';
+const arrive = (subject) =>
+  request(app)
+    .post('/api/v1/mailbox/receive').set(AUTH)
+    .send({ from: 'Ravi Kumar <ravi@pharma.example>', subject, body: 'Body' });
+
 import { buildAcknowledgement, ACKNOWLEDGEMENT_SUBJECT } from '../services/email/templates/acknowledgement.js';
 
 beforeEach(async () => {
@@ -20,23 +25,20 @@ describe('email configuration', () => {
   it('exposes non-secret config only — never OAuth credentials', () => {
     const config = emailService.getEmailConfig();
     expect(config.ipcQueryEmail).toBe('front-office@test.invalid');
-    expect(config.inquirer.email).toBe('inquirer@test.invalid');
     expect(JSON.stringify(config)).not.toMatch(/GMAIL_|client_secret|refresh_token/i);
   });
 
-  it('validates transport selection and Gmail credential completeness', () => {
+  it('validates transport and mailbox selection', () => {
     expect(validateEmailConfig({ ...env, EMAIL_TRANSPORT: 'carrier-pigeon' })).toContainEqual(
       expect.stringContaining('EMAIL_TRANSPORT must be one of'),
     );
 
-    const errors = validateEmailConfig({
-      ...env,
-      EMAIL_TRANSPORT: 'gmail',
-      GMAIL_CLIENT_ID: '',
-      GMAIL_CLIENT_SECRET: '',
-    });
-    expect(errors).toHaveLength(3);
-    expect(errors.join(' ')).toMatch(/GMAIL_CLIENT_ID.*required/);
+    expect(validateEmailConfig({ ...env, EMAIL_TRANSPORT: 'gmail' })).toContainEqual(
+      expect.stringContaining('EMAIL_TRANSPORT must be one of: mock, nic'),
+    );
+    expect(validateEmailConfig({ ...env, MAILBOX_SOURCE: 'gmail' })).toContainEqual(
+      expect.stringContaining('MAILBOX_SOURCE must be one of: auto, nic'),
+    );
 
     expect(validateEmailConfig({ ...env, IPC_QUERY_EMAIL: '' })).toContainEqual(
       expect.stringContaining('IPC_QUERY_EMAIL is required'),
@@ -45,50 +47,84 @@ describe('email configuration', () => {
     expect(validateEmailConfig(env)).toEqual([]);
   });
 
+  describe('production refuses a configuration that cannot really send', () => {
+    afterEach(() => {
+      vi.unstubAllEnvs();
+    });
+
+    const inProduction = (overrides = {}) => {
+      vi.stubEnv('NODE_ENV', 'production');
+      vi.stubEnv('FRONT_OFFICE_EMAIL', 'front.office@ipc.gov.in');
+      vi.stubEnv('OFFICER_IN_CHARGE_EMAIL', 'oic@ipc.gov.in');
+      for (const [key, value] of Object.entries(overrides.envs || {})) vi.stubEnv(key, value);
+      return validateEmailConfig({ ...env, ...overrides.config });
+    };
+
+    it('refuses the mock transport', () => {
+      expect(inProduction({ config: { EMAIL_TRANSPORT: 'mock' } }).join(' ')).toMatch(
+        /records emails as sent without sending them/,
+      );
+    });
+
+    it('requires a real outbound channel', () => {
+      expect(inProduction({ config: { EMAIL_TRANSPORT: 'mock' } }).join(' ')).toMatch(
+        /needs a real outbound channel/,
+      );
+      const withAgent = inProduction({
+        config: { EMAIL_TRANSPORT: 'mock' },
+        envs: { NIC_BROWSER_MAILBOX: 'true', NIC_EMAIL: 'lab@ipc.gov.in', NIC_BROWSER_TEST_RECIPIENT: 'test@ipc.gov.in' },
+      });
+      expect(withAgent.join(' ')).not.toMatch(/needs a real outbound channel/);
+    });
+
+    it('refuses the unroutable placeholder addresses', () => {
+      vi.stubEnv('NODE_ENV', 'production');
+      vi.stubEnv('FRONT_OFFICE_EMAIL', '');
+      vi.stubEnv('OFFICER_IN_CHARGE_EMAIL', 'officer-in-charge-unconfigured@example.com');
+
+      const errors = validateEmailConfig({ ...env, EMAIL_TRANSPORT: 'nic' }).join(' ');
+      expect(errors).toMatch(/FRONT_OFFICE_EMAIL must be a real address/);
+      expect(errors).toMatch(/OFFICER_IN_CHARGE_EMAIL must be a real address/);
+    });
+  });
+
+  it('requires a test recipient while the outbound interlock is closed', () => {
+    vi.stubEnv('NIC_BROWSER_MAILBOX', 'true');
+    vi.stubEnv('NIC_EMAIL', 'lab@ipc.gov.in');
+    vi.stubEnv('NIC_BROWSER_TEST_RECIPIENT', '');
+    vi.stubEnv('NIC_TEST_RECIPIENT', '');
+
+    expect(validateEmailConfig(env).join(' ')).toMatch(/NIC_BROWSER_TEST_RECIPIENT is required/);
+
+    vi.stubEnv('NIC_ALLOW_OUTBOUND', 'true');
+    expect(validateEmailConfig(env).join(' ')).not.toMatch(/NIC_BROWSER_TEST_RECIPIENT is required/);
+    vi.unstubAllEnvs();
+  });
+
+  it('requires a real Officer-in-Charge address before the internal forward may be allowed', () => {
+    vi.stubEnv('NIC_ALLOW_INTERNAL_FORWARD', 'true');
+    vi.stubEnv('OFFICER_IN_CHARGE_EMAIL', 'officer-in-charge-unconfigured@example.com');
+
+    expect(validateEmailConfig(env).join(' ')).toMatch(/NIC_ALLOW_INTERNAL_FORWARD=true requires a real/);
+
+    vi.stubEnv('OFFICER_IN_CHARGE_EMAIL', 'oic@ipc.gov.in');
+    expect(validateEmailConfig(env).join(' ')).not.toMatch(/NIC_ALLOW_INTERNAL_FORWARD/);
+    vi.unstubAllEnvs();
+  });
+
   it('selects the mock transport and never loads Gmail in the test path', async () => {
     expect((await emailService.getTransport()).name).toBe('mock');
     expect((await emailService.getTransport('mock')).name).toBe('mock');
   });
 });
 
-describe('sendEnquiry — sender identity comes from the acting stakeholder', () => {
-  it('sends from the inquirer to the Front Officer', async () => {
-    const result = await emailService.sendEnquiry({
-      subject: 'Clarification on monograph revision',
-      body: 'Please confirm the revised timeline.',
-      timestamp: '2026-08-17T09:00:00.000Z',
-    });
-
-    expect(result.from).toBe('Test Inquirer <inquirer@test.invalid>');
-    expect(result.to).toEqual(['front-office@test.invalid']);
-    expect(result.transport).toBe('mock');
-    expect(result.providerMessageId).toBe('mock-msg-1');
-  });
-
-  it('ignores any attempt to supply an arbitrary "from"', async () => {
-    const result = await emailService.sendEnquiry({
-      from: 'attacker@evil.example',
-      subject: 'Spoof attempt',
-      body: 'x',
-    });
-    expect(result.from).toBe('Test Inquirer <inquirer@test.invalid>');
-  });
-
-  it('delivers the enquiry into the mock IPC mailbox', async () => {
-    await emailService.sendEnquiry({ subject: 'Test enquiry', body: 'Body', timestamp: '2026-08-17T09:00:00.000Z' });
-
-    const messages = await mailbox.list('front-office@test.invalid');
-    expect(messages).toHaveLength(1);
-    expect(messages[0].mailboxMessageId).toBe('MSG-00001');
-    expect(messages[0].subject).toBe('Test enquiry');
-    expect(messages[0].ingested).toBe(false);
-  });
-});
-
 describe('mock mailbox determinism', () => {
+  const deposit = (subject) =>
+    emailService.sendAcknowledgement({ to: 'front-office@test.invalid', queryId: subject });
+
   it('mints sequential ids and resets them, so tests can assert exact values', async () => {
-    await emailService.sendEnquiry({ subject: 'One', body: 'a' });
-    await emailService.sendEnquiry({ subject: 'Two', body: 'b' });
+    await deposit('One');
+    await deposit('Two');
 
     expect((await mailbox.list('front-office@test.invalid')).map((m) => m.mailboxMessageId)).toEqual([
       'MSG-00001',
@@ -96,20 +132,22 @@ describe('mock mailbox determinism', () => {
     ]);
 
     await mockTransport.reset();
-    await emailService.sendEnquiry({ subject: 'After reset', body: 'c' });
+    await deposit('After reset');
     expect((await mailbox.list('front-office@test.invalid'))[0].mailboxMessageId).toBe('MSG-00001');
   });
 
   it('preserves delivery order and supports unreadOnly filtering', async () => {
-    await emailService.sendEnquiry({ subject: 'First', body: 'a' });
-    await emailService.sendEnquiry({ subject: 'Second', body: 'b' });
+    await deposit('First');
+    await deposit('Second');
 
     await mailbox.markIngested('front-office@test.invalid', 'MSG-00001');
 
-    expect((await mailbox.list('front-office@test.invalid')).map((m) => m.subject)).toEqual(['First', 'Second']);
-    expect((await mailbox.list('front-office@test.invalid', { unreadOnly: true })).map((m) => m.subject)).toEqual([
-      'Second',
-    ]);
+    const subjects = (await mailbox.list('front-office@test.invalid')).map((m) => m.subject);
+    expect(subjects[0]).toContain('First');
+    expect(subjects[1]).toContain('Second');
+    const unread = await mailbox.list('front-office@test.invalid', { unreadOnly: true });
+    expect(unread).toHaveLength(1);
+    expect(unread[0].subject).toContain('Second');
   });
 });
 
@@ -141,17 +179,26 @@ describe('email HTTP endpoints', () => {
     expect(res.status).toBe(200);
     expect(res.body.transport).toBe('mock');
     expect(res.body.ipcQueryEmail).toBe('front-office@test.invalid');
-    expect(res.body.inquirer.email).toBe('inquirer@test.invalid');
+    expect(res.body.participants.map((p) => p.role)).toEqual(['FRONT_OFFICE', 'OFFICER_IN_CHARGE']);
   });
 
-  it('POST /emails/enquiry sends and returns the stored message', async () => {
-    const res = await request(app)
-      .post('/api/v1/emails/enquiry').set(AUTH)
-      .send({ subject: 'Monograph query', body: 'Details here', timestamp: '2026-08-17T09:00:00.000Z' });
+  it('GET /emails/config reports the NICeMail channel as well as the transport', async () => {
+    const quiet = await request(app).get('/api/v1/emails/config').set(AUTH);
+    expect(quiet.body).toMatchObject({ nicBrowserMailbox: false, outboundAllowed: false });
 
-    expect(res.status).toBe(201);
-    expect(res.body.from).toBe('Test Inquirer <inquirer@test.invalid>');
-    expect(res.body.to).toEqual(['front-office@test.invalid']);
+    vi.stubEnv('NIC_BROWSER_MAILBOX', 'true');
+    vi.stubEnv('NIC_EMAIL', 'lab@ipc.gov.in');
+    vi.stubEnv('NIC_ALLOW_OUTBOUND', 'true');
+
+    const live = await request(app).get('/api/v1/emails/config').set(AUTH);
+    expect(live.body).toMatchObject({
+      transport: 'mock',
+      nicBrowserMailbox: true,
+      outboundAllowed: true,
+    });
+
+    expect(JSON.stringify(live.body)).not.toMatch(/lab@ipc\.gov\.in/);
+    vi.unstubAllEnvs();
   });
 
   it('POST /emails/acknowledgement sends the acknowledgement', async () => {
@@ -179,18 +226,15 @@ describe('email HTTP endpoints', () => {
   });
 
   it('does not put the acknowledgement back in the IPC inbox — no ingestion loop', async () => {
-    await emailService.sendEnquiry({ subject: 'Loop check', body: 'a' });
+    await arrive('Loop check');
     await request(app)
       .post('/api/v1/emails/acknowledgement').set(AUTH)
       .send({ to: 'inquirer@test.invalid', queryId: 'QRY-2026-00001' });
 
-    // The IPC mailbox still holds only the enquiry; re-polling it can never
-    // register the acknowledgement as a new query.
     const ipcInbox = await mailbox.list('front-office@test.invalid');
     expect(ipcInbox).toHaveLength(1);
     expect(ipcInbox[0].subject).toBe('Loop check');
 
-    // It was delivered to the inquirer instead.
     const inquirerInbox = await mailbox.list('inquirer@test.invalid');
     expect(inquirerInbox).toHaveLength(1);
     expect(inquirerInbox[0].subject).toContain('Acknowledgement of Query Received');
@@ -199,7 +243,7 @@ describe('email HTTP endpoints', () => {
 
 describe('mailbox HTTP endpoints', () => {
   it('lists messages and flags in-memory persistence', async () => {
-    await emailService.sendEnquiry({ subject: 'Listed', body: 'a' });
+    await arrive('Listed');
 
     const res = await request(app).get('/api/v1/mailbox/messages').set(AUTH);
     expect(res.status).toBe(200);
@@ -224,7 +268,7 @@ describe('mailbox HTTP endpoints', () => {
   });
 
   it('marks a message ingested and 404s for an unknown id', async () => {
-    await emailService.sendEnquiry({ subject: 'To ingest', body: 'a' });
+    await arrive('To ingest');
 
     const ok = await request(app).post('/api/v1/mailbox/messages/MSG-00001/ingested').set(AUTH);
     expect(ok.status).toBe(200);
@@ -235,8 +279,8 @@ describe('mailbox HTTP endpoints', () => {
   });
 
   it('deletes a single message and 404s for an unknown id', async () => {
-    await emailService.sendEnquiry({ subject: 'Keep', body: 'a' });
-    await emailService.sendEnquiry({ subject: 'Doomed', body: 'b' });
+    await arrive('Keep');
+    await arrive('Doomed');
 
     const ok = await request(app).delete('/api/v1/mailbox/messages/MSG-00002').set(AUTH);
     expect(ok.status).toBe(200);
@@ -249,13 +293,11 @@ describe('mailbox HTTP endpoints', () => {
 
     const missing = await request(app).delete('/api/v1/mailbox/messages/MSG-99999').set(AUTH);
     expect(missing.status).toBe(404);
-    // Prove the route was actually matched: the catch-all 404 answers with
-    // {error:'Not Found', path}, which would otherwise pass the status check.
     expect(missing.body).toEqual({ error: 'Message not found', messageId: 'MSG-99999' });
   });
 
   it('DELETE /mailbox clears the inbox', async () => {
-    await emailService.sendEnquiry({ subject: 'Doomed', body: 'a' });
+    await arrive('Doomed');
     const res = await request(app).delete('/api/v1/mailbox').set(AUTH);
     expect(res.status).toBe(200);
     expect(res.body.reset).toBe(true);

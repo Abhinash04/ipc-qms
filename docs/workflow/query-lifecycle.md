@@ -21,7 +21,7 @@ year-scoped as `QRY-<year>-#####`.
    summarises the enquiry onto `aiSummary`, sends the acknowledgement to that address, and forwards
    the enquiry — with that same summary in the covering note — to the Officer-in-Charge.
    The case passes through `FRONT_OFFICE_VERIFICATION` and lands at `PENDING_ASSIGNMENT`, and the
-   audit trail reads `QUERY_RECEIVED → QUERY_REGISTERED → AI_SUMMARY_GENERATED →
+   audit trail reads `QUERY_RECEIVED → QUERY_REGISTERED → CASE_ASSOCIATED → AI_SUMMARY_GENERATED →
    ACKNOWLEDGEMENT_SENT → QUERY_FORWARDED`, then `EMAIL_CLASSIFIED` for the decision itself. The
    summary records how it was produced: `status: GENERATED` when the model answered, `FALLBACK`
    when it did not and the deterministic stand-in was used, `FAILED` when the call threw — and only
@@ -58,8 +58,9 @@ year-scoped as `QRY-<year>-#####`.
 10. **Closed** — `businessStatus: CLOSED`, `workflowState: CLOSED`, reached in step 8. The full
     audit trail — every step above — remains attached to the query permanently.
 
-To see this in the running app, email the Front Office mailbox from any address (or use the in-app
-**Raise Enquiry** test harness), accept it as the Front Officer, and work it through as each role in
+To see this in the running app, email the Front Office mailbox from any address — email is the only
+intake channel, and the in-app Raise Enquiry harness that was the other one is gone — accept it as the
+Front Officer, and work it through as each role in
 turn — the accounts are listed in [docs/auth.md](../auth.md). The `/queries/:queryId` detail screen
 builds its timeline, draft-version history and audit log from whatever the case has actually
 accumulated, so it is only as rich as the workflow you have driven.

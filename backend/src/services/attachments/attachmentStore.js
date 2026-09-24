@@ -3,28 +3,12 @@ import fs from 'fs/promises';
 import path from 'path';
 import env from '../../config/env.js';
 
-/**
- * Disk is the single source of truth for attachment bytes. Mongo is optional
- * in this repo (config/db.js falls back to an in-memory mailbox when
- * DATABASE_URL is unset or unreachable), so disk is the only store that works
- * in every configuration and is what can feed real bytes into a Gmail MIME
- * multipart.
- *
- * Each attachment is a pair of files: `<id>.bin` (raw bytes) and `<id>.json`
- * (metadata sidecar). The sidecar means metadata survives a backend restart
- * without a database, the same guarantee the rest of this store gives.
- */
-
 const ID_PATTERN = /^att_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 function root() {
   return env.ATTACHMENT_DIR;
 }
 
-/**
- * The only thing standing between `:attachmentId` and directory traversal —
- * every path built by this module passes through here first.
- */
 function assertValidId(id) {
   if (typeof id !== 'string' || !ID_PATTERN.test(id)) {
     throw Object.assign(new Error(`Invalid attachment id "${id}"`), { status: 400 });
@@ -45,12 +29,6 @@ async function ensureRoot() {
   await fs.mkdir(root(), { recursive: true });
 }
 
-/**
- * Writes bytes + metadata under a caller-supplied id. Idempotent by design —
- * writing the same id twice just overwrites — which is what lets Gmail
- * ingestion derive a deterministic id from (messageId, providerAttachmentId)
- * and re-poll safely without an index.
- */
 async function saveWithId(
   id,
   {
@@ -78,15 +56,6 @@ async function saveWithId(
     queryId,
     providerMessageId,
     providerAttachmentId,
-    /**
-     * Who uploaded it, from the session — never from the request body.
-     *
-     * An attachment can legitimately have no queryId yet: the portal uploads
-     * evidence before the case id exists. `uploadedBy` is what lets
-     * middleware/authorizeAttachmentAccess.js admit the uploader to their own
-     * not-yet-attached file without opening it to everyone. Null for
-     * mail-ingested files, which have no human uploader.
-     */
     uploadedBy,
     createdAt: new Date().toISOString(),
   };
@@ -133,7 +102,6 @@ async function remove(id) {
   await Promise.allSettled([fs.unlink(binPath(id)), fs.unlink(metaPath(id))]);
 }
 
-/** Test-only: wipes the whole store. Never called from production code paths. */
 async function reset() {
   await fs.rm(root(), { recursive: true, force: true });
   await ensureRoot();

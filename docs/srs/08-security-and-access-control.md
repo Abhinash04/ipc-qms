@@ -15,6 +15,15 @@ not implicitly grant workflow actions.
 `verifyRole`/`verifyAction` — and both guards fail closed with 401 if no principal is present, so a
 route mis-wired to omit authentication breaks loudly rather than silently allowing access.
 
+**Case scope, on top of role.** A role allow-list naming every role denies nothing, so membership of
+the case is the substance. `services/authz/caseAccess.js` answers which cases a principal is party
+to — Front Office, Officer-in-Charge, Admin and Super Admin see everything, an Assigned Official and
+a Reviewer only the cases they are on — and `GET /queries` is filtered by it.
+`middleware/authorizeCaseDelta.js` guards `POST /queries/persist` against state as stored *before*
+the delta, and `middleware/authorizeAttachmentAccess.js` resolves an attachment's owning case and
+admits only a principal party to it. All three fail closed with **503** when there is no store,
+because "cannot tell" must never widen to "allowed".
+
 ## 8.2 Authentication
 
 **Implemented.** `POST /api/v1/auth/login` verifies credentials against the seeded directory
@@ -23,20 +32,22 @@ route mis-wired to omit authentication breaks loudly rather than silently allowi
 `Authorization` header is what makes attachment preview work — `<img>`, `<iframe>` and
 `<a download>` cannot carry a header.
 
-The server refuses to start without `JWT_SECRET` (≥32 characters) and `QMS_SEED_PASSWORD`.
-Sign-in answers with one message for an unknown address and a wrong password alike, and runs the
-bcrypt compare even for an unknown email, so neither the response nor its timing enumerates
-accounts.
+The server refuses to start without `JWT_SECRET` (≥32 characters) and a credential for **every**
+seeded account — resolved per account from `QMS_PASSWORDS_FILE` or `QMS_PASSWORD_<USER_ID>`, and the
+boot failure names each account and the variable that would supply it. Sign-in answers with one
+message for an unknown address and a wrong password alike, and runs the bcrypt compare even for an
+unknown email, so neither the response nor its timing enumerates accounts.
 
 **Remaining limitations**, all deliberate and documented:
 
-- **Case-level authorization is absent** — any authenticated user can read any attachment by id,
-  because the server holds no Query Case records to check ownership against.
 - **Workflow-state authorization is half-enforced** — `verifyAction` covers the role half of
   `canPerform(role, action, state)`, not the state half.
 - **No token revocation** — logout clears the cookie, but a copied token stays valid until expiry.
-- **No per-user credentials** — accounts are seeded from source and share one development password.
-  See [docs/auth.md](../auth.md).
+- **The user directory is a source-code constant** — each account has its own credential now, but
+  `backend/src/constants/users.js` cannot be changed without a redeploy, and `models/User.js`'s
+  `active` flag is not read by the auth path. See [docs/auth.md](../auth.md).
+- **`POST /queries/reset` has no production refusal** — it deletes every case in the system, and
+  `verifyRole(SUPER_ADMIN)` is the whole of its protection.
 
 ## 8.3 Data Protection
 
@@ -45,10 +56,13 @@ accounts.
 - Backend responses must not leak stack traces or internal errors in production
   (`NODE_ENV=production` suppresses them — see `backend/src/middleware/errorHandler.js`).
 - Query attachments and drafts are sensitive — access must be scoped to users with a
-  legitimate role in that query's workflow. **This is not yet enforced**: attachment routes require
-  a session and a role, but not a relationship to the case (`middleware/authorizeAttachmentAccess.js`
-  carries the TODO, and the server prints the warning on every boot). Until it lands, do not expose
-  the backend outside a trusted network.
+  legitimate role in that query's workflow. **This is enforced.**
+  `middleware/authorizeAttachmentAccess.js` resolves an attachment's owning case — through the
+  message it arrived on, when the attachment predates the case — and admits only a principal party
+  to it; an attachment with no case yet is readable by its uploader and by the roles that see
+  everything, and by nobody else. What remains unenforced is the workflow-state half of `canPerform`
+  and token revocation, which is why the server still prints a warning on every boot and why this
+  should not be exposed outside a trusted network.
 
 ## 8.4 Open Items
 

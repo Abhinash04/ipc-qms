@@ -4,8 +4,8 @@ import { buildCaseOfficials } from '@/constants/caseOfficials';
 import { STAGE_STATUS } from '@/constants/queryLifecycle';
 import { AUDIT_EVENT, WORKFLOW_STATE } from '@/constants/statusEnums';
 import { findUserById } from '@/constants/mockUsers';
+import { EXTERNAL_INQUIRER as INQUIRER } from '@/test/externalInquirer';
 
-const INQUIRER = findUserById('USR-0001');
 const FRONT_OFFICE = findUserById('USR-0002');
 const OIC = findUserById('USR-0003');
 const OFFICIAL = findUserById('USR-0004');
@@ -77,7 +77,6 @@ describe('status tracks where the case actually is', () => {
 
     expect(byRole(rows, 'Front Office').status).toBe(STAGE_STATUS.CURRENT);
     expect(byRole(rows, 'Officer-in-Charge').status).toBe(STAGE_STATUS.PENDING);
-    // Nobody is assigned yet, so that row is not invented.
     expect(byRole(rows, 'Assigned Official')).toBeUndefined();
   });
 

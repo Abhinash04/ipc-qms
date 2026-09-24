@@ -6,40 +6,8 @@ import { LITERALS, SELECTORS, UNCALIBRATED, describeSpec, entryOf } from './sele
 import { extractOpenMessage, inboxView } from './readInbox.js';
 import { withNicemail } from './session.js';
 
-/**
- * A read-only inspection of the NICeMail session, and a diagnosis of why the
- * agent can or cannot see the mailbox.
- *
- * The question it exists to answer: "the agent cannot find the inbox rows" has
- * several possible causes — the wrong tab, a cross-origin iframe, shadow DOM,
- * a list not rendered yet, a hidden document, drifted selectors — and they
- * need different fixes. So it reports, for every NICeMail document Chrome
- * exposes: its frames and shadow roots, what the accessibility tree and the
- * interactive elements look like, how each registry entry in selectors.js
- * resolves, and the mail rows as the agent sees them; then it names the cause.
- *
- * Measured on the live mailbox: the operator's tab is the Zoho Workplace
- * shell, and the mailbox is a cross-origin iframe with a CDP target of its
- * own. Anything that reads the tab's main page sees the shell and nothing of
- * the mail. The agent is unaffected — it opens the mail app as a top-level
- * document of its own — and the report says which document holds the mail.
- *
- * Against the operator's documents it only reads: Browser.getVersion,
- * Target.getTargets/getBrowserContexts/attachToTarget/detachFromTarget,
- * Runtime.evaluate of the read-only functions below, Page.getFrameTree and
- * Accessibility.getFullAXTree. No navigation, no input, no *.enable, no
- * auto-attach, nothing injected. `agentTab` additionally opens and closes one
- * background tab of its own, exactly as a sync does.
- *
- * Addresses are masked and URL query values dropped unless `showAddresses` —
- * these reports get pasted into chats, and URLs here can carry session ids.
- */
-
 const AX_TIMEOUT_MS = 30000;
-/** Interactive AX roles worth listing by name. */
 const AX_NAMED_ROLES = new Set(['button', 'link', 'treeitem', 'tab', 'menuitem', 'textbox', 'searchbox', 'combobox']);
-/** What must resolve on a mailbox showing its Inbox. Anything else calibrated is
- *  reported but only expected in another state (a message open, a compose form). */
 const EXPECTED_ON_INBOX = [
   'appReady',
   'folderInbox',
@@ -52,9 +20,7 @@ const EXPECTED_ON_INBOX = [
   'listRowSize',
   'previewPane',
 ];
-/** Pop-up controls: absent, or hidden once dismissed, is their normal state. */
 const POPUPS = new Set(['surveyCloseButton', 'followUpSkipButton']);
-/** What must resolve while a compose form is open: every control composeEmail uses. */
 const EXPECTED_ON_COMPOSE = [
   'fromAddress',
   'toInput',
@@ -66,12 +32,9 @@ const EXPECTED_ON_COMPOSE = [
   'discardButton',
 ];
 
-// ── Redaction ────────────────────────────────────────────────────────────────
-
 const EMAIL = /([A-Za-z0-9._%+-])[A-Za-z0-9._%+-]*@([A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+)/g;
 const URL_TEXT = /\bhttps?:\/\/[^\s"'<>]+/g;
 
-/** A URL with its query VALUES removed; the key names stay, they are the useful part. */
 function withoutQueryValues(url) {
   try {
     const parsed = new URL(url);
@@ -82,7 +45,6 @@ function withoutQueryValues(url) {
   }
 }
 
-/** Every string in `value`, with query values dropped and — unless shown — addresses masked. */
 export function redact(value, { showAddresses = false } = {}) {
   if (typeof value === 'string') {
     const stripped = value.replace(URL_TEXT, withoutQueryValues);
@@ -90,7 +52,6 @@ export function redact(value, { showAddresses = false } = {}) {
   }
   if (Array.isArray(value)) return value.map((item) => redact(item, { showAddresses }));
   if (value && typeof value === 'object') {
-    // Keys too: some are built from page text (the row-like census).
     return Object.fromEntries(
       Object.entries(value).map(([key, item]) => [redact(key, { showAddresses }), redact(item, { showAddresses })]),
     );
@@ -98,9 +59,6 @@ export function redact(value, { showAddresses = false } = {}) {
   return value;
 }
 
-// ── Page-side (read-only; each receives pageKit as its second argument) ───────
-
-/** One pass over a document: its shape, its roles, its controls, its classes. */
 export const censusDocument =({ appReady, listRow, maxInventory }, kit) => {
   const { list, crossOrigin } = kit.roots();
 
@@ -137,9 +95,6 @@ export const censusDocument =({ appReady, listRow, maxInventory }, kit) => {
     landmarks.set(`${role}|${name}`, { role, name });
   }
 
-  // Controls, grouped. Inside a mail row every cell repeats once per row, so
-  // those collapse to one line with a count — and their names, which carry
-  // senders and subjects, are left out.
   const INTERACTIVE =
     'button, a[href], input, textarea, select, [contenteditable], [role="button"], [role="link"], ' +
     '[role="textbox"], [role="searchbox"], [role="treeitem"], [role="tab"], [role="menuitem"], ' +
@@ -159,7 +114,6 @@ export const censusDocument =({ appReady, listRow, maxInventory }, kit) => {
     groups.set(key, group);
   }
 
-  // Anything shaped like a list of messages, by the container holding it.
   const rowLike = {};
   for (const element of kit.all('[role="option"], [role="row"], [role="listitem"], article')) {
     const container = element.parentElement?.closest('[role]');
@@ -177,8 +131,6 @@ export const censusDocument =({ appReady, listRow, maxInventory }, kit) => {
     shadowRoots,
     sameOriginFrames,
     crossOriginFrames: crossOrigin,
-    // Deep (through shadow roots and same-origin frames) and in the plain
-    // document: the reader's page code searches only the latter.
     appReady: kit.all(appReady).length,
     appReadyLight: document.querySelectorAll(appReady).length,
     rows: kit.all(listRow).length,
@@ -194,7 +146,6 @@ export const censusDocument =({ appReady, listRow, maxInventory }, kit) => {
   };
 };
 
-/** How every registry entry resolves: with its checks, and raw when nothing passes. */
 const describeRegistry = ({ entries }, kit) =>
   entries.map(([key, entry]) => {
     const checked = kit.resolve(entry);
@@ -211,10 +162,8 @@ const describeRegistry = ({ entries }, kit) =>
     };
   });
 
-/** Null until the list has rows, which is what `waitFor` polls on. */
 const rowsLoaded = ({ listRow }) => document.querySelectorAll(listRow).length || null;
 
-/** What inside an open message looks like an attachment — for calibrating them. */
 const probeAttachments = ({ container }, kit) => {
   const root = document.querySelector(container);
   if (!root) return [];
@@ -224,14 +173,10 @@ const probeAttachments = ({ container }, kit) => {
       ...kit.summary(element),
       classes: [...element.classList].slice(0, 6),
       attributes: [...element.attributes].map((attribute) => attribute.name).slice(0, 12),
-      // Resolved to an absolute URL, so the report's redaction can drop its
-      // query values — a relative "attach.do?…" would slip past it.
       href: element.href || (element.getAttribute('href') ? new URL(element.getAttribute('href'), location.href).href : null),
       text: kit.norm(element.textContent).slice(0, 60),
     }));
 };
-
-// ── Node side ────────────────────────────────────────────────────────────────
 
 function summariseAxTree(nodes) {
   const roles = {};
@@ -253,8 +198,6 @@ const flattenFrames = (node, parentId = null) => [
 
 const firstLine = (error) => String(error?.message || error).split('\n')[0];
 
-/** Registry entries that can be queried as they stand, plus the id builders
- *  filled in with a real message id when there is one. */
 function registryEntries(firstRowId) {
   const entries = Object.entries(SELECTORS)
     .filter(([key, spec]) => typeof spec !== 'function' && !LITERALS.has(key))
@@ -267,7 +210,6 @@ function registryEntries(firstRowId) {
   return entries;
 }
 
-/** What is wrong with one resolved entry, if anything. */
 function registryWarnings(result) {
   const warnings = [];
   const tried = result.tried || [];
@@ -282,7 +224,6 @@ function registryWarnings(result) {
   return warnings;
 }
 
-/** Everything about one document. Read-only; per-part failures are recorded, not thrown. */
 export async function inspectDocument(session, { rows = 5 } = {}) {
   const doc = { errors: [] };
   const attempt = async (part, work) => {
@@ -356,10 +297,6 @@ export async function inspectDocument(session, { rows = 5 } = {}) {
   return doc;
 }
 
-/**
- * The inspection. Seams: `connect` (the CDP client), `attach` (the verdict the
- * agent itself would reach) and `withSession` (the agent's own tab).
- */
 export async function inspectBrowser({
   connect = cdpConnect,
   attach = attachToNicemail,
@@ -422,9 +359,6 @@ export async function inspectBrowser({
 
     if (agentTab) {
       const inspectAgentTab = async (session) => {
-        // The tab has only just loaded, and its list fills a second or more
-        // after the mailbox reports itself ready. Wait as a read does; an empty
-        // folder simply stays empty.
         await session
           .waitFor(rowsLoaded, { timeout: browserConfig.timeoutMs, argument: { listRow: SELECTORS.listRow } })
           .catch(() => {});
@@ -446,14 +380,8 @@ export async function inspectBrowser({
   return redact(report, { showAddresses });
 }
 
-// ── Diagnosis ────────────────────────────────────────────────────────────────
-
 const SEVERITY = { ok: 0, info: 1, warn: 2, fail: 3 };
 
-/**
- * One line per question the operator would ask, worst first in the verdict.
- * Pure: it reads the report and nothing else.
- */
 export function diagnose(report) {
   const checks = [];
   const check = (status, code, message) => checks.push({ status, code, message });
@@ -535,7 +463,6 @@ export function diagnose(report) {
   if (missing.length) {
     check('fail', 'SELECTORS_DRIFTED', `Expected on the Inbox but not found: ${missing.map((result) => result.key).join(', ')}.`);
   }
-  // A form is taken as open when any of its controls resolves; with none, there is nothing to check.
   const form = registry.filter((result) => EXPECTED_ON_COMPOSE.includes(result.key));
   const absent = form.filter((result) => !result.count);
   if (form.length && absent.length === form.length) {
@@ -568,13 +495,10 @@ export function diagnose(report) {
   return done();
 }
 
-// ── Text report ──────────────────────────────────────────────────────────────
-
 const pad = (label, value) => `  ${String(label).padEnd(34)}${value}`;
 const clip = (text, width) => String(text ?? '').replace(/\s+/g, ' ').slice(0, width);
 const MARK = { ok: '✓', info: 'i', warn: '!', fail: '✗' };
 
-/** The report as lines of text, for the terminal. */
 export function formatReport(report) {
   const lines = [];
   const heading = (title) => lines.push('', `── ${title}`);

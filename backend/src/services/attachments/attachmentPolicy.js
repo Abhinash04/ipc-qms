@@ -1,11 +1,5 @@
 import env from '../../config/env.js';
 
-/**
- * One table drives both validations: an upload must have an extension AND a
- * declared mimetype that agree with each other and appear together in some
- * row here. A `.pdf` claiming `application/x-msdownload` is rejected even
- * though `.pdf` alone is allowed — mismatch, not just "unknown type".
- */
 const SUPPORTED_TYPES = [
   { category: 'image', exts: ['png'], mimes: ['image/png'] },
   { category: 'image', exts: ['jpg', 'jpeg'], mimes: ['image/jpeg'] },
@@ -53,8 +47,6 @@ function findRow(ext, mime) {
   );
 }
 
-/** Bytes are read once per request at boot time via env, not cached at import,
- *  to match the rest of the config (identities.js, mailbox/index.js). */
 function limits() {
   return {
     maxFileBytes: env.ATTACHMENT_MAX_FILE_MB * 1024 * 1024,
@@ -63,10 +55,6 @@ function limits() {
   };
 }
 
-/**
- * Validates one file's declared name + mimetype + size against the policy.
- * Returns `{ ok: true }` or `{ ok: false, reason }`.
- */
 function validateFile({ filename, mimeType, size }) {
   const { maxFileBytes } = limits();
   const ext = extensionOf(filename);
@@ -75,17 +63,6 @@ function validateFile({ filename, mimeType, size }) {
   if (!findRow(ext, mimeType)) {
     return { ok: false, reason: `unsupported file type "${ext}" (${mimeType || 'unknown mimetype'})` };
   }
-  /**
-   * An unverifiable size FAILS, rather than skipping the check.
-   *
-   * These two guards used to read `typeof size === 'number'`, so a caller
-   * passing null silently skipped both the empty-file test and the per-file
-   * ceiling — which is exactly what the Gmail ingest path did, leaving the only
-   * route a fully external sender can drive with no size limit at all. Every
-   * caller has the size available (a declared part size, or buffer.length), so
-   * "no size" means a caller forgot to pass it, not that there is nothing to
-   * check.
-   */
   if (!Number.isFinite(size)) return { ok: false, reason: 'file size could not be determined' };
   if (size <= 0) return { ok: false, reason: 'empty file' };
   if (size > maxFileBytes) {
@@ -94,11 +71,6 @@ function validateFile({ filename, mimeType, size }) {
   return { ok: true };
 }
 
-/**
- * Validates a whole upload batch: each file individually, plus file-count and
- * combined-size ceilings. Returns `{ ok, message, errors }` where `errors` is
- * per-file `{ filename, reason }`.
- */
 function validateUpload(files) {
   const { maxTotalBytes, maxFiles } = limits();
   const errors = [];

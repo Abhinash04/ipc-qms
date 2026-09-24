@@ -1,17 +1,10 @@
 /* eslint-disable react-refresh/only-export-components -- test-only module, never served by the dev server */
 import { SECTION } from '@/constants/routeSections';
 
-/**
- * Test-only twin of routeElements.jsx with every page imported eagerly, so
- * suites can drive pages synchronously after render. Aliased in place of
- * routeElements.jsx by the vitest config. Never shipped: only the test
- * environment resolves this module.
- */
 export { MainLayout } from '@/layouts/MainLayout';
 export { LoginPage } from '@/pages/auth/LoginPage';
 
 import { DashboardPage } from '@/pages/dashboard/DashboardPage';
-import { ComposeEnquiryPage } from '@/pages/inquirer/ComposeEnquiryPage';
 import { MailboxInboxPage } from '@/pages/frontOffice/MailboxInboxPage';
 import { MailboxMessagePage } from '@/pages/frontOffice/MailboxMessagePage';
 import { QueriesListPage } from '@/pages/queries/QueriesListPage';
@@ -42,7 +35,6 @@ import { AdminSettingsPage } from '@/pages/admin/AdminSettingsPage';
 
 export const SECTION_ELEMENT = {
   [SECTION.DASHBOARD]: <DashboardPage />,
-  [SECTION.COMPOSE]: <ComposeEnquiryPage />,
   [SECTION.INBOX]: <MailboxInboxPage />,
   [SECTION.INBOX_DETAIL]: <MailboxMessagePage />,
   [SECTION.QUERIES]: <QueriesListPage />,

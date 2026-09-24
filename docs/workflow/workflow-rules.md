@@ -14,13 +14,26 @@ versions, completed review steps, and the audit trail — and must create an aud
 - Whether the workflow continues from its current step after transfer, or restarts a step.
 - Whether a transfer reason is mandatory.
 
-**Status: built, deliberately disabled.** `transferQuery` exists in
-`frontend/src/store/useWorkflowStore.js` and emits `QUERY_TRANSFERRED` (see
-[srs/09-audit-and-compliance.md](../srs/09-audit-and-compliance.md)), but the action is listed in
-`CLARIFICATION_REQUIRED_ACTIONS` (`frontend/src/constants/workflowRules.js`), and `canPerform`
-returns `false` for anything in that list **before** consulting the role table. So no role can
-invoke it and no UI offers it. Removing the entry from that list is the single change that turns it
-on once the questions above are answered.
+**Status: LIVE, with the questions above still open.** Corrected 2026-09-23 — this section said
+"built, deliberately disabled" and that is no longer true.
+
+`transferQuery` is in `frontend/src/store/useWorkflowStore.js`, emits `QUERY_TRANSFERRED` (see
+[srs/09-audit-and-compliance.md](../srs/09-audit-and-compliance.md)), and is **no longer gated**:
+`CLARIFICATION_REQUIRED_ACTIONS` now contains only `DELETE_REVIEW_LEVEL`
+(`frontend/src/constants/workflowRules.js`). `ROLE_ACTIONS` grants TRANSFER to the
+`ASSIGNED_OFFICIAL` and `SUPER_ADMIN`, `ACTION_VALID_STATES` allows it from the working states, and
+`WorkflowActionsCard` renders the control. `transferQuery.test.jsx` exercises the whole flow.
+
+So the mechanics answered themselves in code while the **policy** questions above were left open. The
+rules the implementation currently assumes, which the client has not confirmed:
+
+- only the **currently assigned official** may initiate (the store refuses anyone else);
+- **any** Assigned Official may receive it — there is no division or expertise restriction;
+- the workflow **continues** from its current step; the state stays `ASSIGNED`;
+- a reason **is** mandatory (the store refuses a blank one).
+
+Those four are defaults chosen to make the feature work, not decisions. They still need sign-off, and
+if an answer differs the change is to the store rules rather than to whether the action exists.
 
 ## Pullback
 
@@ -38,10 +51,18 @@ pullback must create an audit event (`QUERY_PULLED_BACK`).
 - Whether a reason is required for pullback.
 - Whether pullback is allowed after final approval has already been granted.
 
-**Status: built, deliberately disabled.** `pullBackQuery` exists in the store and emits
-`QUERY_PULLED_BACK`, and `PULLED_BACK` is a declared `WORKFLOW_STATE`. As with transfer, the action
-sits in `CLARIFICATION_REQUIRED_ACTIONS`, so `canPerform` refuses it for every role and no UI
-exposes it.
+**Status: LIVE, with the questions above still open.** Corrected 2026-09-23 — as with transfer, the
+"deliberately disabled" claim is no longer true.
+
+`pullBackQuery` is in the store, emits `QUERY_PULLED_BACK`, and `PULLED_BACK` is a declared
+`WORKFLOW_STATE`. It is **not** in `CLARIFICATION_REQUIRED_ACTIONS`: `ROLE_ACTIONS` grants PULLBACK to
+`ADMIN` and `SUPER_ADMIN`, `ACTION_VALID_STATES` allows it from **every** state — including after final
+approval, which is one of the open questions above — and `WorkflowActionsCard` renders the control.
+`pullbackQuery.test.jsx` exercises it.
+
+The implementation's current answers to the open questions, none of them confirmed: Admin and Super
+Admin may pull back, from any stage, to any earlier stage the operator picks, with a reason recorded
+in `pullbackHistory`, and completed review decisions are left as they are.
 
 A server-side endpoint also exists — `POST /api/v1/queries/:queryId/pullback`, guarded by
 `verifyAction(PULLBACK)`, which `ROLE_ACTIONS` grants to ADMIN and SUPER_ADMIN. It persists
@@ -64,7 +85,11 @@ check that's too strict/loose). Both are flagged in
 [srs/14-open-questions-and-client-clarifications.md](../srs/14-open-questions-and-client-clarifications.md)
 for explicit client sign-off.
 
-The mechanics were built anyway — they are cheap and the audit-event shape was already settled — but
-gated behind `CLARIFICATION_REQUIRED_ACTIONS` so the *policy* questions stay open. That way the
-client's answers determine who may act and from which states, without the transition logic having to
-be written from scratch afterwards.
+The mechanics were built anyway — they are cheap and the audit-event shape was already settled — and
+were at first gated behind `CLARIFICATION_REQUIRED_ACTIONS` so the *policy* questions stayed open.
+
+**That gate is gone, and the questions are not.** Both actions now ship with defaults chosen by
+whoever implemented them, which is the situation the gate existed to prevent. The defaults are listed
+under each status above so they can be confirmed or corrected as written rather than discovered in
+use. `CLARIFICATION_REQUIRED_ACTIONS` still exists and still holds `DELETE_REVIEW_LEVEL`, so the
+mechanism is available if either action should be closed again pending an answer.

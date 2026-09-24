@@ -8,15 +8,9 @@ import * as mockTransport from '../services/email/transports/mockTransport.js';
 import * as mailbox from '../services/email/mailbox/index.js';
 import {
   identityForRole,
-  identityForEmail,
   publicDirectory,
   IDENTITY_ROLES,
 } from '../config/identities.js';
-import {
-  toMailboxMessage,
-  inboxQuery,
-  isEligibleEnquiry,
-} from '../services/email/mailbox/gmailInboxReader.js';
 
 const ORIGINAL_ENV = { ...process.env };
 
@@ -47,19 +41,10 @@ describe('identity configuration', () => {
     expect(identity.name).toBe('Someone Else');
   });
 
-  it('reports a role as unable to send real mail when it has no token of its own', () => {
-    // Tokens are blank in the test environment.
+  it('publishes only role, name and address', () => {
     for (const identity of publicDirectory()) {
-      expect(identity.canSendReal).toBe(false);
+      expect(Object.keys(identity).sort()).toEqual(['email', 'name', 'role']);
     }
-  });
-
-  it('never exposes a refresh token in the public directory', () => {
-    process.env.GMAIL_REFRESH_TOKEN_FRONT_OFFICE = 'super-secret-token';
-
-    const serialised = JSON.stringify(publicDirectory());
-    expect(serialised).not.toContain('super-secret-token');
-    expect(serialised).not.toMatch(/refreshToken/);
   });
 
   it('returns null for a role with no configured identity', () => {
@@ -68,68 +53,7 @@ describe('identity configuration', () => {
   });
 });
 
-describe('identity resolution when a role holds more than one person', () => {
-  // Address-first resolution is what keeps a role with several holders honest:
-  // the acting user's own address decides whether they can send, never the role.
-  // ASSIGNED_OFFICIAL now holds six mock officials and no real account at all —
-  // it was briefly a real Gmail identity and that was rolled back — so no
-  // address on that role resolves to a sending account.
-
-  it('resolves the Front Officer from her own address', () => {
-    const identity = identityForEmail('front-office@test.invalid');
-    expect(identity).toMatchObject({
-      role: IDENTITY_ROLES.FRONT_OFFICE,
-      name: 'Test Front Officer',
-    });
-  });
-
-  it('has no Assigned Official identity — the role is entirely mock', () => {
-    expect(identityForRole(IDENTITY_ROLES.ASSIGNED_OFFICIAL)).toBeNull();
-    expect(identityForEmail('assigned-official@test.invalid')).toBeNull();
-    expect(identityForEmail('rawat.jatin@ipc.example')).toBeNull();
-  });
-
-  it('returns nothing for a mock user, so they can never borrow an account', () => {
-    expect(identityForEmail('neha.singh@ipc.example')).toBeNull();
-    expect(identityForEmail('amit.mehta@ipc.example')).toBeNull();
-    expect(identityForEmail('')).toBeNull();
-    expect(identityForEmail(undefined)).toBeNull();
-  });
-
-  it('ignores address casing and surrounding whitespace', () => {
-    expect(identityForEmail('  Front-Office@Test.Invalid ')?.role).toBe(
-      IDENTITY_ROLES.FRONT_OFFICE,
-    );
-  });
-
-  it('the Officer-in-Charge sends as himself and no Assigned Official can', () => {
-    // The two roles were held by people with near-identical display names, so
-    // this asserts on addresses: the OIC has an account, the official has none.
-    const officer = identityForEmail('officer@test.invalid');
-
-    expect(officer.role).toBe(IDENTITY_ROLES.OFFICER_IN_CHARGE);
-    expect(identityForEmail('rawat.jatin@ipc.example')).toBeNull();
-  });
-
-  it('sends through the mock transport for a user with no identity', async () => {
-    const transport = await emailService.getTransport(
-      'gmail',
-      IDENTITY_ROLES.ASSIGNED_OFFICIAL,
-      'neha.singh@ipc.example',
-    );
-    expect(transport.name).toBe('mock');
-  });
-});
-
 describe('sender identity comes from the acting stakeholder', () => {
-  it('sends the enquiry from the inquirer to the Front Officer', async () => {
-    const result = await emailService.sendEnquiry({ subject: 'Monograph query', body: 'Details' });
-
-    expect(result.from).toBe('Test Inquirer <inquirer@test.invalid>');
-    expect(result.to).toEqual(['front-office@test.invalid']);
-    expect(result.sentAsRole).toBe(IDENTITY_ROLES.INQUIRER);
-  });
-
   it('sends the acknowledgement from the Front Officer to the inquirer', async () => {
     const result = await emailService.sendAcknowledgement({
       to: 'inquirer@test.invalid',
@@ -167,23 +91,24 @@ describe('sender identity comes from the acting stakeholder', () => {
   });
 });
 
-describe('transport resolution — credentials are never borrowed', () => {
-  it('uses the mock transport for every role while no token is configured', async () => {
+describe('transport resolution is name-driven', () => {
+  it('gives every role the same transport', async () => {
     for (const role of Object.values(IDENTITY_ROLES)) {
-      const transport = await emailService.getTransport('gmail', role);
-      expect(transport.name, `${role} must not use another account`).toBe('mock');
+      expect((await emailService.getTransport('mock', role)).name, role).toBe('mock');
+      expect((await emailService.getTransport('nic', role)).name, role).toBe('nic');
     }
   });
 
-  it('keeps using the mock transport when the transport itself is mock', async () => {
-    const transport = await emailService.getTransport('mock', IDENTITY_ROLES.FRONT_OFFICE);
-    expect(transport.name).toBe('mock');
+  it('reaches a real transport only when EMAIL_TRANSPORT names one', async () => {
+    expect((await emailService.getTransport('mock')).name).toBe('mock');
+    expect((await emailService.getTransport('nic')).name).toBe('nic');
+    expect((await emailService.getTransport('gmail')).name).toBe('mock');
   });
 
   it('records which role a message was sent as', async () => {
-    const result = await emailService.sendEnquiry({ subject: 'x', body: 'y' });
+    const result = await emailService.sendAcknowledgement({ to: 'inquirer@test.invalid', queryId: 'QRY-1' });
     expect(result.transport).toBe('mock');
-    expect(result.sentAsRole).toBe(IDENTITY_ROLES.INQUIRER);
+    expect(result.sentAsRole).toBe(IDENTITY_ROLES.FRONT_OFFICE);
   });
 });
 
@@ -192,22 +117,9 @@ describe('email HTTP surface', () => {
     const res = await request(app).get('/api/v1/emails/config').set(AUTH);
 
     expect(res.status).toBe(200);
-    expect(res.body.participants).toHaveLength(3);
-    expect(res.body.participants.map((p) => p.role)).toEqual([
-      'INQUIRER',
-      'FRONT_OFFICE',
-      'OFFICER_IN_CHARGE',
-    ]);
+    expect(res.body.participants).toHaveLength(2);
+    expect(res.body.participants.map((p) => p.role)).toEqual(['FRONT_OFFICE', 'OFFICER_IN_CHARGE']);
     expect(JSON.stringify(res.body)).not.toMatch(/GMAIL_|client_secret|refresh_?token/i);
-  });
-
-  it('addresses an enquiry to the Front Officer, not to the old shared mailbox', async () => {
-    const res = await request(app)
-      .post('/api/v1/emails/enquiry').set(AUTH)
-      .send({ subject: 'Query', body: 'Body' });
-
-    expect(res.status).toBe(201);
-    expect(res.body.to).toEqual(['front-office@test.invalid']);
   });
 
   it('forwards an existing query and requires its id', async () => {
@@ -221,90 +133,42 @@ describe('email HTTP surface', () => {
     expect(bad.status).toBe(400);
   });
 
-  it('delivers the enquiry into the Front Officer inbox, which is what she polls', async () => {
-    await request(app).post('/api/v1/emails/enquiry').set(AUTH).send({ subject: 'Inbox check', body: 'b' });
+  it('delivers a sent copy into the Front Officer inbox, which is what she polls', async () => {
+    await emailService.sendAcknowledgement({ to: 'front-office@test.invalid', queryId: 'QRY-1' });
 
     const res = await request(app).get('/api/v1/mailbox/messages').set(AUTH);
     expect(res.body.recipient).toBe('front-office@test.invalid');
     expect(res.body.messages).toHaveLength(1);
-    expect(res.body.messages[0].subject).toBe('Inbox check');
-  });
-});
-
-describe('gmail inbox reader — message mapping', () => {
-  const gmailMessage = {
-    id: '18f2a1b2c3d4e5f6',
-    threadId: '18f2a1b2c3d4e5f6',
-    internalDate: '1755500000000',
-    labelIds: ['INBOX', 'UNREAD'],
-    payload: {
-      headers: [
-        { name: 'From', value: 'Abhinash Pritiraj <inquirer@test.invalid>' },
-        { name: 'To', value: 'front-office@test.invalid' },
-        { name: 'Subject', value: 'Clarification on monograph revision' },
-      ],
-      body: { data: Buffer.from('Dear Madam,\n\nPlease clarify.').toString('base64') },
-    },
-  };
-
-  it('uses Gmail ids so dedupe keys on the real message and thread', () => {
-    const mapped = toMailboxMessage(gmailMessage, 'front-office@test.invalid');
-
-    expect(mapped.mailboxMessageId).toBe('18f2a1b2c3d4e5f6');
-    expect(mapped.providerMessageId).toBe('18f2a1b2c3d4e5f6');
-    expect(mapped.providerThreadId).toBe('18f2a1b2c3d4e5f6');
-  });
-
-  it('decodes the headers and body into the shape ingestion expects', () => {
-    const mapped = toMailboxMessage(gmailMessage, 'front-office@test.invalid');
-
-    expect(mapped.from).toBe('Abhinash Pritiraj <inquirer@test.invalid>');
-    expect(mapped.subject).toBe('Clarification on monograph revision');
-    expect(mapped.body).toContain('Please clarify.');
-    expect(mapped.receivedAt).toBe(new Date(1755500000000).toISOString());
-  });
-
-  it('treats Gmail UNREAD as "not yet registered"', () => {
-    expect(toMailboxMessage(gmailMessage, 'x').ingested).toBe(false);
-
-    const read = { ...gmailMessage, labelIds: ['INBOX'] };
-    expect(toMailboxMessage(read, 'x').ingested).toBe(true);
-  });
-
-  it('reads a multipart body', () => {
-    const multipart = {
-      ...gmailMessage,
-      payload: {
-        headers: gmailMessage.payload.headers,
-        parts: [
-          { mimeType: 'text/plain', body: { data: Buffer.from('plain text part').toString('base64') } },
-          { mimeType: 'text/html', body: { data: Buffer.from('<p>html</p>').toString('base64') } },
-        ],
-      },
-    };
-
-    expect(toMailboxMessage(multipart, 'x').body).toBe('plain text part');
   });
 });
 
 describe('mailbox source selection', () => {
-  it('stays on the local mailbox unless Gmail polling is explicitly requested', () => {
+  it('stays on the local mailbox unless another source is explicitly requested', () => {
     expect(mailbox.describe().backend).toBe('in-memory');
   });
 });
 
-describe('preflight is a standalone script', () => {
-  it('is never imported by the application', async () => {
+describe('the operator scripts are standalone', () => {
+  it('are never imported by the application', async () => {
     const { readFileSync, readdirSync, statSync } = await import('node:fs');
-    const { join } = await import('node:path');
+    const { join, basename } = await import('node:path');
+
+    const scripts = readdirSync('src/scripts')
+      .filter((entry) => entry.endsWith('.js'))
+      .map((entry) => basename(entry, '.js'));
+    expect(scripts.length).toBeGreaterThan(0);
 
     const offenders = [];
     const walk = (dir) => {
       for (const entry of readdirSync(dir)) {
         const full = join(dir, entry);
-        if (statSync(full).isDirectory()) { if (entry !== 'test') walk(full); }
-        else if (entry.endsWith('.js') && !full.includes('gmailPreflight')) {
-          if (readFileSync(full, 'utf8').includes('gmailPreflight')) offenders.push(full);
+        if (statSync(full).isDirectory()) {
+          if (entry !== 'test' && entry !== 'scripts') walk(full);
+        } else if (entry.endsWith('.js')) {
+          const source = readFileSync(full, 'utf8');
+          for (const script of scripts) {
+            if (source.includes(`scripts/${script}`)) offenders.push(`${full} -> ${script}`);
+          }
         }
       }
     };
@@ -314,140 +178,11 @@ describe('preflight is a standalone script', () => {
   });
 });
 
-describe('an enquiry may arrive from anyone, addressed to the Front Officer', () => {
-  // Intake is N:1 — many external inquirers, one Front Office mailbox. Nobody
-  // registers or authenticates before writing in, so the sender cannot be a
-  // filter. What stops the Front Officer's private mail becoming a case is not
-  // a sender allow-list any more: it is that arriving mail creates nothing at
-  // all until she accepts it.
-
-  it('asks Gmail for mail addressed to the Front Officer, from anyone', () => {
-    expect(inboxQuery()).toBe('in:inbox is:unread to:(front-office@test.invalid)');
-    expect(inboxQuery({ unreadOnly: false })).toBe('in:inbox to:(front-office@test.invalid)');
-  });
-
-  it('carries no from: clause — a sender allow-list would silently drop real enquiries', () => {
-    expect(inboxQuery()).not.toContain('from:');
-    expect(inboxQuery({ unreadOnly: false })).not.toContain('from:');
-  });
-
-  it('accepts a message from an address nobody has ever seen', () => {
-    const fromStranger = (to) => isEligibleEnquiry({ from: 'A Stranger <new@example.com>', to });
-
-    expect(fromStranger('front-office@test.invalid')).toBe(true);
-    expect(fromStranger('Front Office <front-office@test.invalid>')).toBe(true);
-    // Several recipients, the Front Officer among them.
-    expect(fromStranger('someone@else.invalid, front-office@test.invalid')).toBe(true);
-  });
-
-  it('still requires the message to be addressed to the Front Officer', () => {
-    // Mail merely cc'd to her, or sent to another of her addresses, is not an
-    // enquiry to IPC. This is the one filter that remains.
-    expect(
-      isEligibleEnquiry({ from: 'anyone@example.com', to: 'someone@else.invalid' }),
-    ).toBe(false);
-    expect(isEligibleEnquiry({ from: 'anyone@example.com', to: '' })).toBe(false);
-  });
-});
-
-describe('attachment metadata', () => {
-  const withAttachment = {
-    id: 'msg-att-1',
-    threadId: 'thread-att-1',
-    internalDate: '1755500000000',
-    labelIds: ['INBOX', 'UNREAD'],
-    payload: {
-      headers: [
-        { name: 'From', value: 'Test Inquirer <inquirer@test.invalid>' },
-        { name: 'Subject', value: 'Enquiry with a specification sheet' },
-      ],
-      parts: [
-        { mimeType: 'text/plain', body: { data: Buffer.from('See attached.').toString('base64') } },
-        {
-          mimeType: 'application/pdf',
-          filename: 'specification.pdf',
-          body: { attachmentId: 'ANGjdJ_att_1', size: 204800 },
-        },
-      ],
-    },
-  };
-
-  /**
-   * `declaredSize` is the raw byte count from the Gmail part, carried alongside
-   * the rounded `sizeKb` so the attachment policy has something it can enforce
-   * a limit with — sizeKb is rounded and floored at 1, so it cannot be. It is
-   * internal plumbing: materialiseAttachments strips it before the record is
-   * stored, and the real length of the downloaded bytes is what finally decides.
-   */
-  it('records name, type and size for each attachment', () => {
-    const mapped = toMailboxMessage(withAttachment, 'front-office@test.invalid');
-
-    expect(mapped.attachments).toEqual([
-      {
-        id: 'ANGjdJ_att_1',
-        name: 'specification.pdf',
-        mimeType: 'application/pdf',
-        sizeKb: 200,
-        declaredSize: 204800,
-      },
-    ]);
-  });
-
-  it('stores no file content — only the handle needed to fetch it later', () => {
-    const mapped = toMailboxMessage(withAttachment, 'front-office@test.invalid');
-    const serialised = JSON.stringify(mapped.attachments);
-
-    expect(serialised).not.toContain('data');
-    expect(mapped.attachments[0]).not.toHaveProperty('content');
-    expect(mapped.attachments[0]).not.toHaveProperty('body');
-  });
-
-  it('leaves the list empty when there is nothing attached', () => {
-    const plain = {
-      ...withAttachment,
-      payload: { headers: withAttachment.payload.headers, body: { data: Buffer.from('hi').toString('base64') } },
-    };
-    expect(toMailboxMessage(plain, 'x').attachments).toEqual([]);
-  });
-
-  it('finds attachments nested inside a multipart body', () => {
-    const nested = {
-      ...withAttachment,
-      payload: {
-        headers: withAttachment.payload.headers,
-        parts: [
-          {
-            mimeType: 'multipart/mixed',
-            parts: [
-              {
-                mimeType: 'image/png',
-                filename: 'diagram.png',
-                body: { attachmentId: 'att-nested', size: 51200 },
-              },
-            ],
-          },
-        ],
-      },
-    };
-
-    expect(toMailboxMessage(nested, 'x').attachments).toEqual([
-      { id: 'att-nested', name: 'diagram.png', mimeType: 'image/png', sizeKb: 50, declaredSize: 51200 },
-    ]);
-  });
-});
-
-describe('sending while the mailbox is a real Gmail inbox', () => {
-  // Regression: mockTransport deposited a copy of every outgoing message into
-  // the IPC mailbox. With MAILBOX_SOURCE=gmail that store is read-only and its
-  // deliver() throws, so EVERY send through this transport returned HTTP 500 —
-  // POST /emails/response most visibly.
+describe('sending while the mailbox is a read-only NICeMail IMAP inbox', () => {
   const ORIGINAL_SOURCE = process.env.MAILBOX_SOURCE;
 
   beforeEach(() => {
-    process.env.MAILBOX_SOURCE = 'gmail';
-    // test/setup.js pins the in-memory store for the whole suite. Release the
-    // pin here, or MAILBOX_SOURCE is ignored and these tests would pass without
-    // ever touching the path that broke.
+    process.env.MAILBOX_SOURCE = 'nic';
     mailbox.useAuto();
   });
 
@@ -496,7 +231,6 @@ describe('sending while the mailbox is a real Gmail inbox', () => {
       body: 'x',
     });
 
-    // The send succeeded; the deposit was skipped rather than attempted.
     expect(mailbox.supportsDelivery()).toBe(false);
   });
 });

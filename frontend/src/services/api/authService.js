@@ -1,18 +1,10 @@
 import { axiosClient } from './axiosClient';
 
-/**
- * Session API.
- *
- * The token itself never passes through here — the server sets it as an
- * httpOnly cookie, so these calls only ever carry or receive the user record.
- */
-
 export async function login(email, password) {
   const { data } = await axiosClient.post('/auth/login', { email, password });
   return data.user;
 }
 
-/** Development only — the backend rejects this outside NODE_ENV=development. */
 export async function devLogin(email) {
   const { data } = await axiosClient.post('/auth/dev-login', { email });
   return data.user;
@@ -22,12 +14,6 @@ export async function logout() {
   await axiosClient.post('/auth/logout');
 }
 
-/**
- * The signed-in user, or `null` when there is no valid session.
- *
- * A 401 here is the normal answer for "not signed in", not an error worth
- * propagating — it is exactly what a first-time visitor gets.
- */
 export async function fetchMe() {
   try {
     const { data } = await axiosClient.get('/auth/me');

@@ -1,6 +1,6 @@
 import { mkdtemp, rm, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
-import { join } from 'path';
+import { basename, join } from 'path';
 
 import browserConfig from '../../../../config/browserConfig.js';
 import { normaliseAddress } from '../../mailbox/address.js';
@@ -9,57 +9,12 @@ import { listRows } from './readInbox.js';
 import { withNicemail } from './session.js';
 import { SELECTORS, UNCALIBRATED, locate, requireElement } from './selectors.js';
 
-/**
- * Sending one message through the signed-in NICeMail compose form.
- *
- * `composeEmail` is the one action the rest of the QMS uses to send as the
- * NICeMail mailbox; every NICeMail-specific step is in here and in
- * selectors.js. It is only ever called by transports/nicBrowserTransport.js,
- * after the outbound interlock has approved every recipient. Everything it
- * types is the message it was handed — never a credential; the session was
- * signed in by a human. It invents no content: subject and body come from the
- * QMS exactly as they are to be sent.
- *
- * It fails closed. Every check runs before Send is pressed — the addresses,
- * the account the form sends as, the recipients the form actually took, the
- * subject and body as the form holds them, each attachment uploaded and
- * scanned, no dialog over the form — and a failure there discards the draft
- * and sends nothing.
- *
- * Pressing Send is not taken as sending. A message counts as sent only when it
- * is in the Sent folder, newer than the moment Send was pressed. Anything short
- * of that, once Send has been pressed, is reported as unconfirmed: the message
- * may have gone, and the person retrying is told to check Sent first rather
- * than risk reaching the recipient twice.
- *
- * Each step is reported through `onStage` as it completes, and a failure
- * carries `failedStep` — the step it stopped at — and `seen`, what was on the
- * page, so the outbound record says where a send failed, not only that it did.
- *
- * Every step was calibrated against the live mailbox by
- * `npm run nic:browser:calibrate` before its keys left UNCALIBRATED.
- */
-
-/** An address the form can take: one @, no spaces or brackets, a dotted domain. */
 const ADDRESS = /^[^\s@<>"',;]+@[^\s@<>"',;]+\.[^\s@<>"',;]+$/;
-/** An address becomes a recipient chip within moments; this bounds the wait. */
 const CHIP_TIMEOUT_MS = 5000;
-/** Uploading and virus-scanning a file can take a while on a large one. */
 const UPLOAD_TIMEOUT_MS = 60000;
-/**
- * Zoho's message ids start with the server's time in ms; this allows for the
- * difference between that clock and this machine's (measured live at a few
- * seconds at most). Kept tight on purpose: an earlier message with the same
- * subject to the same recipient — a retried case, or a test re-run after a
- * database reset — must never fall inside it and confirm a press that sent
- * nothing. Every attempt takes far longer than this, so none can.
- */
 const CLOCK_SKEW_MS = 10000;
-/** The survey dialog opens within a few seconds of the mailbox loading. */
 const SURVEY_WAIT_MS = 5000;
-/** How long the editor may take to show text it was given. */
 const BODY_SETTLE_MS = 2000;
-/** A snapshot of the page is evidence, not a step: it must not hold a send up. */
 const SNAPSHOT_TIMEOUT_MS = 3000;
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -68,13 +23,6 @@ const firstLine = (error) => String(error?.message || error).split('\n')[0];
 const refuse = (message, stage = 'validate') => Object.assign(new Error(message), { stage });
 
 const unconfirmed = (message, cause) =>
-  /**
-   * `status` and `details` are for the case page's retry buttons, which reach
-   * this through HTTP: without a status the error handler hides the message
-   * outside development, and the one instruction that prevents a second copy
-   * would arrive as a bare "Internal Server Error". 504: the mailbox, upstream
-   * of this server, did not confirm in time.
-   */
   Object.assign(
     new Error(
       `${message} Check the NICeMail Sent folder before retrying — a retry after a send that did go out ` +
@@ -82,8 +30,6 @@ const unconfirmed = (message, cause) =>
     ),
     { unconfirmed: true, stage: 'confirm_send', cause, status: 504, details: { unconfirmed: true } },
   );
-
-// ── Page-side (each receives pageKit as its second argument) ─────────────────
 
 const entryShown = ({ spec }, kit) => kit.resolve(spec).elements.length > 0 || null;
 const entryGone = ({ spec }, kit) => kit.resolve(spec, { raw: true }).elements.length === 0 || null;
@@ -93,17 +39,11 @@ const openRoute = ({ route }) => {
   return true;
 };
 
-/** The entry's accessible name — e.g. "From <address>". */
 const nameOfEntry = ({ spec }, kit) => {
   const element = kit.resolve(spec).elements[0];
   return element ? kit.nameOf(element) : null;
 };
 
-/**
- * Type one address into a recipient field and commit it with Enter — the
- * method the calibration proved turns an address into a recipient chip. The
- * value goes through the prototype's setter, as React needs.
- */
 const typeRecipient = ({ spec, address }, kit) => {
   const input = kit.resolve(spec).elements[0];
   if (!input) return false;
@@ -119,7 +59,6 @@ const typeRecipient = ({ spec, address }, kit) => {
   return true;
 };
 
-/** The addresses the recipient row of this input holds, one per chip. */
 const recipientChips = ({ spec, chip }, kit) => {
   const input = kit.resolve(spec, { raw: true }).elements[0];
   const row = input?.closest('.zmCRow');
@@ -129,7 +68,6 @@ const recipientChips = ({ spec, chip }, kit) => {
 
 const valueOf = ({ spec }, kit) => kit.resolve(spec).elements[0]?.value ?? null;
 
-/** Focus an element, in its own frame — the editor's body is in an iframe. */
 const focusEntry = ({ spec }, kit) => {
   const element = kit.resolve(spec).elements[0];
   if (!element) return false;
@@ -143,24 +81,16 @@ const textOf = ({ spec }, kit) => {
   return element ? (element.innerText ?? element.textContent) : null;
 };
 
-/** The Sent folder is the one shown — its route, and the tree marking it current. */
 const sentShown = (sel) =>
   location.hash === sel.sentFolderRoute &&
   document.querySelector(sel.folderActive)?.getAttribute('aria-label') === sel.folderSentLabel;
 
-/** Truthy once the named file is listed and its upload and scan have finished. */
 const attachmentReady = ({ row, filename }) => {
   const match = [...document.querySelectorAll(row)].find((element) => element.getAttribute('aria-label') === filename);
   if (!match) return null;
   return /scanning|uploading|%/i.test(match.textContent) ? null : true;
 };
 
-/**
- * The dialogs open over the page — name, a clip of the text, the buttons. A
- * dialog that holds the compose form itself is the form, not something in
- * front of it; `exclude` names what only the form has (its To field — a
- * confirmation prompt with a Send button of its own has none).
- */
 const openDialogs = (argument, kit) => {
   const clip = (text, width) => kit.norm(text).slice(0, width);
   const inside = argument?.exclude ? kit.resolve(argument.exclude, { raw: true }).elements : [];
@@ -178,16 +108,11 @@ const openDialogs = (argument, kit) => {
     }));
 };
 
-/** Truthy once no visible dialog carries the survey's text. */
 const surveyGone = ({ text }, kit) =>
   !kit
     .all('[role="dialog"], [role="alertdialog"], [aria-modal="true"]')
     .some((dialog) => kit.visible(dialog) && kit.norm(dialog.innerText ?? dialog.textContent).includes(text)) || null;
 
-/**
- * What the compose form looks like right now — the evidence for a send that
- * failed. Lengths of the body only, never its text; no cookies, no storage.
- */
 const formState = ({ send, editor }, kit) => {
   const clip = (text, width = 80) => kit.norm(text).slice(0, width);
   const buttons = kit.resolve(send, { raw: true }).elements;
@@ -222,11 +147,8 @@ const formState = ({ send, editor }, kit) => {
   };
 };
 
-// ── Steps ────────────────────────────────────────────────────────────────────
-
 const collapse = (text) => String(text ?? '').replace(/\s+/g, ' ').trim();
 
-/** Everything that can be checked without a browser, checked before one is used. */
 function preflight({ to, cc, attachments }) {
   if (!to.length) throw refuse('There is no recipient to send to; nothing was sent.');
   for (const address of [...to, ...cc]) {
@@ -245,7 +167,6 @@ function preflight({ to, cc, attachments }) {
   }
 }
 
-/** The page as it is, for a log line and a failure's `seen`. Never throws. */
 async function snapshot(session) {
   const ask = (fn, argument) =>
     session
@@ -256,7 +177,6 @@ async function snapshot(session) {
   return { dialogs, ...form };
 }
 
-/** One line of what a snapshot shows: the dialogs, the Send button, the notices. */
 function seenIn(snap) {
   if (!snap) return null;
   const parts = [];
@@ -280,14 +200,6 @@ const dialogNames = (dialogs) => dialogs.map((dialog) => `"${dialog.name || dial
 const isSurvey = (dialog) => `${dialog.name} ${dialog.text}`.includes(SELECTORS.surveyDialogText);
 const isFollowUpPrompt = (dialog) => `${dialog.name} ${dialog.text}`.includes(SELECTORS.followUpDialogText);
 
-/**
- * After Send: wait for the compose form to close. Zoho may first ask whether
- * to add a follow-up reminder (when the body reads like it expects a reply)
- * and hold the message until answered; when that prompt is the one dialog
- * open, "Skip and Send" is pressed — once — so the message goes as written.
- * Anything else on the page is left alone. Resolves with whether the prompt
- * was answered; throws a timeout when the form never closes.
- */
 async function awaitComposeClosed(session, { onSkipped }) {
   const deadline = Date.now() + browserConfig.timeoutMs;
   let skipped = false;
@@ -311,12 +223,6 @@ async function awaitComposeClosed(session, { onSkipped }) {
   }
 }
 
-/**
- * Close NICeMail's survey dialog if it is open, or opens within `waitMs`, with
- * its own Close button — found by exact name, and pressed only when the survey
- * is the one dialog open. "Participate now!" is never pressed. Returns
- * 'closed' or 'absent'; refuses (nothing sent) when it cannot be closed.
- */
 async function closeSurvey(session, { waitMs = 0 } = {}) {
   const deadline = Date.now() + waitMs;
   const ask = () => session.evaluate(openDialogs, { exclude: SELECTORS.toInput }, { kit: pageKit });
@@ -354,7 +260,6 @@ async function openCompose(session) {
   }
 }
 
-/** The form must send as the mailbox the QMS files this case under. */
 async function checkSender(session) {
   await requireElement(session, 'fromAddress');
   const from = await session.evaluate(nameOfEntry, { spec: SELECTORS.fromAddress }, { kit: pageKit });
@@ -383,7 +288,6 @@ async function addRecipients(session, key, addresses) {
   }
 }
 
-/** Exactly the intended recipients — an autocomplete that picked someone else, or a leftover chip, stops the send. */
 async function checkRecipients(session, key, addresses) {
   const held = await session.evaluate(recipientChips, { spec: SELECTORS[key], chip: SELECTORS.recipientChip }, { kit: pageKit });
   const wanted = [...new Set(addresses.map(normaliseAddress))].sort();
@@ -407,7 +311,6 @@ async function fillSubject(session, subject) {
   await checkSubject(session, subject);
 }
 
-/** The body as the editor holds it — polled briefly, as the editor lays text out. */
 async function checkBody(session, body) {
   const deadline = Date.now() + Math.min(BODY_SETTLE_MS, browserConfig.timeoutMs);
   for (;;) {
@@ -420,8 +323,6 @@ async function checkBody(session, body) {
   }
 }
 
-/** Typed into the editor as text, the way a person would: the editor takes
- *  line breaks as its own paragraphs, and nothing in the text is read as markup. */
 async function fillBody(session, body) {
   await requireElement(session, 'bodyEditor');
   if (!(await session.evaluate(focusEntry, { spec: SELECTORS.bodyEditor }, { kit: pageKit }))) {
@@ -431,11 +332,14 @@ async function fillBody(session, body) {
   return checkBody(session, body);
 }
 
-/**
- * There is no file input in the form: "Attach from my computer" opens a file
- * chooser, which is intercepted and handed the staged files. Each file must
- * then be listed with its upload and virus scan finished before Send.
- */
+function stagedName(filename) {
+  const name = basename(String(filename || '').trim());
+  if (!name || name === '.' || name === '..') {
+    throw refuse(`An attachment has an unusable filename (${filename}); nothing was sent.`, 'validate');
+  }
+  return name;
+}
+
 async function attachFiles(session, attachments) {
   const staging = await mkdtemp(join(tmpdir(), 'qms-nic-send-'));
   let chooser = null;
@@ -445,7 +349,7 @@ async function attachFiles(session, attachments) {
   try {
     const paths = [];
     for (const attachment of attachments) {
-      const path = join(staging, attachment.filename);
+      const path = join(staging, stagedName(attachment.filename));
       await writeFile(path, attachment.content);
       paths.push(path);
     }
@@ -478,12 +382,6 @@ async function attachFiles(session, attachments) {
   }
 }
 
-/**
- * Nothing may stand between the checked form and Send. The survey is closed —
- * and since it may have taken the focus while it was open, the form is checked
- * again. Any other dialog stops the send: what it asks is unknown, and a click
- * on Send might answer it instead of sending.
- */
 async function clearBeforeSend(session, { to, cc, subject, body }) {
   const ask = () => session.evaluate(openDialogs, { exclude: SELECTORS.toInput }, { kit: pageKit });
   const blocked = (dialogs) =>
@@ -498,13 +396,10 @@ async function clearBeforeSend(session, { to, cc, subject, body }) {
   if (cc.length) await checkRecipients(session, 'ccInput', cc);
   await checkSubject(session, subject);
   await checkBody(session, body);
-  // Last, straight before Send: closing the survey may have opened something
-  // else, and nothing at all may be open when Send is pressed.
   const left = await ask();
   if (left.length) throw blocked(left);
 }
 
-/** Close the form without sending, so a failed send leaves no draft behind. Best effort. */
 async function discardDraft(session) {
   const discard = await locate(session, SELECTORS.discardButton).catch(() => null);
   if (!discard) return;
@@ -514,13 +409,6 @@ async function discardDraft(session) {
     .catch(() => {});
 }
 
-/**
- * The sent message, found in the Sent folder: same subject, the recipient on
- * it, and newer than the moment Send was pressed — an older message with the
- * same subject can never confirm this one. Rows are read only once the Sent
- * folder is the one shown: every folder shares one list, and until Sent has
- * loaded it still holds the Inbox. Null if it does not appear in time.
- */
 async function findInSent(session, { subject, to, since }) {
   const wanted = to.map(normaliseAddress);
   try {
@@ -544,18 +432,6 @@ async function findInSent(session, { subject, to, since }) {
   }
 }
 
-/**
- * Send one message as the NICeMail mailbox.
- *
- * Resolves `{ ok: true, providerMessageId, sentAt }` — the id is the message's
- * own in the Sent folder — only once the send is proven. Throws otherwise, with
- * `failedStep` (the step it stopped at) and `seen` (what was on the page);
- * `unconfirmed: true` whenever Send may have been pressed, since from then on
- * the message may have gone.
- *
- * `onStage(phase, data)` hears each step as it completes: 'NIC BROWSER' up to
- * and including the press of Send, 'VERIFICATION' after it.
- */
 export async function composeEmail(
   { to = [], cc = [], subject = '', body = '', attachments = [] },
   { connect, onStage = null } = {},
@@ -563,9 +439,7 @@ export async function composeEmail(
   const emit = (phase, data) => {
     try {
       onStage?.(phase, data);
-    } catch {
-      // A log line is never the reason a send fails.
-    }
+    } catch {}
   };
 
   try {
@@ -630,8 +504,6 @@ export async function composeEmail(
         await clearBeforeSend(session, { to, cc, subject, body });
         done('pre_send_clear');
 
-        // Held on to, not looked up again: a successful send removes the
-        // button, and a fresh lookup would report that success as "not found".
         current = 'click_send';
         const sendButton = (await requireElement(session, 'sendButton')).first();
         const since = Date.now() - CLOCK_SKEW_MS;
@@ -646,8 +518,6 @@ export async function composeEmail(
           const skipped = await awaitComposeClosed(session, { onSkipped: () => done('follow_up_reminder_skipped') });
           emit('VERIFICATION', { step: 'compose_closed', afterMs: Date.now() - started, followUpSkipped: skipped });
         } catch (cause) {
-          // Still looked for in Sent: the form staying open does not prove
-          // the message stayed with it.
           const snap = await snapshot(session);
           notClosed = { cause, seen: seenIn(snap) };
           emit('VERIFICATION', { step: 'compose_not_closed', afterMs: Date.now() - started, cause: firstLine(cause), snapshot: snap });
@@ -675,11 +545,9 @@ export async function composeEmail(
           { failedStep: 'find_in_sent' },
         );
       } catch (error) {
-        // A click that resolved nothing dispatched nothing: Send was not pressed.
         if (current === 'click_send' && error?.dispatched === false) pressed = false;
 
         if (pressed) {
-          // From the press of Send on, nothing can be reported as "not sent".
           if (error?.unconfirmed) throw error;
           throw Object.assign(unconfirmed('NICeMail may have sent this message, but the send could not be checked.', error), {
             failedStep: current,
@@ -696,14 +564,11 @@ export async function composeEmail(
     },
     { connect },
   ).catch((error) => {
-    // Reaching Chrome, finding the signed-in tab, loading the mailbox.
     if (error && typeof error === 'object') error.failedStep ??= 'open_browser_tab';
     throw error;
   });
 }
 
-/** The name the transport and its tests have always used. */
 export const sendMail = composeEmail;
 
-// Page-side, for the tests that run them against a real DOM.
 export { openDialogs, formState };

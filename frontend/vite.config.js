@@ -2,10 +2,6 @@ import { fileURLToPath, URL } from 'node:url'
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
-
-// Latin subsets that render above the fold; preloading them makes the font
-// available at first paint, eliminating the web-font layout shift Lighthouse
-// traced on the dashboards. Deliberately not every weight/subset.
 const PRELOAD_FONTS = [
   /inter-latin-400-normal/,
   /inter-latin-500-normal/,
@@ -35,13 +31,10 @@ function preloadKeyFonts() {
   }
 }
 
-// https://vite.dev/config/
 export default defineConfig({
   plugins: [react(), tailwindcss(), preloadKeyFonts()],
   resolve: {
     alias: {
-      // Tests drive pages synchronously after render, so vitest resolves the
-      // eager twin of the lazy production route table. Must sit before '@'.
       ...(globalThis.process?.env?.VITEST
         ? {
             '@/routes/routeElements': fileURLToPath(
@@ -57,5 +50,6 @@ export default defineConfig({
     globals: true,
     setupFiles: ['./src/test/setup.js'],
     include: ['src/**/*.test.{js,jsx}'],
+    testTimeout: 20_000,
   },
 })

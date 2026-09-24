@@ -3,16 +3,6 @@ import { describe, it, expect, afterEach, vi } from 'vitest';
 import { MailboxMessage, Counter } from '../models/MailboxMessage.js';
 import * as mongoMailbox from '../services/email/mailbox/mongoIpcMailbox.js';
 
-/**
- * The Mongo primary mailbox shares its collection with the NICeMail browser
- * mailbox. Every query it makes must leave the NICeMail rows alone: they
- * belong to another Front Office, and a NICeMail row is the only record that
- * stops the next inbox sync storing a removed message again.
- *
- * No database: the model's methods are replaced, and what is asserted is the
- * filter each operation hands to MongoDB.
- */
-
 const NOT_NICEMAIL = { source: { $ne: 'nic-browser' } };
 
 afterEach(() => {

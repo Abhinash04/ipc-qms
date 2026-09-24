@@ -1,19 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
-/**
- * Sending a case's email at most once.
- *
- * This is the file that pins the bug the whole change exists for. The Officer-in-
- * Charge pressed Approve four times while the first send hung for 22 seconds on a
- * failing DNS lookup; every request checked "already sent?", found nothing yet,
- * and sent. The inquirer received the same response three times.
- *
- * So the question here is never "does one send work" but "what happens when two
- * requests want to send the same email at the same time, and what happens after
- * a failure nobody can interpret". The stand-in models enforce the unique key
- * the claim rests on, and the sends are stubs whose timing the test controls.
- */
-
 vi.mock('../models/OutboundEmail.js', async (importOriginal) => ({
   ...(await importOriginal()),
   OutboundEmail: (await import('./support/memoryDb.js')).memoryDb.model('OutboundEmail', {
@@ -35,11 +21,10 @@ const KEY = dispatchKey('OUTGOING_RESPONSE', QUERY_ID);
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
 
-/** A send that succeeds, after yielding — long enough for a second request to start. */
 const slowSuccess = () =>
   vi.fn(async () => {
     await tick();
-    return { providerMessageId: 'gmail-1', providerThreadId: 'thread-1', transport: 'gmail', sentAt: '2026-09-18T10:00:00.000Z' };
+    return { providerMessageId: 'provider-1', providerThreadId: 'thread-1', transport: 'nic', sentAt: '2026-09-18T10:00:00.000Z' };
   });
 
 const failWith = (properties, message = 'send failed') =>
@@ -53,7 +38,7 @@ const dispatch = (overrides = {}) =>
     emailType: 'OUTGOING_RESPONSE',
     recipients: ['ravi@pharma.example'],
     subject: 'Re: Dissolution limits [QRY-2026-00001]',
-    transport: 'gmail',
+    transport: 'nic',
     quickRetryDelayMs: 0,
     ...overrides,
   });
@@ -72,7 +57,6 @@ describe('two requests, one email', () => {
 
     expect(send).toHaveBeenCalledTimes(1);
     expect(results.filter((r) => r.outcome === OUTCOMES.SENT)).toHaveLength(1);
-    // The others are told what is happening rather than being handed a failure.
     expect(results.filter((r) => r.outcome === OUTCOMES.IN_PROGRESS)).toHaveLength(2);
     expect((await row()).status).toBe('SENT');
   });
@@ -89,8 +73,6 @@ describe('two requests, one email', () => {
 
   it('finishes the bookkeeping of a send whose recording failed', async () => {
     const send = slowSuccess();
-    // The email goes; writing the EmailMessage does not. A caller must still be
-    // told it was sent — reporting failure here is what invites a second send.
     const finalize = vi
       .fn()
       .mockRejectedValueOnce(new Error('mongo went away'))
@@ -100,7 +82,6 @@ describe('two requests, one email', () => {
     expect(first.outcome).toBe(OUTCOMES.SENT);
     expect((await row()).status).toBe('SENT');
 
-    // The next call repeats only the bookkeeping.
     const second = await dispatch({ send, finalize });
     expect(second.outcome).toBe(OUTCOMES.ALREADY_SENT);
     expect(finalize).toHaveBeenCalledTimes(2);
@@ -110,10 +91,9 @@ describe('two requests, one email', () => {
 
 describe('a send that provably did not go out', () => {
   it('is FAILED, and can be claimed again', async () => {
-    const send = failWith({ code: 'ENOTFOUND' }, 'getaddrinfo ENOTFOUND gmail.googleapis.com');
+    const send = failWith({ code: 'ENOTFOUND' }, 'getaddrinfo ENOTFOUND smtp.mgovcloud.in');
     const onFailure = vi.fn();
 
-    // One automatic retry for a network failure, then it reports.
     const result = await dispatch({ send, onFailure });
 
     expect(result.outcome).toBe(OUTCOMES.FAILED);
@@ -134,19 +114,17 @@ describe('a send that provably did not go out', () => {
     const send = vi
       .fn()
       .mockRejectedValueOnce(Object.assign(new Error('getaddrinfo EAI_AGAIN'), { code: 'EAI_AGAIN' }))
-      .mockResolvedValue({ providerMessageId: 'gmail-2', transport: 'gmail' });
+      .mockResolvedValue({ providerMessageId: 'provider-2', transport: 'nic' });
     const onFailure = vi.fn();
 
     const result = await dispatch({ send, onFailure });
 
     expect(result.outcome).toBe(OUTCOMES.SENT);
     expect(send).toHaveBeenCalledTimes(2);
-    // Nothing failed as far as the case is concerned, so nothing is reported.
     expect(onFailure).not.toHaveBeenCalled();
   });
 
   it('does not retry a request the provider refused', async () => {
-    // A 400 will fail identically however often it is repeated.
     const send = failWith({ status: 400 }, 'Invalid To header');
 
     const result = await dispatch({ send });
@@ -156,7 +134,7 @@ describe('a send that provably did not go out', () => {
   });
 
   it('treats a local failure as not sent — nothing reached the provider', async () => {
-    const send = failWith({}, 'Gmail transport selected but the OAuth app is not configured.');
+    const send = failWith({}, 'NICeMail SMTP selected but no app password is configured.');
 
     const result = await dispatch({ send });
 
@@ -197,7 +175,6 @@ describe('a send that may have gone out', () => {
     expect(result.unconfirmed).toBe(true);
     expect(onFailure.mock.calls[0][2]).toBe(DELIVERY.UNCERTAIN);
     expect((await row()).status).toBe('UNCERTAIN');
-    // No automatic retry: that is the whole point.
     expect(send).toHaveBeenCalledTimes(1);
   });
 
@@ -205,7 +182,7 @@ describe('a send that may have gone out', () => {
     await dispatch({ send: uncertainSend() });
 
     const send = slowSuccess();
-    const reconcile = vi.fn(async () => ({ verdict: 'SENT', providerMessageId: 'gmail-9' }));
+    const reconcile = vi.fn(async () => ({ verdict: 'SENT', providerMessageId: 'provider-9' }));
     const finalize = vi.fn();
 
     const result = await dispatch({ send, reconcile, finalize });
@@ -213,9 +190,8 @@ describe('a send that may have gone out', () => {
     expect(result.outcome).toBe(OUTCOMES.ALREADY_SENT);
     expect(result.reconciled).toBe(true);
     expect(send).not.toHaveBeenCalled();
-    // The case is brought up to date as though the send had been seen to work.
     expect(finalize).toHaveBeenCalledTimes(1);
-    expect((await row()).providerMessageId).toBe('gmail-9');
+    expect((await row()).providerMessageId).toBe('provider-9');
   });
 
   it('is settled by the Sent folder: absent means it can be sent', async () => {
@@ -243,14 +219,12 @@ describe('a send that may have gone out', () => {
     await dispatch({ send: uncertainSend() });
 
     const send = slowSuccess();
-    // No `reconcile` — a NICeMail send, which nothing can verify from here.
     const result = await dispatch({ send });
 
     expect(result.outcome).toBe(OUTCOMES.BLOCKED_UNCERTAIN);
     expect(send).not.toHaveBeenCalled();
   });
 
-  /** A sender that died mid-send leaves a claim nobody will ever settle. */
   it('turns an abandoned claim into UNCERTAIN rather than sending again', async () => {
     await OutboundEmail.create({
       dispatchKey: KEY,
@@ -282,7 +256,7 @@ describe('a case answered before this ledger existed', () => {
       to: ['ravi@pharma.example'],
       subject: 'Re: Dissolution limits [QRY-2026-00001]',
       timestamp: '2026-09-18T09:45:44.239Z',
-      providerMessageId: 'gmail-legacy',
+      providerMessageId: 'provider-legacy',
     });
 
     const send = slowSuccess();
@@ -290,7 +264,7 @@ describe('a case answered before this ledger existed', () => {
 
     expect(result.outcome).toBe(OUTCOMES.ALREADY_SENT);
     expect(send).not.toHaveBeenCalled();
-    expect(await row()).toMatchObject({ status: 'SENT', providerMessageId: 'gmail-legacy' });
+    expect(await row()).toMatchObject({ status: 'SENT', providerMessageId: 'provider-legacy' });
   });
 });
 
@@ -314,7 +288,6 @@ describe('a person settles what the server could not', () => {
     expect(settled.resolvedBy).toMatchObject({ id: 'USR-0002', outcome: 'SENT' });
     expect(finalize).toHaveBeenCalledTimes(1);
 
-    // And it stays settled: a later attempt sends nothing.
     const send = slowSuccess();
     expect((await dispatch({ send })).outcome).toBe(OUTCOMES.ALREADY_SENT);
     expect(send).not.toHaveBeenCalled();

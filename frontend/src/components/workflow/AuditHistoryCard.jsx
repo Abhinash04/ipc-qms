@@ -3,10 +3,8 @@ import { ShieldCheck } from 'lucide-react';
 
 import { stableKey } from '@/utils/stableKey';
 
-/** How many audit rows show before the reader asks for the rest. */
 const AUDIT_PREVIEW = 8;
 
-/** Event colour follows the outcome: refusals red, completions green, AI purple. */
 function auditBadgeColor(rawEvent) {
   if (rawEvent.includes('REJECT')) {
     return 'bg-rose-50 text-rose-700 border-rose-200';
@@ -23,7 +21,6 @@ function auditBadgeColor(rawEvent) {
   return 'bg-blue-50 text-blue-700 border-blue-200';
 }
 
-/** Distinguishes an automated actor from a person at a glance. */
 function describeActor(actor) {
   const name = actor?.toLowerCase() || '';
 
@@ -45,13 +42,6 @@ function describeActor(actor) {
   };
 }
 
-/**
- * `details` is a sentence from the client and a structured object from the
- * server's own writes — intake, denials, transport failures all record fields
- * rather than prose. Rendering the object directly throws "Objects are not
- * valid as a React child", so the object form is flattened to `key: value`
- * pairs rather than dropped: it is usually the more informative of the two.
- */
 function describeDetails(details) {
   if (!details) return '—';
   if (typeof details === 'string') return details;
@@ -110,15 +100,9 @@ function AuditRow({ entry }) {
   );
 }
 
-/**
- * The append-only trail for a case, newest first. Collapsed to a short preview
- * until the reader asks for the whole history.
- */
 export function AuditHistoryCard({ audit }) {
   const [showAll, setShowAll] = useState(false);
 
-  // useQueryCase sorts ascending, so the newest event would otherwise be
-  // buried at the bottom of an unbounded table.
   const newestFirst = [...audit].reverse();
   const visible = showAll ? newestFirst : newestFirst.slice(0, AUDIT_PREVIEW);
 
@@ -174,11 +158,6 @@ export function AuditHistoryCard({ audit }) {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 text-[15px]">
-            {/* `auditId` is the stable id and the server now always returns one
-                (falling back to the document id for events it wrote itself).
-                `stableKey` is the house fallback the other audit lists already
-                use — see DashboardActivity.jsx — and covers a row that predates
-                that change. */}
             {visible.map((entry) => (
               <AuditRow key={entry.auditId || stableKey(entry)} entry={entry} />
             ))}

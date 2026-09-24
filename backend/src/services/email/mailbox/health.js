@@ -3,27 +3,10 @@ import { AUDIT_ACTIONS, AUDIT_RESULTS } from '../../../constants/auditActions.js
 import { ACTOR_TYPES } from '../../../constants/roles.js';
 import { describeError } from '../delivery.js';
 
-/**
- * Whether the mailbox can be reached — tracked across polls, not per poll.
- *
- * The inbox is polled every few seconds by two clients. When the provider goes
- * away, every one of those polls fails, and reporting each failure separately
- * buries the fact in noise: a live test produced a wall of identical
- * "Could not check the IPC mailbox" toasts and one stack trace per poll for the
- * same DNS outage.
- *
- * So an outage is reported on its edges — it began, it ended — and counted in
- * between. What the operator needs is "the mailbox has been unreachable since
- * 10:31, 48 polls", and that is what the audit trail, the log and the inbox
- * banner get.
- */
-
-/** While failing, log at most this often; the count carries the rest. */
 const LOG_INTERVAL_MS = 5 * 60 * 1000;
 
 const initial = {
   ok: true,
-  /** When the current outage began, ISO-8601. */
   since: null,
   failures: 0,
   lastError: null,
@@ -99,13 +82,11 @@ export function recordSuccess({ source = null, address = null } = {}) {
   return state;
 }
 
-/** What the inbox page and /health read. Shaped like the NICeMail sync status. */
 export function snapshot() {
   const { ok, since, failures, lastError, at } = state;
   return { ok, since, failures, error: lastError, at };
 }
 
-/** For tests. */
 export function reset() {
   state = { ...initial };
 }

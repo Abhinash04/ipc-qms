@@ -1,35 +1,7 @@
-/**
- * The KPI tone system — light cards, engraved surface.
- *
- * The card surface is a pale tone gradient carrying the same fine line work a
- * pharmacopoeia certificate uses: diagonal hairlines at a 7px pitch, and a
- * concentric guilloche arc in the top-right corner. It ships as extra
- * background LAYERS on `cardBg` rather than as pseudo-elements, because
- * `.bento-card::before` already owns one and the tile root must stay the
- * single clickable element the tests locate.
- *
- * The same engraving appears at lower intensity on the page ground and the
- * sidebar — see `.engraved-page` and `.engraved-panel` in src/index.css — so
- * the app reads as one printed surface rather than a textured card on a plain
- * one.
- *
- * EVERY token name below is written out in full, on purpose.
- *
- * Tailwind v4 only emits a theme variable whose name it can see as literal text
- * in a source file. A name built by interpolation — `var(--color-tone-${t}-surface-to)`
- * — is invisible to it, gets tree-shaken out of `:root`, and the gradient that
- * referenced it becomes invalid CSS. The declaration is then dropped and the
- * card renders transparent, which is exactly how a saturated build shipped
- * looking like frosted nothing. The same rule is why `subtextColor` and
- * `iconBg` are literal class strings. Do not "simplify" any of this into a
- * template.
- */
 
-/** Diagonal hairlines. Sits above the tone, below the content. */
 const RULES =
   "repeating-linear-gradient(-38deg, rgba(255,255,255,0.55) 0 1px, rgba(255,255,255,0) 1px 7px)";
 
-/** Guilloche arc, bled off the top-right corner. */
 const ARC =
   "repeating-radial-gradient(circle at 106% -6%, rgba(255,255,255,0) 0 44px, rgba(255,255,255,0.6) 44px 45px, rgba(255,255,255,0) 45px 53px)";
 
@@ -161,5 +133,4 @@ export const TONE_STYLES = {
   },
 };
 
-/** Slate is the fallback for any bucket key without an explicit tone. */
 export const styleFor = (key) => TONE_STYLES[TONES[key]] || TONE_STYLES.slate;

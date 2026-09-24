@@ -54,8 +54,6 @@ export function DashboardQueryList({
               <Icon className="h-6.5 w-6.5" strokeWidth={2} />
             </div>
             <div className="min-w-0">
-              {/* Names the tile that is driving this list, so the two read as
-                  one block rather than as an unrelated second section. */}
               <p className="m-0 text-[10.5px] font-extrabold uppercase tracking-wider text-slate-400">
                 Showing
               </p>

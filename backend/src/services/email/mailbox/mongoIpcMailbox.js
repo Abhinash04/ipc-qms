@@ -2,13 +2,6 @@ import { MailboxMessage, Counter } from '../../../models/MailboxMessage.js';
 import { normaliseAddress } from './address.js';
 const COUNTER_KEY = 'mailboxMessage';
 
-/**
- * The collection is shared with the NICeMail browser mailbox, whose rows this
- * store must never list, change or delete: they belong to another Front
- * Office, and a NICeMail row is also the only record that stops the next
- * inbox sync storing a removed message again. The source is named here rather
- * than imported, because nicBrowserMailbox.js must not load on the boot path.
- */
 const NOT_NICEMAIL = { source: { $ne: 'nic-browser' } };
 const mine = (recipient) => ({ to: normaliseAddress(recipient), ...NOT_NICEMAIL });
 const pad = (n) => String(n).padStart(5, '0');
@@ -66,8 +59,6 @@ async function markIngested(recipient, mailboxMessageId) {
 }
 
 async function remove(recipient, mailboxMessageId) {
-  // The Counter doc is deliberately left alone: ids stay monotonic so a deleted
-  // message's id is never handed to a later one.
   const doc = await MailboxMessage.findOneAndDelete({ ...mine(recipient), mailboxMessageId });
   return toPlain(doc);
 }

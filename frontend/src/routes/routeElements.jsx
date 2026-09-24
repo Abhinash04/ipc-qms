@@ -1,14 +1,6 @@
 import { lazy } from 'react';
 import { SECTION } from '@/constants/routeSections';
 
-/**
- * Production page-loading strategy: every page (and the authenticated shell)
- * is a lazy route chunk, so the login page never downloads the app shell and
- * one role never downloads another role's pages.
- *
- * Vitest swaps this module for `routeElements.eager.jsx` (see vite.config.js)
- * because the suites drive pages synchronously after render.
- */
 const lazyPage = (loader, name) =>
   lazy(() => loader().then((module) => ({ default: module[name] })));
 
@@ -16,7 +8,6 @@ export const MainLayout = lazyPage(() => import('@/layouts/MainLayout'), 'MainLa
 export const LoginPage = lazyPage(() => import('@/pages/auth/LoginPage'), 'LoginPage');
 
 const DashboardPage = lazyPage(() => import('@/pages/dashboard/DashboardPage'), 'DashboardPage');
-const ComposeEnquiryPage = lazyPage(() => import('@/pages/inquirer/ComposeEnquiryPage'), 'ComposeEnquiryPage');
 const MailboxInboxPage = lazyPage(() => import('@/pages/frontOffice/MailboxInboxPage'), 'MailboxInboxPage');
 const MailboxMessagePage = lazyPage(() => import('@/pages/frontOffice/MailboxMessagePage'), 'MailboxMessagePage');
 const QueriesListPage = lazyPage(() => import('@/pages/queries/QueriesListPage'), 'QueriesListPage');
@@ -47,7 +38,6 @@ const AdminSettingsPage = lazyPage(() => import('@/pages/admin/AdminSettingsPage
 
 export const SECTION_ELEMENT = {
   [SECTION.DASHBOARD]: <DashboardPage />,
-  [SECTION.COMPOSE]: <ComposeEnquiryPage />,
   [SECTION.INBOX]: <MailboxInboxPage />,
   [SECTION.INBOX_DETAIL]: <MailboxMessagePage />,
   [SECTION.QUERIES]: <QueriesListPage />,

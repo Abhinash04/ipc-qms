@@ -12,16 +12,6 @@ import { fetchAuditEvents, fetchAuditSummary } from '@/services/api/adminService
 import { useRoutePaths } from '@/hooks/useRoutePaths';
 import { buildPath } from '@/constants/routePaths';
 
-/**
- * AI agent monitoring.
- *
- * The question this page exists to answer is whether the model actually
- * answered. `gemmaService` degrades silently — a timeout returns deterministic
- * fallback text rather than throwing — so without the `fallback` flag recorded
- * on each call, a total LLM outage looks exactly like normal operation.
- *
- * Prompts and generated content are deliberately not recorded and not shown.
- */
 export function AdminAiActivityPage() {
   const paths = useRoutePaths();
   const navigate = useNavigate();

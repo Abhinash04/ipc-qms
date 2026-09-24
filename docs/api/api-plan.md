@@ -15,7 +15,7 @@ the planning view.
 |---|---|---|
 | `/health` | `GET` | Service liveness. Public. |
 | `/auth` | `POST /login`, `POST /logout`, `POST /dev-login`, `GET /me` | JWT in an httpOnly cookie (`qms.session`). `dev-login` signs in a seeded account by email with no password, development only; it refuses the NICeMail Front Office with **403** and audits the attempt as `LOGIN_FAILED` / `denied`. |
-| `/emails` | `GET /config`, `POST /enquiry`, `POST /acknowledgement`, `POST /forward`, `POST /response` | Forward and response are gated by `verifyAction(FORWARD\|DISPATCH)`. The three case emails now take **`{ queryId }` and nothing else**: recipient, subject and body are read from the stored case, and a `to` in the body is ignored — see *One email per case* below. Each answers with an `outcome`: **201** `SENT`, **200** `ALREADY_SENT`, **409** `IN_PROGRESS` or blocked-uncertain, **503** `FAILED` (`retryable: true`), **504** `UNCERTAIN` (`unconfirmed: true`). Forward returns **409** naming any attachment it could not resolve. Without MongoDB they keep the old direct-send path, which is documented as a development convenience — production requires MongoDB. |
+| `/emails` | `GET /config`, `POST /acknowledgement`, `POST /forward`, `POST /response` | Forward and response are gated by `verifyAction(FORWARD\|DISPATCH)`. There is no `POST /enquiry`: the in-app Raise Enquiry portal it served is gone, and email is the only intake channel. The three case emails take **`{ queryId }` and nothing else**: recipient, subject and body are read from the stored case, and a `to` in the body is ignored — see *One email per case* below. Each answers with an `outcome`: **201** `SENT`, **200** `ALREADY_SENT`, **409** `IN_PROGRESS` or blocked-uncertain, **503** `FAILED` (`retryable: true`), **504** `UNCERTAIN` (`unconfirmed: true`). Forward returns **409** naming any attachment it could not resolve. Without MongoDB they keep the old direct-send path, which is documented as a development convenience — production requires MongoDB. |
 | `/mailbox` | `GET /messages`, `GET /messages/:id`, `GET /messages/:id/attachments/:attachmentId`, `POST /messages/:id/read`, `POST /sync`, `POST /messages/:id/ingested`, `POST /messages/:id/accept`, `POST /messages/:id/decision`, `GET /decisions`, `DELETE /messages/:id`, `POST /receive`, `DELETE /` | Front Office + Super Admin; the last two are Super-Admin-only destructive/injection utilities. `accept` plus the decision routes are the intake validation gate — see below. Reading a message, its attachments, its read state and a manual sync are *The message API* below. For the NICeMail Front Office the message routes act on the NICeMail mailbox — see *The NICeMail mailbox* below. |
 | `/ai` | `POST /summary`, `POST /recommend`, `POST /draft` | Any signed-in role. Grounded in the IPC corpus; never throws — falls back deterministically. |
 | `/attachments` | `POST /`, `GET /:id/meta`, `GET /:id` | **Top-level, not nested under a query** — see below. |
@@ -61,8 +61,10 @@ provider. The exception is the NICeMail mailbox: there the message is already st
 the case is built from that record, the body is ignored, and an id not in that mailbox is **404**.
 What the body may **not** carry is the actor, the Case ID, the decision or the case's mailbox: those
 are the server's to determine. The accept stores `sourceMailbox` — `{ source, address }` of the
-signed-in user's mailbox — on the case, and the acknowledgement and final response go out through
-it.
+signed-in user's mailbox — on the case, and **all three** of the case's emails go out through it:
+the acknowledgement, the forward to the Officer-in-Charge and the final response. The rule is stated
+normatively in
+[backend/README.md](../../backend/README.md#which-channel-a-cases-mail-goes-out-through).
 
 The response is
 `{ queryId, created, alreadyDecided, acknowledged, forwarded, aiSummaryStatus, errors }`, and it is
@@ -167,10 +169,19 @@ than unread. Filtering on one to mean the other shows the wrong messages.
 | `POST /queries/:queryId/outbound/resolve` | `verifyToken` + `verifyRole(FRONT_OFFICE, SUPER_ADMIN)` + schema | **Not part of the sync API.** Body `{ emailType, outcome }` where `outcome` is `SENT` or `NOT_SENT`. Records what a person found in the sending mailbox's Sent folder for an `UNCERTAIN` send. **Sends nothing.** |
 | `POST /queries/reset` | `verifyToken` + `verifyRole(SUPER_ADMIN)` + schema | Deletes every case, step, review, version, notification, email record and the id counter, then inserts whatever the body carries. The UI sends `buildSeedState()`, which is empty, so in practice it inserts nothing. |
 
-Neither read nor `persist` carries a role allow-list, because every signed-in role uses both. The
-guard that belongs there is per-case ownership, which is not yet server-side. What *is* enforced:
-bodies are validated against Zod schemas that strip undeclared keys, so a caller cannot `$set`
-arbitrary fields; and the audit actor is taken from the session and rejected from the request body.
+Neither read nor `persist` carries a role allow-list, because every signed-in role uses both — an
+allow-list naming every role denies nothing. The guard that belongs there is per-case ownership, and
+it **is** server-side: `GET /queries` is filtered by `services/authz/caseAccess.js`, and
+`POST /queries/persist` runs `middleware/authorizeCaseDelta.js`, which checks both the protected
+values the role may set and membership of every case the delta touches — against state as stored
+*before* the delta, never from the body, because the body writes the very fields membership is derived
+from. Four roles see every case (Front Office, Officer-in-Charge, Admin, Super Admin); the Assigned
+Official and the Reviewer see only the cases they are party to; any other role sees none. With no
+store reachable both fail closed with 503.
+
+Also enforced: bodies are validated against Zod schemas that strip undeclared keys, so a caller cannot
+`$set` arbitrary fields; and the audit actor is taken from the session and rejected from the request
+body.
 
 **MongoDB is the system of record, not a mirror of a tab's beliefs.** Four rules on `persist` enforce
 that:
@@ -179,9 +190,10 @@ that:
   index can never fire — a second case minted with the same id would *replace* the first and the
   original enquiry would be gone. `createdAt` is the witness: a genuine update carries the one the
   case was created with, a collision from another tab carries its own. When they differ the request
-  is refused with `{ error, queryId }` and the stored case is kept. The email path no longer mints
-  client-side, but the in-app **Raise Enquiry** portal path still does, and this guard is what
-  protects it.
+  is refused with `{ error, queryId }` and the stored case is kept. Nothing mints a Case ID
+  client-side any more — intake is one server call, and the in-app Raise Enquiry portal that was the
+  other channel is gone — so this is now a backstop. It is kept because the failure it prevents is a
+  silently lost enquiry.
 - **Counters merge with `$max`, never `$set`.** A client reports the counter it believes it holds,
   and that belief goes stale — a second tab, a reload against an empty read, a refused reset. A
   wholesale `$set` let a stale value overwrite the server's and the next case re-issued an id that
@@ -232,8 +244,8 @@ approvable state, **403** for a role without `FINAL_APPROVE`.
   it, the error is `{ step: 'dispatch', outcome: 'UNCERTAIN', unconfirmed: true, error }` and the
   dispatch is recorded `UNCERTAIN`. The case still stays at `READY_FOR_DISPATCH` — `CLOSED` is
   reserved for a send known to have happened — and the Dispatch page replaces "retry" with the two
-  answers a look in the Sent folder produces. For Gmail the check is made automatically first; see
-  *One email per case* below.
+  answers a look in the Sent folder produces. Nothing makes that check for you; see *One email per
+  case* below.
 - **The response goes out through the case's mailbox** — `sourceMailbox` on the stored case, set at
   accept. A NICeMail case is answered through the NICeMail browser session; every other case through
   `EMAIL_TRANSPORT`.
@@ -271,21 +283,22 @@ A request either **claims** the dispatch or is answered from the record:
 `NOT_SENT` or `UNCERTAIN`:
 
 - **`NOT_SENT`** — the request provably never reached the provider: DNS (`ENOTFOUND`, `EAI_AGAIN`),
-  `ECONNREFUSED`, `EHOSTUNREACH`, `ENETUNREACH`, TLS failures, any HTTP **4xx** (including OAuth
-  `invalid_grant`), a NICeMail failure before Send was pressed. Retrying is safe, and one quick
-  retry (~2 s) happens automatically inside the same request for the transient network cases.
+  `ECONNREFUSED`, `EHOSTUNREACH`, `ENETUNREACH`, TLS failures, any HTTP **4xx**, a NICeMail failure
+  before Send was pressed. Retrying is safe, and one quick retry (~2 s) happens automatically inside
+  the same request for the transient network cases.
 - **`UNCERTAIN`** — the request may have been delivered and the answer was lost: HTTP **5xx**,
   `ECONNRESET`, `ETIMEDOUT`, a client timeout, a NICeMail send pressed but not confirmed. **No
   automatic retry**, because a retry can put a second copy in the inquirer's inbox.
 
-**Uncertain sends are reconciled where the provider allows it.** Gmail is searched for the message
-this dispatch tried to send — `in:sent rfc822msgid:<id>`, falling back to
-`in:sent to:<recipient> after:<epoch>` with an exact `Subject` and `Message-ID` header comparison.
-Found means `SENT`. Not found means `NOT_SENT` only after a 60-second settle window, since a message
-can take seconds to appear in Sent; before that it is `UNKNOWN`. NICeMail and the mock transport
-cannot be reconciled and always answer `UNKNOWN`.
+**No uncertain send settles itself.** `emailService.reconcileDelivery` asks the case's channel on
+every uncertain send, and every channel answers `UNKNOWN`. The legacy Gmail transport's Sent-folder
+search — `in:sent rfc822msgid:<id>`, falling back to `in:sent to:<recipient> after:<epoch>` with an
+exact `Subject` and `Message-ID` comparison, and a 60-second settle window before it would say
+`NOT_SENT` — was the only implementation of `reconcile` that ever existed, and it went with Gmail.
+Neither NICeMail path can be asked and the mock has nothing to say. The seam is kept because a
+transport able to verify its own Sent folder would slot straight in.
 
-**What cannot be reconciled is settled by a person.** An `UNCERTAIN` dispatch blocks the retry and
+**Every uncertain send is therefore settled by a person.** An `UNCERTAIN` dispatch blocks the retry and
 the UI asks instead for the Sent folder to be checked, offering two answers:
 `POST /queries/:queryId/outbound/resolve` with `outcome: "SENT"` records it exactly as a successful
 send would — for a final response, that closes the case — and `outcome: "NOT_SENT"` marks it
@@ -305,18 +318,20 @@ Two further properties:
 
 `GET /mailbox/messages` no longer answers **500** when the provider cannot be reached. A transient
 network failure, a 5xx or a 429 answers **503** with
-`{ error, retryable: true, sync: { ok: false, since, failures } }` and a `Retry-After: 30` header; an
-authentication failure answers **502** and names `npm run gmail:preflight`. The outage itself is
-tracked in `services/email/mailbox/health.js`: the **first** failure logs once and writes one
-`SYNC_FAILED` audit row, repeats are counted and logged at most once every five minutes, and
-recovery logs and writes `SYNC_RECOVERED` with the duration and the number of attempts. The state is
-exposed as `sync` on the listing and on `GET /health`.
+`{ error, retryable: true, sync: { ok: false, since, failures } }` and a `Retry-After: 30` header; a
+rejected credential is different in kind — retrying will not fix it — so it answers **502** with
+`retryable: false` and says what to re-authenticate. The outage itself is tracked in
+`services/email/mailbox/health.js`: the **first** failure logs once and writes one `SYNC_FAILED` audit
+row, repeats are counted and logged at most once every five minutes, and recovery logs and writes
+`SYNC_RECOVERED` with the duration and the number of attempts. The state is exposed as `sync` on the
+listing and on `GET /health`.
 
-A steady-state Gmail poll costs **two list calls** — the inbox and `is:unread` — plus a
-`messages.get` only for ids not already in the 500-entry content cache, at most four in flight at a
-time, with concurrent identical polls coalesced into one. The client has a 30-second timeout. Before
-this, each poll was one list plus up to 25 parallel gets with no timeout, which during a DNS outage
-meant 26 separate ten-second lookups per poll.
+The read path is kept cheap enough to fail safely. For the NICeMail browser mailbox a poll triggers a
+sync at most once every `NIC_BROWSER_SYNC_TTL_MS` and opens at most `NIC_BROWSER_SYNC_MAX` new
+messages, because every message read is a real page interaction in somebody's live mailbox and all of
+them queue behind the one serialised session. The lesson came from the Gmail reader that preceded it,
+whose poll was one list plus up to 25 parallel gets with no timeout — during a DNS outage, 26 separate
+ten-second lookups per poll.
 
 ## Still planned
 
@@ -338,16 +353,21 @@ None of these exist: no route, controller, service or collection.
 
 ### What server-side cases unblocked, and what they did not
 
-Query Cases now persist to MongoDB, so two users see the same cases and the records needed for
-ownership checks exist. Two gaps remain, and they are now *unimplemented* rather than *blocked*:
+Query Cases persist to MongoDB, so two users see the same cases and the records needed for ownership
+checks exist. **Case-level authorization has landed on top of them**: `services/authz/caseAccess.js`
+filters `GET /queries` to the cases a principal is party to, `middleware/authorizeCaseDelta.js` guards
+`POST /queries/persist` against state as stored before the delta, and
+`middleware/authorizeAttachmentAccess.js` resolves an attachment's owning case. All three fail closed
+with 503 rather than passing when they cannot tell.
 
-- **case-level authorization** — `authorizeAttachmentAccess` still checks only that a session
-  exists, and `GET /queries` still returns every case to every role;
+One gap remains, *unimplemented* rather than *blocked*:
+
 - **workflow-state authorization** — `verifyAction` enforces the role half of
   `canPerform(role, action, state)`; the state half is still evaluated on the client, so
-  `POST /queries/persist` validates the shape of a transition rather than its legality.
+  `POST /queries/persist` validates the shape of a transition rather than its legality, and a
+  principal party to a case may write any field on it.
 
-Decomposing the sync API into the per-resource routes above is what closes both.
+Decomposing the sync API into the per-resource routes above is what closes it.
 
 ## Conventions
 

@@ -14,13 +14,6 @@ import { useRoutePaths } from '@/hooks/useRoutePaths';
 import { buildPath } from '@/constants/routePaths';
 import { useWorkflowStore } from '@/store/useWorkflowStore';
 
-/**
- * Email activity, and the trace from a message to its case.
- *
- * Inbound comes from the live mailbox (`GET /mailbox/messages`); everything
- * outbound — sends, forwards, dispatches and failures — comes from the audit
- * trail, because outbound mail is not stored in the mailbox.
- */
 export function AdminEmailActivityPage() {
   const paths = useRoutePaths();
   const navigate = useNavigate();
@@ -42,7 +35,6 @@ export function AdminEmailActivityPage() {
   const emailEvents = (outbound.data?.events || []).filter((event) => event.action.startsWith('EMAIL_'));
   const messages = inbox.data?.messages || [];
 
-  /** The message → case link the workflow store already holds. */
   const queryIdFor = (mailboxMessageId) =>
     emailMessages.find((m) => m.sourceMessageId === mailboxMessageId)?.queryId || null;
 

@@ -20,18 +20,16 @@ const OFFICIAL = { id: 'USR-0004', role: ROLES.ASSIGNED_OFFICIAL };
 const OTHER_OFFICIAL = { id: 'USR-0006', role: ROLES.ASSIGNED_OFFICIAL };
 const REVIEWER = { id: 'USR-0005', role: ROLES.REVIEWER };
 const OTHER_REVIEWER = { id: 'USR-0007', role: ROLES.REVIEWER };
-const INQUIRER = { id: 'USR-0001', role: ROLES.INQUIRER, email: 'abhinash@example.com' };
 
 const ALL_STATES = Object.values(WORKFLOW_STATE);
 
-/** One query per workflow state, all owned by the same people. */
 function queryInState(state, overrides = {}) {
   return {
     queryId: `QRY-${state}`,
     subject: state,
     workflowState: state,
     businessStatus: deriveBusinessStatus(state),
-    inquirer: { id: INQUIRER.id, email: INQUIRER.email },
+    inquirer: { id: null, email: 'ravi@pharma.example' },
     currentAssigneeId: OFFICIAL.id,
     currentWorkflowStepId: `STP-${state}`,
     createdAt: '2026-08-20T09:00:00.000Z',
@@ -90,7 +88,7 @@ describe('every role has buckets, and they never double-count', () => {
 
   it.each(roles)('%s buckets are mutually exclusive', (role) => {
     const ctx = {
-      user: role === ROLES.REVIEWER ? REVIEWER : role === ROLES.INQUIRER ? INQUIRER : OFFICIAL,
+      user: role === ROLES.REVIEWER ? REVIEWER : OFFICIAL,
       workflowSteps: stepsFor(EVERY_STATE, REVIEWER.id),
       reviews: [],
     };
@@ -113,7 +111,7 @@ describe('Total Queries means "everything in my scope, any status"', () => {
   const roles = Object.values(ROLES);
 
   const ctxFor = (role) => ({
-    user: role === ROLES.REVIEWER ? REVIEWER : role === ROLES.INQUIRER ? INQUIRER : OFFICIAL,
+    user: role === ROLES.REVIEWER ? REVIEWER : OFFICIAL,
     workflowSteps: stepsFor(EVERY_STATE, REVIEWER.id),
     reviews: EVERY_STATE.map((q, i) => ({
       queryId: q.queryId,
@@ -126,7 +124,6 @@ describe('Total Queries means "everything in my scope, any status"', () => {
     const total = bucketsForRole(role).find((b) => b.key === 'total');
     expect(total, `${role} is missing a total bucket`).toBeDefined();
     expect(total.label).toBe('Total Queries');
-    // It deliberately overlaps the status tiles, so exclusivity checks skip it.
     expect(total.aggregate).toBe(true);
   });
 
@@ -140,7 +137,6 @@ describe('Total Queries means "everything in my scope, any status"', () => {
 
   it.each(roles)('%s Total spans many workflow states', (role) => {
     const total = bucketRecords(EVERY_STATE, role, 'total', ctxFor(role));
-    // The point of the tile: it is not pinned to one status.
     expect(new Set(total.map((q) => q.workflowState)).size).toBeGreaterThan(1);
   });
 
@@ -164,8 +160,6 @@ describe('Total Queries means "everything in my scope, any status"', () => {
     expect(defaultBucketKey(ROLES.OFFICER_IN_CHARGE)).toBe('awaitingAssignment');
     expect(defaultBucketKey(ROLES.ASSIGNED_OFFICIAL)).toBe('assigned');
     expect(defaultBucketKey(ROLES.REVIEWER)).toBe('awaitingReview');
-    // These two have no queue of their own to land on.
-    expect(defaultBucketKey(ROLES.INQUIRER)).toBe('total');
     expect(defaultBucketKey(ROLES.ADMIN)).toBe('total');
   });
 
@@ -182,17 +176,6 @@ describe('role visibility scoping', () => {
     workflowSteps: stepsFor(EVERY_STATE, REVIEWER.id),
     reviews: [],
     ...extra,
-  });
-
-  it('an inquirer sees only their own queries', () => {
-    const mine = queryInState(WORKFLOW_STATE.RECEIVED);
-    const theirs = queryInState(WORKFLOW_STATE.RECEIVED, {
-      queryId: 'QRY-OTHER',
-      inquirer: { id: 'USR-9999', email: 'someone@else.example' },
-    });
-
-    const seen = visibleQueries([mine, theirs], ROLES.INQUIRER, ctx(INQUIRER));
-    expect(seen.map((q) => q.queryId)).toEqual([mine.queryId]);
   });
 
   it('an assigned official sees only their own cases, in any state', () => {
@@ -267,27 +250,6 @@ describe('buckets map onto the real workflow states', () => {
     );
   });
 
-  it('inquirer buckets follow businessStatus, and Closed absorbs CANCELLED', () => {
-    const inquirerCtx = { user: INQUIRER, workflowSteps: [], reviews: [] };
-    expect(at(ROLES.INQUIRER, 'open', inquirerCtx)).toEqual([WORKFLOW_STATE.RECEIVED]);
-    expect(at(ROLES.INQUIRER, 'closed', inquirerCtx).sort()).toEqual(
-      [WORKFLOW_STATE.CANCELLED, WORKFLOW_STATE.CLOSED].sort(),
-    );
-    // Total is the roll-up and must equal everything the inquirer can see.
-    expect(bucketRecords(EVERY_STATE, ROLES.INQUIRER, 'total', inquirerCtx)).toHaveLength(
-      EVERY_STATE.length,
-    );
-  });
-
-  it('inquirer Open + In Progress + Closed accounts for every one of their queries', () => {
-    const inquirerCtx = { user: INQUIRER, workflowSteps: [], reviews: [] };
-    const total =
-      bucketRecords(EVERY_STATE, ROLES.INQUIRER, 'open', inquirerCtx).length +
-      bucketRecords(EVERY_STATE, ROLES.INQUIRER, 'inProgress', inquirerCtx).length +
-      bucketRecords(EVERY_STATE, ROLES.INQUIRER, 'closed', inquirerCtx).length;
-    expect(total).toBe(EVERY_STATE.length);
-  });
-
   it('businessStatus values used by the buckets are the real enum members', () => {
     for (const state of ALL_STATES) {
       expect(Object.values(BUSINESS_STATUS)).toContain(deriveBusinessStatus(state));
@@ -310,7 +272,6 @@ describe('list-page filters are built from the same buckets', () => {
       ].sort(),
     );
 
-    // Another official's cases are excluded by the role scope, not by state.
     const foreign = EVERY_STATE.filter(
       anyBucket(ROLES.ASSIGNED_OFFICIAL, ['assigned', 'drafting', 'returned'], {
         ...ctx,

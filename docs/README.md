@@ -12,12 +12,14 @@ design system).
 
 ## Operational Guides
 
-- [auth.md](./auth.md) — the 13 seeded accounts (a 14th, the NICeMail Front Office, when `NIC_BROWSER_MAILBOX=true`), their roles and landing dashboards, how
+- [auth.md](./auth.md) — the 12 seeded accounts (a 13th, the NICeMail Front Office, when `NIC_BROWSER_MAILBOX=true`), their roles and landing dashboards, how
   sign-in works, and the known limitations of the seeded-account mechanism. **Contains no
-  credentials** — the password is referenced by environment-variable name.
-- [EMAIL_MANUAL_TEST.md](./EMAIL_MANUAL_TEST.md) — manual procedure for proving real Gmail sends
-  and the browser end-to-end workflow. Only the Front Office mailbox is authenticated; an enquiry is
-  sent from any external address and validated by hand.
+  credentials** — each account's password is referenced by environment-variable name.
+- [MAIL_MANUAL_TEST.md](./MAIL_MANUAL_TEST.md) — what a person still has to check by hand, and only
+  that: the automated suites are listed first so the same ground is not covered twice. Covers the
+  mock, NICeMail browser-agent and NICeMail SMTP postures, the three-inbox walkthrough, what the
+  backend log should and should not say, and the attachment checklist. An enquiry is sent from any
+  external address; no QMS account is involved.
 - [NIC_EMAIL_PHASE0.md](./NIC_EMAIL_PHASE0.md) — the feasibility gate for NIC government email
   (`@gov.in`) over IMAP/SMTP. The `mgovcloud.in` endpoints are reachable and the transport is
   implemented and selectable, but **authentication has not yet succeeded**: an application-specific

@@ -9,6 +9,7 @@ import { useWorkflowStore } from '@/store/useWorkflowStore';
 import { findUserById } from '@/constants/mockUsers';
 import * as mailboxService from '@/services/api/mailboxService';
 import { installFakeCaseMail } from '@/test/fakeCaseMail';
+import { EXTERNAL_INQUIRER as INQUIRER } from '@/test/externalInquirer';
 
 vi.mock('@/services/api/mailboxService', () => ({
   fetchEmailConfig: vi.fn().mockResolvedValue({}),
@@ -17,19 +18,11 @@ vi.mock('@/services/api/mailboxService', () => ({
   recordMailboxDecision: vi.fn().mockResolvedValue({ alreadyDecided: false }),
   markMessageIngested: vi.fn().mockResolvedValue({ ingested: true }),
   deleteMailboxMessage: vi.fn().mockResolvedValue({ deleted: true }),
-  sendEnquiry: vi.fn().mockResolvedValue({}),
   sendAcknowledgement: vi.fn().mockResolvedValue({}),
   forwardQuery: vi.fn().mockResolvedValue({}),
   sendResponse: vi.fn().mockResolvedValue({}),
 }));
 
-/**
- * jsdom computes no layout, so these pin the structural rules that caused the
- * whitespace rather than measuring pixels. The content assertions are the ones
- * that prove the compaction removed space and not functionality.
- */
-
-const INQUIRER = findUserById('USR-0001');
 const FRONT_OFFICE = findUserById('USR-0002');
 const OFFICIAL = findUserById('USR-0004');
 const REVIEWER = findUserById('USR-0005');
@@ -57,7 +50,6 @@ function renderAs(user, path) {
   );
 }
 
-/** The workspace grid that holds the content column and the action panel. */
 const detailGrid = () =>
   document.querySelector('[class*="lg:grid-cols-[minmax(0,1fr)_340px]"]');
 
@@ -66,7 +58,6 @@ const actionsCard = () =>
 
 let queryId;
 
-/** Drive a case to UNDER_REVIEW so the reviewer sees both right-hand cards. */
 async function caseUnderReview() {
   ({ queryId } = s().ingestEmail(enquiry(), async () => null));
   await s().verifyQuery(queryId, FRONT_OFFICE);
@@ -79,8 +70,6 @@ async function caseUnderReview() {
 
 beforeEach(async () => {
   vi.clearAllMocks();
-  // The forward is a server call, and the case reaches PENDING_ASSIGNMENT only
-  // because the server put it there — a canned reply moves nothing.
   installFakeCaseMail(mailboxService);
   await s().hydrate();
   await s().resetDemo();
@@ -91,16 +80,23 @@ describe('the detail columns size to their own content', () => {
   it('does not let one column stretch the other', () => {
     renderAs(REVIEWER, `/reviewer/queries/${queryId}`);
 
-    // Without items-start the grid stretches both columns to the taller one,
-    // which dragged the Workflow progress card far past its timeline.
     expect(detailGrid().className).toMatch(/items-start/);
   });
 
   it('lets the actions card end at its last button', () => {
     renderAs(REVIEWER, `/reviewer/queries/${queryId}`);
 
-    // h-full made this card fill the stretched row instead of its content.
     expect(actionsCard().className).not.toMatch(/h-full/);
+  });
+});
+
+describe('the front officer case page shows the internal blocks', () => {
+  it('renders the draft, the actions and the audit trail', () => {
+    renderAs(FRONT_OFFICE, `/front-officer/queries/${queryId}`);
+
+    expect(screen.getByText('Audit history')).toBeInTheDocument();
+    expect(screen.getByText('Available actions')).toBeInTheDocument();
+    expect(screen.getByText('Response Draft')).toBeInTheDocument();
   });
 });
 
@@ -108,26 +104,15 @@ describe('nothing was lost to the compaction', () => {
   it('still shows the timeline, every action, and the review decision card', () => {
     renderAs(REVIEWER, `/reviewer/queries/${queryId}`);
 
-    // Timeline stages (both layouts are in the DOM, so match all).
     expect(screen.getAllByText('Enquiry submitted').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Forwarded to Officer-in-Charge').length).toBeGreaterThan(0);
 
-    // Every control the reviewer had before.
     expect(screen.getByRole('heading', { name: 'Available actions' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Review draft/ })).toBeInTheDocument();
 
-    // Transfer and pullback are NOT among them, and this assertion is the
-    // point rather than an omission. ROLE_ACTIONS grants TRANSFER to the
-    // assigned official and PULLBACK to ADMIN (constants/workflowRules.js:51-56)
-    // — a reviewer holds neither, and WorkflowActionsCard renders each button
-    // only when the grant is present. This test previously required both to be
-    // on screen for a reviewer, which contradicted the role matrix in
-    // docs/workflow/role-permission-matrix.md and had been failing since the
-    // two actions were gated.
     expect(screen.queryByRole('button', { name: /Transfer query/ })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Pull back query/ })).not.toBeInTheDocument();
 
-    // The second right-hand card, which is what made the column tall.
     expect(screen.getByRole('heading', { name: 'Review decision' })).toBeInTheDocument();
   });
 
@@ -136,9 +121,6 @@ describe('nothing was lost to the compaction', () => {
       { ...enquiry(), mailboxMessageId: 'MSG-LAYOUT-2' },
       async () => null,
     );
-    // A case reaches the Front Office workspace already validated — accepting
-    // the message in the mailbox is what registers and acknowledges it. There
-    // is no second "Validate Query" step here any more.
     await s().verifyQuery(fresh, FRONT_OFFICE);
 
     renderAs(FRONT_OFFICE, `/front-officer/queries/${fresh}`);
@@ -150,12 +132,4 @@ describe('nothing was lost to the compaction', () => {
     expect(actionsCard().className).not.toMatch(/h-full/);
   });
 
-  it('renders the single-column inquirer view with no actions column', () => {
-    renderAs(INQUIRER, `/inquirer/queries/${queryId}`);
-
-    expect(screen.getAllByText('Enquiry submitted').length).toBeGreaterThan(0);
-    // The inquirer never had the actions card; that must not have changed.
-    expect(screen.queryByRole('heading', { name: 'Available actions' })).toBeNull();
-    expect(detailGrid()).toBeNull();
-  });
 });

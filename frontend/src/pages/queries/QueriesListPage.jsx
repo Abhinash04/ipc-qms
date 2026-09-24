@@ -8,7 +8,6 @@ export function QueriesListPage() {
   const paths = useRoutePaths();
   const currentUser = useAuthStore((state) => state.currentUser);
 
-  // The role's own visibility rule — the same one the dashboard scopes by.
   const filter = useBucketFilter(currentUser?.role);
 
   const isAssignedOfficial = currentUser?.role === ROLES.ASSIGNED_OFFICIAL;

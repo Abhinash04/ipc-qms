@@ -4,8 +4,6 @@ import authorizeAttachmentAccess from '../middleware/authorizeAttachmentAccess.j
 import { uploadMiddleware, uploadFiles, getMeta, serveFile } from '../controllers/attachmentController.js';
 
 const router = express.Router();
-
-// verifyToken first, so authorizeAttachmentAccess can rely on req.user.
 router.post('/attachments', verifyToken, authorizeAttachmentAccess, uploadMiddleware, uploadFiles);
 router.get('/attachments/:id/meta', verifyToken, authorizeAttachmentAccess, getMeta);
 router.get('/attachments/:id', verifyToken, authorizeAttachmentAccess, serveFile);

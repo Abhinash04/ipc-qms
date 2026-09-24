@@ -2,15 +2,6 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
 import { diagnose, inspectBrowser, redact } from '../services/email/nic/browser/inspect.js';
 
-/**
- * The inspector against a fake Chrome: every method it sends and every page
- * function it evaluates is recorded, so "read-only" is checked, not assumed.
- *
- * The documents are shaped like the live session: the operator's tab is the
- * Workplace shell with no mail in it, and the mailbox is a cross-origin iframe
- * target inside it.
- */
-
 const SHELL_URL = 'https://workplace.mgovcloud.in/#mail_app/mail/folder/inbox';
 const MAIL_URL = 'https://mail.mgovcloud.in/zm/?fromService=wp&token=SESSION-SECRET';
 
@@ -40,7 +31,6 @@ const census = (overrides = {}) => ({
 
 const MAILBOX = census({ url: 'https://mail.mgovcloud.in/zm/', appReady: 1, appReadyLight: 1, rows: 3, options: 3 });
 
-/** Every entry resolves by its first strategy unless `registry` says otherwise. */
 const resolvedRegistry = (overrides = {}) => ({ entries }) =>
   entries.map(([key]) => ({
     key,

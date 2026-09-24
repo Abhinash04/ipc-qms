@@ -5,7 +5,6 @@ import * as audit from '../services/audit/auditService.js';
 import { AUDIT_ACTIONS, AUDIT_RESULTS } from '../constants/auditActions.js';
 import { ACTOR_TYPES } from '../constants/roles.js';
 
-/** USR-0008's own password, from src/test/fixtures/passwords.json. */
 const PASSWORD = 'test-pw-superadmin-0008';
 
 beforeEach(() => {
@@ -14,7 +13,6 @@ beforeEach(() => {
 
 describe('auditService', () => {
   it('reports that it is not durable without Mongo', () => {
-    // The suite runs with DATABASE_URL blank, so this is the fallback path.
     expect(audit.describe()).toEqual({ backend: 'in-memory', durable: false });
   });
 
@@ -32,7 +30,6 @@ describe('auditService', () => {
     expect(event.actorType).toBe(ACTOR_TYPES.SYSTEM);
     expect(event.result).toBe(AUDIT_RESULTS.SUCCESS);
     expect(Date.parse(event.timestamp)).not.toBeNaN();
-    // Nothing is durable in this configuration, and the record says so.
     expect(event.persisted).toBe(false);
   });
 

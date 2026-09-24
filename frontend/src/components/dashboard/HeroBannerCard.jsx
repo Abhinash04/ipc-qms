@@ -6,9 +6,7 @@ import {
   Mail,
   CheckCircle,
   Send,
-  Inbox,
   Zap,
-  Lock,
 } from "lucide-react";
 
 export function HeroBannerCard() {
@@ -89,7 +87,6 @@ export function HeroBannerCard() {
                   strokeWidth={2.2}
                 />
 
-                {/* Pulsing Signal Rays around Envelope */}
                 <m.span
                   animate={{ scale: [1, 1.4, 1], opacity: [0.8, 0, 0.8] }}
                   transition={{
@@ -114,29 +111,14 @@ export function HeroBannerCard() {
               </m.div>
 
               <div className="space-y-1.5 min-w-0 flex-1 text-center sm:text-left mt-3 sm:mt-0">
-                <div className="flex items-center justify-center sm:justify-start gap-2">
-                  <span className="relative flex h-2.5 w-2.5">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-blue-600"></span>
-                  </span>
-                  <span className="text-[11px] font-black uppercase tracking-widest text-blue-700">
-                    Live Mail Sync
-                  </span>
-                </div>
-
                 <p className="text-sm font-black text-slate-900 leading-snug flex items-center justify-center sm:justify-start gap-1.5 m-0">
                   <span>Digital Query Ingestion</span>
-                  <Send className="h-3.5 w-3.5 text-indigo-600 animate-pulse" />
+                  <Send className="h-3.5 w-3.5 text-indigo-600" />
                 </p>
 
-                <div className="flex flex-wrap justify-center sm:justify-start items-center gap-1.5 pt-0.5">
-                  <span className="inline-flex items-center gap-1 text-[10.5px] font-bold text-slate-600 bg-white/90 px-2.5 py-0.5 rounded-full border border-slate-200/80 shadow-2xs">
-                    <Inbox className="h-3 w-3 text-indigo-500" /> Auto-synced
-                  </span>
-                  <span className="inline-flex items-center gap-1 text-[10.5px] font-bold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200/60">
-                    <Lock className="h-3 w-3 text-emerald-600" /> SSL Active
-                  </span>
-                </div>
+                <p className="m-0 text-[11.5px] font-semibold text-slate-500">
+                  Enquiries arrive by email in the IPC mailbox and are registered by the Front Office.
+                </p>
               </div>
             </div>
           </div>

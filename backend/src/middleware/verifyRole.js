@@ -4,11 +4,6 @@ import * as audit from '../services/audit/auditService.js';
 import { AUDIT_ACTIONS, AUDIT_RESULTS } from '../constants/auditActions.js';
 import { ACTOR_TYPES } from '../constants/roles.js';
 
-/**
- * A refusal is worth recording: a run of these against one account is what an
- * attempted privilege escalation looks like from the outside. Fire-and-forget
- * — `audit.record` never throws, and the refusal must not wait on a write.
- */
 function recordDenial(req, reason) {
   void audit.record({
     action: AUDIT_ACTIONS.AUTHORIZATION_DENIED,
@@ -20,20 +15,11 @@ function recordDenial(req, reason) {
   });
 }
 
-/**
- * Authorization — step 3 of the chain in .claude/backend-rules.md.
- *
- * Both guards assume verifyToken ran first. If it did not, they fail closed
- * with 401 rather than letting an unauthenticated request through — a route
- * mis-wired to omit verifyToken should break loudly, not silently open.
- */
-
 const unauthenticated = () =>
   Object.assign(new Error('Authentication required'), { status: HTTP_STATUS.UNAUTHORIZED });
 
 const forbidden = (message) => Object.assign(new Error(message), { status: HTTP_STATUS.FORBIDDEN });
 
-/** Allow only these roles. Use for endpoints that are not workflow actions. */
 export function verifyRole(...roles) {
   const allowed = roles.flat();
 
@@ -47,12 +33,6 @@ export function verifyRole(...roles) {
   };
 }
 
-/**
- * Allow only roles that may perform this workflow action, per ROLE_ACTIONS.
- *
- * This is the role half of the frontend's `canPerform` only — the workflow
- * state half cannot be checked here yet. See constants/workflowActions.js.
- */
 export function verifyAction(action) {
   return (req, res, next) => {
     if (!req.user) return next(unauthenticated());

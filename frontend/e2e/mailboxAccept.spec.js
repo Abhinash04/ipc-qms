@@ -18,38 +18,10 @@ import {
   resetDatabase,
 } from './helpers/db.js';
 
-/**
- * The Front Office validation gate, end to end.
- *
- * Every assertion here is made against MongoDB rather than against the screen.
- * The UI saying "Query case QRY-… created" is a claim; the case, the two
- * outbound emails and the decision record are the evidence, and they are what
- * the next stage of the workflow actually reads.
- */
-
-/**
- * An external enquirer. `.example` is reserved by RFC 2606 and can never
- * receive mail, so this suite cannot reach a real mailbox even if the transport
- * were misconfigured. Nothing about it is read from the environment — the point
- * of the first assertion is that the case records *the sender*, not whatever
- * address the deployment happens to have configured.
- */
 const SENDER = 'Ravi Kumar <ravi@pharma.example>';
 const SENDER_EMAIL = 'ravi@pharma.example';
-
-/** ROLE_SLUG[FRONT_OFFICE] + SECTIONS.INBOX.segment — frontend/src/constants. */
 const INBOX_PATH = '/front-officer/inbox';
-
-/** mintIds() in acceptMessage.js labels the id with the UTC year. */
 const currentYear = () => new Date().getUTCFullYear();
-
-/**
- * Click ✓ or ✗ on one row and confirm.
- *
- * Both buttons carry an accessible name that includes the mailbox message id,
- * and both swap the row's controls for an inline "Yes" — only ever one at a
- * time, because the page tracks a single `{ id, action }` confirmation.
- */
 async function decideInUi(page, mailboxMessageId, action) {
   const verb = action === 'accept' ? 'Accept' : 'Reject';
   await page
@@ -57,8 +29,6 @@ async function decideInUi(page, mailboxMessageId, action) {
     .click();
   await page.getByRole('button', { name: 'Yes', exact: true }).click();
 }
-
-/** Everything the accept path is supposed to have written, in one read. */
 async function persistedState() {
   const [cases, emails, decisions] = await Promise.all([
     readQueryCases(),
@@ -83,7 +53,6 @@ const ACCEPTED_STATE = {
   decision: 'ACCEPTED',
 };
 
-/** Put one message in the mailbox and open the inbox, signed in to both sides. */
 async function arrive(page, request, subject) {
   await devSignIn(request, SUPER_ADMIN_USER.email);
   const message = await injectInboundMessage(request, {
@@ -120,7 +89,6 @@ test('accepting a message opens one case, acknowledges the sender and forwards i
 
   const [queryCase] = await readQueryCases();
   expect(queryCase.queryId).toBe(`QRY-${currentYear()}-00001`);
-  // The enquirer is whoever wrote in — never a configured stakeholder address.
   expect(queryCase.inquirer.email).toBe(SENDER_EMAIL);
   expect(queryCase.inquirer.name).toBe('Ravi Kumar');
   expect(queryCase.workflowState).toBe('PENDING_ASSIGNMENT');
@@ -153,7 +121,6 @@ test('rejecting a message creates no case and no acknowledgement', async ({ page
     .toBe('REJECTED');
 
   expect(await readQueryCases()).toHaveLength(0);
-  // Not just "no acknowledgement" — a rejection writes no email record at all.
   expect(await readEmailMessages()).toHaveLength(0);
 
   const [decision] = await readMailboxDecisions();
@@ -187,9 +154,6 @@ test('a message opens in full from the inbox, and shows the case it became once 
 test('a formatted body runs no script and cannot take the page anywhere', async ({ page, request }) => {
   const subject = 'Formatted enquiry';
   const message = await arrive(page, request, subject);
-
-  // The body a hostile sender could write, served as the API would serve a
-  // NICeMail message: the stored record is real, only its HTML is added here.
   const hostile =
     '<p>Formatted hello</p><script>alert("script")</script><img src="x" onerror="alert(\'img\')">' +
     '<p>after</p><template shadowrootmode="open"><meta http-equiv="refresh" content="0;url=https://example.invalid/">' +
@@ -228,9 +192,6 @@ test('accepting the same message twice produces one case, one acknowledgement, o
   const message = await arrive(page, request, 'Assay method clarification — Metformin HCl');
 
   await decideInUi(page, message.mailboxMessageId, 'accept');
-
-  // Settle completely before the second attempt: overlapping the two would test
-  // concurrency, which is not what this case is about.
   await expect
     .poll(persistedState, { timeout: 60_000 })
     .toEqual(ACCEPTED_STATE);
@@ -248,31 +209,9 @@ test('accepting the same message twice produces one case, one acknowledgement, o
   expect(cases).toHaveLength(1);
   expect(cases[0].queryId).toBe(firstCase.queryId);
 
-  // The id sequence was not advanced either — the second accept returned from
-  // the stored decision without minting anything.
   const [counter] = await readQueryCounters({ key: 'counters' });
   expect(counter.value.QRY).toBe(1);
 
-  /**
-   * Nor was the enquiry summarised a second time.
-   *
-   * GEMMA_API_URL is empty under .env.e2e, so the summary is the deterministic
-   * stand-in and says so — a FALLBACK presented as the model's work would be
-   * worse than no summary. `isUsable` in acceptMessage.js counts a FALLBACK as
-   * a summary we already have, so the retry reuses it: one stored summary, one
-   * AI_SUMMARY_GENERATED row, no second model call.
-   *
-   * The other branch — `status: 'FAILED'`, which a retry *would* re-summarise —
-   * is deliberately not asserted here, because it cannot be produced from
-   * outside the process. `gemmaService.generateSummary` catches every network,
-   * timeout, non-2xx and parse failure and returns the fallback, so no value of
-   * GEMMA_API_URL (empty, unroutable, or a host that refuses) makes it throw,
-   * and only a throw reaches the FAILED branch. The backend's own suite covers
-   * it by replacing the function
-   * (backend/src/test/acceptMessage.test.js — `vi.spyOn(gemmaService,
-   * 'generateSummary').mockRejectedValue(...)`), which an out-of-process run
-   * has no equivalent of.
-   */
   expect(second.aiSummaryStatus).toBe('FALLBACK');
   expect(cases[0].aiSummary).toMatchObject({
     status: 'FALLBACK',

@@ -12,32 +12,20 @@ import { EMAIL_TYPE } from '@/constants/emailModel';
 import * as mailboxService from '@/services/api/mailboxService';
 import { notify } from '@/services/notify';
 import { installFakeCaseMail } from '@/test/fakeCaseMail';
+import { EXTERNAL_INQUIRER as INQUIRER } from '@/test/externalInquirer';
 
 vi.mock('@/services/api/mailboxService');
 
-const INQUIRER = findUserById('USR-0001');
 const FRONT_OFFICE = findUserById('USR-0002');
 
 const s = () => useWorkflowStore.getState();
 
-/**
- * The endpoints that send a case's email. Both take a case and nothing else:
- * the recipient, the wording and the "has this already gone?" decision are the
- * server's, so a test can no longer hand them a reply to return — it asks the
- * stand-in endpoint what the server would have done. See src/test/fakeCaseMail.js.
- */
 let caseMail;
 
-/** Put the endpoints back after a test has made one fail. */
 const restoreMail = () => {
   vi.mocked(mailboxService.sendAcknowledgement).mockImplementation(caseMail.sendAcknowledgement);
 };
 
-/**
- * What axios rejects with when the server answers a NICeMail send that may have
- * gone out: its own message is the status line, and the server's reason — the
- * instruction to check the Sent folder — is in the response body.
- */
 const UNCONFIRMED_REASON =
   'NICeMail may have sent this message but did not confirm it in time. Check the NICeMail Sent folder before retrying.';
 
@@ -58,7 +46,6 @@ const enquiry = () => ({
   receivedAt: '2026-08-26T09:00:00.000Z',
 });
 
-/** A freshly received query, sitting where Front Office would pick it up. */
 function receivedQuery() {
   const { queryId } = s().ingestEmail(enquiry(), async () => null);
   return queryId;
@@ -99,9 +86,6 @@ describe('Validate acknowledges the inquirer', () => {
     const result = await s().verifyQuery(queryId, FRONT_OFFICE);
 
     expect(result.acknowledged).toBe(true);
-    // The case, and nothing else. A `to` in the request used to decide who was
-    // emailed, which made the recipient the browser's to choose — and a stale
-    // tab's choice could be the wrong inquirer.
     expect(mailboxService.sendAcknowledgement).toHaveBeenCalledWith({ queryId });
   });
 
@@ -130,17 +114,12 @@ describe('Validate acknowledges the inquirer', () => {
 describe('the inquirer is never emailed twice', () => {
   it('does not re-send when the query is already acknowledged', async () => {
     const queryId = receivedQuery();
-    // Stand in for the ingestion chain, which acknowledges before verifying.
-    // Straight to the endpoint, so the spy below counts only Validate's own
-    // request.
     await caseMail.sendAcknowledgement({ queryId });
     await s().refreshFromServer();
     expect(ackMessages(queryId)).toHaveLength(1);
 
     const result = await s().verifyQuery(queryId, FRONT_OFFICE);
 
-    // The request is made — the browser cannot know what another tab or
-    // officer has already sent — and is answered "already sent".
     expect(result).toMatchObject({ acknowledged: true, alreadySent: true });
     expect(mailboxService.sendAcknowledgement).toHaveBeenCalledTimes(1);
     expect(ackMessages(queryId)).toHaveLength(1);
@@ -168,7 +147,6 @@ describe('a failed acknowledgement never blocks the workflow', () => {
 
     expect(result.acknowledged).toBe(false);
     expect(result.error).toMatch(/Network Error/);
-    // The point: the timeline moved anyway.
     expect(s().getQuery(queryId).workflowState).toBe(
       WORKFLOW_STATE.FRONT_OFFICE_VERIFICATION,
     );
@@ -195,15 +173,12 @@ describe('a failed acknowledgement never blocks the workflow', () => {
     const result = await s().verifyQuery(queryId, FRONT_OFFICE);
 
     expect(result).toMatchObject({ acknowledged: false, unconfirmed: true });
-    // Not "Request failed with status code 504".
     expect(result.error).toMatch(/Sent folder/);
     expect(ackMessages(queryId)).toHaveLength(0);
   });
 
   it('keeps the permission gate throwing synchronously', () => {
     const queryId = receivedQuery();
-    // The whole design rests on this: verifyQuery is not `async`, so an
-    // unauthorised call throws rather than rejecting.
     expect(() => s().verifyQuery(queryId, findUserById('USR-0003'))).toThrow(
       /may not perform VERIFY/,
     );
@@ -220,13 +195,9 @@ describe('the Front Office sees when the email did not go out', () => {
     const queryId = receivedQuery();
     await s().verifyQuery(queryId, FRONT_OFFICE);
 
-    // Opened fresh, after the fact. Whether the acknowledgement went out is
-    // read from the case rather than remembered from the click that failed, so
-    // it is still visible on a page load hours later.
     openCase(queryId);
 
     expect(await screen.findByText('Acknowledgement email not sent')).toBeInTheDocument();
-    // Not a refusal — the case itself was registered.
     expect(screen.queryByText('Action refused')).toBeNull();
     expect(s().getQuery(queryId).workflowState).toBe(
       WORKFLOW_STATE.FRONT_OFFICE_VERIFICATION,
@@ -241,11 +212,6 @@ describe('the Front Office sees when the email did not go out', () => {
     expect(ackMessages(queryId)).toHaveLength(1);
   });
 
-  /**
-   * A retry that NICeMail may have sent must not be reported as "not sent" with
-   * the retry button beside it: pressed again, it can email the inquirer a
-   * second copy. The notice says what is actually known, and why to look first.
-   */
   it('says a retry may already have been sent, rather than that it was not', async () => {
     vi.mocked(mailboxService.sendAcknowledgement).mockRejectedValue(new Error('Network Error'));
     const queryId = receivedQuery();
@@ -254,10 +220,6 @@ describe('the Front Office sees when the email did not go out', () => {
     await screen.findByText('Acknowledgement email not sent');
 
     const warning = vi.spyOn(notify, 'warning');
-    // An unconfirmed send leaves the case saying so, which is what the notice
-    // below is read from. Remembering it from this click would lose it on the
-    // next page load, and the person who has to check the Sent folder is often
-    // not the one who pressed the button.
     installFakeCaseMail(mailboxService, {
       acknowledgement: { outcome: 'UNCERTAIN', error: UNCONFIRMED_REASON },
     });

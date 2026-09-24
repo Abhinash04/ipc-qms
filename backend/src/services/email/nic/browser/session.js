@@ -1,38 +1,36 @@
 import browserConfig from '../../../../config/browserConfig.js';
 import { attachToNicemail, release, MESSAGES } from './attach.js';
+import { connect as cdpConnect } from './cdp.js';
 import { SELECTORS } from './selectors.js';
-
-/**
- * One unit of browser work against the signed-in NICeMail session.
- *
- * The operator's own NICeMail tab is never driven. It is the proof of the
- * session and nothing else: the work happens in a tab this agent opens itself,
- * in the operator's own browser profile — so it shares the cookies their manual
- * sign-in produced — and that tab is closed again before the call returns.
- *
- * The agent tab goes to browserConfig.appUrl rather than to whatever the
- * operator is looking at. On the workplace front door the mail UI is a
- * cross-origin iframe with a debugging target of its own, which a session on
- * the host page cannot reach; the app URL serves the same mailbox as a single
- * top-level document.
- *
- * The agent still never signs in. If the tab lands anywhere that shows a
- * password field, the work is abandoned with SESSION_EXPIRED before a single
- * field is touched — the field is counted, never focused.
- *
- * Calls are serialised: there is one browser session, and a sync and a send
- * interleaving clicks in it would corrupt both.
- */
 
 let queue = Promise.resolve();
 
+let queued = 0;
+
+const ourTargets = new Set();
+
+export const agentTargetIds = () => new Set(ourTargets);
+
+export const pending = () => queued;
+
 const fail = (message, stage) => Object.assign(new Error(message), { stage });
 
-/**
- * Null until the app has settled one way or the other, so `waitFor` keeps
- * polling: the mailbox appears well over a second after the load event, and the
- * app's hash routing fires no lifecycle event at all.
- */
+async function sweepOurTabs(client) {
+  if (ourTargets.size === 0) return;
+
+  const targets = await client.listTargets().catch(() => null);
+  const live = targets ? new Set(targets.map((target) => target.targetId)) : null;
+
+  for (const targetId of [...ourTargets]) {
+    if (live && !live.has(targetId)) {
+      ourTargets.delete(targetId);
+      continue;
+    }
+    const closed = await client.closeTarget(targetId).catch(() => false);
+    if (closed) ourTargets.delete(targetId);
+  }
+}
+
 const mailboxState = ({ listing, password }) => {
   const rendered = document.querySelectorAll(listing).length > 0;
   const passwordFields = document.querySelectorAll(password).length;
@@ -40,25 +38,21 @@ const mailboxState = ({ listing, password }) => {
   return { rendered, passwordFields, host: location.host };
 };
 
-async function runExclusive(work, { connect } = {}) {
-  const attached = await attachToNicemail({ connect });
-  if (!attached.ok) throw fail(attached.error, attached.stage);
-
-  const { browser, page: operatorPage } = attached.data;
-  const { client } = browser;
-
+async function withFreshTab(client, browserContextId, work) {
   let targetId = null;
   let session = null;
 
   try {
-    // about:blank, then navigate — the sequence that was measured end to end.
-    // Creating the tab straight onto the app races its own first navigation,
-    // and a Target.closeTarget issued into that race reports success on a tab
-    // that stays open.
-    targetId = await client.createTarget('about:blank', {
-      background: true,
-      browserContextId: operatorPage.browserContextId,
-    });
+    try {
+      targetId = await client.createTarget('about:blank', {
+        background: true,
+        browserContextId,
+      });
+    } catch (error) {
+      if (error?.adoptedTargetId) ourTargets.add(error.adoptedTargetId);
+      throw error;
+    }
+    ourTargets.add(targetId);
 
     session = await client.attach(targetId);
     await session.send('Page.navigate', { url: browserConfig.appUrl });
@@ -75,27 +69,74 @@ async function runExclusive(work, { connect } = {}) {
     return await work(session);
   } finally {
     if (session) await session.close().catch(() => {});
-    // Verified and retried inside closeTarget, which reports false rather than
-    // throwing when the tab outlived the close. A tab left behind is a tab the
-    // operator finds in their window, once per sync — not worth failing a sync
-    // that has already done its work, but never worth hiding either.
     if (targetId) {
       const closed = await client.closeTarget(targetId).catch(() => false);
-      if (!closed) {
+      if (closed) ourTargets.delete(targetId);
+      else {
         console.warn(
           `[NICeMail agent] The agent tab (target ${targetId}) would not close. ` +
-            'Close it by hand; it is not the tab you signed in on.',
+            'It will be closed before the next NICeMail operation.',
         );
       }
     }
+  }
+}
+
+const worthAnotherTab = (error) => error?.stage !== 'verify_session';
+
+async function runExclusive(work, { connect } = {}) {
+  const attached = await attachToNicemail({ connect, exclude: ourTargets });
+  if (!attached.ok) throw fail(attached.error, attached.stage);
+
+  const { browser, page: operatorPage } = attached.data;
+  const { client } = browser;
+
+  try {
+    await sweepOurTabs(client);
+
+    let entered = false;
+    const guarded = (session) => {
+      entered = true;
+      return work(session);
+    };
+
+    try {
+      return await withFreshTab(client, operatorPage.browserContextId, guarded);
+    } catch (error) {
+      if (entered || !worthAnotherTab(error)) throw error;
+
+      console.warn(
+        `[NICeMail agent] The agent tab never became usable (${error.message}). ` +
+          'Closing it and trying once more with a fresh tab.',
+      );
+      await sweepOurTabs(client);
+      return await withFreshTab(client, operatorPage.browserContextId, guarded);
+    }
+  } finally {
     await release(browser);
   }
 }
 
-/** `connect` is the test seam, passed through to attachToNicemail. */
+export async function closeAgentTabs({ connect = cdpConnect } = {}) {
+  if (ourTargets.size === 0) return;
+
+  let client = null;
+  try {
+    client = await connect();
+    await sweepOurTabs(client);
+  } catch {} finally {
+    await client?.disconnect?.().catch(() => {});
+  }
+}
+
 export function withNicemail(work, options = {}) {
+  queued += 1;
+  const done = () => {
+    queued -= 1;
+  };
+
   const run = queue.then(() => runExclusive(work, options));
-  // The queue must survive a failed run, or one error would block every later call.
   queue = run.catch(() => {});
+  run.then(done, done);
   return run;
 }

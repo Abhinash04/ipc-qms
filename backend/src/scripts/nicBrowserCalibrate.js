@@ -1,9 +1,7 @@
 import 'dotenv/config';
-
 import { mkdir, rm, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import path from 'path';
-
 import browserConfig from '../config/browserConfig.js';
 import { redact } from '../services/email/nic/browser/inspect.js';
 import { pageKit } from '../services/email/nic/browser/pageKit.js';
@@ -11,28 +9,9 @@ import { listRows } from '../services/email/nic/browser/readInbox.js';
 import { SELECTORS, locate } from '../services/email/nic/browser/selectors.js';
 import { withNicemail } from '../services/email/nic/browser/session.js';
 
-/**
- * Calibrating the NICeMail compose form against the live mailbox.
- *
- * A compose key in selectors.js leaves UNCALIBRATED — refused by the agent —
- * only once this has shown, in the agent's own background tab, that each
- * one resolves and does what sending needs: New Mail opens the form, an
- * address typed into To becomes a recipient, the subject and body take their
- * text, a file can be attached, and Discard closes the form again.
- *
- * It NEVER presses Send. It types into one draft and discards it. It also
- * visits the Sent and Drafts folders, to learn their routes and to check that
- * no draft was left behind. The operator's own tab is not touched.
- *
- *   npm run nic:browser:calibrate
- *   npm run nic:browser:calibrate -- --attach        also attach a small generated PDF
- *   npm run nic:browser:calibrate -- --show-addresses
- */
-
 const args = process.argv.slice(2);
 const attach = args.includes('--attach');
 const showAddresses = args.includes('--show-addresses');
-
 const COMPOSE_KEYS = [
   'composeButton',
   'toInput',
@@ -46,19 +25,9 @@ const COMPOSE_KEYS = [
   'fromAddress',
 ];
 
-/**
- * An entry the calibration may use although it is UNCALIBRATED. `locate`
- * refuses the registry's own entry objects; a copy of one is an explicit
- * decision, and only this script makes it.
- */
 const unlocked = (key) => ({ ...SELECTORS[key] });
-
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const firstLine = (error) => String(error?.message || error).split('\n')[0];
-
-// ── Page-side (each receives pageKit as its second argument) ─────────────────
-
-/** How every entry resolves, as the inspector reports it. */
 const resolveEntries = ({ entries }, kit) =>
   entries.map(([key, entry]) => {
     const checked = kit.resolve(entry);
@@ -74,7 +43,6 @@ const resolveEntries = ({ entries }, kit) =>
     };
   });
 
-/** Truthy once the entry resolves with its checks — what `waitFor` polls on. */
 const entryShown = ({ spec }, kit) => kit.resolve(spec).elements.length > 0 || null;
 const entryGone = ({ spec }, kit) => kit.resolve(spec, { raw: true }).elements.length === 0 || null;
 
@@ -85,8 +53,6 @@ const setHash = ({ hash }) => {
 };
 const activeFolderIs = ({ label }) =>
   document.querySelector('[role="treeitem"].zmCurTree')?.getAttribute('aria-label') === label || null;
-
-/** A row's attribute names, and the attribute names of the cells inside it. */
 const rowShape = ({ listRow }) => {
   const row = document.querySelector(listRow);
   if (!row) return null;
@@ -95,8 +61,6 @@ const rowShape = ({ listRow }) => {
     cells: [...new Set([...row.querySelectorAll('[data-action], [data-testid]')].map((cell) => cell.getAttribute('data-action') || cell.getAttribute('data-testid')))],
   };
 };
-
-/** Clear a recipient input, through the prototype setter React listens behind. */
 const clearInput = ({ spec }, kit) => {
   const input = kit.resolve(spec).elements[0];
   if (!input) return false;
@@ -106,7 +70,6 @@ const clearInput = ({ spec }, kit) => {
   return true;
 };
 
-/** Type an address and commit it the way `method` says, without CDP input. */
 const commitInPage = ({ spec, address, method }, kit) => {
   const input = kit.resolve(spec).elements[0];
   if (!input) return false;
@@ -138,12 +101,6 @@ const focusEntry = ({ spec }, kit) => {
   element.focus();
   return element.ownerDocument.activeElement === element || element.ownerDocument.hasFocus();
 };
-
-/**
- * What the recipient row now holds: every element in it (other than the input)
- * that carries the address in an attribute or its text — the chip, if the
- * address was committed — and what is still sitting in the input.
- */
 const recipientState = ({ spec, address }, kit) => {
   const input = kit.resolve(spec, { raw: true }).elements[0];
   if (!input) return null;
@@ -170,8 +127,6 @@ const recipientState = ({ spec, address }, kit) => {
 };
 
 const inputValue = ({ spec }, kit) => kit.resolve(spec).elements[0]?.value ?? null;
-
-/** The body written as the editor's own markup: one `<div>` per line. */
 const writeBodyHtml = ({ spec, lines }, kit) => {
   const body = kit.resolve(spec).elements[0];
   if (!body) return false;
@@ -195,12 +150,9 @@ const clearBody = ({ spec }, kit) => {
   body.innerHTML = '<div><br></div>';
   return true;
 };
-
-/** Tab labels: the compose tab is named after its subject once the app has taken it. */
 const tabLabels = () =>
   [...document.querySelectorAll('[role="tab"]')].map((tab) => (tab.getAttribute('aria-label') || tab.textContent || '').trim());
 
-/** Open dialogs and their buttons — a "discard this draft?" confirmation, if any. */
 const openDialogs = (_, kit) =>
   kit
     .all('[role="dialog"], [role="alertdialog"]')
@@ -214,7 +166,6 @@ const openDialogs = (_, kit) =>
 const liveRegions = (_, kit) =>
   kit.all('[role="status"], [role="alert"], [aria-live]').map((region) => kit.norm(region.textContent).slice(0, 120)).filter(Boolean);
 
-/** The attachment row of the compose form: its text, and what in it names a file. */
 const attachmentArea = ({ spec, stem }, kit) => {
   const button = kit.resolve(spec, { raw: true }).elements[0];
   const row = button?.closest('.zmCRAtt') || button?.closest('.zmCAttListWra')?.parentElement;
@@ -238,8 +189,6 @@ const attachmentArea = ({ spec, stem }, kit) => {
   };
 };
 
-// ── Steps ────────────────────────────────────────────────────────────────────
-
 async function resolveKeys(session, keys) {
   return session.evaluate(resolveEntries, { entries: keys.map((key) => [key, SELECTORS[key]]) }, { kit: pageKit });
 }
@@ -257,7 +206,7 @@ async function waitShown(session, key, timeout = browserConfig.timeoutMs) {
 async function visitFolder(session, key, label) {
   await click(session, key);
   await session.waitFor(activeFolderIs, { timeout: browserConfig.timeoutMs, argument: { label } });
-  await sleep(1500); // the list fills after the folder switches
+  await sleep(1500);
   const rows = await session.evaluate(listRows, SELECTORS);
   return {
     hash: await session.evaluate(hashNow),
@@ -291,7 +240,6 @@ async function tryRecipient(session, address) {
     await sleep(1500);
     const state = await session.evaluate(recipientState, { spec, address }, { kit: pageKit });
     Object.assign(attempts.at(-1), state);
-    // A holder outside the input, and the input emptied: the address became a recipient.
     if (state?.holders.length && !state.inputValue.toLowerCase().includes(address.toLowerCase())) {
       return { chosen: method, attempts };
     }
@@ -338,7 +286,6 @@ async function tryAttach(session) {
     const before = await session.evaluate(attachmentArea, argument, { kit: pageKit });
     await session.send('DOM.enable');
     await session.send('DOM.setFileInputFiles', { files: [file], backendNodeId: opened.backendNodeId });
-    // Listed first, then uploaded and virus-scanned: wait for the status to settle.
     const snapshots = [];
     const uploadStarted = Date.now();
     while (Date.now() - uploadStarted < 45000) {
@@ -382,8 +329,6 @@ async function discard(session) {
   return { dialogs, confirmedWith, closed, closedAfterMs: closed ? Date.now() - started : null };
 }
 
-// ── Run ──────────────────────────────────────────────────────────────────────
-
 async function calibrate(session) {
   const report = { at: new Date().toISOString(), steps: {} };
   const recipient = browserConfig.testRecipient;
@@ -391,7 +336,6 @@ async function calibrate(session) {
   const marker = `IPC-QMS calibration dry run ${report.at}`;
   const lines = ['IPC-QMS calibration dry run.', 'This draft is discarded without being sent.'];
 
-  // Folders first, while no compose tab is open.
   report.steps.sent = await visitFolder(session, 'folderSent', 'Sent');
   report.steps.draftsBefore = await visitFolder(session, 'folderDrafts', 'Drafts');
   await backToInbox(session);

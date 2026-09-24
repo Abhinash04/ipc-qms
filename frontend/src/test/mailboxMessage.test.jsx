@@ -8,7 +8,6 @@ import { useAuthStore } from '@/store/useAuthStore';
 import { findUserById } from '@/constants/mockUsers';
 import { fetchMailboxMessage, markMailboxMessageRead } from '@/services/api/mailboxService';
 
-// The real module, so the message-scoped download URL is the one the page builds.
 vi.mock('@/services/api/mailboxService', async (importOriginal) => ({
   ...(await importOriginal()),
   fetchMailboxMessage: vi.fn(),
@@ -20,7 +19,6 @@ const FRONT_OFFICE = findUserById('USR-0002');
 const CSP =
   "default-src 'none'; img-src data:; style-src 'unsafe-inline'; font-src data:; form-action 'none'; base-uri 'none'";
 
-/** Already read, so no test marks it read unless it asks to. */
 const MESSAGE = {
   mailboxMessageId: 'MSG-00001',
   from: 'Ravi Kumar <ravi@pharma.example>',
@@ -54,7 +52,6 @@ function renderMessage(id = MESSAGE.mailboxMessageId) {
   return queryClient;
 }
 
-/** One `<dt>`/`<dd>` pair of the header block. */
 const field = (label) => screen.getByText(label, { selector: 'dt' }).parentElement;
 
 beforeEach(() => {
@@ -73,7 +70,6 @@ describe('the message header', () => {
     expect(field('From')).toHaveTextContent('Ravi Kumar <ravi@pharma.example>');
     expect(field('To')).toHaveTextContent('ipc-mailbox@example.invalid, registry@example.invalid');
     expect(field('CC')).toHaveTextContent('copy@pharma.example');
-    // Empty, so not shown at all.
     expect(screen.queryByText('BCC', { selector: 'dt' })).toBeNull();
     expect(field('Date').querySelector('time')).toHaveAttribute('datetime', MESSAGE.receivedAt);
     expect(screen.getByRole('link', { name: 'Back to IPC Mailbox' })).toHaveAttribute(
@@ -104,7 +100,6 @@ describe('the message body', () => {
     });
     renderMessage();
 
-    // Plain text stays the default even when there is HTML.
     const formatted = await screen.findByRole('button', { name: 'Formatted' });
     expect(screen.getByRole('button', { name: 'Plain text' })).toHaveAttribute('aria-pressed', 'true');
     expect(document.querySelector('iframe')).toBeNull();
@@ -127,18 +122,14 @@ describe('the message body', () => {
     );
     expect(doc.querySelector('a').getAttribute('target')).toBe('_blank');
 
-    // Nothing of the mail reached the app's own document, and nothing ran.
     expect(screen.queryByTestId('mail-html-marker')).toBeNull();
     expect(window.__mailLeak).toBeUndefined();
   });
 
-  // A declarative shadow root: the frame's parser attaches it, and the inert
-  // pass's selectors never look inside a template.
   it('drops template content, and points SVG links at a new tab too', async () => {
     fetchMailboxMessage.mockResolvedValue({
       ...MESSAGE,
       bodyHtml:
-        // After body content, so it parses into the body rather than the head.
         '<p>Hello</p><template shadowrootmode="open"><a href="https://evil.example/">x</a>' +
         '<meta http-equiv="refresh" content="0"></template>' +
         '<svg><a xlink:href="https://site.example/"><text>svg link</text></a></svg>',
@@ -170,7 +161,6 @@ describe('attachments', () => {
 
     expect(await screen.findByRole('heading', { name: 'Attachments (2)' })).toBeInTheDocument();
     expect(screen.getByText('2.0 KB')).toBeInTheDocument();
-    // Not clicked: jsdom reports a navigation it cannot perform on the console.
     expect(screen.getByRole('link', { name: 'Download' }).getAttribute('href')).toMatch(
       /\/mailbox\/messages\/MSG-00001\/attachments\/att_1\?download=1$/,
     );
@@ -218,13 +208,11 @@ describe('read state', () => {
     await waitFor(() => expect(queryClient.getQueryData(key).isRead).toBe(true));
     expect(markMailboxMessageRead).toHaveBeenCalledWith('MSG-00001');
 
-    // The server still answers unread; the page must not ask a second time.
     await act(() => queryClient.refetchQueries({ queryKey: key }));
     expect(fetchMailboxMessage).toHaveBeenCalledTimes(2);
     expect(markMailboxMessageRead).toHaveBeenCalledTimes(1);
   });
 
-  // `null` is a mailbox that keeps no read state: asking would only earn a 409.
   it.each([true, null])('never marks a message whose isRead is %s', async (isRead) => {
     fetchMailboxMessage.mockResolvedValue({ ...MESSAGE, isRead });
     renderMessage();

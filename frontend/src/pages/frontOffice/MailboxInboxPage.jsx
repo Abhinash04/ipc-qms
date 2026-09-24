@@ -57,18 +57,15 @@ import { ROLE_SLUG } from "@/constants/permissions";
 import { cn } from "@/utils/cn";
 
 const AUTO_REFRESH_MS = 15000;
-/** While a NICeMail sync is reading the live inbox, its mail appears as it lands. */
 const SYNC_POLL_MS = 3000;
 const PAGE_SIZE = 50;
 const SEARCH_DEBOUNCE_MS = 300;
 
-/** `awaiting` is the list's `unreadOnly`: not yet accepted or rejected. */
 const MAIL_FILTERS = [
   { awaiting: false, label: "All mail" },
   { awaiting: true, label: "Awaiting" },
 ];
 
-/** `value`, once it has stopped changing for `ms`. No timer runs until it changes. */
 function useDebouncedValue(value, ms) {
   const [debounced, setDebounced] = useState(value);
 
@@ -81,54 +78,26 @@ function useDebouncedValue(value, ms) {
   return debounced;
 }
 
-/** Column template shared by the header strip and every row. */
 const ROW_GRID = "xl:grid-cols-[60px_220px_1fr_200px_160px_150px]";
 
-/**
- * One line summarising the last mailbox check.
- *
- * It reports what is *waiting*, never what was registered — checking the
- * mailbox registers nothing. A case appears only when somebody accepts a
- * message below.
- */
 function describeMailboxCheck(result) {
   const waiting = result.fetched || 0;
   if (waiting === 0) return "No new mail";
   return `${waiting} message${waiting === 1 ? "" : "s"} awaiting validation`;
 }
 
-/**
- * What accepting actually achieved, step by step.
- *
- * Accepting does three things now — case, acknowledgement, forward — and any
- * one of them can fail on its own without losing the case. Naming the step that
- * failed is the difference between "retry the tick" and an afternoon spent
- * working out which email never went out.
- */
 function describeAccept(result, message) {
   const sender = parseSender(message.from).email || message.from;
   const done = [];
   const failed = [];
 
-  // Three outcomes, not two: an "offline summary" is a real result produced
-  // without the model, and calling it a success would hide that the AI service
-  // is down — which is the thing worth knowing.
   if (result.aiSummaryStatus === "GENERATED") done.push("AI summary generated");
   else if (result.aiSummaryStatus === "FALLBACK") done.push("summary produced offline");
   else if (result.aiSummaryStatus === "FAILED") failed.push("no AI summary");
 
-  /**
-   * "Not sent" and "may have been sent" need opposite advice.
-   *
-   * The server flags an acknowledgement `unconfirmed` when Send was pressed in
-   * the NICeMail browser and nothing confirmed it left. Advising a retry there
-   * — as this toast used to for every failure — is how an inquirer ends up
-   * acknowledged twice from an official mailbox.
-   */
   const ackUnconfirmed = (result.errors || []).some(
     (entry) => entry.step === "acknowledgement" && entry.unconfirmed,
   );
-  // The server's own reason, which names the step the send stopped at.
   const ackError = (result.errors || []).find((entry) => entry.step === "acknowledgement")?.error;
   const reason = ackError ? ` Acknowledgement: ${ackError}` : "";
 
@@ -149,19 +118,6 @@ function describeAccept(result, message) {
     : `${sentence}. The case is saved — retry from the case page.${reason}`;
 }
 
-/**
- * The mailbox could not be read — the list is whatever was last seen.
- *
- * Two mailboxes report this. The NICeMail one is filled by an agent reading a
- * signed-in Chrome tab, and a failed read is answered 200 with whatever was
- * already stored plus a `sync` that says why. A Gmail poll that cannot reach
- * Google answers 503 and reports the outage the same way, since the last
- * listing is still on screen and still worth showing.
- *
- * Standing here rather than in a toast is the point: an outage lasts as long as
- * it lasts, and one banner that clears itself beats a toast every thirty
- * seconds that does not.
- */
 function MailboxSyncNotice({ sync }) {
   const since = sync.since ? new Date(sync.since).toLocaleTimeString() : null;
 
@@ -200,9 +156,6 @@ function MailboxOfflineNotice({ reason }) {
           Mailbox server offline / unreachable
         </p>
         <p className="mt-1 text-[12.5px] font-medium text-rose-700 leading-relaxed">
-          {/* The server's own reason when it gave one — a credential Gmail
-              refused says something quite different from a backend that is not
-              running, and the Front Officer can act on only one of them. */}
           {reason ||
             'Could not connect to the backend mailbox service. Please verify backend is running (`npm start` in `/backend`).'}
         </p>
@@ -255,7 +208,6 @@ function InboxActions({
         <span>{running ? "Checking Mailbox…" : "Check IPC Mailbox"}</span>
       </button>
 
-      {/* NICeMail only: every other mailbox is read live on each listing. */}
       {canSync && (
         <button
           type="button"
@@ -274,7 +226,6 @@ function InboxActions({
   );
 }
 
-/** Search and the awaiting filter, both answered by the server. */
 function InboxToolbar({ search, onSearchChange, awaiting, onAwaitingChange }) {
   return (
     <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-5">
@@ -323,7 +274,6 @@ function InboxToolbar({ search, onSearchChange, awaiting, onAwaitingChange }) {
   );
 }
 
-/** Shown until the first answer, so an inbox still loading never reads as empty. */
 function InboxSkeleton() {
   return (
     <div role="status" aria-label="Loading mail" className="space-y-3">
@@ -422,12 +372,6 @@ function MailboxColumnHeader() {
   );
 }
 
-/**
- * What became of this message: a case, a rejection, or a decision still to make.
- *
- * Three states rather than two. "Not registered" used to mean both "waiting for
- * you" and "you looked at it and said no", which are opposite things.
- */
 function QueryCaseCell({ known, queryId, detailPath, rejected }) {
   if (known && detailPath) {
     return (
@@ -458,15 +402,6 @@ function QueryCaseCell({ known, queryId, detailPath, rejected }) {
   );
 }
 
-/**
- * The validation gate, one row at a time: is this a genuine IPC enquiry?
- *
- * Shown only while the message is undecided. Accepting opens a case, mints its
- * id, acknowledges whoever wrote in and forwards the enquiry to the
- * Officer-in-Charge; rejecting records that it was seen and turned down, and
- * creates nothing at all. Both are final — the server keeps the first decision
- * and ignores any later one — so each asks for confirmation first.
- */
 function RowValidationControls({ message, decision, pending, confirming, onAsk, onCancel, onConfirm }) {
   if (decision) return null;
 
@@ -548,13 +483,6 @@ function RowValidationControls({ message, decision, pending, confirming, onAsk, 
   );
 }
 
-/**
- * One action block for every breakpoint. It used to be rendered twice — once
- * `xl:hidden`, once `hidden xl:flex`. CSS hid one of them, but both stayed in
- * the accessibility tree and in the DOM, so every row exposed two identically
- * named "Yes" buttons and the compact copy's icon buttons carried no
- * accessible name at all.
- */
 function RowDeleteControls({
   message,
   known,
@@ -568,8 +496,6 @@ function RowDeleteControls({
   if (confirming) {
     return (
       <div className="flex flex-col items-center gap-1.5">
-        {/* Desktop-only caption: the compact layout never showed one, and the
-            buttons are self-explanatory next to the row they belong to. */}
         <span className="hidden xl:block text-[11px] font-extrabold text-slate-500 uppercase tracking-wider">
           Delete?
         </span>
@@ -619,7 +545,6 @@ function RowDeleteControls({
   );
 }
 
-/** Registered, rejected, or still to be decided — the rail colour says which. */
 const railColour = (known, rejected) => {
   if (known) return "bg-emerald-500";
   if (rejected) return "bg-slate-400";
@@ -648,15 +573,8 @@ function MailboxRow({
   const sender = parseSender(message.from);
   const received = formatReceived(message.receivedAt);
   const rejected = decision?.decision === "REJECTED";
-  // `null` is a mailbox that keeps no read state, which is not the same as unread.
   const unread = message.isRead === false;
 
-  /**
-   * Anywhere on the row opens the message, except a click meant for a control
-   * inside it, one that ends a text selection, or one on a tooltip, which
-   * React bubbles here out of its portal. The subject link is the keyboard
-   * way in.
-   */
   const openFromRow = (event) => {
     if (
       !event.currentTarget.contains(event.target) ||
@@ -795,7 +713,14 @@ function MailboxRow({
   );
 }
 
-function MailboxFeedCard({ count, deleteMessage, children }) {
+const FEED_SUBTITLE = {
+  'nic-browser': 'Email received in the NICeMail mailbox, from any sender.',
+  nic: 'Email received in the NICeMail mailbox over IMAP, from any sender.',
+  mongo: 'Messages in the local mailbox store — development and testing, not a live inbox.',
+  'in-memory': 'Messages in the local mailbox store — development and testing, not a live inbox.',
+};
+
+function MailboxFeedCard({ count, backend, deleteMessage, children }) {
   return (
     <div className="glass-panel aurora-panel bento-card rounded-[30px] border border-white/80 p-6 sm:p-7 shadow-lg bg-white/95 backdrop-blur-xl">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 mb-5 border-b border-slate-100/80">
@@ -808,8 +733,8 @@ function MailboxFeedCard({ count, deleteMessage, children }) {
               Incoming Mailbox Feed 📬
             </h2>
             <p className="m-0 text-[13.5px] font-medium text-slate-500 mt-1">
-              Live email received in the official IPC inbox, from any sender. A
-              message becomes a Query Case only when you accept it.
+              {FEED_SUBTITLE[backend] || 'Messages in the Front Office mailbox, from any sender.'}{' '}
+              A message becomes a Query Case only when you accept it.
             </p>
           </div>
         </div>
@@ -847,17 +772,7 @@ export function MailboxInboxPage() {
   const { running, error, lastResult, accept, reject, checkMailbox } =
     useMailboxIngestion();
 
-  /**
-   * On by default, because the NICeMail mailbox fills itself in the background.
-   * A listing kicks off the sync that reads the live inbox and answers with
-   * what was already stored — so the messages that sync finds appear on the
-   * NEXT poll. With auto-refresh off there is no next poll: the page showed
-   * "No Mail in the IPC Mailbox" beside a toast saying three were waiting,
-   * until someone pressed Check twice.
-   */
   const [autoRefresh, setAutoRefresh] = useState(true);
-  // `{ id, action }`, not a bare id: accept, reject and delete each confirm, and
-  // a single id would let one row's confirmation open another's.
   const [confirming, setConfirming] = useState(null);
   const [deciding, setDeciding] = useState(false);
   const [search, setSearch] = useState("");
@@ -867,11 +782,6 @@ export function MailboxInboxPage() {
 
   const queryClient = useQueryClient();
 
-  /**
-   * One page at a time, searched and filtered by the server: the NICeMail
-   * store only grows, and filtering one page here would miss the rest.
-   * The previous page stays on screen while the next one loads.
-   */
   const inbox = useQuery({
     queryKey: ["mailbox", "list", { q, awaiting, offset }],
     queryFn: () =>
@@ -879,7 +789,6 @@ export function MailboxInboxPage() {
     placeholderData: keepPreviousData,
     retry: false,
     refetchInterval: (query) => {
-      // A failed read keeps the last answer, which may still say `running`.
       if (query.state.status !== "error" && query.state.data?.sync?.running) {
         return SYNC_POLL_MS;
       }
@@ -887,10 +796,6 @@ export function MailboxInboxPage() {
     },
   });
 
-  /**
-   * NICeMail is read in the background (202), so the answer only says whether
-   * a sync started; the list then polls while `sync.running` is true.
-   */
   const syncNow = useMutation({
     mutationFn: () => syncMailbox(),
     onSuccess: ({ started }) => {
@@ -912,11 +817,6 @@ export function MailboxInboxPage() {
     },
   });
 
-  /**
-   * Decisions are a separate read because under MAILBOX_SOURCE=gmail the
-   * message is a live view of a real account and carries no QMS state — there
-   * is nowhere on it to record that it was rejected.
-   */
   const decisions = useQuery({
     queryKey: ["mailbox", "decisions"],
     queryFn: fetchMailboxDecisions,
@@ -933,21 +833,10 @@ export function MailboxInboxPage() {
 
   const messages = inbox.data?.messages || [];
 
-  /**
-   * The last row on a later page went — accepted, rejected or deleted — so
-   * step back to a page that has some, rather than show an empty inbox. Set
-   * while rendering, as React advises for state that follows other state.
-   */
   if (!inbox.isPlaceholderData && inbox.data && !messages.length && offset > 0) {
     setOffset(Math.max(0, offset - PAGE_SIZE));
   }
 
-  /**
-   * A failed read still has something to say. The server answers a mailbox it
-   * cannot reach with 503 and the reason, and react-query keeps the last good
-   * listing on screen — so the page shows that listing with a banner saying it
-   * may be stale, rather than an empty inbox and a toast.
-   */
   const loadFailure = inbox.isError
     ? (inbox.error?.response?.data ?? { error: inbox.error?.message })
     : null;
@@ -959,7 +848,6 @@ export function MailboxInboxPage() {
       (d) => d.mailboxMessageId === mailboxMessageId,
     ) || null;
 
-  /** Reads the mailbox. Registers nothing — that is what the tick is for. */
   const checkNow = async () => {
     notifyMailboxCheck(await checkMailbox());
     await inbox.refetch();
@@ -978,16 +866,11 @@ export function MailboxInboxPage() {
     setDeciding(true);
     const result = await accept(message);
 
-    // Reported only once the case actually exists — a toast before the commit
-    // is a claim, not a result.
     if (result.error) {
       notify.error("Could not register that message", result.error);
     } else if (result.accepted) {
       notify.success(`Query case ${result.queryId} created`, describeAccept(result, message));
     } else {
-      // Not necessarily a no-op: pressing ✓ again after a failed send retries
-      // the step that did not complete, so say where the case stands now rather
-      // than only that it already exists.
       notify.info(
         "Already registered",
         `Query case ${result.queryId} — ${describeAccept(result, message)}`,
@@ -1073,6 +956,7 @@ export function MailboxInboxPage() {
 
       <MailboxFeedCard
         count={inbox.data?.total ?? messages.length}
+        backend={inbox.data?.backend}
         deleteMessage={deleteMessage}
       >
         <InboxToolbar
@@ -1095,8 +979,6 @@ export function MailboxInboxPage() {
 
             <div className="space-y-3">
               {messages.map((message, index) => {
-                // The server's link wins; the store lookup covers a mailbox
-                // whose answer does not carry one.
                 const queryId =
                   message.linkedCase?.queryId ||
                   queryIdFor(message.mailboxMessageId);

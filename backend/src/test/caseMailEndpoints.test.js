@@ -1,17 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import request from 'supertest';
 
-/**
- * The retry buttons, and the control that settles a send nobody can verify.
- *
- * These endpoints are the case page's "Retry sending" and the Dispatch page's
- * "Retry sending response". They used to take the recipient and the text from
- * the request and send them, with no guard at all — so a retry could address
- * anyone, say anything, and be pressed twice. They now name a case and nothing
- * else: the server reads who is written to and what they are told from the
- * stored case, and sends it at most once.
- */
-
 vi.mock('../config/db.js', async (importOriginal) => ({
   ...(await importOriginal()),
   isConnected: () => true,
@@ -199,7 +188,6 @@ describe('POST /emails/response — the Dispatch page retry', () => {
     expect(await messagesOfType('OUTGOING_RESPONSE')).toHaveLength(0);
   });
 
-  /** The retry that matters: pressing it again must not send a second copy. */
   it('refuses to retry while an earlier send may already have arrived', async () => {
     responseSpy.mockRejectedValue(
       Object.assign(new Error('NICeMail may have sent this message but did not confirm it in time.'), {
@@ -241,7 +229,6 @@ describe('POST /queries/:queryId/outbound/resolve', () => {
     expect(history).toContain('EMAIL_DELIVERY_CONFIRMED');
     expect(history).toContain('RESPONSE_DISPATCHED');
 
-    // Nothing was sent by saying so.
     expect(responseSpy).not.toHaveBeenCalled();
   });
 

@@ -8,8 +8,6 @@ import { MobileNav } from "@/components/layout/MobileNav";
 
 export function MainLayout() {
   return (
-    // reducedMotion="user" makes every framer-motion animation in the shell
-    // and its pages respect the OS "reduce motion" setting (WCAG 2.3.3).
     <LazyMotion features={domAnimation} strict>
       <MotionConfig reducedMotion="user">
         <div className="app-shell-aurora relative flex h-screen overflow-hidden bg-transparent">

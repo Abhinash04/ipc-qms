@@ -6,6 +6,7 @@ import { WORKFLOW_STATE } from '@/constants/statusEnums';
 import { buildLifecycle, STAGE, STAGE_STATUS } from '@/constants/queryLifecycle';
 import { fakeFinalApprovalEndpoint } from '@/test/fakeFinalApprovalEndpoint';
 import { fakeCaseMail } from '@/test/fakeCaseMail';
+import { EXTERNAL_INQUIRER as INQUIRER } from '@/test/externalInquirer';
 
 vi.mock('@/services/api/mailboxService');
 
@@ -16,13 +17,7 @@ const OIC = findUserById('USR-0003');
 const OFFICIAL = findUserById('USR-0004');
 const REVIEWER_A = findUserById('USR-0005');
 const REVIEWER_B = findUserById('USR-0006');
-const INQUIRER = findUserById('USR-0001');
 
-/**
- * The forward is a server call now: the record of it, the audit row and the
- * move to PENDING_ASSIGNMENT all come back from the endpoint rather than being
- * written here. See src/test/fakeCaseMail.js.
- */
 const caseMail = fakeCaseMail();
 const fakeForward = caseMail.forwardQuery;
 
@@ -36,10 +31,6 @@ const fakeSend = (payload) =>
     sentAt: '2026-08-18T12:00:00.000Z',
   });
 
-/**
- * Final approval is one server call now, so the mail leg is injected into the
- * endpoint rather than into the store — see src/test/fakeFinalApprovalEndpoint.js.
- */
 const finalApproval = () => fakeFinalApprovalEndpoint({ send: fakeSend });
 
 const enquiry = () => ({

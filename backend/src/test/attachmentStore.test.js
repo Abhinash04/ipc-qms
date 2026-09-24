@@ -45,15 +45,12 @@ describe('attachmentStore', () => {
     await expect(store.getMetadata(traversal)).rejects.toThrow(/Invalid attachment id/);
     await expect(store.readBytes(traversal)).rejects.toThrow(/Invalid attachment id/);
     await expect(store.remove(traversal)).rejects.toThrow(/Invalid attachment id/);
-    // Also reject ids that are merely close to valid but carry extra segments.
     await expect(store.getMetadata('att_valid/../../x')).rejects.toThrow(/Invalid attachment id/);
   });
 
   it('detects a corrupted case: metadata present, bytes missing', async () => {
     const meta = await store.save({ buffer: Buffer.from('x'), filename: 'x.txt', mimeType: 'text/plain' });
     await store.remove(meta.attachmentId);
-    // remove() deletes both files; simulate "sidecar survives, bytes vanish"
-    // by re-saving only the metadata note that readBytes fails cleanly either way.
     expect(await store.getMetadata(meta.attachmentId)).toBeNull();
   });
 

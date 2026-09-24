@@ -64,9 +64,10 @@ status:    'GENERATED' | 'FALLBACK' | 'FAILED'
 - `FAILED` — the call itself threw and there is nothing usable. Pressing ✓ again re-attempts only
   the summary; a `GENERATED` or `FALLBACK` summary already on the case is left alone.
 
-The intake audit order is therefore `QUERY_RECEIVED → QUERY_REGISTERED → AI_SUMMARY_GENERATED →
-ACKNOWLEDGEMENT_SENT → QUERY_FORWARDED`, with `EMAIL_CLASSIFIED` written last when the controller
-records the decision. `AI_SUMMARY_GENERATED` is recorded with `actorType: agent`, the status in its
+The intake audit order is therefore `QUERY_RECEIVED → QUERY_REGISTERED → CASE_ASSOCIATED →
+AI_SUMMARY_GENERATED → ACKNOWLEDGEMENT_SENT → QUERY_FORWARDED`, with `EMAIL_CLASSIFIED` written last
+when the controller records the decision. `CASE_ASSOCIATED` is the row that ties the mailbox
+message to the case it became, and only the accept whose insert created the case writes it. `AI_SUMMARY_GENERATED` is recorded with `actorType: agent`, the status in its
 `aiMetadata`, and `result: failure` only for `FAILED` — a fallback is a success that says so.
 
 **A failed summary costs nothing else.** The case, its Case ID, the acknowledgement and the forward
@@ -86,10 +87,16 @@ nothing twice. One incoming email can open exactly one case: `EmailMessage.sourc
 a unique **partial** index (`partialFilterExpression: { sourceMessageId: { $type: 'string' } }`),
 which is enforcement by the database rather than by one browser tab's memory.
 
-Outbound dispatch mirrors this in reverse: an approved response is rendered into an email
-and sent through the same provider, with delivery status recorded against the query. The response
-body only — the case's attachments are **not** carried onto it, by either the automatic send or the
-retry, and whether they should be is still open (§12.2, and srs/14 *Dispatch*).
+Outbound dispatch mirrors this in reverse: an approved response is rendered into an email and sent
+back through the channel the case arrived in, with delivery status recorded against the query. The
+response body only — the case's attachments are **not** carried onto it, by either the automatic send
+or the retry, and whether they should be is still open (§12.2, and srs/14 *Dispatch*).
+
+**Which channel a case's mail goes out through is the case's property, not the deployment's.** A case
+stores `sourceMailbox` at intake, and all three of its emails — the acknowledgement, the forward to
+the Officer-in-Charge and the final response — follow it. The rule is stated once, normatively, in
+[backend/README.md](../../backend/README.md#which-channel-a-cases-mail-goes-out-through); it is not
+restated here.
 
 **It is sent by the server, on final approval, and nobody presses send.**
 `POST /api/v1/queries/:queryId/final-approval` (`services/workflow/finalApproval.js`) records the
@@ -117,9 +124,12 @@ that check a missing or revoked Front Office credential would close cases having
 - **Ingestion**: Automatic (mailbox polling/webhook) or manual (Front Office pastes/uploads
   the email)? — **Resolved in implementation** (12.1): both, split. Polling is automatic but only
   *lists*; registration is manual — the Front Officer decides what becomes a case.
-- **Provider**: Which email service/API is the *production* one? Gmail (OAuth) and NICeMail
-  (IMAP/SMTP) are both implemented and switchable by configuration; the decision is which one the
-  deployment runs on, not which one to build.
+- **Provider**: Which email service/API is the *production* one? — **Re-resolved in implementation**:
+  NICeMail. The Gmail transport, its inbox reader and its OAuth configuration have been deleted;
+  what remains is NICeMail, reached two ways — an operator-signed-in browser session (the working
+  channel) and IMAP/SMTP (awaiting an application-specific password) — with `mock` for development.
+  Client confirmation of the production choice is still outstanding; see
+  [14-open-questions-and-client-clarifications.md](./14-open-questions-and-client-clarifications.md#email).
 - **Threading**: Should follow-up emails on the same query thread attach to the existing
   Query record, or always create a new one?
 - **Incoming replies**: If an inquirer replies mid-workflow, how should that be handled —
@@ -138,29 +148,36 @@ Email ingestion and dispatch exist; see `backend/src/services/email/`. Sections 
 "None" predate that work and cover the parts of this document (threading rules, provider choice
 already made) that remain otherwise unrevised.
 
-**Three transports are selectable** by `EMAIL_TRANSPORT`, with `MAILBOX_SOURCE` choosing where
+**Two transports are selectable** by `EMAIL_TRANSPORT`, with `MAILBOX_SOURCE` choosing where
 incoming enquiries are read from:
 
 | Value | Sends via | Reads from | Status |
 |---|---|---|---|
 | `mock` | nothing leaves the machine | in-memory or MongoDB | default; what the test suite always uses |
-| `gmail` | the Front Office Gmail account (one OAuth 2.0 refresh token) | the Front Officer's real Gmail inbox | working; depends on that refresh token |
 | `nic` | NICeMail SMTP, one shared government mailbox | the NICeMail mailbox over IMAP, read-only | implemented; **awaiting an application-specific password** |
 
-Under Gmail, **only the Front Office mailbox is authenticated**. It is the one account the system
-reads from and sends as: acknowledgements, the forward to the Officer-in-Charge and the final
-dispatch all go out as the Front Officer, and inbox polling uses the same token. So
-`GMAIL_REFRESH_TOKEN_FRONT_OFFICE` is required when `EMAIL_TRANSPORT=gmail` and there is no
-per-role equivalent — inquirers are external senders who authenticate to nothing here, and the
-Officer-in-Charge is a recipient addressed by `OFFICER_IN_CHARGE_EMAIL`, never a sender. Any other
-role falls back to the mock transport rather than borrowing another account's credentials; the QMS
-never claims a `From` address it did not authenticate as. NICeMail is likewise one mailbox rather
-than one account per role, so every role sends from the same configured address with the role
-carried in the display name.
+`EMAIL_TRANSPORT` accepts nothing else, and `MAILBOX_SOURCE` accepts only `auto` and `nic`. A Gmail
+transport and Gmail inbox reader existed through the development phase, authenticated as the Front
+Office account with one OAuth 2.0 refresh token; they, the OAuth variables and the `googleapis`
+dependency have all been deleted. Nothing here reads a personal mailbox any more.
+
+NICeMail is **one mailbox rather than one account per role**, so every role sends from the same
+configured address with the role carried in the display name. Inquirers are external senders who
+authenticate to nothing here, and the Officer-in-Charge is a recipient addressed by
+`OFFICER_IN_CHARGE_EMAIL`, never a sender. A role holding no usable credential falls back to the mock
+transport rather than borrowing another account's; the QMS never claims a `From` address it did not
+authenticate as.
+
+The mailbox address is environment-driven (`NIC_EMAIL`) and hardcoded nowhere: it is a test mailbox
+today and `lab.ipc@gov.in` in production, so moving over is a one-variable change.
 
 Outbound NICeMail is subject to a two-key interlock: selecting the transport is not sufficient, and
-mail is confined to `NIC_TEST_RECIPIENT` until `NIC_ALLOW_OUTBOUND=true`. Selecting a transport
-should not, by itself, be enough to start mailing the public from a `.gov.in` address.
+every real send is confined to one test recipient until `NIC_ALLOW_OUTBOUND` is the exact string
+`true`. Selecting a transport should not, by itself, be enough to start mailing the public from a
+`.gov.in` address. `NIC_ALLOW_INTERNAL_FORWARD=true` additionally opens exactly one more address —
+`OFFICER_IN_CHARGE_EMAIL`, re-derived server-side and never taken from a request — for the forward
+alone. It is a **recipient allowance, not a second channel**, and it applies to the **browser channel
+only**: the SMTP transport checks recipients against `NIC_TEST_RECIPIENT` alone and never reads it.
 
 ### 12.3.1 NICeMail has a second, unrelated mechanism
 
@@ -170,19 +187,24 @@ shares no code and no credential with the IMAP/SMTP path.
 
 The agent can only ever attach: it never launches a browser, navigates to a login page, types a
 credential or touches an OTP field. Authentication is the operator's responsibility and remains so.
-Its code is loaded lazily, so a missing Chrome session cannot prevent the backend starting. With
-`NIC_BROWSER_MAILBOX=true` it is also a second Front Office mailbox: a Front Office account that
-signs in as `NIC_EMAIL` sees the NICeMail inbox, and the acknowledgement and final response of a case
-accepted from it go out through the signed-in NICeMail tab — so for that mailbox it is in the request
-path. Its selectors have not yet been calibrated against the live page. See
+Its code is loaded lazily, so a missing Chrome session cannot prevent the backend starting. It is
+never selected by `EMAIL_TRANSPORT`. With `NIC_BROWSER_MAILBOX=true` it is a second Front Office
+mailbox: a Front Office account (`USR-0014`) signs in as `NIC_EMAIL` and sees the NICeMail inbox, and
+**all three** emails of a case accepted from it — acknowledgement, forward to the Officer-in-Charge
+and final response — go out through the signed-in NICeMail tab, so for that mailbox it is in the
+request path. The reading selectors and the compose form are calibrated and verified against the live
+mailbox; the attachment-reading keys and `ccToggle` are not, and the agent refuses an uncalibrated
+key before the page is touched. See
 [backend/README.md](../../backend/README.md#nicemail-two-separate-mechanisms) and
 [NIC_BROWSER_AGENT.md §17](../NIC_BROWSER_AGENT.md#17-two-front-office-mailboxes).
 
 ## 12.4 Attachments
 
 Attachments are supported end-to-end: upload (`POST /api/v1/attachments`), real MIME
-multipart on outbound Gmail sends, byte download of inbound Gmail attachments, and the
-Front Officer's Forward to the Officer-in-Charge. See `backend/src/services/attachments/`.
+multipart on outbound SMTP sends, file upload into the compose form on a browser-session send, and
+the Front Officer's Forward to the Officer-in-Charge. See `backend/src/services/attachments/`.
+Inbound NICeMail attachments are **metadata only** — `nicImap` records name, type and size and does
+not download the bytes, and the browser agent's attachment-reading selectors are still uncalibrated.
 
 The Forward-to-OIC path is **fail-closed**: if any attachment associated with the query
 cannot be resolved (unknown id, missing bytes on disk, checksum mismatch), the forward is
@@ -192,10 +214,13 @@ document. When the forward runs as part of an accept, that abort is reported as
 `forwarded: false` with the reason in `errors` — the case is still created and the sender still
 acknowledged — and the case stays at `FRONT_OFFICE_VERIFICATION` for the manual forward to retry.
 
-**Security note:** the attachment endpoints require a session and a role, but **not a relationship
-to the case** — any authenticated user can read any attachment by id. See
-[backend/README.md](../../backend/README.md#security-status-authenticated-but-not-yet-case-scoped)
-for what is required before deployment.
+**Security note:** the attachment endpoints are case-scoped.
+`middleware/authorizeAttachmentAccess.js` resolves an attachment's owning case — through the message
+it arrived on, when the attachment predates the case — and admits only a principal party to it; one
+with no case yet is readable by its uploader and by the roles that see everything. It fails closed
+with 503 when there is no store. See
+[backend/README.md](../../backend/README.md#security-status-authenticated-and-case-scoped)
+for what is still required before deployment.
 
 **Attachments fail closed on send.** Every referenced file is verified (existence, bytes, SHA-256)
 before an outbound message leaves; an unresolvable attachment aborts the send with a 409 naming it,

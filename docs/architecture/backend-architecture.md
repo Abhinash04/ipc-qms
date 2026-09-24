@@ -10,15 +10,15 @@ Per `.claude/backend-rules.md`, the backend follows a Controller → Service sep
 - **Routes** (`src/routes/`) map URL + method to a controller function, and declare the middleware
   chain for that route. `src/routes/index.js` is the single mount point, aggregated under
   `/api/v1` in `src/app.js`. Ten resource routers — health, auth, emails, mailbox, AI, attachments,
-  NIC, audit, queries, pullback — carrying 36 route registrations in all.
+  NIC, audit, queries, pullback — carrying 41 route registrations in all.
 - **Controllers** (`src/controllers/`) parse the request, call the appropriate service, and shape
   the HTTP response. Ten controllers, one per resource.
-- **Services** (`src/services/`) hold business logic and data access, kept stateless. Six groups:
-  `ai/`, `attachments/`, `audit/`, `auth/`, `email/`, `workflow/`.
-- **Models** (`src/models/`) hold the Mongoose schemas — thirteen models across twelve files:
+- **Services** (`src/services/`) hold business logic and data access, kept stateless. Seven groups:
+  `ai/`, `attachments/`, `audit/`, `auth/`, `authz/`, `email/`, `workflow/`.
+- **Models** (`src/models/`) hold the Mongoose schemas — fourteen models across thirteen files:
   `AuditEvent`, `EmailMessage`, `EmailThread`, `MailboxDecision`, `MailboxMessage` (which also
-  exports the `Counter` backing message-id sequences), `Notification`, `QueryCase`, `QueryCounter`,
-  `ResponseVersion`, `Review`, `User`, `WorkflowStep`.
+  exports the `Counter` backing message-id sequences), `Notification`, `OutboundEmail`, `QueryCase`,
+  `QueryCounter`, `ResponseVersion`, `Review`, `User`, `WorkflowStep`.
 - **Data** (`src/data/`) holds the IPC knowledge corpus and the retrieval layer that grounds AI
   answers. Not a data-*access* layer — it is domain content plus search.
 - **Validators** (`src/validators/`) holds the Zod schemas — `mailboxSchemas.js`,
@@ -29,16 +29,23 @@ Per `.claude/backend-rules.md`, the backend follows a Controller → Service sep
 
 `src/app.js` assembles, in order:
 
+0. `app.set('trust proxy', 1)` — **only** under `NODE_ENV=production`, so `secure` cookies and
+   rate-limit keys use the real client address rather than the proxy's.
 1. `helmet()` — security headers.
 2. `cors({ origin: env.CLIENT_URL, credentials: true })` — restricted to the configured frontend,
    with credentials enabled so the browser will attach the session cookie cross-origin.
-3. `morgan()` — request logging (`dev` in development, `combined` in production, **disabled
+3. `compression()`.
+4. `morgan()` — request logging (`dev` in development, `combined` in production, **disabled
    entirely when `NODE_ENV=test`**).
-4. `express.json()` — body parsing.
-5. `cookie-parser()` — required for the cookie-based session.
-6. `/api/v1` routes.
-7. `notFound` — 404 handler for unmatched routes.
-8. `errorHandler` — centralized error formatter; hides stack traces outside development.
+5. `express.json({ limit: '2mb' })` — body parsing.
+6. `cookie-parser()` — required for the cookie-based session.
+7. Two `express-rate-limit` instances: 10 requests per 15 minutes on `/api/v1/auth/login` with
+   `skipSuccessfulRequests`, and 600 per minute across `/api/v1`. Both are skipped under
+   `NODE_ENV=test`, because a suite makes hundreds of requests in seconds and would trip the limiter
+   rather than assert what it came to assert.
+8. `/api/v1` routes.
+9. `notFound` — 404 handler for unmatched routes.
+10. `errorHandler` — centralized error formatter; hides stack traces outside development.
 
 Authentication is applied **per route, never globally** — `src/routes/index.js` mounts the routers
 without a blanket guard, and each route declares its own chain. This is deliberate: the three public
@@ -53,11 +60,27 @@ The auth middleware:
 - **`verifyRole(...roles)`** — plain role gate; flattens its arguments so both varargs and an array
   work.
 - **`verifyAction(action)`** — workflow-action gate via `constants/workflowActions.js`.
-- **`authorizeAttachmentAccess`** — currently only re-asserts a session (see below).
+- **`authorizeCaseDelta`** — case-membership gate on `POST /queries/persist`, checked against state
+  as stored *before* the delta (see below).
+- **`authorizeAttachmentAccess`** — resolves an attachment's owning case and admits only a principal
+  party to it (see below).
 
 Both role guards **fail closed with 401 when `req.user` is absent**, so a route mis-wired to omit
 `verifyToken` breaks loudly instead of silently allowing access. Every refusal is recorded as an
 `AUTHORIZATION_DENIED` audit event, fire-and-forget so auditing can never block the response.
+
+**Case scope sits on top of role**, because a role allow-list naming every role denies nothing and
+every role legitimately writes through `/queries/persist`. `services/authz/caseAccess.js` answers one
+question — which cases is this principal party to — and `GET /queries` is filtered by it: Front
+Office, Officer-in-Charge, Admin and Super Admin see everything, an Assigned Official and a Reviewer
+only the cases they are on. `authorizeCaseDelta` checks both the protected values a role may set and
+membership of every case a delta touches, *including* cases reached through a stored row rather than
+named — which is what stops a foreign workflow step being re-homed onto a case you are entitled to.
+Membership is never read from the body, because the body writes the very fields membership is derived
+from. `authorizeAttachmentAccess` resolves an attachment's owning case, through the message it
+arrived on when the attachment predates the case, and an attachment with no case yet is readable by
+its uploader and by the roles that see everything. All three fail closed with **503** when there is
+no store: "cannot tell" must never widen to "allowed".
 
 Validation is the step after authorization in that per-route chain. `validateBody(schema)`
 (`src/middleware/validateBody.js`) parses the body against a Zod schema from `src/validators/` and
@@ -68,7 +91,10 @@ a client on a newer build must not 400 a whole batch over one field the server h
 but it must not be able to write that field either. A failure returns 400 with the offending field
 *paths* only, never the values.
 
-Rate limiting is still not implemented.
+Rate limiting is in place: `express-rate-limit` gives `/api/v1/auth/login` 10 requests per 15
+minutes with `skipSuccessfulRequests` — so a working session's reloads cannot lock its owner out —
+and all of `/api/v1` 600 per minute. Both are in-memory, which suits the single instance the
+deployment runs, and both are disabled under `NODE_ENV=test`.
 
 ## Error Handling
 
@@ -135,8 +161,10 @@ ID, create the case, record the `ACCEPTED` decision, summarise the enquiry, ackn
 forward to the Officer-in-Charge. The browser used to orchestrate this step by step; a closed tab
 halfway through left a case nobody had been told about, and the Case ID came from a counter the
 client held, so two tabs could mint the same one. The audit trail reads
-`QUERY_RECEIVED → QUERY_REGISTERED → AI_SUMMARY_GENERATED → ACKNOWLEDGEMENT_SENT → QUERY_FORWARDED`,
-with `EMAIL_CLASSIFIED` written last by the controller when it records the decision.
+`QUERY_RECEIVED → QUERY_REGISTERED → CASE_ASSOCIATED → AI_SUMMARY_GENERATED → ACKNOWLEDGEMENT_SENT →
+QUERY_FORWARDED`, with `EMAIL_CLASSIFIED` written last by the controller when it records the decision.
+`CASE_ASSOCIATED` ties the mailbox message to the case it became and is written only by the accept
+whose insert created the case, so it appears once however many accepts race.
 
 - **The Case ID is minted atomically** —
   `QueryCounter.findOneAndUpdate({ key: 'counters' }, { $inc: { 'value.QRY': 1 } }, { new, upsert })`,
@@ -210,9 +238,9 @@ the response to the inquirer and closes the case, writing
   twenty-two-second send all read "no" and all proceeded, and the inquirer received three copies.
 - **A degraded transport is a failure, not a delivery.** `getTransport` falls back to the mock when
   a role holds no usable credential and the mock returns an ordinary success. Under
-  `EMAIL_TRANSPORT=gmail` or `nic` a mock result therefore means the Front Office credential is
-  missing or revoked, and the case is not closed on it. Under `EMAIL_TRANSPORT=mock` it is delivery,
-  because that is what the deployment asked for.
+  `EMAIL_TRANSPORT=nic` a mock result therefore means the Front Office credential is missing or
+  revoked, and the case is not closed on it. Under `EMAIL_TRANSPORT=mock` it is delivery, because
+  that is what the deployment asked for.
 - **A failed send is reported, not thrown.** The response is
   `{ queryId, approved, dispatched, alreadyDispatched, workflowState, recipient, errors }` at HTTP
   200; 404 for an unknown case, 409 for one not in an approvable state, 403 for a role without
@@ -253,13 +281,17 @@ Three properties, in the order they matter:
    the same request. **`UNCERTAIN` is never retried automatically**, because a retry can deliver a
    second copy.
 
-An `UNCERTAIN` Gmail dispatch is reconciled against the Sent folder before anyone is asked
-(`in:sent rfc822msgid:<id>`, falling back to a recipient-and-date search compared on the exact
-`Subject` and `Message-ID`), and is only called `NOT_SENT` after a 60-second settle window.
-NICeMail and the mock have no such read path, so a person settles it:
+**No `UNCERTAIN` send settles itself.** `emailService.reconcileDelivery` asks the case's channel on
+every uncertain send and every channel answers `UNKNOWN`: the legacy Gmail transport's Sent-folder
+search — `in:sent rfc822msgid:<id>`, falling back to a recipient-and-date search compared on the exact
+`Subject` and `Message-ID`, with a 60-second settle window before it would say `NOT_SENT` — was the
+only implementation of `reconcile` that ever existed, and it went with Gmail. Neither NICeMail path
+can be asked and the mock has nothing to say. The seam is kept, because a transport that could verify
+its own Sent folder would slot straight in, but today **a person** settles it:
 `POST /queries/:queryId/outbound/resolve` records `SENT` (bookkeeping runs as though it had sent; a
 final response closes the case) or `NOT_SENT` (unlocks the retry), audited as
-`EMAIL_DELIVERY_CONFIRMED` / `EMAIL_DELIVERY_DENIED`.
+`EMAIL_DELIVERY_CONFIRMED` / `EMAIL_DELIVERY_DENIED`. Neither sends anything, and nothing escalates an
+uncertain dispatch on its own.
 
 Bookkeeping is separated from delivery and is idempotent: the `EmailMessage` ids are deterministic
 (`MSG-ACK-`/`MSG-FWD-`/`MSG-RESP-` + `queryId`), so a crash between sending and recording self-heals
@@ -279,54 +311,69 @@ count. `GET /mailbox/messages` answers **503** `{ error, retryable: true, sync }
 `Retry-After: 30` for a transient failure and **502** for an authentication failure, rather than a
 bare 500, and the same state appears on `GET /health`.
 
-The read path was also made cheap enough to fail safely: a steady-state Gmail poll is two list calls
-plus a `messages.get` only for ids not already in a 500-entry cache, at most four in flight,
-concurrent identical polls coalesced, and a 30-second client timeout. It was previously one list
-plus up to 25 parallel gets with no timeout — during a DNS outage, 26 ten-second lookups per poll.
+The read path is also kept cheap enough to fail safely. For the browser mailbox a poll triggers a sync
+at most once every `NIC_BROWSER_SYNC_TTL_MS` and opens at most `NIC_BROWSER_SYNC_MAX` new messages,
+because every message read is a real page interaction in somebody's live mailbox and all of them queue
+behind the one serialised session. The lesson came from the Gmail reader that preceded it, whose poll
+was one list plus up to 25 parallel gets with no timeout — during a DNS outage, 26 separate
+ten-second lookups per poll.
 
 ## Swap seams
 
 Two places are deliberately polymorphic:
 
-- **`services/email/mailbox/index.js`** — four implementations (in-memory, Mongo, Gmail inbox,
-  NICeMail over IMAP) expose the same six functions; the facade selects one at call time (forced
-  override → `MAILBOX_SOURCE=gmail` → `MAILBOX_SOURCE=nic` → Mongo if connected → in-memory).
-  `supportsDelivery()` is false for Gmail and NICeMail because a real inbox cannot be written into.
-  A fifth, `nicBrowserMailbox.js` — the NICeMail inbox read by the browser agent and stored in
+- **`services/email/mailbox/index.js`** — three implementations (in-memory, Mongo, NICeMail over
+  IMAP) expose the same six functions; the facade selects one at call time (forced override →
+  `MAILBOX_SOURCE=nic` → Mongo if connected → in-memory). `MAILBOX_SOURCE` accepts only `auto` and
+  `nic`. `supportsDelivery()` is false for NICeMail because a real inbox cannot be written into.
+  A fourth, `nicBrowserMailbox.js` — the NICeMail inbox read by the browser agent and stored in
   MongoDB — is not selected by `MAILBOX_SOURCE`: with `NIC_BROWSER_MAILBOX=true`, `forUser(user)`
   returns it for the Front Office user whose sign-in address is `NIC_EMAIL`, and
   `mailboxController` gives every other user the facade's choice. It is imported on demand, so
-  `playwright-core` never loads on the boot path.
-- **`emailService.getTransport`** — mock, Gmail or NICeMail SMTP, resolved per sender identity
-  through a dynamic `import()` so `googleapis` and `nodemailer` are never evaluated on the mock path.
-  External mail on a case — the acknowledgement and the final response — goes through
-  `transportFor(sourceMailbox)` first: a case whose `sourceMailbox.source` is `nic-browser` sends
-  through `transports/nicBrowserTransport.js` (the signed-in NICeMail tab, behind the
-  `NIC_ALLOW_OUTBOUND` interlock), and every other case falls through to `getTransport`. The
-  forward to the Officer-in-Charge is internal and always uses `getTransport`.
+  nothing in it loads on the boot path — and it needs no automation package, speaking CDP over
+  Node's global `WebSocket`.
+- **`emailService.getTransport`** — mock or NICeMail SMTP, selected by transport NAME through a
+  dynamic `import()` so `nodemailer` is never evaluated on the mock path. There is no per-role
+  credential and so no per-identity resolution: NICeMail is one mailbox, not one account per role. `EMAIL_TRANSPORT` accepts
+  only those two. A case's mail goes through `transportFor(sourceMailbox)` first: a case whose
+  `sourceMailbox.source` is `nic-browser` sends through `transports/nicBrowserTransport.js` (the
+  signed-in NICeMail tab, behind the `NIC_ALLOW_OUTBOUND` interlock), and every other case falls
+  through to `getTransport`. **All three** of a case's emails follow that rule — acknowledgement,
+  final response *and* the forward to the Officer-in-Charge. The forward used to stay on
+  `EMAIL_TRANSPORT` regardless, because that is where the legacy Gmail transport was; once Gmail
+  went, a NICeMail case forwarding through `EMAIL_TRANSPORT` would have been a second channel with
+  no credential, and while the browser interlock was closed that forward escaped it entirely. The
+  normative statement is in
+  [backend/README.md](../../backend/README.md#which-channel-a-cases-mail-goes-out-through).
 
-The NIC and Gmail modules additionally accept optional `client` / `createClient` /
-`createTransport` / `connect` factory parameters as test-only injection seams, which is how the
-suite exercises them without network access.
+`NIC_ALLOW_INTERNAL_FORWARD=true` opens exactly one more recipient for the forward alone —
+`OFFICER_IN_CHARGE_EMAIL`, re-derived server-side and never taken from a request. It is a recipient
+allowance, not a second channel.
+
+The NIC modules additionally accept optional `client` / `createClient` / `createTransport` /
+`connect` factory parameters as test-only injection seams, which is how the suite exercises them
+without network access.
 
 ## Known limitations
 
 Documented here because they are architectural, not incidental:
 
-1. **Case-level authorization is absent.** `authorizeAttachmentAccess` checks only that a session
-   exists, so any authenticated user can read any attachment by id, and `GET /queries` returns
-   every case to every role. The Query Case records now exist server-side; what is missing is the
-   ownership check against them. The server prints this warning at boot.
-2. **Workflow-state authorization is half-enforced** — `verifyAction` covers the role half of
-   `canPerform(role, action, state)`; the state half is still decided in the client store.
-3. **Sessions are stateless** — logout clears the cookie, but a copied token remains valid until it
+1. **Workflow-state authorization is half-enforced** — `verifyAction` covers the role half of
+   `canPerform(role, action, state)`; the state half is still decided in the client store, so a
+   principal party to a case may write any field on it. The server prints this warning at boot.
+2. **Sessions are stateless** — logout clears the cookie, but a copied token remains valid until it
    expires.
-4. **`constants/capabilities.js`** (NIC agent autonomy) is tested but wired into no route.
-5. **The NICeMail browser mailbox is uncalibrated and only partly isolated.** Its UI selectors have
-   never been run against the real NICeMail page; mailbox pinning covers the NICeMail Front Office's
-   own requests, not the decision routes or the primary mailbox's `?recipient=`; and an unconfirmed
-   send cannot be recorded as sent. The full list of open items is in
+3. **The user directory is a source-code constant** — accounts cannot be added or deactivated
+   without a redeploy, and `models/User.js`'s `active` flag is not read by the auth path.
+4. **`POST /queries/reset` has no production refusal**, unlike the two mailbox fixtures, and it is
+   the most destructive of the three. `verifyRole(SUPER_ADMIN)` is the whole of its protection.
+5. **`constants/capabilities.js`** (NIC agent autonomy) is tested but wired into no route.
+6. **The NICeMail browser mailbox is only partly isolated.** Mailbox pinning covers the NICeMail
+   Front Office's own requests, not the decision routes; there is no scrolling beyond the rows a
+   fresh agent tab loads; the attachment-reading selectors and `ccToggle` are still uncalibrated; and
+   an unconfirmed send cannot later be recorded as sent. The full list of open items is in
    [NIC_BROWSER_AGENT.md §17](../NIC_BROWSER_AGENT.md#known-limitations--open).
 
-Server-side Query Cases were the blocking dependency for 1 and 2, and they have landed; what is
-left is enforcing against them. See [workflow-engine.md](./workflow-engine.md) for the model.
+Case-level authorization was the item server-side Query Cases blocked, and it has landed — reads are
+scoped by `caseAccess.js`, writes by `authorizeCaseDelta`, attachments by their owning case. What is
+left is the state machine in (1). See [workflow-engine.md](./workflow-engine.md) for the model.

@@ -28,7 +28,6 @@ const FILTER_TABS = [
   },
 ];
 
-/** Direction filter for the thread. */
 function ThreadFilterTabs({ filter, onChange }) {
   return (
     <div className="flex bg-slate-100/80 p-1 rounded-xl shrink-0">
@@ -69,7 +68,6 @@ function ThreadHeader({ count, filter, onFilterChange }) {
   );
 }
 
-/** Why the thread is empty depends on whether a filter is narrowing it. */
 function ThreadEmptyState({ filter }) {
   if (filter === "ALL") {
     return (
@@ -103,7 +101,6 @@ function ShowPreviousButton({ count, onClick }) {
   );
 }
 
-/** An older message, shown as a one-liner until the reader opens it. */
 function PreviousMessage({ message, isFilteredView, isExpanded, onToggle }) {
   if (!isExpanded) {
     return <CollapsedMessage message={message} onExpand={onToggle} />;
@@ -119,8 +116,6 @@ function PreviousMessage({ message, isFilteredView, isExpanded, onToggle }) {
 
 export function EmailThread({ messages = [] }) {
   const [filter, setFilter] = useState("ALL");
-  // Which earlier messages the reader has opened, plus whether the older block
-  // has been revealed. The newest message is always expanded.
   const [expanded, setExpanded] = useState(() => new Set());
   const [showPrevious, setShowPrevious] = useState(false);
 
@@ -174,7 +169,6 @@ export function EmailThread({ messages = [] }) {
               />
             ))}
 
-            {/* The newest message is what the reader almost always wants. */}
             {latest && (
               <ThreadMessage
                 key={latest.messageId}
@@ -195,7 +189,6 @@ const shortTime = (timestamp) =>
     timeStyle: "short",
   });
 
-/** One line: who, what, when. Click to open the full message. */
 function CollapsedMessage({ message, onExpand }) {
   const inbound = message.direction === EMAIL_DIRECTION.INBOUND;
 
@@ -289,7 +282,6 @@ function ThreadMessage({ message, isFilteredView, onCollapse }) {
           )}
         </div>
 
-        {/* Flat meta lines rather than a boxed panel nested inside the bubble. */}
         <div className="text-[13px] space-y-0.5 mb-3">
           <div className="flex gap-2 items-start">
             <span className="font-extrabold shrink-0 w-8 text-slate-400">

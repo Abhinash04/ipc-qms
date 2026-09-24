@@ -108,8 +108,6 @@ const IPC_ANNOUNCEMENTS = [
 export function ScrollingMarquee({ className = "" }) {
   const [selectedAnnouncement, setSelectedAnnouncement] = useState(null);
 
-  // Two labelled copies of the list make the loop seamless; the copy tag
-  // keeps every rendered item's key unique and stable without an array index.
   const marqueeItems = [
     ...IPC_ANNOUNCEMENTS.map((item) => ({ item, key: `${item.id}-a` })),
     ...IPC_ANNOUNCEMENTS.map((item) => ({ item, key: `${item.id}-b` })),
@@ -251,7 +249,6 @@ export function ScrollingMarquee({ className = "" }) {
               </div>
             </div>
 
-            {/* Modal Footer */}
             <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
               <button
                 onClick={() => setSelectedAnnouncement(null)}

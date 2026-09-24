@@ -9,15 +9,6 @@ import { fetchEmailConfig } from '@/services/api/mailboxService';
 import { fetchHealth } from '@/services/api/healthService';
 import { useRoutePaths } from '@/hooks/useRoutePaths';
 
-/**
- * System settings — Super Admin only, by virtue of SECTION.ADMIN_SETTINGS
- * being absent from ADMIN_CONSOLE while SUPER_ADMIN receives every section.
- *
- * Read-only on purpose. Everything shown is reported by the server about its
- * own configuration; nothing here is editable yet, and inventing a control
- * that writes nowhere would be worse than showing the truth.
- */
-
 function toneClassFor(tone) {
   if (tone === 'warn') return 'text-amber-800';
   if (tone === 'good') return 'text-emerald-800';
@@ -84,24 +75,56 @@ function AuditPanel({ audit }) {
   );
 }
 
+const TRANSPORT_HINT = {
+  mock: 'Delivers nothing — messages are kept in the local mailbox',
+  nic: 'Real mail leaves this machine — NICeMail SMTP',
+};
+
 function EmailPanel({ config }) {
-  const isRealTransport = config?.transport === 'gmail';
+  const transport = config?.transport || null;
+  const transportSends = Boolean(transport) && transport !== 'mock';
+  const agentOn = Boolean(config?.nicBrowserMailbox);
 
   return (
     <Panel title="Email" icon={CheckCircle2}>
       <Row
         label="Transport"
-        value={config?.transport || '—'}
-        tone={isRealTransport ? 'warn' : 'neutral'}
-        hint={isRealTransport ? 'Real mail leaves this machine' : 'Nothing leaves this machine'}
+        value={transport || '—'}
+        tone={transportSends ? 'warn' : 'neutral'}
+        hint={
+          transport
+            ? TRANSPORT_HINT[transport] || 'Unrecognised transport — assume real mail leaves this machine'
+            : 'Not reported by the server'
+        }
       />
+      <Row
+        label="NICeMail browser agent"
+        value={agentOn ? 'enabled' : 'disabled'}
+        tone={agentOn ? 'warn' : 'neutral'}
+        hint={
+          agentOn
+            ? 'Cases from the NICeMail mailbox are sent from that account, whatever the transport above says'
+            : 'No case is sent through NICeMail'
+        }
+      />
+      {agentOn && (
+        <Row
+          label="Outbound interlock"
+          value={config?.outboundAllowed ? 'open' : 'closed'}
+          tone={config?.outboundAllowed ? 'warn' : 'good'}
+          hint={
+            config?.outboundAllowed
+              ? 'NIC_ALLOW_OUTBOUND=true — NICeMail sends may reach any recipient'
+              : 'NICeMail sends are confined to the configured test recipient'
+          }
+        />
+      )}
       <Row label="Query recipient" value={config?.ipcQueryEmail || '—'} />
       {(config?.participants || []).map((participant) => (
         <Row
           key={participant.role}
           label={participant.name}
-          value={participant.canSendReal ? 'can send' : 'mock only'}
-          tone={participant.canSendReal ? 'good' : 'neutral'}
+          value={participant.role}
           hint={participant.email}
         />
       ))}
@@ -112,13 +135,13 @@ function EmailPanel({ config }) {
 const KNOWN_LIMITATIONS = [
   {
     label: 'Case authorization',
-    value: 'role-level only',
-    hint: 'Any signed-in user can read any attachment by id — Query Case ownership is not yet server-side',
+    value: 'enforced on reads',
+    hint: 'An attachment can only be read by someone party to its case; an upload can still name another case',
   },
   {
     label: 'Workflow enforcement',
-    value: 'client-side',
-    hint: 'The server validates the shape of a transition, not whether the workflow state allowed it',
+    value: 'partly server-side',
+    hint: 'Final approval and dispatch check the stored state; other transitions are checked for the role, not the state they came from',
   },
   {
     label: 'Session revocation',

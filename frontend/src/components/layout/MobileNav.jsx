@@ -9,8 +9,7 @@ export function MobileNav() {
   const currentUser = useAuthStore((state) => state.currentUser);
   const logout = useAuthStore((state) => state.logout);
   const navigate = useNavigate();
-  
-  // Notifications is excluded at the source now — see routeSections.js.
+
   const items = navItemsForRole(currentUser?.role);
 
   if (items.length === 0) return null;

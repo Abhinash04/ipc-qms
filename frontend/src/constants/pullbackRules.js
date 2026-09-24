@@ -26,7 +26,6 @@ export const STAGE_LABELS = {
   [WORKFLOW_STATE.CLOSED]: 'Query Closure',
 };
 
-/** Standard ordered progression of workflow states */
 const STAGE_ORDER = [
   WORKFLOW_STATE.RECEIVED,
   WORKFLOW_STATE.FRONT_OFFICE_VERIFICATION,
@@ -39,21 +38,14 @@ const STAGE_ORDER = [
   WORKFLOW_STATE.CLOSED,
 ];
 
-/**
- * Derives valid pullback target stages for a query based on its actual history.
- * Only returns stages that the query has ALREADY reached/passed in its history,
- * excluding the query's current workflow state.
- */
 export function getValidPullbackStages(query, auditEvents = []) {
   if (!query) return [];
 
   const queryAudits = auditEvents.filter((a) => a.queryId === query.queryId);
   const reachedStates = new Set();
 
-  // Always include initial state
   reachedStates.add(WORKFLOW_STATE.RECEIVED);
 
-  // Map audit events to workflow states
   queryAudits.forEach((audit) => {
     const evt = audit.event;
     if (evt === 'QUERY_RECEIVED') reachedStates.add(WORKFLOW_STATE.RECEIVED);
@@ -68,7 +60,6 @@ export function getValidPullbackStages(query, auditEvents = []) {
     if (evt === 'QUERY_CLOSED') reachedStates.add(WORKFLOW_STATE.CLOSED);
   });
 
-  // Include states up to current state in sequence if history missing specific events
   const currentIdx = STAGE_ORDER.indexOf(query.workflowState);
   if (currentIdx > 0) {
     for (let i = 0; i < currentIdx; i++) {
@@ -76,10 +67,8 @@ export function getValidPullbackStages(query, auditEvents = []) {
     }
   }
 
-  // Remove current state from available target pullback destinations
   reachedStates.delete(query.workflowState);
 
-  // Sort by standard order
   return Array.from(reachedStates).sort((a, b) => {
     const idxA = STAGE_ORDER.indexOf(a);
     const idxB = STAGE_ORDER.indexOf(b);

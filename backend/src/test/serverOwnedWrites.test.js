@@ -1,25 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import request from 'supertest';
 
-/**
- * What a client may not write about a case.
- *
- * `/queries/persist` takes case documents from the browser and `$set`s them, so
- * whatever it accepts is effectively client-controlled. Three things must not
- * be:
- *
- *   - **the inquirer** — it is read off the incoming email at intake and is
- *     where every reply goes. A stale tab that re-sent an older document could
- *     redirect the answer to a member of the public.
- *   - **DISPATCHED / CLOSED** — a case is closed when its response is known to
- *     have been sent, which only the server can know. The Dispatch page's retry
- *     used to close the case itself, after a send it had made.
- *   - **the outbound emails** — the acknowledgement, forward and response are
- *     recorded by the server when each is sent. A client-written record would
- *     both claim a send nobody made and, because the outbox adopts such a record
- *     as proof, stop the real one going out.
- */
-
 vi.mock('../config/db.js', async (importOriginal) => ({
   ...(await importOriginal()),
   isConnected: () => true,
@@ -72,8 +53,6 @@ describe('the inquirer is written once', () => {
   it('is not changed by a later write', async () => {
     await persist({ query: CASE });
 
-    // The Officer-in-Charge: assigning is theirs (authorizeCaseDelta refuses
-    // the Front Office a state it holds no action for).
     const res = await persist(
       {
         query: { ...CASE, workflowState: 'ASSIGNED', inquirer: { id: null, name: 'Someone Else', email: 'elsewhere@example.com' } },
@@ -83,35 +62,10 @@ describe('the inquirer is written once', () => {
 
     expect(res.status).toBe(200);
     const after = await stored();
-    // The transition lands; the recipient does not move.
     expect(after.workflowState).toBe('ASSIGNED');
     expect(after.inquirer.email).toBe('ravi@pharma.example');
   });
 
-  /**
-   * An Inquirer's own portal enquiry: the inquirer is clamped to the session
-   * identity, and still written once — on insert. Both rules used to write the
-   * field, one in `$set` and one in `$setOnInsert`, which MongoDB refuses; every
-   * portal enquiry would have failed.
-   */
-  it('is the signed-in Inquirer on their own portal enquiry, whatever the request names', async () => {
-    const res = await persist(
-      {
-        query: {
-          ...CASE,
-          queryId: 'QRY-2026-00002',
-          workflowState: 'RECEIVED',
-          inquirer: { id: null, name: 'Forged', email: 'forged@example.com' },
-        },
-      },
-      ROLES.INQUIRER,
-    );
-
-    expect(res.status).toBe(200);
-    const created = await QueryCase.findOne({ queryId: 'QRY-2026-00002' }).lean();
-    expect(created.inquirer.id).toBe('USR-0001');
-    expect(created.inquirer.email).not.toBe('forged@example.com');
-  });
 });
 
 describe('closing a case is the server’s to do', () => {
@@ -134,7 +88,6 @@ describe('closing a case is the server’s to do', () => {
     expect((await stored()).businessStatus).not.toBe('CLOSED');
   });
 
-  /** A closed case still has to accept ordinary writes — a pullback moves it back out. */
   it('allows a write to a case the server has already closed', async () => {
     await QueryCase.updateOne({ queryId: QUERY_ID }, { $set: { workflowState: 'CLOSED', businessStatus: 'CLOSED' } });
 

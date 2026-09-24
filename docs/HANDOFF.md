@@ -7,7 +7,9 @@ is deliberately incomplete, and what to do next.
 
 The full query lifecycle runs end to end against a real backend: authenticated sign-in, Query Cases
 persisted in MongoDB, a working email pipeline, a grounded LLM integration, attachments, an audit
-trail, and an administration console. The remaining structural gap is **case-level authorization**.
+trail, and an administration console. Case-level authorization is enforced server-side; the
+remaining structural gap is **workflow-state authorization** — the server does not yet check the
+state a case was in when somebody acted on it.
 
 Intake is **N:1 with a human gate**. Anyone may write to the Front Office mailbox from any address;
 arriving mail is only *listed*. Nothing is registered until a Front Officer accepts it in the IPC
@@ -27,8 +29,8 @@ message is found in NICeMail's Sent folder — see the NIC browser-agent row and
 | Persistence — cases | ✅ Done | 14 Mongoose models; the store syncs through `/api/v1/queries`. Cases are shared across users and browsers. The `inquirer` on a case is write-once, and closure and outbound mail records are server-owned: a client delta that writes them is refused with 409. |
 | Request validation | ✅ Done | Zod schemas on `/queries/*`, `/queries/:id/pullback` and the mailbox decision/accept routes; unknown keys are stripped rather than written. |
 | Workflow state-transition engine | ✅ Done | Single-writer `applyTransition` guarantees one audit event per transition; dynamic review levels. |
-| Workflow validation | 🟡 Client-side | Role + state enforced centrally in the store. The server enforces the **role** half only — see [Known Gaps](#known-gaps). |
-| Email integration | ✅ Done | Enquiry from any external sender → Front Office mailbox → acknowledgement → forward → response dispatched automatically on final approval, on one thread. Three transports selectable by `EMAIL_TRANSPORT`: mock, Gmail, NICeMail SMTP — plus the NICeMail browser transport, chosen per case for cases from the NICeMail mailbox. Only the Front Office mailbox is authenticated. |
+| Workflow validation | 🟡 Client-side | Role + state enforced centrally in the store. The server enforces the **role** half and per-case membership; the **state** half is still the client's — see [Known Gaps](#known-gaps). |
+| Email integration | ✅ Done | Enquiry from any external sender → Front Office mailbox → acknowledgement → forward → response dispatched automatically on final approval, on one thread. Two transports selectable by `EMAIL_TRANSPORT`: mock and NICeMail SMTP — plus the NICeMail browser transport, chosen per case for cases from the NICeMail mailbox, which carries all three of that case's emails. Only the Front Office mailbox is authenticated. |
 | Final approval & dispatch | ✅ Done | **Granting final approval sends the response** — `POST /queries/:queryId/final-approval`, gated `verifyAction(FINAL_APPROVE)`, records the approval, emails the inquirer and closes the case (`FINAL_APPROVAL_GRANTED → RESPONSE_DISPATCHED → QUERY_CLOSED`). The server sends under the Front Office identity it already holds, so **no role gained `DISPATCH`**. The approval is an atomic state flip, so exactly one request records the decision; the send goes through the dispatch ledger, so exactly one email leaves. The approval is written before any mail is attempted and the case closes only after a send that happened; a failed send stays at `READY_FOR_DISPATCH` with an `EMAIL_SEND_FAILED` row, which **Retry sending response** recovers. An unconfirmed send is recorded `UNCERTAIN` and **blocks** the retry in favour of *It was sent* / *It was not sent*. |
 | Intake validation gate | ✅ Done | Arriving mail is listed, never registered. The Front Officer accepts (✓) or rejects (×) each message; reject creates nothing. **Accept is one server call** — `POST /mailbox/messages/:messageId/accept` mints the Case ID atomically, creates the case, records the decision, summarises the enquiry onto the case, acknowledges the sender **and forwards to the Officer-in-Charge**, landing at `PENDING_ASSIGNMENT`. Recorded in `MailboxDecision`; the first decision on a message wins. |
 | Attachments | ✅ Done | Upload, preview, download; **fail-closed** forwarding refuses to send if any file cannot be read. |
@@ -36,10 +38,10 @@ message is found in NICeMail's Sent folder — see the NIC browser-agent row and
 | Audit trail | ✅ Done | Server-side, queryable, backing the Admin console. The actor is taken from the session, not the request body. Degrades to a bounded in-memory buffer without Mongo. |
 | Admin / Super Admin console | ✅ Done | Overview, audit trail, email activity, AI activity, roles; System Settings is Super-Admin-only. |
 | Notifications | ✅ Done | Sonner toasts wired to committed outcomes, never to button clicks. A provider outage produces **one** standing banner and one toast, not one per poll, and the poll backs off 1 → 2 → 5 minutes while it lasts. |
-| Outbound email idempotency | ✅ Done | Every case email — acknowledgement, forward, final response — is claimed in the `outboundemails` ledger under a unique `"${emailType}:${queryId}"` key before it is attempted, from intake, final approval and the retry buttons alike. A failure is classified `NOT_SENT` (safe to retry; one quick automatic retry for transient network errors) or `UNCERTAIN` (never retried automatically). Gmail reconciles `UNCERTAIN` against its Sent folder; anything it cannot settle is answered by a person through `POST /queries/:queryId/outbound/resolve`, audited either way. |
-| Case-level authorization | ❌ Not done | Role-level only. The records to check against now exist — this is unimplemented, no longer blocked. See [Known Gaps](#known-gaps). |
+| Outbound email idempotency | ✅ Done | Every case email — acknowledgement, forward, final response — is claimed in the `outboundemails` ledger under a unique `"${emailType}:${queryId}"` key before it is attempted, from intake, final approval and the retry buttons alike. A failure is classified `NOT_SENT` (safe to retry; one quick automatic retry for transient network errors) or `UNCERTAIN` (never retried automatically). Nothing settles an `UNCERTAIN` send automatically — every channel answers `UNKNOWN` — so a person answers it through `POST /queries/:queryId/outbound/resolve`, audited either way. |
+| Case-level authorization | ✅ Done | `services/authz/caseAccess.js` resolves which cases a principal is party to; `GET /queries` is filtered by it, `middleware/authorizeCaseDelta.js` guards `POST /queries/persist` against state as stored **before** the delta, and `middleware/authorizeAttachmentAccess.js` resolves an attachment's owning case and admits only a principal party to it. All three fail closed — no store means 503, not a pass. What is still absent is a server-side workflow state machine: see [Known Gaps](#known-gaps). |
 | NIC email — IMAP/SMTP | 🟡 Credential | Endpoints reachable, transport implemented and selectable. Awaiting an application-specific password — see [NIC_EMAIL_PHASE0.md](./NIC_EMAIL_PHASE0.md). |
-| NIC email — browser agent | 🟡 Attachments & threads uncalibrated | Attaches over raw CDP to a Chrome session the operator signs in to by hand, and works in a background tab of its own; lazily loaded, never blocks startup. With `NIC_BROWSER_MAILBOX=true` it is a **second Front Office mailbox**: a Front Office account (`USR-0014`) that signs in as `NIC_EMAIL` with `QMS_SEED_PASSWORD` (dev login refuses it) sees the NICeMail inbox, synced into MongoDB a message at a time, with search, paging, a message page (sandboxed HTML, attachments, linked case), QMS-local read state and **Sync now**; each case records `sourceMailbox` at accept, server-side, and its acknowledgement, final response and their retries go out through the NICeMail session, confined to the test recipient until `NIC_ALLOW_OUTBOUND=true`. **Reading is calibrated and verified live** with the read-only inspector `npm run nic:browser:discover`. **Composing is calibrated and verified live** (`npm run nic:browser:calibrate` plus one real test send, 2026-09-22). `composeEmail` checks the From account, the recipient chips, the subject and the body before Send. It counts a send only when the form has closed and the message is in the Sent folder. The attachment-reading keys and `ccToggle` stay in `UNCALIBRATED`, which the agent will not use until a live calibration takes them out. Open items: [Known Gaps](#known-gaps) 10; runbooks [§17](./NIC_BROWSER_AGENT.md#17-two-front-office-mailboxes). |
+| NIC email — browser agent | 🟡 Attachments & threads uncalibrated | Attaches over raw CDP to a Chrome session the operator signs in to by hand, and works in a background tab of its own; lazily loaded, never blocks startup. With `NIC_BROWSER_MAILBOX=true` it is a **second Front Office mailbox**: a Front Office account (`USR-0014`) that signs in as `NIC_EMAIL` with a credential of its own (dev login refuses it) sees the NICeMail inbox, synced into MongoDB a message at a time, with search, paging, a message page (sandboxed HTML, attachments, linked case), QMS-local read state and **Sync now**; each case records `sourceMailbox` at accept, server-side, and its acknowledgement, forward to the Officer-in-Charge, final response and their retries all go out through the NICeMail session, confined to the test recipient until `NIC_ALLOW_OUTBOUND=true`. **Reading is calibrated and verified live** with the read-only inspector `npm run nic:browser:discover`. **Composing is calibrated and verified live** (`npm run nic:browser:calibrate` plus one real test send, 2026-09-22). `composeEmail` checks the From account, the recipient chips, the subject and the body before Send. It counts a send only when the form has closed and the message is in the Sent folder. The attachment-reading keys and `ccToggle` stay in `UNCALIBRATED`, which the agent will not use until a live calibration takes them out. Open items: [Known Gaps](#known-gaps) 10; runbooks [§17](./NIC_BROWSER_AGENT.md#17-two-front-office-mailboxes). |
 | Transfer / pullback | 🟡 Gated off | Implemented in the store but disabled pending client answers — see below. |
 
 **Tests:** backend 660 across 50 files, frontend 804 across 44 files, plus a Playwright end-to-end
@@ -56,7 +58,8 @@ Run both halves; the frontend needs the backend for sign-in, email, attachments 
 cd backend
 npm install
 cp .env.example .env
-# set JWT_SECRET (>=32 chars) and QMS_SEED_PASSWORD — the server exits without them
+# set JWT_SECRET (>=32 chars) and a sign-in credential for every account — the server
+# exits without them
 npm run dev        # http://localhost:5000
 ```
 
@@ -97,7 +100,6 @@ Things that must be configured outside this repository. None of them can be fixe
 | Prerequisite | Needed for | Symptom when missing |
 |---|---|---|
 | A reachable MongoDB at `DATABASE_URL` | everything case-related | `503` on `/queries/*`; refusal to start in production |
-| A valid Gmail refresh token for the **Front Office mailbox** | `EMAIL_TRANSPORT=gmail` | the server refuses to start; `gmail:preflight` fails. No other role needs one — inquirers are external and nothing sends as the Officer-in-Charge |
 | A NICeMail application-specific password | `EMAIL_TRANSPORT=nic`, `nic:verify` | IMAP `Invalid credentials`, SMTP `535`. A webmail password is rejected under MFA by design |
 | Network reach to `*.mgovcloud.in:993/465` | NICeMail IMAP/SMTP | `nic:preflight` reports the endpoint as unreachable |
 | `NIC_ALLOW_OUTBOUND=true` | NICeMail mail to anyone but the test recipient | the transport refuses the send and names the variable |
@@ -107,27 +109,30 @@ Verify each with the commands in [Verification](#verification).
 
 ### Signing in
 
-There is a real login screen. All seeded accounts share `QMS_SEED_PASSWORD` from `backend/.env`.
+There is a real login screen. Every account has its **own** password, from `QMS_PASSWORDS_FILE` or
+`QMS_PASSWORD_<USER_ID>`; outside production one `QMS_SEED_PASSWORD` still opens all of them unless
+`QMS_ALLOW_SHARED_PASSWORD=false`.
 
-**[docs/auth.md](./auth.md) is the single source of truth** for the 13 development accounts, their
-roles, landing dashboards and section access. One per role:
+**[docs/auth.md](./auth.md) is the single source of truth** for the 12 seeded development accounts,
+their roles, landing dashboards and section access. One per role:
 
 | Role | Email | Lands on |
 |---|---|---|
 | SUPER_ADMIN | `admin@ipc.example` | `/super-admin/dashboard` |
 | ADMIN | `suresh.gupta@ipc.example` | `/admin/dashboard` |
-| FRONT_OFFICE | `bhoomikamakker@gmail.com` | `/front-officer/dashboard` |
-| OFFICER_IN_CHARGE | `rawatjatin436@gmail.com` | `/officer-in-charge/dashboard` |
+| FRONT_OFFICE | `bhumika.makker@ipc.example` | `/front-officer/dashboard` |
+| OFFICER_IN_CHARGE | `jatin.rawat@ipc.example` | `/officer-in-charge/dashboard` |
 | ASSIGNED_OFFICIAL | `neha.singh@ipc.example` | `/assigned-official/dashboard` |
 | REVIEWER | `amit.mehta@ipc.example` | `/reviewer/dashboard` |
-| INQUIRER | `abhinash.pritiraj@gmail.com` | `/inquirer/dashboard` |
 
-Development identities only — not real IPC employees.
+Development identities only — not real IPC employees. There is **no `INQUIRER` role**: an inquirer is
+a member of the public who emails the Front Office mailbox, is read off the `From` header at intake,
+holds no account here and never signs in.
 
-With `NIC_BROWSER_MAILBOX=true` there is a 14th account: a second `FRONT_OFFICE` (`USR-0014`) whose
-sign-in address is the value of `NIC_EMAIL` and whose name is `NIC_FRONT_OFFICE_NAME`. It signs in
-with `QMS_SEED_PASSWORD` like the rest, but **dev login refuses it** — its inbox is the live NICeMail
-mailbox. See [auth.md](./auth.md).
+With `NIC_BROWSER_MAILBOX=true` there is a 13th account: a second `FRONT_OFFICE` (`USR-0014`) whose
+sign-in address is the value of `NIC_EMAIL` and whose name is `NIC_FRONT_OFFICE_NAME`. It needs a
+credential of its own like every other account, but **dev login refuses it** — its inbox is the live
+NICeMail mailbox. See [auth.md](./auth.md).
 
 ## Verification
 
@@ -138,8 +143,8 @@ Every check below is safe to run repeatedly. None of them sends mail.
 cd backend && npm install && npm start
 
 # Both unit suites. Neither touches the network or needs a database.
-cd backend  && npm test && npm run lint     # 589 tests, 44 files
-cd frontend && npm test && npm run lint     # 787 tests, 42 files
+cd backend  && npm test && npm run lint     # 912 tests, 59 files
+cd frontend && npm test && npm run lint     # 760 tests, 42 files
 
 # Frontend production build + bundle budget
 cd frontend && npm run build:check
@@ -150,7 +155,8 @@ cd frontend && npm run build:check
 #   cd frontend && npx playwright install chromium
 # Specs live in frontend/e2e/, the config is frontend/playwright.config.js, and
 # the backend settings come from backend/.env.e2e (credential-free and committed
-# on purpose; JWT_SECRET and QMS_SEED_PASSWORD still come from backend/.env).
+# on purpose; sign-in uses the committed per-account fixture it names, and only
+# JWT_SECRET is inherited from backend/.env).
 # Playwright starts both servers itself and refuses to adopt one it did not
 # start: a backend already on :5000 fails the run. Stop it first — that server
 # is usually pointed at the real database and a real mailbox.
@@ -163,15 +169,14 @@ cd backend && npm run ingest:ipc
 
 # Email credentials. These REPORT; they do not repair.
 cd backend
-npm run gmail:preflight                     # composes and sends nothing
 npm run nic:preflight                       # read-only reachability
 npm run nic:preflight -- --email=you@gov.in # adds the authentication check
 npm run nic:verify                          # sends one message, test recipient only
 npm run nic:browser:discover                # read-only; clicks and types nothing
 ```
 
-Interpret failures by category before changing anything. `invalid_grant`, `Invalid credentials`,
-`535`, an unreachable endpoint and an absent Chrome session are **credential, network and operator
+Interpret failures by category before changing anything. `Invalid credentials`, `535`, an
+unreachable endpoint and an absent Chrome session are **credential, network and operator
 prerequisites** — the code is not at fault and must not be edited to make the check pass.
 
 ## Repository Map
@@ -191,7 +196,7 @@ docs/        This file, plus SRS, architecture, workflow, API — docs/README.md
    complete and why toasts can be wired to it rather than to buttons; the one path that bypasses it
    is accepting a mailbox message, which runs entirely server-side and is read back with
    `refreshFromServer()`.
-3. **The mailbox is a duck-typed seam** — mock, Mongo, Gmail-inbox and NICeMail IMAP implementations
+3. **The mailbox is a duck-typed seam** — the mock, Mongo and NICeMail IMAP implementations
    share one interface, selected at call time, so the same pipeline runs against a real inbox or a
    fake one; the NICeMail browser mailbox implements it too, and is chosen by who is signed in.
    Going the other way, **every outbound case email is claimed in a ledger before it is sent** — a
@@ -208,31 +213,34 @@ docs/        This file, plus SRS, architecture, workflow, API — docs/README.md
 
 | Real | Mock / local |
 |---|---|
-| Authentication, sessions, RBAC (both sides) | The user directory (seeded from source, one shared password) |
+| Authentication, sessions, RBAC (both sides) | The user directory — seeded from a source constant on every connect, so it cannot be changed without a redeploy. Per-account credentials are real, and there *is* a `User` collection, but `$setOnInsert` means an existing row is never refreshed and the `active` flag is not read by the auth path (see gap 4) |
 | Query Cases, workflow steps, reviews, versions (MongoDB) | Divisions and categories (static constants) |
 | The audit trail (`/audit`, MongoDB) | Reports page (KPIs are real; charts are not connected) |
 | Email send/forward/acknowledge/ingest | `mockAiService` — now the *fallback*, not the primary |
-| Gmail transport + inbox reader (when configured) | |
 | NICeMail IMAP/SMTP transport (awaiting a credential) | |
 | Pravah Gemma summary/recommendation/draft | |
 | Attachment storage, preview, download | |
 
 ## Known Gaps
 
-1. **Case-level authorization is not enforced.** Any authenticated user can read any attachment by
-   id, and `GET /queries` returns every case to every role: `authorizeAttachmentAccess` checks only
-   that a session exists. The case records needed to check ownership now exist, so this is
-   unimplemented rather than blocked. The backend prints this warning on every boot. **Do not
-   expose this server outside a trusted network.**
+1. **Case access is enforced, but nothing bounds what a member may write.** Reads are scoped by
+   `caseAccess.js`, `/queries/persist` is guarded by `authorizeCaseDelta` and attachments resolve
+   their owning case — but a principal party to a case may write any field on it, and the four roles
+   whose scope is *everything* (Front Office, Officer-in-Charge, Admin, Super Admin) reach every
+   case. The backend prints this warning on every boot. **Do not expose this server outside a
+   trusted network.**
 2. **Workflow-state authorization is half-enforced.** `verifyAction` enforces the role half of
    `canPerform(role, action, state)`. The state half is still evaluated on the client, so
    `POST /queries/persist` validates the *shape* of a transition, not whether the case was in a
    state that allowed it.
 3. **Token revocation does not exist.** Logout clears the cookie, but a copied token stays valid
    until it expires (default 8h).
-4. **All accounts share one seeded password.** A development mechanism, not a user store. The `User`
-   collection is seeded on connect but is **not read for authentication** — `userDirectory.js` still
-   answers from `src/constants/users.js`.
+4. **The user directory lives in source.** Each account has its own credential
+   (`QMS_PASSWORDS_FILE` or `QMS_PASSWORD_<USER_ID>`; `QMS_ALLOW_SHARED_PASSWORD=true` restores the
+   old one-secret mode, and left unset that mode is on outside production whenever
+   `QMS_SEED_PASSWORD` is set) — but the directory itself is a constant. The `User` collection is
+   seeded on connect and is **not read for authentication**: `userDirectory.js` answers from
+   `src/constants/users.js`, so no account can be added or deactivated without a redeploy.
 5. **Transfer and pullback are implemented but gated off.** `transferQuery` and `pullBackQuery`
    exist in the store, but `canPerform` returns `false` for anything listed in
    `CLARIFICATION_REQUIRED_ACTIONS` — they stay disabled until the client answers the questions in
@@ -270,34 +278,43 @@ docs/        This file, plus SRS, architecture, workflow, API — docs/README.md
       (`?recipient=` no longer reaches NICeMail rows: the Mongo primary store excludes them.)
     - **Tombstones.** A NICeMail message's "already handled" memory is its MongoDB row;
       `npm run db:reset` removes it, and the next sync reads the message again.
-    - **Duplicate acknowledgements.** Two concurrent accepts of the same NICeMail message can both
-      pass the acknowledgement check before either records it — the browser queue makes that window
-      long — and send two.
-    - **Unconfirmed sends.** A send that was pressed but not confirmed cannot be recorded as sent, and
-      the flag is not stored on the case. After an unconfirmed accept or approval, the case page's
-      acknowledgement notice and the Dispatch page's retry still offer a plain retry; only the
-      case's `EMAIL_SEND_FAILED` audit row says it may have gone out. (A retry that itself ends
-      unconfirmed is reported as such: 504, with the Sent-folder warning.) There is no control to
-      record a send the QMS did not see complete.
-    - **Case content is editable by any role.** Any signed-in role can edit a case's inquirer and
-      response text through `/queries/persist` — pre-existing (gap 2), but it now decides what an
-      official mailbox sends.
+    - ~~**Duplicate acknowledgements.**~~ **Closed.** Two concurrent accepts of the same message
+      cannot produce two of anything. The case is guarded by a unique partial index on
+      `sourceMailboxMessageId`, so both requests converge on one `queryId`; the acknowledgement and
+      the forward are then each claimed once in the `outboundemails` ledger by `dispatchKey`, and the
+      loser is answered `ALREADY_SENT` rather than sending. Verified 2026-09-23 against a live
+      database: a second accept returned the same Case ID with `created: false` and
+      `acknowledgement.outcome: ALREADY_SENT`, leaving one case, one acknowledgement, one forward and
+      two ledger rows.
+    - **Unconfirmed sends need a person, and nothing chases them.** A send that was pressed but not
+      confirmed is recorded `UNCERTAIN` in the ledger, and **no channel can settle it** — the Gmail
+      transport's Sent-folder search was the only implementation of `reconcile` that ever existed.
+      `POST /queries/:queryId/outbound/resolve` is the control that records the answer, and the case
+      page and the Dispatch page both offer it, so "there is no control" is no longer the gap. What
+      remains is that nothing escalates: a case whose final response is `UNCERTAIN` sits at
+      `READY_FOR_DISPATCH` indefinitely with no alert and no ageing report. It needs an owner and a
+      target time to settle.
+    - **Case content is editable by anyone party to the case.** The inquirer is write-once and an
+      approved version is locked, but the response text is not: any principal the case admits can
+      still edit it through `/queries/persist` — pre-existing (gaps 1 and 2), but it now decides what
+      an official mailbox sends.
     - **Dev login** still signs every other seeded account in without a password whenever
       `NODE_ENV=development` (the default when unset), and the server listens on all interfaces —
-      including the primary Front Office, whose inbox may be a real Gmail account under
-      `MAILBOX_SOURCE=gmail`. Pre-existing; only the NICeMail Front Office is refused.
+      including the primary Front Office, whose inbox may be a real NICeMail mailbox under
+      `MAILBOX_SOURCE=nic`. Pre-existing; only the NICeMail Front Office is refused.
 
 ## What's Next
 
-- **Case-level authorization** — gaps 1 and 2. The records exist now; what is missing is the
-  ownership check in `authorizeAttachmentAccess`, row scoping on `GET /queries`, and moving
-  `ACTION_VALID_STATES` server-side. The shape is in
+- **Workflow-state enforcement** — gaps 1 and 2. Case scope, the persist guard and attachment
+  ownership have landed; what is missing is moving `ACTION_VALID_STATES` server-side, so a permitted
+  role cannot act on a case in a state that never allowed it. The shape is in
   [architecture/workflow-engine.md](./architecture/workflow-engine.md).
 - **Decompose the `/queries` sync API** into per-resource routes — see
   [api/api-plan.md](./api/api-plan.md#still-planned). That is what makes row scoping natural rather
   than bolted on.
-- **Per-user credentials** — replace the seeded shared-password directory
-  (`backend/src/constants/users.js`) with a real user collection.
+- **A mutable user directory** — replace the source-constant directory
+  (`backend/src/constants/users.js`) with a real user collection, so accounts can be added and
+  deactivated without a redeploy. Per-account credentials already landed.
 - **Client sign-off on the open questions** —
   [srs/14](./srs/14-open-questions-and-client-clarifications.md) still governs transfer/pullback
   rules and SLA definitions.

@@ -29,8 +29,6 @@ export function PullbackQueryModal({ query, isOpen, onClose, currentUser }) {
 
   const validStages = getValidPullbackStages(query, auditEvents);
 
-  // Derived during render rather than synced by an effect: until the user
-  // picks a stage, the first valid one stands in.
   const stage = selectedStage || validStages[0] || '';
 
   if (!query) return null;
@@ -114,7 +112,6 @@ export function PullbackQueryModal({ query, isOpen, onClose, currentUser }) {
 
         {!isConfirmStep ? (
           <div className="space-y-4 py-2 select-none">
-            {/* Current Stage Display */}
             <div className="rounded-2xl border border-amber-200/60 bg-amber-50/60 p-3.5 flex items-center justify-between text-sm">
               <span className="font-bold text-amber-800 uppercase tracking-wider text-xs">
                 Current Stage
@@ -124,7 +121,6 @@ export function PullbackQueryModal({ query, isOpen, onClose, currentUser }) {
               </span>
             </div>
 
-            {/* Select Destination Stage */}
             <div className="space-y-2">
               <label
                 htmlFor="pullback-target-stage"
@@ -153,7 +149,6 @@ export function PullbackQueryModal({ query, isOpen, onClose, currentUser }) {
               )}
             </div>
 
-            {/* Reason for Pullback */}
             <div className="space-y-2">
               <label
                 htmlFor="pullback-reason"
@@ -189,7 +184,6 @@ export function PullbackQueryModal({ query, isOpen, onClose, currentUser }) {
             </div>
           </div>
         ) : (
-          /* Confirmation Step */
           <div className="py-4 space-y-4 select-none">
             <div className="rounded-2xl border border-amber-300 bg-amber-50/80 p-4 space-y-3">
               <div className="flex items-center gap-2 text-amber-950">

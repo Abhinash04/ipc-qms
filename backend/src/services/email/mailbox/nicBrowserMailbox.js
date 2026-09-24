@@ -6,24 +6,10 @@ import { AUDIT_ACTIONS, AUDIT_RESULTS } from '../../../constants/auditActions.js
 import { ACTOR_TYPES } from '../../../constants/roles.js';
 import * as audit from '../../audit/auditService.js';
 import { readInbox } from '../nic/browser/readInbox.js';
+import { pending as browserPending } from '../nic/browser/session.js';
 import { normaliseAddress } from './address.js';
 import { searchFilter } from './messageView.js';
 import * as triage from './triage.js';
-
-/**
- * The NICeMail mailbox, read by the browser agent, as a QMS mailbox store.
- *
- * Same five-function interface as the other stores, so the Front Office inbox
- * and the accept flow treat it exactly like any other mailbox. The difference
- * is where messages come from: a sync reads the live inbox through the
- * signed-in browser and stores what it finds in MailboxMessage. Listing then
- * reads from MongoDB, never from the browser.
- *
- * Deduplication is structural. A message's id is derived from the provider's
- * own id, and it is written with `$setOnInsert` under a unique key — so
- * reading the same inbox a hundred times stores each message once, and never
- * resets a message the Front Office already ingested or removed.
- */
 
 export const SOURCE = 'nic-browser';
 
@@ -41,13 +27,10 @@ const toPlain = (doc) => {
   return rest;
 };
 
-// ── Sync ─────────────────────────────────────────────────────────────────────
-
 let lastSyncAt = 0;
 let inFlight = null;
 let status = { ok: null, at: null, stored: 0, stage: null, error: null };
 
-/** The reader drops a larger HTML body itself; the store does not trust that. */
 const BODY_HTML_MAX = 1000000;
 const RECEIVED_AT_SOURCES = new Set(['message', 'sync']);
 
@@ -63,9 +46,6 @@ async function store(address, message) {
           providerMessageId: message.providerMessageId,
           providerThreadId: message.providerThreadId || null,
           source: SOURCE,
-          // The mailbox it arrived in, not the To header: Bcc'd and list mail
-          // still belongs to this mailbox's Front Office. The header is kept
-          // beside it.
           to: address,
           toAddresses: Array.isArray(message.to) ? message.to : [],
           from: message.from,
@@ -94,28 +74,18 @@ async function store(address, message) {
     );
     return result?.upsertedCount ? 1 : 0;
   } catch (error) {
-    // Two syncs racing on the same message: the other one stored it.
     if (error?.code === 11000) return 0;
     throw error;
   }
 }
 
-/** A message that failed to read this many times in this process is left alone. */
 const QUARANTINE_AFTER = 3;
-/** providerMessageId → failed reads, in this process. A restart forgets it. */
 const attempts = new Map();
-/** When the current run of failed syncs began. */
 let failingSince = null;
 
 const quarantinedIds = () => [...attempts].filter(([, count]) => count >= QUARANTINE_AFTER).map(([id]) => id);
-/** Failed before, not yet given up on: the reader tries these again, after the rest. */
 const retryIds = () => [...attempts].filter(([, count]) => count < QUARANTINE_AFTER).map(([id]) => id);
 
-/**
- * The sync's audit rows: its edges — failing, recovered — and a completed sync
- * only when it did something. The inbox is polled every 30 seconds; a row for
- * every quiet poll would bury the ones that matter.
- */
 async function recordSync(action, { failed = false, error = null, details }) {
   await audit.record({
     action,
@@ -126,19 +96,6 @@ async function recordSync(action, { failed = false, error = null, details }) {
   });
 }
 
-/**
- * Read the live inbox once and store anything new — the Mail Ingestion
- * Service. The browser agent reads; this stores, deduplicates and audits;
- * turning a message into a case stays with the Front Office (acceptMessage).
- *
- * Each message is stored as it is read. A message that cannot be read is
- * counted and tried again next time, up to QUARANTINE_AFTER times; a failure
- * to store is not a message's fault, so it stops the read.
- *
- * Never throws: the outcome is kept in `syncStatus()`, because a closed Chrome
- * or an expired sign-in must not break the inbox view of what is already
- * stored. `reader` is the test seam; `trigger` is 'poll' or 'manual'.
- */
 async function sync(address = browserConfig.mailboxAddress, { reader = readInbox, trigger = 'poll' } = {}) {
   if (inFlight) return inFlight;
 
@@ -169,12 +126,8 @@ async function sync(address = browserConfig.mailboxAddress, { reader = readInbox
       };
 
       const out = await reader({ max: browserConfig.syncMax, skip, retry: new Set(retryIds()), onMessage });
-      // A reader that returns its messages instead of streaming them; the
-      // `seen` set keeps one that does both from storing anything twice.
       for (const message of Array.isArray(out) ? out : out?.messages ?? []) await onMessage(message);
 
-      // Counted only from a read that completed: a read that threw may be the
-      // page's fault, and must not quarantine good mail.
       const failures = out?.failures ?? [];
       for (const { providerMessageId } of failures) {
         attempts.set(providerMessageId, (attempts.get(providerMessageId) || 0) + 1);
@@ -212,7 +165,6 @@ async function sync(address = browserConfig.mailboxAddress, { reader = readInbox
       status = {
         ok: false,
         at: new Date().toISOString(),
-        // What was stored before the read stopped is kept, and said so.
         stored: storedIds.length,
         stage: error?.stage || null,
         error: String(error?.message || error).split('\n')[0],
@@ -240,15 +192,14 @@ async function sync(address = browserConfig.mailboxAddress, { reader = readInbox
   return inFlight;
 }
 
-/** Start a sync in the background when the last one is older than the TTL. */
 function syncIfDue(address) {
   if (inFlight || Date.now() - lastSyncAt < browserConfig.syncTtlMs) return;
+  if (browserPending() > 0) return;
   sync(address);
 }
 
 const syncStatus = () => ({ ...status, running: Boolean(inFlight) });
 
-/** Test-only. */
 function resetSyncState() {
   lastSyncAt = 0;
   inFlight = null;
@@ -256,8 +207,6 @@ function resetSyncState() {
   attempts.clear();
   failingSince = null;
 }
-
-// ── Mailbox interface ────────────────────────────────────────────────────────
 
 const scope = (recipient) => ({ to: normaliseAddress(recipient), source: SOURCE, removedAt: null });
 
@@ -276,13 +225,6 @@ async function listFilter(recipient, { unreadOnly = false, junkOnly = false, q }
   return filter;
 }
 
-/**
- * Stored messages, newest first — a page of them when `limit` is given, all of
- * them otherwise. Kicks off a background sync when one is due, so the Front
- * Office inbox poll is what drives reading — a message appears on the poll
- * after the sync that found it. The HTML body is left out: a list is polled
- * every few seconds, and only a message's own page shows it.
- */
 async function list(recipient, { unreadOnly = false, junkOnly = false, q, limit, offset = 0 } = {}) {
   if (!isConnected()) throw unavailable();
   syncIfDue(recipient);
@@ -295,7 +237,6 @@ async function list(recipient, { unreadOnly = false, junkOnly = false, q, limit,
   return docs.map(toPlain);
 }
 
-/** How many messages `list` would return without a limit. */
 async function count(recipient, options = {}) {
   if (!isConnected()) throw unavailable();
   return MailboxMessage.countDocuments(await listFilter(recipient, options));
@@ -306,12 +247,6 @@ async function get(recipient, id) {
   return toPlain(await MailboxMessage.findOne({ ...scope(recipient), mailboxMessageId: id }).lean());
 }
 
-/**
- * The Front Office has opened it in the dashboard. QMS state only: NICeMail's
- * own read state is the operator's, and the agent puts it back after every
- * read, so nothing here goes near the browser. The first read is the one kept.
- * Resolves `{ message, changed }`, or null for a message not in this mailbox.
- */
 async function markRead(recipient, id, reader = {}) {
   if (!isConnected()) throw unavailable();
   const changed = await MailboxMessage.findOneAndUpdate(
@@ -325,14 +260,8 @@ async function markRead(recipient, id, reader = {}) {
   return message ? { message, changed: false } : null;
 }
 
-/** A sync asked for by hand is refused this soon after the last one ended. */
 const MANUAL_SYNC_GAP_MS = 15000;
 
-/**
- * A sync someone asked for, started in the background. It joins one already
- * running, and a click moments after one ended starts nothing: each sync opens
- * a browser tab and up to NIC_BROWSER_SYNC_MAX messages.
- */
 function requestSync(address = browserConfig.mailboxAddress) {
   if (!isConnected()) throw unavailable();
   const started = !inFlight && Date.now() - lastSyncAt >= MANUAL_SYNC_GAP_MS;
@@ -350,7 +279,6 @@ async function markIngested(recipient, id) {
   return toPlain(doc);
 }
 
-/** Hidden, not deleted: the record is what stops the next sync bringing it back. */
 async function remove(recipient, id) {
   if (!isConnected()) throw unavailable();
   const doc = await MailboxMessage.findOneAndUpdate(

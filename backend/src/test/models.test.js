@@ -71,8 +71,6 @@ describe('Backend MongoDB Models', () => {
       stepId: 'stp-001',
       reviewerId: 'usr-002',
       decision: 'APPROVED',
-      // Singular, matching the client that writes it and the four pages that
-      // display it. The model said `comments`, which nothing ever populated.
       comment: 'Looks good',
       responseId: 'RESP-00002',
       version: 'v2',
@@ -83,10 +81,6 @@ describe('Backend MongoDB Models', () => {
     expect(rev.responseId).toBe('RESP-00002');
   });
 
-  /**
-   * The Officer-in-Charge can return a draft for revision from final approval,
-   * where no review level is open. That review is real and has no step.
-   */
   it('instantiates a Review with no step, for a return from final approval', () => {
     const rev = new Review({
       reviewId: 'rev-002',

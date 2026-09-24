@@ -17,16 +17,9 @@ import { useWorkflowStore } from '@/store/useWorkflowStore';
 import { WORKFLOW_ACTION } from '@/constants/workflowRules';
 import { AUDIT_EVENT } from '@/constants/statusEnums';
 import { AiRecommendationCard } from '@/components/ai/AiRecommendationCard';
-import { ROLES } from '@/constants/roles';
-import { isQueryOwnedBy } from '@/utils/queryOwnership';
 import { buildLifecycle } from '@/constants/queryLifecycle';
 import { findUserById } from '@/constants/mockUsers';
 
-/**
- * Compact metadata for the sticky panel. CaseSummaryBar carries some of this
- * too, but that bar scrolls away — keeping the identifiers in view while
- * reading a long thread is the point.
- */
 function CaseDetailsPanel({ query }) {
   const rows = [
     ['Case ID', query.queryId],
@@ -70,7 +63,6 @@ function InfoRow({ label, value }) {
   );
 }
 
-/** The drafted response, or why there isn't one yet. */
 function DraftTabContent({ versions, latestVersion }) {
   if (versions.length === 0) {
     return (
@@ -95,24 +87,21 @@ function DraftTabContent({ versions, latestVersion }) {
   );
 }
 
-/** Draft / info / attachments. Inquirers do not see the internal draft. */
-function CaseWorkspaceTabs({ query, versions, latestVersion, isInquirer }) {
+function CaseWorkspaceTabs({ query, versions, latestVersion }) {
   return (
     <div className="bg-white rounded-3xl border border-slate-200/80 overflow-hidden shadow-sm p-5">
-      <Tabs defaultValue={isInquirer ? 'info' : 'draft'}>
+      <Tabs defaultValue="draft">
         <div className="border-b border-slate-100 pb-3">
           <TabsList variant="line">
-            {!isInquirer && <TabsTrigger value="draft">Response Draft</TabsTrigger>}
+            <TabsTrigger value="draft">Response Draft</TabsTrigger>
             <TabsTrigger value="info">Query Info</TabsTrigger>
             <TabsTrigger value="attachments">Attachments</TabsTrigger>
           </TabsList>
         </div>
 
-        {!isInquirer && (
-          <TabsContent value="draft" className="mt-0 pt-5">
-            <DraftTabContent versions={versions} latestVersion={latestVersion} />
-          </TabsContent>
-        )}
+        <TabsContent value="draft" className="mt-0 pt-5">
+          <DraftTabContent versions={versions} latestVersion={latestVersion} />
+        </TabsContent>
 
         <TabsContent value="info" className="mt-0 pt-5 space-y-1">
           <InfoRow label="Inquirer" value={query.inquirer.name} />
@@ -130,7 +119,6 @@ function CaseWorkspaceTabs({ query, versions, latestVersion, isInquirer }) {
   );
 }
 
-/** AI summary, the officials on the case, and who to assign it to. */
 function CaseInsightPanels({ query, steps, audit, canAssign, currentUser, assignQuery }) {
   return (
     <>
@@ -144,10 +132,6 @@ function CaseInsightPanels({ query, steps, audit, canAssign, currentUser, assign
               queryId: query.queryId,
               actor: null,
               actorLabel: 'AI Summary Assistant',
-              // Without this the delta went out with `event: undefined`, which
-              // the server's schema rejects — so every re-generated summary
-              // 400ed and lived in this tab only. The store's own summary
-              // transition uses the same event; see useWorkflowStore.js.
               event: AUDIT_EVENT.AI_SUMMARY_GENERATED,
               patch: { aiSummary: newSummary },
               details: newSummary.text,
@@ -158,8 +142,6 @@ function CaseInsightPanels({ query, steps, audit, canAssign, currentUser, assign
 
       <CaseOfficialsCard query={query} steps={steps} audit={audit} />
 
-      {/* Suggestions for whom to assign are only useful while the
-          assignment is still open; after that Officials is the answer. */}
       {canAssign && (
         <div className="bg-white rounded-3xl border border-slate-200/80 p-5 shadow-sm">
           <AiRecommendationCard
@@ -214,9 +196,8 @@ export function QueryDetailPage() {
   } = useQueryCase();
   const canAssign = can(WORKFLOW_ACTION.ASSIGN);
   const assignQuery = useWorkflowStore((state) => state.assignQuery);
-  const isInquirer = currentUser?.role === ROLES.INQUIRER;
 
-  if (!query || (isInquirer && !isQueryOwnedBy(query, currentUser))) {
+  if (!query) {
     return (
       <EmptyState
         title="Query not found"
@@ -227,13 +208,11 @@ export function QueryDetailPage() {
 
   const stages = buildLifecycle({ query, steps, versions, reviews, audit, messages });
 
-  const breadcrumbItems = isInquirer
-    ? [{ label: 'Dashboard', path: paths.DASHBOARD }, { label: query.queryId }]
-    : [
-        { label: 'Dashboard', path: paths.DASHBOARD },
-        { label: 'Queries', path: paths.QUERIES },
-        { label: query.queryId },
-      ];
+  const breadcrumbItems = [
+    { label: 'Dashboard', path: paths.DASHBOARD },
+    { label: 'Queries', path: paths.QUERIES },
+    { label: query.queryId },
+  ];
 
   return (
     <div>
@@ -241,7 +220,6 @@ export function QueryDetailPage() {
 
       <CaseSummaryBar query={query} />
 
-      {/* Workflow is a status indicator, so it keeps the full width. */}
       <div className="bg-white rounded-3xl border border-slate-200/80 p-5 shadow-sm mb-5">
         <h2 className="font-heading text-[19px] font-black text-slate-900 mb-3 border-b border-slate-100 pb-2.5">
           Workflow progress
@@ -249,51 +227,32 @@ export function QueryDetailPage() {
         <QueryLifecycleTimeline stages={stages} />
       </div>
 
-      {/* One workspace grid. minmax(0,1fr) stops wide children (the audit
-          table, long email bodies) blowing the left column out. */}
-      <div
-        className={
-          isInquirer
-            ? 'space-y-5 mb-5'
-            : 'grid grid-cols-1 items-start gap-5 lg:grid-cols-[minmax(0,1fr)_340px] mb-5'
-        }
-      >
+      <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-[minmax(0,1fr)_340px] mb-5">
         <div className="min-w-0 space-y-5">
-          {!isInquirer && (
-            <CaseInsightPanels
-              query={query}
-              steps={steps}
-              audit={audit}
-              canAssign={canAssign}
-              currentUser={currentUser}
-              assignQuery={assignQuery}
-            />
-          )}
+          <CaseInsightPanels
+            query={query}
+            steps={steps}
+            audit={audit}
+            canAssign={canAssign}
+            currentUser={currentUser}
+            assignQuery={assignQuery}
+          />
 
           <EmailThread messages={messages} />
 
-          <CaseWorkspaceTabs
-            query={query}
-            versions={versions}
-            latestVersion={latestVersion}
-            isInquirer={isInquirer}
-          />
+          <CaseWorkspaceTabs query={query} versions={versions} latestVersion={latestVersion} />
         </div>
 
-        {!isInquirer && (
-          /* Sticky so the actions stay reachable through a long thread. It
-             scrolls internally rather than overflowing the viewport. */
-          <div className="lg:sticky lg:top-6 self-start space-y-4 lg:max-h-[calc(100vh-3rem)] lg:overflow-y-auto">
-            <WorkflowActionsCard />
-            {can(WORKFLOW_ACTION.APPROVE_REVIEW) && <ReviewDecisionCard />}
-            <CaseDetailsPanel query={query} />
-          </div>
-        )}
+        <div className="lg:sticky lg:top-6 self-start space-y-4 lg:max-h-[calc(100vh-3rem)] lg:overflow-y-auto">
+          <WorkflowActionsCard />
+          {can(WORKFLOW_ACTION.APPROVE_REVIEW) && <ReviewDecisionCard />}
+          <CaseDetailsPanel query={query} />
+        </div>
       </div>
 
-      {!isInquirer && <AuditHistoryCard audit={audit} />}
+      <AuditHistoryCard audit={audit} />
 
-      {!isInquirer && <StageLinksFooter paths={paths} />}
+      <StageLinksFooter paths={paths} />
     </div>
   );
 }

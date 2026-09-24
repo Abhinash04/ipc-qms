@@ -154,11 +154,6 @@ export function ApprovalDetailPage() {
                       rows={3}
                     />
                   </div>
-                  {/* Disabled while it runs. A send can take twenty seconds on
-                      a bad network, and a button that still looks ready is an
-                      invitation to press it again: four presses during one slow
-                      send is how an inquirer received the same response three
-                      times. */}
                   <Button
                     className="w-full"
                     disabled={running}
@@ -172,15 +167,6 @@ export function ApprovalDetailPage() {
                         );
                         setComment("");
 
-                        /**
-                         * Approving and answering are one click but two
-                         * outcomes, and the second can fail on its own. Saying
-                         * only "approved" when the inquirer was never emailed
-                         * is the state this whole change exists to prevent, so
-                         * anything short of a send is raised here — the
-                         * approval stands either way, and the case waits at
-                         * READY_FOR_DISPATCH for the Front Office to retry.
-                         */
                         if (result?.inProgress) {
                           notify.info(
                             "Already being sent",
@@ -194,9 +180,6 @@ export function ApprovalDetailPage() {
                           const reason =
                             failure?.error || "the response could not be sent";
 
-                          // "May have been sent" and "was not sent" need
-                          // opposite instructions: one says check before you
-                          // retry, the other says retry.
                           throw new Error(
                             failure?.unconfirmed
                               ? `Approved, and the response may already have been sent: ${reason}`

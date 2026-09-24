@@ -8,12 +8,6 @@ import { useWorkflowStore } from '@/store/useWorkflowStore';
 import { MOCK_USERS } from '@/constants/mockUsers';
 import { ROLES, ROLE_LABELS } from '@/constants/roles';
 
-/**
- * The signed-in identity and the notifications entry point both used to live
- * in the Sidebar and were moved here by the sidebar redesign. These assertions
- * came with them — the contracts moved, they were not dropped.
- */
-
 const userFor = (role) => MOCK_USERS.find((user) => user.role === role);
 
 function renderHeader() {
@@ -59,8 +53,6 @@ describe('notifications live in the header, not the sidebar', () => {
   it('gives the bell an accessible name carrying the unread count', () => {
     renderHeader();
 
-    // Icon-only control: without this name it is unusable by anyone not
-    // looking at it.
     expect(
       screen.getByRole('button', { name: /^Notifications \(\d+ unread\)$/ }),
     ).toBeInTheDocument();

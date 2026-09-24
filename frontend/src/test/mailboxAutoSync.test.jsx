@@ -15,21 +15,13 @@ const OIC = findUserById('USR-0003');
 const POLL_MS = 30000;
 const BACKOFF_MS = [60000, 120000, 300000];
 
-/** What a mailbox the server could not reach rejects with. */
-const unreachable = (reason = 'Gmail mailbox unreachable (getaddrinfo ENOTFOUND gmail.googleapis.com)') =>
+const unreachable = (reason = 'Mailbox unreachable (getaddrinfo ENOTFOUND mail.mgovcloud.in)') =>
   Object.assign(new Error('Request failed with status code 503'), {
     response: { status: 503, data: { error: reason, retryable: true } },
   });
 
 let toasts;
 
-/**
- * Advance the fake clock past one poll and let the request that follows settle.
- *
- * The tick is `setTimeout` → `await checkMailbox()` → `setTimeout`, so the
- * timer alone does not run the whole thing: the promise in the middle has to
- * be flushed before the next timer exists.
- */
 async function poll(ms) {
   await act(async () => {
     await vi.advanceTimersByTimeAsync(ms);
@@ -48,22 +40,11 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  // Dropped rather than run: the next tick is always scheduled, and firing it
-  // here would update React outside `act` and fail the shared console check.
   vi.clearAllTimers();
   vi.useRealTimers();
   vi.restoreAllMocks();
 });
 
-/**
- * A mailbox that cannot be reached is an outage, not a stream of events.
- *
- * The live Gmail test produced one permanent "Could not check the IPC mailbox"
- * toast every thirty seconds for as long as the DNS failure lasted, because an
- * error toast stays until it is dismissed and every poll raised another. The
- * failure still has to be visible — silently not reading the mailbox is worse —
- * so it is announced once, and again when it clears.
- */
 describe('an unreachable mailbox is announced once, not once per poll', () => {
   it('raises a single toast however long the outage lasts', async () => {
     vi.mocked(mailboxService.fetchMailboxMessages).mockRejectedValue(unreachable());
@@ -76,7 +57,6 @@ describe('an unreachable mailbox is announced once, not once per poll', () => {
 
     expect(mailboxService.fetchMailboxMessages).toHaveBeenCalledTimes(4);
     expect(toasts.error).toHaveBeenCalledTimes(1);
-    // And it carries the server's reason, not "Request failed with status code 503".
     expect(toasts.error).toHaveBeenCalledWith(
       'The IPC mailbox cannot be reached',
       expect.stringContaining('ENOTFOUND'),
@@ -91,7 +71,6 @@ describe('an unreachable mailbox is announced once, not once per poll', () => {
     await poll(POLL_MS);
     expect(mailboxService.fetchMailboxMessages).toHaveBeenCalledTimes(1);
 
-    // The ordinary interval has passed, but the backoff has not.
     await poll(POLL_MS);
     expect(mailboxService.fetchMailboxMessages).toHaveBeenCalledTimes(1);
 
@@ -113,12 +92,6 @@ describe('an unreachable mailbox is announced once, not once per poll', () => {
     });
   });
 
-  /**
-   * A mailbox the server reached but could not READ answers 200, with the last
-   * stored listing and a `sync` saying why — which is what a NICeMail browser
-   * agent with no Chrome behind it looks like. This poll used to treat that as
-   * a healthy empty mailbox and say nothing at all, on every page but the inbox.
-   */
   it('announces a mailbox that answered but could not be read', async () => {
     vi.mocked(mailboxService.fetchMailboxMessages).mockResolvedValue({
       messages: [],
@@ -150,11 +123,6 @@ describe('an unreachable mailbox is announced once, not once per poll', () => {
   });
 });
 
-/**
- * The same restraint for the good news. "3 messages awaiting validation" every
- * thirty seconds for the same three messages is noise; a fourth arriving is
- * not.
- */
 describe('waiting mail is announced when it grows, not while it sits', () => {
   const waiting = (n) => ({ messages: Array.from({ length: n }, (_, i) => ({ mailboxMessageId: `m${i}` })) });
 
@@ -196,7 +164,6 @@ describe('waiting mail is announced when it grows, not while it sits', () => {
     );
   });
 
-  // The poll needs a count, not the mailbox: one row and the server's `total`.
   it('asks for one row and announces the total', async () => {
     vi.mocked(mailboxService.fetchMailboxMessages).mockResolvedValue({
       messages: [{ mailboxMessageId: 'm0' }],

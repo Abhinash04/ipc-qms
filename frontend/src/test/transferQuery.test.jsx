@@ -20,13 +20,11 @@ vi.mock('@/services/api/mailboxService', () => ({
     transport: 'mock',
     ipcQueryEmail: 'ipc-query-mock@example.com',
     ipcReplyFrom: { email: 'arnd@example.com', name: 'AR&D Division' },
-    inquirer: { email: 'abhinash.pritiraj@gmail.com', name: 'Abhinash Pritiraj' },
   }),
   fetchMailboxMessages: vi.fn().mockResolvedValue({ messages: [] }),
   fetchMailboxDecisions: vi.fn().mockResolvedValue({ decisions: [] }),
   recordMailboxDecision: vi.fn().mockResolvedValue({ alreadyDecided: false }),
   markMessageIngested: vi.fn().mockResolvedValue({ ingested: true }),
-  sendEnquiry: vi.fn().mockResolvedValue({ providerMessageId: 'mock-msg-1' }),
   sendAcknowledgement: vi.fn().mockResolvedValue({ providerMessageId: 'mock-msg-2' }),
 }));
 
@@ -34,21 +32,16 @@ const s = () => useWorkflowStore.getState();
 
 const FRONT_OFFICE = findUserById('USR-0002');
 const OIC = findUserById('USR-0003');
-const OFFICIAL_A = findUserById('USR-0004'); // Neha Singh
-const OFFICIAL_B = findUserById('USR-0009'); // Rawat Jatin
+const OFFICIAL_A = findUserById('USR-0004');
+const OFFICIAL_B = findUserById('USR-0009');
 
-/**
- * The forward is a server call now: the record of it, the audit row and the
- * move to PENDING_ASSIGNMENT all come back from the endpoint rather than being
- * written here. See src/test/fakeCaseMail.js.
- */
 const caseMail = fakeCaseMail();
 const fakeForward = caseMail.forwardQuery;
 
 const enquiry = () => ({
   mailboxMessageId: 'MSG-TRF-00001',
   to: 'ipc-query-mock@example.com',
-  from: 'Abhinash Pritiraj <abhinash.pritiraj@gmail.com>',
+  from: 'Abhinash Pritiraj <abhinash.pritiraj@pharma.example>',
   subject: 'Transfer Functionality Verification Test Query',
   body: 'Testing transfer query between assigned officials.',
   receivedAt: '2026-08-18T09:00:00.000Z',
@@ -89,7 +82,6 @@ describe('Transfer Query Functionality Unit & Integration Tests', () => {
       expect(initialQuery.currentAssigneeId).toBe(OFFICIAL_A.id);
       expect(initialQuery.workflowState).toBe(WORKFLOW_STATE.ASSIGNED);
 
-      // Perform transfer
       const result = s().transferQuery(
         queryId,
         OFFICIAL_B.id,
@@ -103,7 +95,6 @@ describe('Transfer Query Functionality Unit & Integration Tests', () => {
       expect(updatedQuery.currentAssigneeId).toBe(OFFICIAL_B.id);
       expect(updatedQuery.workflowState).toBe(WORKFLOW_STATE.ASSIGNED);
 
-      // Check audit event
       const auditTrail = s().getAudit(queryId);
       const transferAudit = auditTrail.find((a) => a.event === AUDIT_EVENT.QUERY_TRANSFERRED);
       expect(transferAudit).toBeDefined();
@@ -113,7 +104,6 @@ describe('Transfer Query Functionality Unit & Integration Tests', () => {
       expect(transferAudit.details).toContain(`Transferred To: ${OFFICIAL_B.name}`);
       expect(transferAudit.details).toContain('Reason: Query belongs to another department');
 
-      // Check notification
       const notifs = s().getNotifications();
       const transferNotif = notifs.find((n) => n.queryId === queryId && n.recipientRole === 'ASSIGNED_OFFICIAL');
       expect(transferNotif).toBeDefined();
@@ -155,40 +145,31 @@ describe('Transfer Query Functionality Unit & Integration Tests', () => {
     it('renders "Transfer Query" action for current assignee and processes modal transfer flow', async () => {
       const { unmount } = renderAs(OFFICIAL_A, `/assigned-official/queries/${queryId}`);
 
-      // Verify "Transfer Query" button exists for assigned official
       const transferBtn = screen.getByRole('button', { name: /Transfer Query/i });
       expect(transferBtn).toBeInTheDocument();
 
-      // Open Modal
       fireEvent.click(transferBtn);
 
-      // Verify Modal Title & Dialog
       expect(screen.getByRole('heading', { name: 'Transfer Query' })).toBeInTheDocument();
       expect(screen.getAllByText(queryId).length).toBeGreaterThan(0);
 
-      // Verify current assignee is displayed
       expect(screen.getAllByText(OFFICIAL_A.name).length).toBeGreaterThan(0);
 
-      // Select colleague (Official B - Rawat Jatin)
       const officialBOptions = await screen.findAllByText(OFFICIAL_B.name);
       expect(officialBOptions.length).toBeGreaterThan(0);
       fireEvent.click(officialBOptions[0]);
 
-      // Click "Continue to Transfer"
       const continueBtn = screen.getByRole('button', { name: /Continue to Transfer/i });
       fireEvent.click(continueBtn);
 
-      // Verify Confirmation step is shown
       expect(screen.getByText('Confirm Query Transfer')).toBeInTheDocument();
       expect(
         screen.getByText(new RegExp('Are you sure you want to transfer query')),
       ).toBeInTheDocument();
 
-      // Click "Confirm & Transfer"
       const confirmBtn = screen.getByRole('button', { name: /Confirm & Transfer/i });
       fireEvent.click(confirmBtn);
 
-      // Verify state update in store
       await waitFor(() => {
         const updated = s().getQuery(queryId);
         expect(updated.currentAssigneeId).toBe(OFFICIAL_B.id);
@@ -198,17 +179,13 @@ describe('Transfer Query Functionality Unit & Integration Tests', () => {
     });
 
     it('reflects updated assignee and transfer audit event on Query Detail page for OIC / Super Admin', () => {
-      // First perform transfer
       s().transferQuery(queryId, OFFICIAL_B.id, 'Colleague has better expertise', OFFICIAL_A);
 
-      // Render as Officer-in-Charge
       renderAs(OIC, `/officer-in-charge/queries/${queryId}`);
 
-      // Verify current assignee is now Official B
       expect(screen.getAllByText('Assignee').length).toBeGreaterThan(0);
       expect(screen.getAllByText(OFFICIAL_B.name).length).toBeGreaterThan(0);
 
-      // Verify Audit history contains transfer event
       expect(screen.getByRole('heading', { name: 'Audit history' })).toBeInTheDocument();
       expect(screen.getByText('QUERY TRANSFERRED')).toBeInTheDocument();
       expect(screen.getAllByText(new RegExp(`Transferred From: ${OFFICIAL_A.name}`)).length).toBeGreaterThan(0);
@@ -217,20 +194,16 @@ describe('Transfer Query Functionality Unit & Integration Tests', () => {
     });
 
     it('transfers query out of Official A active work and into Official B active work', () => {
-      // Before transfer: Official A sees queryId in My Work
       const { unmount: unmountA1 } = renderAs(OFFICIAL_A, '/assigned-official/my-work');
       expect(screen.getByText(queryId)).toBeInTheDocument();
       unmountA1();
 
-      // Perform transfer
       s().transferQuery(queryId, OFFICIAL_B.id, 'Workload redistribution', OFFICIAL_A);
 
-      // After transfer: Official A no longer sees queryId in My Work
       const { unmount: unmountA2 } = renderAs(OFFICIAL_A, '/assigned-official/my-work');
       expect(screen.queryByText(queryId)).toBeNull();
       unmountA2();
 
-      // Official B sees queryId in My Work
       const { unmount: unmountB } = renderAs(OFFICIAL_B, '/assigned-official/my-work');
       expect(screen.getByText(queryId)).toBeInTheDocument();
       unmountB();
@@ -239,26 +212,20 @@ describe('Transfer Query Functionality Unit & Integration Tests', () => {
     it('displays AI recommended officials in Transfer Query modal and allows selecting a recommendation', async () => {
       const { unmount } = renderAs(OFFICIAL_A, `/assigned-official/queries/${queryId}`);
 
-      // Open Modal
       const transferBtn = screen.getByRole('button', { name: /Transfer Query/i });
       fireEvent.click(transferBtn);
 
-      // Verify AI Recommended section header
       expect(await screen.findByText('AI RECOMMENDED OFFICIALS')).toBeInTheDocument();
 
-      // Verify AI recommendation cards with Match % are rendered
       const matchBadges = await screen.findAllByText(/% Match/);
       expect(matchBadges.length).toBeGreaterThan(0);
 
-      // Verify current assignee OFFICIAL_A (Neha Singh) is excluded from recommendations
       const aiRecSection = screen.getByText('AI RECOMMENDED OFFICIALS').closest('div');
       expect(aiRecSection.textContent).not.toContain('Neha Singh');
 
-      // Click an AI recommendation card (e.g. Official B - Rawat Jatin)
       const recCard = screen.getAllByText(OFFICIAL_B.name)[0].closest('div');
       fireEvent.click(recCard);
 
-      // Verify "Continue to Transfer" is enabled
       const continueBtn = screen.getByRole('button', { name: /Continue to Transfer/i });
       expect(continueBtn).toBeEnabled();
 

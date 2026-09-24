@@ -15,7 +15,6 @@ export function buildCaseOfficials({ query, steps = [], audit = [] } = {}) {
 
   const seen = new Set(audit.map((a) => a.event));
 
-  // First entry wins, matching the Array#find this replaces.
   const firstByEvent = new Map();
   for (const entry of audit) {
     if (!firstByEvent.has(entry.event)) firstByEvent.set(entry.event, entry);

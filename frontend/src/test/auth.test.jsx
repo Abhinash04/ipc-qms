@@ -9,13 +9,6 @@ import { useWorkflowStore } from '@/store/useWorkflowStore';
 import { MOCK_USERS, findUserById } from '@/constants/mockUsers';
 import { roleHome } from '@/constants/routePaths';
 
-/**
- * Authentication is server-side: the login form posts credentials, the server
- * sets an httpOnly session cookie, and the browser restores the session on
- * boot via GET /auth/me. Nothing about the password lives in the frontend any
- * more, so these tests drive the API rather than a local credential check.
- */
-
 vi.mock('@/services/api/authService', () => ({
   login: vi.fn(),
   logout: vi.fn().mockResolvedValue(undefined),
@@ -31,14 +24,11 @@ vi.mock('@/services/api/mailboxService', () => ({
     transport: 'mock',
     ipcQueryEmail: 'ipc-query-mock@example.com',
     ipcReplyFrom: { email: 'arnd@example.com', name: 'AR&D Division' },
-    inquirer: { email: 'abhinash.pritiraj@gmail.com', name: 'Abhinash Pritiraj' },
   }),
   fetchMailboxMessages: vi.fn().mockResolvedValue({ messages: [] }),
   fetchMailboxDecisions: vi.fn().mockResolvedValue({ decisions: [] }),
   recordMailboxDecision: vi.fn().mockResolvedValue({ alreadyDecided: false }),
-  markMessageIngested: vi.fn().mockResolvedValue({ ingested: true }),
-  sendEnquiry: vi.fn().mockResolvedValue({ providerMessageId: 'mock-msg-1' }),
-  sendAcknowledgement: vi.fn().mockResolvedValue({ providerMessageId: 'mock-msg-2' }),
+  markMessageIngested: vi.fn().mockResolvedValue({ ingested: true }),  sendAcknowledgement: vi.fn().mockResolvedValue({ providerMessageId: 'mock-msg-2' }),
 }));
 
 import * as authService from '@/services/api/authService';
@@ -56,7 +46,6 @@ function renderApp(path = '/login') {
   );
 }
 
-/** The submit handler is async, so the click has to settle inside act(). */
 async function signInThroughForm(email, password) {
   fireEvent.change(screen.getByLabelText('Email'), { target: { value: email } });
   fireEvent.change(screen.getByLabelText('Password'), { target: { value: password } });
@@ -65,7 +54,6 @@ async function signInThroughForm(email, password) {
   });
 }
 
-/** An axios-shaped rejection, as the real service would produce. */
 const httpError = (status, message) =>
   Object.assign(new Error(message), { response: { status, data: { error: message } } });
 
@@ -117,8 +105,6 @@ describe('the login form talks to the server', () => {
     renderApp();
     await signInThroughForm('stranger@example.com', 'whatever');
 
-    // The old form rejected this without a request. Account existence is the
-    // server's answer to give, not the browser's.
     expect(authService.login).toHaveBeenCalledWith('stranger@example.com', 'whatever');
   });
 
@@ -250,7 +236,6 @@ describe('routes decide nothing before the session is known', () => {
     useAuthStore.setState({ currentUser: null, authReady: false });
     renderApp('/reviewer/dashboard');
 
-    // Without the authReady gate this flashed the login screen on every reload.
     expect(screen.queryByRole('heading', { name: 'Sign in' })).not.toBeInTheDocument();
     expect(screen.queryByText('Access restricted')).not.toBeInTheDocument();
   });

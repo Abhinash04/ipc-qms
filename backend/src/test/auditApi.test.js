@@ -7,12 +7,6 @@ import { AUDIT_ACTIONS, AUDIT_RESULTS } from '../constants/auditActions.js';
 import * as audit from '../services/audit/auditService.js';
 import * as store from '../services/attachments/attachmentStore.js';
 
-/**
- * The audit read API is what makes the Administration console real rather than
- * decorative, so these tests assert two things: that the endpoints are
- * administrator-only, and that real actions actually land in the trail.
- */
-
 const ADMIN = authHeader(ROLES.ADMIN);
 
 beforeEach(async () => {
@@ -29,7 +23,6 @@ describe('GET /audit is administrator-only', () => {
     ['FRONT_OFFICE', ROLES.FRONT_OFFICE],
     ['OFFICER_IN_CHARGE', ROLES.OFFICER_IN_CHARGE],
     ['REVIEWER', ROLES.REVIEWER],
-    ['INQUIRER', ROLES.INQUIRER],
   ])('refuses %s — the trail is not an operational view', async (_label, role) => {
     const res = await request(app).get('/api/v1/audit').set(authHeader(role));
     expect(res.status).toBe(403);
@@ -72,9 +65,6 @@ describe('the trail reports what the server actually did', () => {
   });
 
   it('records an AI call with latency and whether it fell back', async () => {
-    // GEMMA_API_URL is blank in the suite, so every AI call takes the
-    // deterministic fallback — which is exactly the case worth proving is
-    // visible, because it is silent everywhere else.
     const res = await request(app)
       .post('/api/v1/ai/summary')
       .set(AUTH)
@@ -109,14 +99,14 @@ describe('the trail reports what the server actually did', () => {
   });
 
   it('records a refused request, which is what an escalation attempt looks like', async () => {
-    await request(app).delete('/api/v1/mailbox').set(authHeader(ROLES.INQUIRER));
+    await request(app).delete('/api/v1/mailbox').set(authHeader(ROLES.ASSIGNED_OFFICIAL));
 
     const trail = await request(app).get('/api/v1/audit').set(ADMIN);
     const denied = trail.body.events.find((e) => e.action === AUDIT_ACTIONS.AUTHORIZATION_DENIED);
 
     expect(denied).toBeTruthy();
     expect(denied.result).toBe(AUDIT_RESULTS.DENIED);
-    expect(denied.actorRole).toBe(ROLES.INQUIRER);
+    expect(denied.actorRole).toBe(ROLES.ASSIGNED_OFFICIAL);
     expect(denied.details.path).toContain('/mailbox');
   });
 
@@ -181,7 +171,6 @@ describe('filtering and aggregation', () => {
     expect(res.body.overall.total).toBe(3);
     expect(res.body.overall.byAction.EMAIL_SENT).toBe(2);
     expect(res.body.overall.byResult.failure).toBe(1);
-    // Everything above was recorded moments ago, so "today" sees all of it.
     expect(res.body.today.total).toBe(3);
     expect(typeof res.body.overall.durable).toBe('boolean');
   });

@@ -8,10 +8,6 @@ describe('Gemma AI Service Unit Tests', () => {
 
   beforeEach(() => {
     vi.restoreAllMocks();
-    // The suite pins GEMMA_API_URL blank so nothing reaches the live endpoint,
-    // which makes gemmaService short-circuit to its fallback before fetching.
-    // These tests exercise the AI parsing path deliberately, so they opt back in
-    // with an unroutable address — `fetch` is mocked, so no request is made.
     env.GEMMA_API_URL = 'http://gemma.test.invalid/api';
   });
 
@@ -87,11 +83,6 @@ describe('Gemma AI Service Unit Tests', () => {
     expect(result.fallback).toBe(true);
   });
 
-  /**
-   * `fetch failed` is all undici says; the reason is in `error.cause`. A whole
-   * live run logged nothing but that phrase while the actual fault was the
-   * machine's DNS resolver — which is diagnosable, and was not diagnosed.
-   */
   it('logs why the call failed, not just that it did', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     global.fetch = vi.fn().mockRejectedValue(
@@ -105,7 +96,6 @@ describe('Gemma AI Service Unit Tests', () => {
     expect(warn.mock.calls.some(([line]) => String(line).includes('ENOTFOUND'))).toBe(true);
   });
 
-  /** The fallback is deliberate, but it must not be silent: /health reports it. */
   it('remembers the last failure, so a deployment running on fallbacks can be seen', async () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     global.fetch = vi.fn().mockRejectedValue(new Error('Network error or timeout'));

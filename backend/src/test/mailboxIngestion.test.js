@@ -1,11 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
-/**
- * The NICeMail ingestion service: what `sync()` makes of what the browser
- * reader hands it. No browser — the reader is the `reader` seam — and the
- * models are the in-memory stand-in from support/memoryDb.js.
- */
-
 vi.mock('../config/db.js', async (importOriginal) => ({
   ...(await importOriginal()),
   isConnected: () => true,
@@ -39,7 +33,6 @@ import browserConfig from '../config/browserConfig.js';
 
 const NIC_ADDRESS = 'nic-mailbox@test.invalid';
 
-/** One message as the reader returns it (contract C-A). */
 const read = (providerMessageId, overrides = {}) => ({
   providerMessageId,
   providerThreadId: null,
@@ -122,7 +115,6 @@ describe('what is stored for each message', () => {
   });
 });
 
-/** `sync` itself ignores the poll TTL, so each call here is one full run. */
 const syncOnce = (reader, options = {}) => nicMailbox.sync(NIC_ADDRESS, { reader, ...options });
 
 const audits = (action) => db.rows('AuditEvent').filter((row) => row.action === action);

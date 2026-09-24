@@ -15,7 +15,6 @@ vi.mock('@/services/api/mailboxService', () => ({
     transport: 'mock',
     ipcQueryEmail: 'ipc-query-mock@example.com',
     ipcReplyFrom: { email: 'arnd-ipc-mock@example.com', name: 'AR&D Division' },
-    inquirer: { email: 'abhinash.pritiraj@gmail.com', name: 'Abhinash Pritiraj' },
   }),
   fetchMailboxMessages: vi.fn().mockResolvedValue({ messages: [] }),
   fetchMailboxMessage: vi.fn().mockResolvedValue(null),
@@ -26,7 +25,6 @@ vi.mock('@/services/api/mailboxService', () => ({
   recordMailboxDecision: vi.fn().mockResolvedValue({ alreadyDecided: false }),
   markMessageIngested: vi.fn().mockResolvedValue({ ingested: true }),
   deleteMailboxMessage: vi.fn().mockResolvedValue({ deleted: true }),
-  sendEnquiry: vi.fn().mockResolvedValue({ providerMessageId: 'mock-msg-1' }),
   sendAcknowledgement: vi.fn().mockResolvedValue({ providerMessageId: 'mock-msg-2' }),
 }));
 
@@ -34,7 +32,7 @@ let WALKTHROUGH_ID;
 let ADVANCED_ID;
 
 const USER_FOR_ROLE = Object.fromEntries(
-  ['USR-0001', 'USR-0002', 'USR-0003', 'USR-0004', 'USR-0005', 'USR-0007', 'USR-0008']
+  ['USR-0002', 'USR-0003', 'USR-0004', 'USR-0005', 'USR-0007', 'USR-0008']
     .map(findUserById)
     .map((user) => [user.role, user]),
 );
@@ -61,7 +59,7 @@ beforeAll(async () => {
   WALKTHROUGH_ID = store.ingestEmail({
     mailboxMessageId: 'MSG-00001',
     to: 'ipc-query-mock@example.com',
-    from: 'Abhinash Pritiraj <abhinash.pritiraj@gmail.com>',
+    from: 'Abhinash Pritiraj <abhinash.pritiraj@pharma.example>',
     subject: 'Clarification on monograph revision timelines',
     body: 'Please confirm the revised submission window.',
     receivedAt: '2026-08-17T09:00:00.000Z',
@@ -70,7 +68,7 @@ beforeAll(async () => {
   ADVANCED_ID = store.ingestEmail({
     mailboxMessageId: 'MSG-00002',
     to: 'ipc-query-mock@example.com',
-    from: 'Abhinash Pritiraj <abhinash.pritiraj@gmail.com>',
+    from: 'Abhinash Pritiraj <abhinash.pritiraj@pharma.example>',
     subject: 'Query on impurity threshold reporting',
     body: 'Seeking guidance on reporting thresholds.',
     receivedAt: '2026-08-17T10:00:00.000Z',

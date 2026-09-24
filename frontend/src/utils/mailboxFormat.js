@@ -1,8 +1,6 @@
-/** Display helpers shared by the IPC mailbox list and the message page. */
 
 const SNIPPET_LENGTH = 140;
 
-/** "Jane Doe <jane@x.gov>" split into its display name and address. */
 export function parseSender(from) {
   if (!from) return { name: "Unknown Sender", email: "", initials: "M" };
 
@@ -21,10 +19,6 @@ export function parseSender(from) {
   return { name, email, initials };
 }
 
-/**
- * A missing or unreadable date is unknown, not "now". Showing the current time
- * made a message the server never dated look as if it had just arrived.
- */
 function toDate(value) {
   const date = value ? new Date(value) : null;
   return date && !Number.isNaN(date.getTime()) ? date : null;
@@ -56,7 +50,6 @@ export function formatFullDate(value) {
     : "—";
 }
 
-/** The start of a body on one line, for a list row. */
 export function toSnippet(body) {
   const text = String(body ?? "").replace(/\s+/g, " ").trim();
   return text.length > SNIPPET_LENGTH

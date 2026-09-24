@@ -12,7 +12,7 @@ import {
   Zap,
 } from "lucide-react";
 
-import { roleHome } from "@/constants/routePaths";
+import { ROUTE_PATHS, roleHome } from "@/constants/routePaths";
 import { useAuthStore } from "@/store/useAuthStore";
 import { MOCK_USERS } from "@/constants/mockUsers";
 import { notify } from "@/services/notify";
@@ -30,7 +30,10 @@ export function LoginPage() {
   const [error, setError] = useState(null);
   const [devOpen, setDevOpen] = useState(false);
 
-  if (currentUser) return <Navigate to={roleHome(currentUser.role)} replace />;
+  const nicFrontOfficeEmail = (import.meta.env.VITE_NIC_FRONT_OFFICE_EMAIL || "").trim();
+
+  const home = currentUser ? roleHome(currentUser.role) : null;
+  if (home && home !== ROUTE_PATHS.LOGIN) return <Navigate to={home} replace />;
 
   const submit = async (event) => {
     event.preventDefault();
@@ -42,8 +45,6 @@ export function LoginPage() {
       notify.success(`Welcome back, ${user.name || user.email}`);
       navigate(roleHome(user.role), { replace: true });
     } catch (caught) {
-      // The server answers with one message for an unknown address and a wrong
-      // password alike, so that a failed sign-in cannot enumerate accounts.
       const message =
         caught?.response?.data?.error || "Incorrect email or password.";
       setError(message);
@@ -269,6 +270,37 @@ export function LoginPage() {
 
                 {devOpen && (
                   <div className="absolute bottom-full left-0 right-0 mb-2 z-30 max-h-72 overflow-y-auto rounded-2xl border border-slate-200/90 bg-white shadow-xl shadow-slate-900/10 p-1.5">
+                    {nicFrontOfficeEmail && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEmail(nicFrontOfficeEmail);
+                          setPassword("");
+                          setDevOpen(false);
+                          setError(null);
+                          document.getElementById("login-password")?.focus();
+                        }}
+                        className="w-full flex items-center gap-3 px-3 py-2.5 mb-1.5 rounded-xl border border-emerald-200/80 bg-emerald-50/60 hover:bg-emerald-50 text-left transition-colors cursor-pointer group"
+                      >
+                        <div className="w-9 h-9 rounded-full bg-linear-to-br from-emerald-500 to-teal-500 text-white text-[12.5px] font-black flex items-center justify-center shrink-0 shadow-sm">
+                          EC
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className="text-[14.5px] font-black text-slate-800 truncate group-hover:text-emerald-700">
+                              Eco-Clubs Front Office
+                            </span>
+                            <span className="px-2 py-0.5 rounded-full bg-emerald-100 border border-emerald-200 text-[10px] font-black tracking-wide text-emerald-700 uppercase shrink-0">
+                              NICeMail
+                            </span>
+                          </div>
+                          <div className="text-[12.5px] font-semibold text-slate-400 truncate">
+                            {nicFrontOfficeEmail} · needs its password
+                          </div>
+                        </div>
+                      </button>
+                    )}
+
                     {MOCK_USERS.map((user) => (
                       <button
                         key={user.id}

@@ -1,6 +1,5 @@
 import {
   LayoutDashboard,
-  MailPlus,
   Inbox,
   Mail,
   ListChecks,
@@ -25,7 +24,6 @@ import {
 
 export const SECTION = {
   DASHBOARD: "DASHBOARD",
-  COMPOSE: "COMPOSE",
   INBOX: "INBOX",
   INBOX_DETAIL: "INBOX_DETAIL",
   QUERIES: "QUERIES",
@@ -60,12 +58,6 @@ export const SECTIONS = {
     segment: "dashboard",
     label: "Dashboard",
     icon: LayoutDashboard,
-    nav: true,
-  },
-  [SECTION.COMPOSE]: {
-    segment: "compose",
-    label: "Raise Enquiry",
-    icon: MailPlus,
     nav: true,
   },
   [SECTION.INBOX]: {
@@ -132,7 +124,6 @@ export const SECTIONS = {
     segment: "reports",
     label: "Reports",
     icon: BarChart3,
-    // nav: true,
   },
   [SECTION.ADMINISTRATION]: {
     segment: "administration",

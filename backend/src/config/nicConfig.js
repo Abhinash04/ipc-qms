@@ -1,32 +1,3 @@
-/**
- * NICeMail connection configuration.
- *
- * Follows the shape of config/authConfig.js — a flat snapshot read from
- * process.env at import, plus a `validate*` returning error strings and an
- * `assert*` that throws.
- *
- * Deliberately separate from config/env.js, which owns EMAIL_TRANSPORT and
- * MAILBOX_SOURCE and calls `validateNicConfig()` when either is set to `nic`.
- * Keeping the NIC_* names in one file means the Gmail and mock paths cannot be
- * disturbed by anything here, and that the two validators cannot drift.
- *
- * This file configures IMAP/SMTP only. The NICeMail browser agent has its own
- * settings in config/browserConfig.js and shares nothing with these.
- *
- * Endpoint defaults are empty on purpose. The working pair as of Phase 0 is
- * imap.mgovcloud.in:993 / smtp.mgovcloud.in:465, documented in .env.example —
- * NIC may move them, and a hard-coded host is the kind of thing that silently
- * points a government mailbox integration at the wrong server.
- *
- * The password is never held here. See services/email/nic/credentials.js.
- */
-/**
- * Read at call time rather than snapshotted at import, matching
- * `services/email/mailbox/index.js` and `config/identities.js`. The suite
- * varies the environment between cases, and a snapshot would force
- * `vi.resetModules()` — which re-imports imapflow and mailparser on every
- * test and costs seconds per case.
- */
 const nicConfig = {
   get email() {
     return (process.env.NIC_EMAIL || '').trim();
@@ -56,11 +27,6 @@ const nicConfig = {
     return (process.env.NIC_MAILBOX || 'INBOX').trim();
   },
 
-  /**
-   * The only address `send_nicemail` will mail. Defaults to the NIC mailbox
-   * itself, so the default behaviour of the send action is to talk to its own
-   * inbox rather than to reach a third party.
-   */
   get testRecipient() {
     return (process.env.NIC_TEST_RECIPIENT || process.env.NIC_EMAIL || '').trim();
   },

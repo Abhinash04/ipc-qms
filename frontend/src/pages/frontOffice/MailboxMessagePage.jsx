@@ -27,7 +27,6 @@ const BODY_FORMATS = [
   { formatted: true, label: "Formatted" },
 ];
 
-/** A message with no case yet: what became of it, and where to decide. */
 const UNLINKED = {
   REJECTED: ["Rejected", "No case was created for this message."],
   ACCEPTED: ["Accepted", null],
@@ -72,7 +71,6 @@ function MessageHeader({ message }) {
   const heading = useRef(null);
   const sender = parseSender(message.from);
 
-  // Focus starts at the message, not at the top of the page it replaced.
   useEffect(() => {
     heading.current?.focus();
   }, [message.mailboxMessageId]);
@@ -114,10 +112,6 @@ function MessageHeader({ message }) {
   );
 }
 
-/**
- * Plain text by default. The HTML body, when the mail had one, is offered as
- * "Formatted" and only ever rendered inside the sandboxed frame.
- */
 function MessageBody({ message }) {
   const [formatted, setFormatted] = useState(false);
 
@@ -163,7 +157,6 @@ function MessageBody({ message }) {
   );
 }
 
-/** Where the message stands. Accepting and rejecting stay on the inbox list. */
 function MessageCaseCard({ message, paths }) {
   const linked = message.linkedCase;
   const [state, hint] = UNLINKED[message.status] || AWAITING;
@@ -202,7 +195,6 @@ function MessageView({ message, paths }) {
     <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
       <div className="min-w-0 space-y-5">
         <MessageHeader message={message} />
-        {/* Keyed so the Formatted choice never carries over to the next message. */}
         <MessageBody key={message.mailboxMessageId} message={message} />
         {attachments.length > 0 && (
           <section className={CARD}>
@@ -235,7 +227,6 @@ export function MailboxMessagePage() {
     retry: false,
   });
 
-  // A failure is left silent: the message simply stays marked unread.
   const { mutate: markRead } = useMutation({
     mutationFn: (id) => markMailboxMessageRead(id),
     onSuccess: (_view, id) => {
@@ -246,11 +237,6 @@ export function MailboxMessagePage() {
     },
   });
 
-  /**
-   * Opening a message marks it read in QMS, once. The ref stops a refetch —
-   * or StrictMode running effects twice — from asking again. `isRead: null` is
-   * a mailbox that keeps no read state, and it is never asked.
-   */
   const marked = useRef(null);
   const unread = message.data?.isRead === false;
   useEffect(() => {

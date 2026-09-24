@@ -22,26 +22,6 @@ import {
   stateOf,
 } from './helpers/workflow.js';
 
-/**
- * Two strangers write to the same Front Office mailbox, and each gets their own
- * answer.
- *
- * This is the live test that went wrong, reproduced against real server code:
- * two external enquirers mailed one mailbox, both cases were created, and one
- * of them received the other's fate — a final response delivered three times,
- * an acknowledgement that needed a manual retry. What is asserted here is the
- * thing that must hold however the two cases interleave: each case carries its
- * own inquirer from the From header it arrived on, and each ends with exactly
- * one acknowledgement and one response addressed to that person and to nobody
- * else.
- *
- * The two are deliberately **interleaved** rather than run one after the other
- * — A to review, then B all the way to closure, then A. Sequential cases share
- * no state worth testing; concurrent ones share the Case ID counter, the
- * mailbox, the outbound ledger and the Front Office session.
- */
-
-/** `.example` is reserved by RFC 2606 and can never receive mail. */
 const ABHINASH = {
   from: 'Abhinash Pritiraj <abhinash@pharma.example>',
   email: 'abhinash@pharma.example',
@@ -64,13 +44,8 @@ const enquiryOf = (person) => ({
   body: person.body,
 });
 
-/** Every outbound email of one type on one case. */
 const mailOf = (queryId, emailType) => readEmailMessages({ queryId, emailType });
 
-/**
- * One case, closed, with exactly one of each email and nothing addressed to
- * anybody but the person who wrote in.
- */
 async function expectAnsweredOnce(queryId, person, other) {
   const row = await caseById(queryId);
   expect(row.workflowState).toBe('CLOSED');
@@ -90,8 +65,6 @@ async function expectAnsweredOnce(queryId, person, other) {
   expect(responses[0].to).toEqual([person.email]);
   expect(responses[0].subject).toContain(queryId);
 
-  // The other inquirer's address appears nowhere on this case — not on the
-  // acknowledgement, not on the answer, not in the body of either.
   const everything = await readEmailMessages({ queryId });
   for (const mail of everything) {
     expect([mail.to, mail.cc, mail.bcc].flat().filter(Boolean)).not.toContain(other.email);
@@ -108,7 +81,6 @@ async function expectAnsweredOnce(queryId, person, other) {
   ]);
 }
 
-/** Approve, and wait for the case to close with its answer sent. */
 async function approveAndClose(page, queryId) {
   await signInAs(page, OFFICER_IN_CHARGE_USER.email);
   await page.goto(approvalPath(queryId));
@@ -135,16 +107,10 @@ test('two inquirers, one mailbox: two cases that never touch each other', async 
   page,
   request,
 }) => {
-  // Two full lifecycles, nine sign-ins, every route chunk cold on first use.
   test.setTimeout(600_000);
 
-  // ── Both enquiries arrive before either is accepted ───────────────────────
-  //
-  // Which is how it happened: the Front Officer opened the inbox to two
-  // messages, not to one.
   const firstMail = await arrive(request, enquiryOf(ABHINASH));
   const secondMail = await arrive(request, enquiryOf(SHEKHAR));
-
   const first = await accept(page, firstMail);
   const second = await accept(page, secondMail);
 
@@ -153,12 +119,9 @@ test('two inquirers, one mailbox: two cases that never touch each other', async 
   expect(second.queryId).toBe(`QRY-${currentYear()}-00002`);
   expect(first.queryId).not.toBe(second.queryId);
 
-  // Each case carries the address its own mail arrived from.
   expect(first.inquirer.email).toBe(ABHINASH.email);
   expect(second.inquirer.email).toBe(SHEKHAR.email);
 
-  // And each was acknowledged once, to that address — the step that needed a
-  // manual retry in the live run.
   for (const [row, person] of [
     [first, ABHINASH],
     [second, SHEKHAR],

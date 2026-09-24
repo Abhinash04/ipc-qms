@@ -8,7 +8,6 @@ export const ROLE_SLUG = {
   [ROLES.OFFICER_IN_CHARGE]: 'officer-in-charge',
   [ROLES.ASSIGNED_OFFICIAL]: 'assigned-official',
   [ROLES.REVIEWER]: 'reviewer',
-  [ROLES.INQUIRER]: 'inquirer',
 };
 
 const ADMIN_CONSOLE = [
@@ -24,8 +23,6 @@ const ADMIN_CONSOLE = [
 ];
 
 export const ROLE_SECTIONS = {
-  [ROLES.INQUIRER]: [SECTION.DASHBOARD, SECTION.COMPOSE, SECTION.QUERY_DETAIL],
-
   [ROLES.FRONT_OFFICE]: [
     SECTION.DASHBOARD,
     SECTION.INBOX,
