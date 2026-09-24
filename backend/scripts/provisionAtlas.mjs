@@ -1,9 +1,12 @@
 import mongoose from 'mongoose';
+import env from '../src/config/env.js';
+import { isSharedDatabase } from '../src/config/db.js';
 import * as models from '../src/models/index.js';
 
 const args = process.argv.slice(2);
 const dryRun = args.includes('--dry-run');
 const truncate = args.includes('--truncate');
+const force = args.includes('--force');
 const seed = !args.includes('--no-seed');
 
 function argValue(name) {
@@ -13,7 +16,7 @@ function argValue(name) {
   return i >= 0 ? args[i + 1] : undefined;
 }
 
-const redact = (uri) => String(uri || '').replace(/\/\/[^@]+@/, '//<credentials>@');
+const redact = (uri) => String(uri || '').replace(/\/\/.*@/, '//<credentials>@');
 
 const WORKFLOW_COLLECTIONS = [
   'querycases', 'workflowsteps', 'reviews', 'responseversions', 'notifications',
@@ -22,13 +25,12 @@ const WORKFLOW_COLLECTIONS = [
 ];
 
 async function main() {
-  const uri = argValue('--uri') || process.env.ATLAS_DATABASE_URL || '';
+  const uri = argValue('--uri') || env.DATABASE_URL || '';
 
   if (!uri) {
     console.error(
-      'No target given. Pass --uri "mongodb+srv://user:pass@cluster.mongodb.net/query_management_system?retryWrites=true&w=majority"\n' +
-        'or set ATLAS_DATABASE_URL. The local DATABASE_URL is ignored on purpose, so this\n' +
-        'cannot be run against the development database by accident.',
+      'No target given. Set DATABASE_URL in backend/.env, or pass --uri ' +
+        '"mongodb+srv://user:pass@cluster.mongodb.net/query_management_system?retryWrites=true&w=majority".',
     );
     process.exitCode = 1;
     return;
@@ -37,6 +39,14 @@ async function main() {
   const dbName = (uri.split('?')[0].split('/')[3] || '').trim();
   if (!dbName) {
     console.error(`The URI names no database: ${redact(uri)}\nAdd one, e.g. .../query_management_system?retryWrites=true`);
+    process.exitCode = 1;
+    return;
+  }
+
+  if (truncate && !dryRun && !force && isSharedDatabase(uri)) {
+    console.error(
+      `--truncate on a shared database (${redact(uri)}) deletes every developer's cases. Add --force only if that is intended.`,
+    );
     process.exitCode = 1;
     return;
   }

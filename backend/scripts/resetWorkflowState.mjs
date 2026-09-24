@@ -1,5 +1,5 @@
 import env from '../src/config/env.js';
-import { connectDb, disconnectDb, mongoose } from '../src/config/db.js';
+import { connectDb, disconnectDb, isSharedDatabase, mongoose } from '../src/config/db.js';
 
 const COLLECTIONS = [
   'querycases',
@@ -25,7 +25,7 @@ const dryRun = args.includes('--dry-run');
 const force = args.includes('--force');
 
 function redactUri(uri) {
-  return String(uri || '').replace(/\/\/[^@]+@/, '//<credentials>@');
+  return String(uri || '').replace(/\/\/.*@/, '//<credentials>@');
 }
 
 async function main() {
@@ -36,15 +36,19 @@ async function main() {
     process.exit(1);
   }
 
-  if (env.NODE_ENV === 'production' && !force) {
-    console.error('Refusing to run against NODE_ENV=production without --force.');
+  const shared = isSharedDatabase();
+  console.log(`  Database   ${redactUri(env.DATABASE_URL)}`);
+  console.log(`  Shared     ${shared ? 'yes — other developers use this database' : 'no'}`);
+  console.log(`  NODE_ENV   ${env.NODE_ENV}`);
+  console.log(`  Mode       ${dryRun ? 'dry run — nothing will be deleted' : 'delete'}\n`);
+
+  if ((env.NODE_ENV === 'production' || (shared && !dryRun)) && !force) {
+    console.error(
+      `Refusing to run against ${env.NODE_ENV === 'production' ? 'NODE_ENV=production' : 'a shared database'} without --force.`,
+    );
     console.error('This deletes every query case in the database.\n');
     process.exit(1);
   }
-
-  console.log(`  Database   ${redactUri(env.DATABASE_URL)}`);
-  console.log(`  NODE_ENV   ${env.NODE_ENV}`);
-  console.log(`  Mode       ${dryRun ? 'dry run — nothing will be deleted' : 'delete'}\n`);
 
   await connectDb({ silent: true });
 

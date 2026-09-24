@@ -1,5 +1,5 @@
 import env from '../src/config/env.js';
-import { connectDb, disconnectDb, mongoose } from '../src/config/db.js';
+import { connectDb, disconnectDb, isSharedDatabase, mongoose } from '../src/config/db.js';
 import { MailboxMessage } from '../src/models/MailboxMessage.js';
 import { MailboxTriage } from '../src/models/MailboxTriage.js';
 import { findPurgeable, sweepOnce, PURGEABLE_SOURCES } from '../src/services/email/mailbox/retention.js';
@@ -28,7 +28,7 @@ const unregisteredHours = argValue('--unregistered-hours')
   : env.MAILBOX_UNREGISTERED_RETENTION_HOURS;
 const limit = argValue('--limit') ? parseInt(argValue('--limit'), 10) : env.MAILBOX_PURGE_BATCH;
 
-const redactUri = (uri) => String(uri || '').replace(/\/\/[^@]+@/, '//<credentials>@');
+const redactUri = (uri) => String(uri || '').replace(/\/\/.*@/, '//<credentials>@');
 
 const pad = (value, width) => String(value ?? '').padEnd(width);
 
@@ -47,12 +47,6 @@ async function main() {
     return;
   }
 
-  if (env.NODE_ENV === 'production' && !dryRun && !force) {
-    console.error('Refusing to purge with NODE_ENV=production without --force.');
-    process.exitCode = 1;
-    return;
-  }
-
   if (!Number.isFinite(unregisteredHours) || unregisteredHours <= 0) {
     console.error(
       `--unregistered-hours must be a positive number (got "${argValue('--unregistered-hours')}").`,
@@ -65,7 +59,9 @@ async function main() {
     return;
   }
 
+  const shared = isSharedDatabase();
   console.log(`Database         ${redactUri(env.DATABASE_URL)}`);
+  console.log(`Shared           ${shared ? 'yes — other developers use this database' : 'no'}`);
   console.log(`NODE_ENV         ${env.NODE_ENV}`);
   console.log(`Mode             ${dryRun ? 'dry run — nothing will be destroyed' : 'purge'}`);
   console.log(`Junk window      ${hours} hours`);
@@ -73,6 +69,14 @@ async function main() {
   console.log(`Confidence floor ${env.MAILBOX_JUNK_CONFIDENCE}`);
   console.log(`Purgeable source ${PURGEABLE_SOURCES.join(', ')}`);
   console.log(`Model            ${env.GEMMA_API_URL ? 'configured' : 'not configured — rules only'}\n`);
+
+  if ((env.NODE_ENV === 'production' || shared) && !dryRun && !force) {
+    console.error(
+      `Refusing to purge ${env.NODE_ENV === 'production' ? 'with NODE_ENV=production' : 'a shared database'} without --force.`,
+    );
+    process.exitCode = 1;
+    return;
+  }
 
   await connectDb({ silent: true });
 
