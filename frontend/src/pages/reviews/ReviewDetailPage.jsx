@@ -20,7 +20,7 @@ import { AddReviewLevelField } from '@/components/workflow/AddReviewLevelField';
 
 export function ReviewDetailPage() {
   const paths = useRoutePaths();
-  const { queryId, query, steps, reviews, versions, latestVersion, audit, messages, currentUser, can } =
+  const { queryId, query, steps, reviews, versions, latestVersion, audit, messages, currentUser, can, resolving } =
     useQueryCase();
   const { run, error, clearError } = useWorkflowAction();
   const addReviewLevel = useWorkflowStore((state) => state.addReviewLevel);
@@ -29,7 +29,7 @@ export function ReviewDetailPage() {
   const [newReviewer, setNewReviewer] = useState('');
   const [deleteError, setDeleteError] = useState(null);
 
-  if (!query) return <EmptyState title="Query not found" />;
+  if (!query) return <EmptyState title={resolving ? 'Loading case…' : 'Query not found'} />;
 
   const reviewSteps = steps.filter((s) => s.stepType === 'REVIEW');
 

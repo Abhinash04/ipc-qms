@@ -267,7 +267,7 @@ function VersionHistoryCard({ versions }) {
 
 export function DraftingDetailPage() {
   const paths = useRoutePaths();
-  const { queryId, query, versions, latestVersion, reviews, steps, currentUser, can } =
+  const { queryId, query, versions, latestVersion, reviews, steps, currentUser, can, resolving } =
     useQueryCase();
   const { run, running, error, clearError } = useWorkflowAction();
   const generateAiDraft = useWorkflowStore((state) => state.generateAiDraft);
@@ -280,7 +280,7 @@ export function DraftingDetailPage() {
   const [deleteError, setDeleteError] = useState(null);
   const draft = edited ?? latestVersion?.content ?? '';
 
-  if (!query) return <EmptyState title="Query not found" />;
+  if (!query) return <EmptyState title={resolving ? 'Loading case…' : 'Query not found'} />;
 
   const wasReturned = query.workflowState === WORKFLOW_STATE.RETURNED_FOR_REVISION;
   const latestReturn = [...reviews].reverse().find((r) => r.decision === 'CHANGES_REQUESTED');

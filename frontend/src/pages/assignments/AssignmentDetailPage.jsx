@@ -20,12 +20,12 @@ const ELIGIBLE_ASSIGNEES = MOCK_USERS.filter((u) => u.role === ROLES.ASSIGNED_OF
 
 export function AssignmentDetailPage() {
   const paths = useRoutePaths();
-  const { queryId, query, currentUser, assignee, can } = useQueryCase();
+  const { queryId, query, currentUser, assignee, can, resolving } = useQueryCase();
   const { run, error, clearError } = useWorkflowAction();
   const assignQuery = useWorkflowStore((state) => state.assignQuery);
   const [override, setOverride] = useState('');
 
-  if (!query) return <EmptyState title="Query not found" />;
+  if (!query) return <EmptyState title={resolving ? 'Loading case…' : 'Query not found'} />;
 
   const canAssign = can(WORKFLOW_ACTION.ASSIGN);
 

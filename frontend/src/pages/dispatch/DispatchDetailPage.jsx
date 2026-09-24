@@ -15,7 +15,7 @@ import { ActionError } from '@/components/workflow/ActionError';
 
 export function DispatchDetailPage() {
   const paths = useRoutePaths();
-  const { queryId, query, latestVersion, messages, currentUser, can } = useQueryCase();
+  const { queryId, query, latestVersion, messages, currentUser, can, resolving } = useQueryCase();
   const dispatched = messages.find((m) => m.emailType === EMAIL_TYPE.OUTGOING_RESPONSE);
   const { run, running, error, clearError } = useWorkflowAction();
   const dispatchResponse = useWorkflowStore((state) => state.dispatchResponse);
@@ -28,7 +28,7 @@ export function DispatchDetailPage() {
   );
   const uncertain = outbound?.status === 'UNCERTAIN';
 
-  if (!query) return <EmptyState title="Query not found" />;
+  if (!query) return <EmptyState title={resolving ? 'Loading case…' : 'Query not found'} />;
 
   const canDispatch = can(WORKFLOW_ACTION.DISPATCH);
   const isClosed = query.workflowState === WORKFLOW_STATE.CLOSED;

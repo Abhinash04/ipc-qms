@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import { useWorkflowStore } from "@/store/useWorkflowStore";
 import { useAuthStore } from "@/store/useAuthStore";
@@ -17,6 +17,24 @@ export function useQueryCase() {
   const allReviews = useWorkflowStore((state) => state.reviews);
   const allAudit = useWorkflowStore((state) => state.auditEvents);
   const allMessages = useWorkflowStore((state) => state.emailMessages);
+  const [checkedId, setCheckedId] = useState(null);
+  const missing = Boolean(queryId) && !query;
+
+  useEffect(() => {
+    if (!missing || checkedId === queryId) return undefined;
+    let live = true;
+    useWorkflowStore
+      .getState()
+      .revalidate()
+      .finally(() => {
+        if (live) setCheckedId(queryId);
+      });
+    return () => {
+      live = false;
+    };
+  }, [missing, checkedId, queryId]);
+
+  const resolving = missing && checkedId !== queryId;
 
   const steps = useMemo(
     () =>
@@ -83,6 +101,7 @@ export function useQueryCase() {
       assignee,
       currentUser,
       can,
+      resolving,
     }),
     [
       queryId,
@@ -97,6 +116,7 @@ export function useQueryCase() {
       assignee,
       currentUser,
       can,
+      resolving,
     ],
   );
 }

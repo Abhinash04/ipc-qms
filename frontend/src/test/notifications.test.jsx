@@ -11,6 +11,7 @@ import { findUserById } from '@/constants/mockUsers';
 import { AUDIT_EVENT } from '@/constants/statusEnums';
 import * as mailboxService from '@/services/api/mailboxService';
 import { installFakeCaseMail } from '@/test/fakeCaseMail';
+import { persistQueryTransition as writeOnServer } from '@/test/fakeQueryApi';
 import { EXTERNAL_INQUIRER as INQUIRER } from '@/test/externalInquirer';
 
 vi.mock('@/services/api/mailboxService');
@@ -126,6 +127,30 @@ describe('history is never replayed as news', () => {
 
     await screen.findByText('Query assigned');
     expect(screen.getAllByText('Query assigned')).toHaveLength(1);
+  });
+
+  it("stays quiet about a colleague's forward that a background reload brings in", async () => {
+    render(<NotificationHost />);
+
+    const queryId = received();
+    await verified(queryId);
+    await writeOnServer({
+      auditEvent: {
+        auditId: 'AUD-09001',
+        queryId,
+        event: AUDIT_EVENT.QUERY_FORWARDED,
+        actor: 'A colleague',
+        at: '2026-08-26T10:00:00.000Z',
+        details: `${queryId} forwarded by a colleague.`,
+      },
+    });
+
+    await act(() => s().refreshFromServer({ quiet: true }));
+    expect(s().getAudit(queryId).some((e) => e.event === AUDIT_EVENT.QUERY_FORWARDED)).toBe(true);
+
+    notify.info('marker');
+    await screen.findByText('marker');
+    expect(screen.queryByText('Forwarded to the Officer-in-Charge')).not.toBeInTheDocument();
   });
 
   it('emits nothing for the events already present when it mounts', async () => {

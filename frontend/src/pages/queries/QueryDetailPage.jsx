@@ -193,6 +193,7 @@ export function QueryDetailPage() {
     reviews,
     audit,
     messages,
+    resolving,
   } = useQueryCase();
   const canAssign = can(WORKFLOW_ACTION.ASSIGN);
   const assignQuery = useWorkflowStore((state) => state.assignQuery);
@@ -200,8 +201,8 @@ export function QueryDetailPage() {
   if (!query) {
     return (
       <EmptyState
-        title="Query not found"
-        description={`No query matching ${queryId} exists in the current demo data.`}
+        title={resolving ? 'Loading case…' : 'Query not found'}
+        description={resolving ? undefined : `No query matching ${queryId} exists in the current demo data.`}
       />
     );
   }

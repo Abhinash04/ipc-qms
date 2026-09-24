@@ -15,7 +15,7 @@ vi.mock('@/services/api/mailboxService');
 const captured = [];
 
 vi.mock('@/services/api/queryCaseService', () => ({
-  fetchAllQueries: vi.fn(async () => ({ queries: [] })),
+  fetchAllQueries: vi.fn(async () => serverSnapshot()),
   checkQueriesEmpty: vi.fn(async () => true),
   resetQueries: vi.fn(async () => ({ success: true })),
   grantFinalApproval: vi.fn(async () => ({ approved: true })),
@@ -39,6 +39,21 @@ vi.mock('@/services/api/aiService', () => ({
 
 const s = () => useWorkflowStore.getState();
 const FRONT_OFFICE = findUserById('USR-0002');
+
+const serverSnapshot = () => {
+  const state = s();
+  return {
+    queries: state.queries,
+    workflowSteps: state.workflowSteps,
+    reviews: state.reviews,
+    responseVersions: state.responseVersions,
+    auditEvents: state.auditEvents,
+    notifications: state.notifications,
+    emailMessages: state.emailMessages,
+    emailThreads: state.emailThreads,
+    counters: state.counters,
+  };
+};
 
 const enquiry = () => ({
   mailboxMessageId: 'msg-summary-1',

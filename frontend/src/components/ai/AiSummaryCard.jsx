@@ -91,8 +91,7 @@ function SummaryBody({ summary, expanded, onToggleExpanded }) {
   );
 }
 
-export function AiSummaryCard({ summary: initialSummary, query, onSummaryUpdated, variant = 'card' }) {
-  const [summary, setSummary] = useState(initialSummary);
+export function AiSummaryCard({ summary, query, onSummaryUpdated, variant = 'card' }) {
   const [loading, setLoading] = useState(false);
   const [expanded, setExpanded] = useState(false);
 
@@ -106,20 +105,13 @@ export function AiSummaryCard({ summary: initialSummary, query, onSummaryUpdated
         inquirerName: query.inquirer?.name,
       });
 
-      if (gemmaSummary) {
-        setSummary(gemmaSummary);
-        if (onSummaryUpdated) {
-          onSummaryUpdated(gemmaSummary);
-        }
-      }
+      if (gemmaSummary) onSummaryUpdated?.(gemmaSummary);
     } catch (error) {
       console.error('[AiSummaryCard] Error generating AI summary:', error);
     } finally {
       setLoading(false);
     }
   };
-
-  const currentSummary = summary || initialSummary;
 
   const outerClass = variant === 'embedded'
     ? "select-none"
@@ -140,7 +132,7 @@ export function AiSummaryCard({ summary: initialSummary, query, onSummaryUpdated
             {loading ? 'Generating Pravah AI Summary...' : 'AI Summary '}
           </h2>
 
-          {!loading && <ProvenanceBadge summary={currentSummary} />}
+          {!loading && <ProvenanceBadge summary={summary} />}
         </div>
 
         <div className="flex items-center gap-2">
@@ -165,7 +157,7 @@ export function AiSummaryCard({ summary: initialSummary, query, onSummaryUpdated
             </p>
             <p className="text-[12px] font-medium text-slate-400">Extracting main request, key points, and domain topics</p>
           </div>
-        ) : !currentSummary?.text ? (
+        ) : !summary?.text ? (
           <div className="flex items-center justify-between py-2">
             <p className="text-[13.5px] font-medium text-slate-500">No AI summary generated yet for this query.</p>
             <button
@@ -179,7 +171,7 @@ export function AiSummaryCard({ summary: initialSummary, query, onSummaryUpdated
           </div>
         ) : (
           <SummaryBody
-            summary={currentSummary}
+            summary={summary}
             expanded={expanded}
             onToggleExpanded={() => setExpanded((open) => !open)}
           />

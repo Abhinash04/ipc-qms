@@ -25,6 +25,7 @@ const captured = [];
 beforeEach(async () => {
   const { loadAll } = await import('@/services/persistence/queryState');
   await loadAll().catch(() => {});
+  await loadAll().catch(() => {});
 
   const { __resetFakeQueryApi } = await import('@/test/fakeQueryApi');
   __resetFakeQueryApi();

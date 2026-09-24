@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { replaceEqualDeep } from '@tanstack/react-query';
 
 import {
   BUSINESS_STATUS,
@@ -14,7 +15,11 @@ import { MOCK_USERS, findUserById, findUserByEmail } from '@/constants/mockUsers
 import { createEmailMessage, EMAIL_DIRECTION, EMAIL_TYPE } from '@/constants/emailModel';
 import { buildSeedState } from '@/constants/mockDomain';
 import { summarise, recommendAssignee, draftResponse } from '@/services/ai/mockAiService';
-const dbModule = () => import('@/services/persistence/queryState');
+let db = null;
+const dbModule = async () => {
+  db ??= await import('@/services/persistence/queryState');
+  return db;
+};
 import {
   sendResponse,
   forwardQuery,
@@ -27,7 +32,7 @@ import {
 } from '@/services/api/queryCaseService';
 import { fetchGemmaAiSummary, fetchGemmaAiDraft } from '@/services/api/aiService';
 import { assembleDraftEmail } from '@/services/ai/draftComposer';
-import { notify } from '@/services/notify';
+import { notify, beginBatch, endBatch } from '@/services/notify';
 
 const pad = (n) => String(n).padStart(5, '0');
 
@@ -237,8 +242,8 @@ async function persistDelta(prev, next, queryId, auditEvent, notification) {
     return before && before !== v;
   });
 
-  const { persistTransition } = await dbModule();
-  await persistTransition({
+  const { persistTransition } = db ?? (await dbModule());
+  return persistTransition({
     query: next.queries.find((q) => q.queryId === queryId) || null,
     auditEvent,
     notification,
@@ -276,11 +281,26 @@ function sendFailure(error) {
 
 const approvalsInFlight = new Map();
 
+const SERVER_COLLECTIONS = [
+  'queries',
+  'workflowSteps',
+  'reviews',
+  'responseVersions',
+  'auditEvents',
+  'notifications',
+  'emailMessages',
+  'emailThreads',
+  'outboundEmails',
+];
+
+let revalidating = null;
+
 export const useWorkflowStore = create((set, get) => ({
   ...buildSeedState(),
 
   hydrated: false,
   persistenceError: null,
+  refreshedAt: 0,
 
   getQuery: (queryId) => get().queries.find((q) => q.queryId === queryId) || null,
 
@@ -321,10 +341,12 @@ export const useWorkflowStore = create((set, get) => ({
     const { next, auditEvent, notification } = computeTransition(prev, options);
     set(next);
 
-    persistDelta(prev, next, options.queryId, auditEvent, notification).catch((error) => {
-      console.error('[qms] failed to persist workflow transition', error);
-      set({ persistenceError: String(error?.message || error) });
-    });
+    persistDelta(prev, next, options.queryId, auditEvent, notification)
+      .then(() => get().revalidate())
+      .catch((error) => {
+        console.error('[qms] failed to persist workflow transition', error);
+        set({ persistenceError: String(error?.message || error) });
+      });
   },
 
   findQueryBySourceMessage: (sourceMessageId) => {
@@ -986,10 +1008,11 @@ export const useWorkflowStore = create((set, get) => ({
     if (running) return running;
 
     const work = (async () => {
-      const result = await approve(queryId, { comment });
-
-      await get().refreshFromServer();
-      return result;
+      try {
+        return await approve(queryId, { comment });
+      } finally {
+        await get().refreshFromServer();
+      }
     })().finally(() => approvalsInFlight.delete(queryId));
 
     approvalsInFlight.set(queryId, work);
@@ -997,9 +1020,11 @@ export const useWorkflowStore = create((set, get) => ({
   },
 
   resolveOutboundEmail: async (queryId, { emailType, outcome }, resolve = resolveOutboundOnServer) => {
-    const result = await resolve(queryId, { emailType, outcome });
-    await get().refreshFromServer();
-    return result;
+    try {
+      return await resolve(queryId, { emailType, outcome });
+    } finally {
+      await get().refreshFromServer();
+    }
   },
 
   rejectFinalApproval: (queryId, reason, actor) => {
@@ -1250,7 +1275,7 @@ export const useWorkflowStore = create((set, get) => ({
     try {
       const { isEmpty, loadAll } = await dbModule();
       if (await isEmpty()) {
-        set({ ...buildSeedState(), hydrated: true, persistenceError: null });
+        set({ ...buildSeedState(), hydrated: true, persistenceError: null, refreshedAt: Date.now() });
         return;
       }
       const stored = await loadAll();
@@ -1267,34 +1292,47 @@ export const useWorkflowStore = create((set, get) => ({
         counters: stored.counters || buildSeedState().counters,
         hydrated: true,
         persistenceError: null,
+        refreshedAt: Date.now(),
       });
     } catch (error) {
       set({ hydrated: true, persistenceError: String(error?.message || error) });
     }
   },
 
-  refreshFromServer: async () => {
+  refreshFromServer: async ({ quiet = false } = {}) => {
     try {
-      const { loadAll } = await dbModule();
+      const { loadAll } = db ?? (await dbModule());
       const stored = await loadAll();
-      set({
-        queries: stored.queries || [],
-        workflowSteps: stored.workflowSteps || [],
-        reviews: stored.reviews || [],
-        responseVersions: stored.responseVersions || [],
-        auditEvents: stored.auditEvents || [],
-        notifications: stored.notifications || [],
-        emailMessages: stored.emailMessages || [],
-        emailThreads: stored.emailThreads || [],
-        outboundEmails: stored.outboundEmails || [],
-        counters: stored.counters || get().counters,
+      const current = get();
+      if (quiet && !current.hydrated) return false;
+      const fresh = {
+        ...Object.fromEntries(
+          SERVER_COLLECTIONS.map((key) => [key, replaceEqualDeep(current[key], stored[key] || [])]),
+        ),
+        counters: stored.counters || current.counters,
         persistenceError: null,
-      });
+        refreshedAt: Date.now(),
+      };
+      if (quiet) beginBatch();
+      try {
+        set(fresh);
+      } finally {
+        if (quiet) endBatch();
+      }
       return true;
     } catch (error) {
-      set({ persistenceError: String(error?.message || error) });
+      if (!quiet) set({ persistenceError: String(error?.message || error) });
       return false;
     }
+  },
+
+  revalidate: () => {
+    revalidating ??= get()
+      .refreshFromServer({ quiet: true })
+      .finally(() => {
+        revalidating = null;
+      });
+    return revalidating;
   },
 
   resetHydration: () => set({ ...buildSeedState(), hydrated: false, persistenceError: null }),

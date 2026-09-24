@@ -44,6 +44,7 @@ let memoryStore = createDefaultStore();
 export const COUNTER_KEY = 'counters';
 
 let pending = Promise.resolve();
+let writes = 0;
 
 function enqueue(work) {
   const result = pending.then(work, work);
@@ -52,7 +53,12 @@ function enqueue(work) {
 }
 
 export async function loadAll() {
-  const data = await enqueue(fetchAllQueries);
+  let seen;
+  let data;
+  do {
+    seen = writes;
+    data = await enqueue(fetchAllQueries);
+  } while (seen !== writes);
 
   if (data && Array.isArray(data.queries)) {
     memoryStore = data;
@@ -134,11 +140,14 @@ export async function persistTransition(delta) {
   if (addThreads.length) memoryStore.emailThreads.push(...addThreads);
   if (counters) memoryStore.counters = counters;
 
+  writes += 1;
   return enqueue(async () => {
     try {
       await persistQueryTransition(delta);
+      return { ok: true };
     } catch (error) {
       reportFailure(error);
+      return { ok: false };
     }
   });
 }

@@ -63,6 +63,7 @@ const enquiry = () => ({
 const settled = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 const fakeForward = async ({ queryId }) => {
+  await settled();
   useWorkflowStore.setState((state) => ({
     queries: state.queries.map((q) =>
       q.queryId === queryId ? { ...q, workflowState: WORKFLOW_STATE.PENDING_ASSIGNMENT } : q,
@@ -388,6 +389,48 @@ describe('the final-approval lock survives the trip', () => {
 
     await settled();
     expect(captured).toEqual([]);
+  });
+});
+
+describe('a server action reads the case back even when it fails', () => {
+  const unavailable = () =>
+    vi.fn(async () => {
+      throw Object.assign(new Error('Request failed with status code 503'), { response: { status: 503 } });
+    });
+
+  it('reloads after final approval fails', async () => {
+    const queryId = await caseAwaitingReview();
+    s().approveReview(queryId, 'No objection from review.', REVIEWER);
+    await settled();
+
+    queryCaseService.fetchAllQueries.mockResolvedValueOnce(
+      serverSnapshot({
+        queries: s().queries.map((q) =>
+          q.queryId === queryId ? { ...q, workflowState: WORKFLOW_STATE.READY_FOR_DISPATCH } : q,
+        ),
+      }),
+    );
+
+    await expect(s().grantFinalApproval(queryId, OIC, unavailable())).rejects.toThrow(/503/);
+
+    expect(s().getQuery(queryId).workflowState).toBe(WORKFLOW_STATE.READY_FOR_DISPATCH);
+  });
+
+  it('reloads after recording an outbound email fails', async () => {
+    const { queryId } = s().ingestEmail(enquiry(), async () => null);
+    await settled();
+
+    queryCaseService.fetchAllQueries.mockResolvedValueOnce(
+      serverSnapshot({
+        outboundEmails: [{ queryId, emailType: 'OUTGOING_RESPONSE', status: 'SENT' }],
+      }),
+    );
+
+    await expect(
+      s().resolveOutboundEmail(queryId, { emailType: 'OUTGOING_RESPONSE', outcome: 'SENT' }, unavailable()),
+    ).rejects.toThrow(/503/);
+
+    expect(s().getOutbound(queryId, 'OUTGOING_RESPONSE')?.status).toBe('SENT');
   });
 });
 

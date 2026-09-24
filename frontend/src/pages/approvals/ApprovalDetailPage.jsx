@@ -31,6 +31,7 @@ export function ApprovalDetailPage() {
     messages,
     currentUser,
     can,
+    resolving,
   } = useQueryCase();
   const { run, running, error, clearError } = useWorkflowAction();
   const grantFinalApproval = useWorkflowStore(
@@ -44,7 +45,7 @@ export function ApprovalDetailPage() {
   );
   const [comment, setComment] = useState("");
 
-  if (!query) return <EmptyState title="Query not found" />;
+  if (!query) return <EmptyState title={resolving ? "Loading case…" : "Query not found"} />;
 
   const canApprove = can(WORKFLOW_ACTION.FINAL_APPROVE);
 
