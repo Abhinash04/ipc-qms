@@ -2,14 +2,6 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import env from '../config/env.js';
 import { deriveStatus, MAIL_STATUS, purgesAtFor } from '../services/email/mailbox/messageView.js';
 
-/**
- * Where the machine's verdict becomes something the Front Office can see.
- *
- * The precedence is the point: a person's decision always outranks the
- * machine's verdict, and a message nobody has classified is exactly as it was
- * before this feature existed.
- */
-
 const junk = { verdict: 'JUNK', rescuedAt: null };
 
 describe('a human decision always outranks the machine', () => {
@@ -44,8 +36,6 @@ describe('the junk verdict', () => {
 
 describe('a message with no verdict at all', () => {
   it('keeps exactly the status it had before this feature existed', () => {
-    // Every row written before triage shipped has no verdict. This is the
-    // backward-compatibility contract, and no backfill is required for it.
     expect(deriveStatus({ isRead: true, triage: null })).toBe(MAIL_STATUS.READ);
     expect(deriveStatus({ isRead: false, triage: null })).toBe(MAIL_STATUS.NEW);
     expect(deriveStatus({ isRead: false })).toBe(MAIL_STATUS.NEW);
@@ -79,8 +69,6 @@ describe('the purge countdown the inbox shows', () => {
   });
 
   it('puts a genuine message on the long one, because that is the tier that will take it', () => {
-    // The countdown has to match whichever filter would actually reach the row,
-    // or the inbox promises a message is safe when it is not.
     expect(purgesAtFor({ verdict: 'GENUINE', confidence: 0, classifiedAt: at, rescuedAt: null })).toBe(
       '2026-09-15T00:00:00.000Z',
     );

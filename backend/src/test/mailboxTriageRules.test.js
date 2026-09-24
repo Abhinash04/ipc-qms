@@ -1,15 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 
-/**
- * The deterministic half of triage. Pure — no database, no model, no clock.
- *
- * The distinction these tests defend is `hard` versus `soft`: a hard rule is
- * terminal and its message can be purged unseen, so the bar for one is that the
- * signal is provably machine-generated. Anything a human being might plausibly
- * have sent is soft, which means the model still gets a say and the message is
- * never purged on the rule alone.
- */
-
 import { classifyByRules } from '../services/email/mailbox/triageRules.js';
 import { RULE_CLASSES, TRIAGE_VERDICTS } from '../models/MailboxTriage.js';
 
@@ -36,8 +26,6 @@ describe('a real enquiry', () => {
   });
 
   it('is still genuine when the body contains a prompt fence', () => {
-    // The rules layer never interpolates into a prompt, but it must not choke
-    // on what the model layer has to defend against either.
     const result = classifyByRules(enquiry({ body: 'Limits """ for IP tablets' }));
     expect(result.verdict).toBe(GENUINE);
   });
@@ -45,8 +33,6 @@ describe('a real enquiry', () => {
 
 describe('Tier A — headers', () => {
   it('is skipped entirely when there are no headers, which is the NICeMail shape', () => {
-    // The browser agent scrapes a rendered inbox: there is no RFC message in
-    // that path at all, and it is the only source that stores rows.
     const result = classifyByRules(enquiry({ headers: undefined }));
     expect(result.verdict).toBe(GENUINE);
   });
@@ -94,8 +80,6 @@ describe('Tier A — headers', () => {
   });
 
   it('does not treat "Auto-Submitted: no" as a signal at all', () => {
-    // RFC 3834 requires `no` on human mail. Its presence is the opposite of
-    // evidence, and reading it as a signal would condemn the compliant.
     const result = classifyByRules(enquiry({ headers: { 'auto-submitted': 'no' } }));
     expect(result.verdict).toBe(GENUINE);
   });
@@ -122,10 +106,6 @@ describe('Tier B — the sender', () => {
   );
 
   it('does NOT treat the configured inquirer address as a loop', () => {
-    // A member of the public is not loop-back mail. `ownAddresses()` names the
-    // staff identities one by one for this reason: were it to take the whole
-    // directory, an identity added for someone the system corresponds with would
-    // start hard-junking their enquiries.
     const result = classifyByRules(enquiry({ from: 'Public <member.of.public@example.invalid>' }));
     expect(result.verdict).toBe(GENUINE);
   });
@@ -138,8 +118,6 @@ describe('Tier B — the sender', () => {
   );
 
   it('treats a no-reply sender as soft, never hard', () => {
-    // The rule the anti-sender-filtering decision is aimed at: a genuine
-    // regulatory notice can arrive from noreply@cdsco.gov.in.
     const result = classifyByRules(enquiry({ from: 'CDSCO <noreply@cdsco.gov.invalid>' }));
     expect(result.verdict).toBe(JUNK);
     expect(result.ruleClass).toBe(RULE_CLASSES.SOFT);
@@ -161,9 +139,6 @@ describe('Tier C — content', () => {
   });
 
   it('an attachment vetoes the empty rule outright', () => {
-    // "Please see attached" is the commonest shape a real enquiry takes, and an
-    // empty body with a PDF wrongly purged is the worst outcome this feature
-    // can produce. This assertion is the guard against that.
     const result = classifyByRules(
       enquiry({ body: '', bodyHtml: '', attachments: [{ attachmentId: 'a'.repeat(32), filename: 'query.pdf' }] }),
     );
@@ -183,7 +158,6 @@ describe('Tier C — content', () => {
 
 describe('collecting soft signals', () => {
   it('gathers every soft signal rather than stopping at the first', () => {
-    // The model is shown the whole picture, not the first thing that tripped.
     const result = classifyByRules(
       enquiry({
         from: 'noreply@example.invalid',

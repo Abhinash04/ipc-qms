@@ -2,9 +2,6 @@ import env from '../config/env.js';
 import { generateDraft, decomposeEnquiry } from '../services/ai/gemmaService.js';
 import { retrieveContext } from '../data/ipcKnowledge.js';
 import { selectContext } from '../data/ipcContextBrain.js';
-// Reaches across the package boundary on purpose: this script exists to show the email the
-// officer actually sees, and the frontend composer is what renders it. A copy here would
-// drift. Safe to import directly — the composer is dependency-free ESM.
 import { assembleDraftEmail } from '../../../frontend/src/services/ai/draftComposer.js';
 import { qualifyPassages } from '../data/evidenceQualification.js';
 

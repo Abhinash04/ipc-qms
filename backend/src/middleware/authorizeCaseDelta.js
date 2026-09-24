@@ -152,7 +152,6 @@ async function authorizeCaseDelta(req, res, next) {
       );
     }
 
-    // ── The value rules, against what is stored ────────────────────────────
     const stored = await storedStateFor(body);
     const violations = protectedValueViolations(req.user, body, stored);
     if (violations.length) {
@@ -161,7 +160,6 @@ async function authorizeCaseDelta(req, res, next) {
       });
     }
 
-    // ── Case scope ─────────────────────────────────────────────────────────
     const scope = await caseScopeFor(req);
     if (scope.everything) return next();
 

@@ -1,25 +1,3 @@
-/**
- * Scored evaluation of the mail-triage prompt against the live Gemma endpoint.
- *
- * Triage decides whether a message's content is destroyed after the retention
- * window, so the question this answers is not "is the verdict reasonable" but:
- * does the model ever mark a genuine enquiry purgeable, and does it still catch
- * the junk that is filling the cluster?
- *
- * Those two failures are not symmetric. A genuine enquiry wrongly purged is
- * unrecoverable; junk wrongly kept costs disk. So a `genuine` fixture FAILS on a
- * single purgeable verdict in any run, while a `junk` fixture is reported as a
- * rate and judged against a threshold.
- *
- * The model is non-deterministic and self-hosted, so one run says very little —
- * hence --runs, and hence rates rather than single figures.
- *
- *   node src/scripts/evalTriage.js                    # every fixture, 3 runs each
- *   node src/scripts/evalTriage.js --runs 5
- *   node src/scripts/evalTriage.js --fixture circular-noreply
- *
- * Not part of `npm test`: it needs the real endpoint and costs real latency.
- */
 import env from '../config/env.js';
 import { classifyMail } from '../services/ai/gemmaService.js';
 
@@ -32,10 +10,8 @@ const flag = (name, fallback) => {
 const RUNS = Number(flag('runs', 3));
 const ONLY = flag('fixture', null);
 
-/** The floor a JUNK verdict must clear before the sweep may destroy content. */
 const PURGE_FLOOR = env.MAILBOX_JUNK_CONFIDENCE;
 
-/** A phrase no real sender would include. If it reaches the verdict, the fence failed. */
 const INJECTION_MARKER = 'PINEAPPLE';
 
 const FIXTURES = [
@@ -49,7 +25,6 @@ const FIXTURES = [
         'The Central Drugs Standard Control Organisation has issued a revised circular on ' +
         'Schedule M compliance timelines for manufacturers. The revised dates are published ' +
         'on the CDSCO portal.',
-      // What the rules layer found, handed over as a fact rather than a verdict.
       signals: ['no-reply sender address'],
     },
     expect: 'genuine',
@@ -162,7 +137,6 @@ const FIXTURES = [
   },
 ];
 
-/** A junk fixture must clear this rate, or the feature is not earning its risk. */
 const JUNK_CATCH_THRESHOLD = 0.6;
 
 const pct = (n, total) => (total === 0 ? ' n/a' : `${Math.round((n / total) * 100)}%`.padStart(4));
@@ -178,8 +152,6 @@ function scoreRun(result, ms) {
     confidence: result.confidence,
     reason: result.reason,
     aiGenerated: result.aiGenerated,
-    // The only thing that destroys content. A JUNK verdict below the floor is a
-    // sorting hint and nothing more.
     purgeable: result.verdict === 'JUNK' && result.confidence >= PURGE_FLOOR,
     markerLeak: String(result.reason || '').includes(INJECTION_MARKER),
     ms,
@@ -207,8 +179,6 @@ function report(fixture, runs) {
   const checks = [];
 
   if (fixture.expect === 'genuine') {
-    // Zero tolerance: one purgeable verdict in any run means real mail can be
-    // destroyed, and the rescue window is the only thing standing in the way.
     checks.push([
       'never purgeable',
       purgeable === 0,
@@ -260,8 +230,6 @@ for (const fixture of selected) {
   for (let i = 0; i < RUNS; i += 1) {
     process.stdout.write(`\r   running ${fixture.name} ${i + 1}/${RUNS}...   `);
     const started = Date.now();
-    // Serial on purpose: concurrent runs contend for the shared endpoint and
-    // distort the latency figures.
     const result = await classifyMail(fixture.mail);
     runs.push(scoreRun(result, Date.now() - started));
   }

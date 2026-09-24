@@ -82,9 +82,6 @@ async function listPage(box, { unreadOnly, junkOnly, q, limit, offset }) {
     return { messages, total };
   }
 
-  // `junkOnly` is not offered here. Only the user's own store keeps rows, so it
-  // is the only mailbox with verdicts to filter by — and the only one the
-  // retention sweep can touch.
   const all = (await box.store.list(box.address, { unreadOnly })).filter((message) => matchesSearch(message, q));
   const messages = limit ? [...all].sort(newestFirst).slice(offset, offset + limit) : all;
   return { messages, total: all.length };
@@ -179,14 +176,6 @@ async function deleteMessage(req, res, next) {
   }
 }
 
-/**
- * "This is not junk." Clears the machine's verdict and stops the retention
- * sweep ever purging the message.
- *
- * A separate action from accepting it: accepting mints a Query Case, and an
- * officer who merely disagrees with the classifier should not have to create
- * one to save the message.
- */
 async function rescueMessage(req, res, next) {
   if (!requireDb(next)) return undefined;
   try {

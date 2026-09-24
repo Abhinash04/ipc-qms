@@ -21,8 +21,6 @@ export const listMessagesQuerySchema = z.object({
     .string()
     .optional()
     .transform((value) => value === 'true'),
-  // The Junk view: what the machine held to be junk and nobody has rescued.
-  // This is the window in which a wrong verdict can still be undone.
   junkOnly: z
     .string()
     .optional()

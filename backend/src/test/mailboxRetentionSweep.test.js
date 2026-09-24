@@ -1,14 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
-/**
- * The sweep itself, against the in-memory Mongo stand-in.
- *
- * The single most important assertion in this file is that a purged row keeps
- * its `providerMessageId`: the sync builds its skip-set from stored provider
- * ids, so a row that loses one is re-ingested on the next poll, re-classified,
- * and purged again, forever.
- */
-
 vi.mock('../config/db.js', async (importOriginal) => ({
   ...(await importOriginal()),
   isConnected: () => true,
@@ -58,7 +49,6 @@ import { resetBuffer } from '../services/audit/auditService.js';
 const NOW = Date.parse('2026-09-23T12:00:00.000Z');
 const hoursAgo = (n) => new Date(NOW - n * 3600000).toISOString();
 
-/** A stored NICeMail message, with the weight that makes this feature worth it. */
 async function storeMessage(id, overrides = {}) {
   await MailboxMessage.create({
     mailboxMessageId: id,
@@ -99,8 +89,6 @@ async function triage(id, overrides = {}) {
   });
 }
 
-// `classify: false` throughout: the model phase has its own test file, and
-// GEMMA_API_URL is blank in the suite anyway.
 const sweep = (options = {}) =>
   sweepOnce({ now: NOW, classify: false, ignoreGrace: true, retentionHours: 46, ...options });
 
@@ -135,9 +123,6 @@ describe('what the sweep purges', () => {
     await sweep();
 
     const row = await MailboxMessage.findOne({ mailboxMessageId: 'NICB-old' }).lean();
-    // nicBrowserMailbox builds its skip-set from stored providerMessageIds.
-    // Lose this and the message is re-ingested, re-classified and re-purged on
-    // every poll for as long as it sits in the provider's inbox.
     expect(row.providerMessageId).toBe('provider-NICB-old');
     expect(row.mailboxMessageId).toBe('NICB-old');
     expect(row.source).toBe('nic-browser');
@@ -187,7 +172,6 @@ describe('what the sweep purges', () => {
 
     expect((await sweep()).purged).toBe(1);
     const row = await MailboxMessage.findOne({ mailboxMessageId: 'NICB-deleted' }).lean();
-    // The person's own deletion time survives; only purgedAt is new.
     expect(row.removedAt).toBe(hoursAgo(48));
     expect(row.purgedAt).toBe('2026-09-23T12:00:00.000Z');
   });
@@ -256,8 +240,6 @@ describe('attachments', () => {
   });
 
   it('carries on when one attachment cannot be removed', async () => {
-    // assertValidId throws on a malformed legacy id, and one bad row must not
-    // stop the sweep.
     vi.mocked(attachmentStore.remove).mockRejectedValueOnce(new Error('not a valid attachment id'));
     await storeMessage('NICB-bad', { attachments: [{ attachmentId: 'nope' }] });
     await triage('NICB-bad');
@@ -295,9 +277,6 @@ describe('the sweep as a job', () => {
   });
 
   it('purges nothing in the grace period after boot', async () => {
-    // The retention window is wall-clock, but the rescue window only exists
-    // while somebody can see the inbox. A server back from a two-day outage
-    // must not purge its backlog before anyone has had a live look at it.
     await storeMessage('NICB-boot');
     await triage('NICB-boot');
 
@@ -333,7 +312,6 @@ describe('the audit trail', () => {
 });
 
 describe('the unregistered tier', () => {
-  /** A real enquiry: rules found nothing, so GENUINE pinned at confidence 0. */
   const genuine = (id, hours) =>
     triage(id, {
       verdict: 'GENUINE',
@@ -350,8 +328,6 @@ describe('the unregistered tier', () => {
   const longSweep = (options = {}) => sweep({ unregisteredHours: 336, ...options });
 
   it('purges a genuine message nobody registered, once the long window passes', async () => {
-    // The whole reason this tier exists: the junk filter can never reach a
-    // GENUINE row, because GENUINE is pinned at confidence 0.
     await storeMessage('NICB-stale', { receivedAt: hoursAgo(400), createdAt: hoursAgo(400) });
     await genuine('NICB-stale', 400);
 
@@ -431,14 +407,10 @@ describe('the unregistered tier', () => {
     const one = rows.find((row) => row.messageId === 'NICB-stale');
     expect(one.details.reason).toBe('unregistered-expired');
     expect(one.details.verdict).toBe('GENUINE');
-    // Still answerable once the body is gone.
     expect(one.details.subject).toBe('Half price reagents this week');
   });
 
   it('lets judged junk go on the short window, and still calls it junk', async () => {
-    // 50 hours old: past the 46-hour junk window, nowhere near 336. The reason
-    // recorded must be the specific one, which is why the unregistered pass runs
-    // last in findPurgeable.
     await storeMessage('NICB-junk');
     await triage('NICB-junk');
 
@@ -448,9 +420,6 @@ describe('the unregistered tier', () => {
   });
 
   it('cannot see a message that has no triage row at all', async () => {
-    // Rows stored before triage existed. `npm run mailbox:purge -- --backfill`
-    // is what gives them one; until then neither tier can reach them, and that
-    // is a documented gap rather than an accident.
     await storeMessage('NICB-pre-feature', { receivedAt: hoursAgo(900), createdAt: hoursAgo(900) });
 
     expect((await longSweep()).purged).toBe(0);

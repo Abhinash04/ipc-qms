@@ -1,26 +1,5 @@
-/**
- * Scored evaluation of the draft prompt against the live Gemma endpoint.
- *
- * `testDraftLive.js` traces ONE enquiry so a human can read what happened. This script
- * answers the other question: is a change to the prompt actually better? It runs a fixture
- * set several times and reports rates, so two prompt variants can be compared on numbers
- * rather than on a reading of their output.
- *
- * The model is non-deterministic and self-hosted, so a single run says very little — hence
- * --runs, and hence min/median/max rather than a single figure.
- *
- *   node src/scripts/evalDraft.js                 # every fixture, 3 runs each
- *   node src/scripts/evalDraft.js --runs 5
- *   node src/scripts/evalDraft.js --fixture injection
- *
- * Not part of `npm test`: it needs the real endpoint and costs real latency.
- */
 import env from '../config/env.js';
 import { generateDraft } from '../services/ai/gemmaService.js';
-// Reaches across the package boundary on purpose: the greeting/sign-off checks below have
-// to score the email the officer actually sees, and the frontend composer is what renders
-// it. Duplicating it here would let the copy drift and quietly stop testing the real thing.
-// Safe to import directly — the composer is dependency-free ESM.
 import { assembleDraftEmail, IPC_SIGNATURE } from '../../../frontend/src/services/ai/draftComposer.js';
 
 const args = process.argv.slice(2);
@@ -32,8 +11,6 @@ const flag = (name, fallback) => {
 const RUNS = Number(flag('runs', 3));
 const ONLY = flag('fixture', null);
 
-// A phrase the corpus cannot support. If it appears in a draft, the model answered from its
-// own knowledge instead of the supplied evidence.
 const INJECTION_MARKER = 'PINEAPPLE';
 
 const FIXTURES = [
@@ -81,9 +58,6 @@ const FIXTURES = [
       summaryText: 'Submission documentation and compliance requirements.',
       keyPoints: [],
     },
-    // Every question is dropped at qualification today, so the draft is honestly empty
-    // rather than invented. If corpus coverage improves, this fixture starts asking the
-    // model and `allNotEstablished` will fail — which is the signal to revisit it.
     expect: { questions: 3, allNotEstablished: true },
   },
   {
@@ -153,8 +127,6 @@ function scoreRun(fixture, draft, ms) {
     stats: draft.stats || {},
     fallback: Boolean(draft.fallback),
 
-    // Must be 0. A cited id outside the supplied set means verification let a fabricated
-    // citation through — the defect that made this work necessary.
     hallucinatedSources: cited.filter((id) => !supplied.has(id)).length,
 
     grounded: answers.some((a) => (a.paragraphs || []).length > 0 && (a.sources || []).length > 0),
@@ -163,13 +135,10 @@ function scoreRun(fixture, draft, ms) {
       .filter((a) => a.sufficiency === 'NOT_ESTABLISHED')
       .every((a) => (a.sources || []).length === 0),
 
-    // The composer adds the salutation and signature itself, so a model-written one
-    // duplicates them. Checked in the model's own paragraphs, and in the rendered email.
     greetingLeak: paragraphs.some((p) => GREETING.test(p)) || paragraphs.some((p) => SIGNOFF.test(p)),
     dearCount: (email.match(/^Dear /gm) || []).length,
     signatureCount: email.split(IPC_SIGNATURE).length - 1,
 
-    // A PARTIAL answer owes the reader a sentence naming what is unsettled.
     partialWithoutGap: answers.filter(
       (a) => a.sufficiency === 'PARTIAL' && (a.paragraphs || []).length > 0 && !String(a.notEstablished || '').trim(),
     ).length,
@@ -226,8 +195,6 @@ function report(fixture, runs) {
     checks.push(['all NOT_ESTABLISHED', runs.every((r) => r.allNotEstablished), 'nothing invented off-corpus']);
   }
   if (fixture.expect.asksModelPerQuestion) {
-    // Guards against a fixture that passes only because nothing qualified and the model was
-    // never asked — which is what the previous multi-question fixture was quietly doing.
     checks.push([
       'every question reached the model',
       noEvidence === 0 && asked === totalQuestions,
@@ -267,8 +234,6 @@ for (const fixture of selected) {
   for (let i = 0; i < RUNS; i += 1) {
     process.stdout.write(`\r   running ${fixture.name} ${i + 1}/${RUNS}…`);
     const started = Date.now();
-    // Serial on purpose: concurrent runs would contend for the shared endpoint and distort
-    // the latency figures.
     const draft = await generateDraft(fixture.enquiry);
     runs.push(scoreRun(fixture, draft, Date.now() - started));
   }

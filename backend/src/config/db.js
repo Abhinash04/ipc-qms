@@ -66,7 +66,6 @@ async function connectDb({ silent = false } = {}) {
         ).catch(() => {});
       }
     } catch {
-      // Ignore collection init 
     }
     return true;
   } catch (error) {

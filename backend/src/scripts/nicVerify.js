@@ -42,7 +42,6 @@ async function main() {
     for (const error of setup.configErrors) console.log(`    - ${error}`);
   }
 
-  // ── Test A — READ ────────────────────────────────────────────────────────
   console.log('\n── Test A — READ (IMAP)');
   const read = await read_nicemail({ limit: 1 });
 
@@ -73,7 +72,6 @@ async function main() {
     }
   }
 
-  // ── Test B — SEND ────────────────────────────────────────────────────────
   console.log('\n── Test B — SEND (SMTP)');
   const marker = `QMS NICeMail connectivity test ${new Date().toISOString()}`;
   const send = await send_nicemail({ subject: marker });
@@ -95,9 +93,6 @@ async function main() {
     line('Rejected', JSON.stringify(send.data.rejected));
   }
 
-  // ── Receipt ──────────────────────────────────────────────────────────────
-  // SMTP acceptance is a promise to try, not proof of delivery. Because the
-  // recipient is the mailbox itself, the claim can actually be checked.
   console.log('\n── Receipt verification');
   let receipt = 'NOT VERIFIED';
 
@@ -119,7 +114,6 @@ async function main() {
 
   line('Actual recipient receipt', receipt);
 
-  // ── Summary ──────────────────────────────────────────────────────────────
   console.log('\n────────────────────────────────────────');
   const allPassed =
     Object.values(readGrades).every((v) => v === PASS) &&
@@ -142,7 +136,6 @@ async function main() {
 }
 
 main().catch((error) => {
-  // Should not happen: the actions return failures rather than throwing.
   console.error(`\nUnexpected error: ${error?.message || error}\n`);
   process.exit(1);
 });

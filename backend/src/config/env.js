@@ -117,13 +117,6 @@ function validateEmailConfig(config = env) {
 
   if (!config.IPC_QUERY_EMAIL) errors.push('IPC_QUERY_EMAIL is required');
 
-  // Retention destroys content, so a nonsensical setting must fail at boot
-  // rather than at the first sweep an hour later.
-  //
-  // Only checked when the key is present. Callers pass a partial object to ask
-  // about one concern — the transport, the mailbox source — and those calls are
-  // not asking about retention. The real `env` always defines both keys, so a
-  // genuinely bad deployment value is still caught.
   if (config.MAILBOX_RETENTION_HOURS !== undefined) {
     if (!Number.isFinite(config.MAILBOX_RETENTION_HOURS) || config.MAILBOX_RETENTION_HOURS <= 0) {
       errors.push(
@@ -152,10 +145,6 @@ function validateEmailConfig(config = env) {
       Number.isFinite(config.MAILBOX_RETENTION_HOURS) &&
       config.MAILBOX_UNREGISTERED_RETENTION_HOURS < config.MAILBOX_RETENTION_HOURS
     ) {
-      // A second tier shorter than the first would purge every message on the
-      // longer rule before the junk rule could ever apply, which silently makes
-      // the confidence floor — the whole protection against a wrong verdict —
-      // irrelevant.
       errors.push(
         `MAILBOX_UNREGISTERED_RETENTION_HOURS (${config.MAILBOX_UNREGISTERED_RETENTION_HOURS}) must not be ` +
           `shorter than MAILBOX_RETENTION_HOURS (${config.MAILBOX_RETENTION_HOURS})`,

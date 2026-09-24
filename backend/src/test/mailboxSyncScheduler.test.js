@@ -1,16 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
-/**
- * The timer that reads the NICeMail mailbox without anyone signed in.
- *
- * Two things are under test and neither is the sync itself: the scheduling —
- * which must not hold the process open, run twice at once, or die on a bad tick —
- * and the breaker, which is the only thing standing between a closed Chrome and
- * one CDP probe every fifteen seconds forever.
- *
- * The store is mocked, so `syncIfDue` is observable and no browser is involved.
- */
-
 const syncIfDue = vi.fn();
 let status = { ok: null };
 
@@ -62,8 +51,6 @@ afterEach(() => {
 
 describe('when the timer is not wanted', () => {
   it('registers nothing under NODE_ENV=test', () => {
-    // The suite has no Chrome, and NIC_CDP_ENDPOINT is pinned unroutable. A
-    // timer here would reach for a browser on every tick.
     env.NODE_ENV = 'test';
     expect(startMailboxSync()).toBeNull();
     expect(vi.getTimerCount()).toBe(0);
@@ -152,8 +139,6 @@ describe('what the tick declines to do', () => {
   });
 
   it('never loads the store module just to decline', async () => {
-    // nicBrowserMailbox may only be imported on demand. Declining before the
-    // import is what keeps that true for a timer that fires forever.
     vi.stubEnv('NIC_BROWSER_MAILBOX', '');
     await tickOnce();
     expect(syncIfDue).not.toHaveBeenCalled();
@@ -179,9 +164,6 @@ describe('the breaker', () => {
   });
 
   it('backs off further on each consecutive failure', async () => {
-    // 1x, 2x, 4x, 20x the interval. Without this a closed Chrome is probed
-    // every fifteen seconds forever, each probe paying a fetch plus the CDP
-    // timeout.
     status = { ok: false, stage: 'connect_browser' };
 
     await tickOnce();

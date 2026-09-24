@@ -1,57 +1,43 @@
 export const AUDIT_ACTIONS = {
-  // ── Authentication ───────────────────────────────────────────────────────
   LOGIN_SUCCEEDED: 'LOGIN_SUCCEEDED',
   LOGIN_FAILED: 'LOGIN_FAILED',
   AUTHENTICATION_FAILED: 'AUTHENTICATION_FAILED',
   AUTHORIZATION_DENIED: 'AUTHORIZATION_DENIED',
 
-  // ── Mail intake ──────────────────────────────────────────────────────────
   EMAIL_RECEIVED: 'EMAIL_RECEIVED',
   EMAIL_READ: 'EMAIL_READ',
   EMAIL_CLASSIFIED: 'EMAIL_CLASSIFIED',
   ATTACHMENT_UPLOADED: 'ATTACHMENT_UPLOADED',
   ATTACHMENT_DOWNLOADED: 'ATTACHMENT_DOWNLOADED',
 
-  // ── Case ─────────────────────────────────────────────────────────────────
   CASE_CREATED: 'CASE_CREATED',
   CASE_ASSOCIATED: 'CASE_ASSOCIATED',
   CASE_ASSOCIATION_CHANGED: 'CASE_ASSOCIATION_CHANGED',
 
-  // ── AI ───────────────────────────────────────────────────────────────────
   AI_SUMMARY_GENERATED: 'AI_SUMMARY_GENERATED',
   AI_DRAFT_GENERATED: 'AI_DRAFT_GENERATED',
   AI_RECOMMENDATION_GENERATED: 'AI_RECOMMENDATION_GENERATED',
 
-  // ── Approval ─────────────────────────────────────────────────────────────
   DRAFT_CREATED: 'DRAFT_CREATED',
   DRAFT_EDITED: 'DRAFT_EDITED',
   DRAFT_SUBMITTED_FOR_APPROVAL: 'DRAFT_SUBMITTED_FOR_APPROVAL',
   DRAFT_APPROVED: 'DRAFT_APPROVED',
   DRAFT_REJECTED: 'DRAFT_REJECTED',
 
-  // ── Outbound ─────────────────────────────────────────────────────────────
   EMAIL_SENT: 'EMAIL_SENT',
   EMAIL_REPLIED: 'EMAIL_REPLIED',
   EMAIL_FORWARDED: 'EMAIL_FORWARDED',
   EMAIL_SEND_FAILED: 'EMAIL_SEND_FAILED',
   SENT_APPEND_FAILED: 'SENT_APPEND_FAILED',
-  /** A person settled a send whose outcome the server could not determine. */
   EMAIL_DELIVERY_CONFIRMED: 'EMAIL_DELIVERY_CONFIRMED',
   EMAIL_DELIVERY_DENIED: 'EMAIL_DELIVERY_DENIED',
 
-  // ── Mailbox state ────────────────────────────────────────────────────────
   EMAIL_MARKED_READ: 'EMAIL_MARKED_READ',
   EMAIL_MARKED_UNREAD: 'EMAIL_MARKED_UNREAD',
   EMAIL_MOVED: 'EMAIL_MOVED',
   EMAIL_DELETED: 'EMAIL_DELETED',
-  /**
-   * The retention sweep stripped a junk message's content. Not a delete: the id
-   * stub remains, because it is what stops the next sync re-ingesting the
-   * message. Deliberately absent from CLIENT_AUDIT_EVENTS — no client writes it.
-   */
   EMAIL_PURGED: 'EMAIL_PURGED',
 
-  // ── Synchronisation ──────────────────────────────────────────────────────
   SYNC_STARTED: 'SYNC_STARTED',
   SYNC_COMPLETED: 'SYNC_COMPLETED',
   SYNC_FAILED: 'SYNC_FAILED',

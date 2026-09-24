@@ -1,13 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
-/**
- * The timer around the sweep.
- *
- * A background job that can hold the process open, run twice at once, or die
- * silently on one bad pass is worse than no job at all, so those are what these
- * assert. The sweep is stubbed out: what is under test here is the scheduling.
- */
-
 vi.mock('../config/db.js', async (importOriginal) => ({
   ...(await importOriginal()),
   isConnected: () => false,
@@ -32,8 +24,6 @@ afterEach(() => {
 
 describe('when the sweep is not wanted', () => {
   it('registers nothing under NODE_ENV=test', () => {
-    // The suite has no MongoDB and the in-memory stand-in makes index
-    // behaviour invisible anyway. A timer here would only make tests flaky.
     env.NODE_ENV = 'test';
     expect(startRetentionSweeps()).toBeNull();
     expect(vi.getTimerCount()).toBe(0);
@@ -54,15 +44,11 @@ describe('when the sweep is wanted', () => {
   });
 
   it('never holds the process open', () => {
-    // An unref'd timer is the difference between a clean exit and a server
-    // that will not shut down.
     const timer = startRetentionSweeps({ bootedAt: Date.now() });
     expect(timer.hasRef()).toBe(false);
   });
 
   it('schedules an early first pass as well as the hourly one', () => {
-    // The first interval tick is an hour away. A deployment restarted more
-    // often than that would otherwise never sweep at all.
     startRetentionSweeps({ bootedAt: Date.now() });
     expect(vi.getTimerCount()).toBe(2);
   });
@@ -80,8 +66,6 @@ describe('when the sweep is wanted', () => {
   });
 
   it('keeps ticking rather than dying on a pass that went wrong', async () => {
-    // isConnected() is false here, so every sweep returns early. The point is
-    // that the timer survives and the ticks keep coming.
     startRetentionSweeps({ bootedAt: Date.now() });
     await vi.advanceTimersByTimeAsync(3 * 60 * 60 * 1000);
     expect(vi.getTimerCount()).toBeGreaterThan(0);

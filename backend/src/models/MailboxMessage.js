@@ -18,17 +18,6 @@ const mailboxMessageSchema = new mongoose.Schema(
     providerMessageId: { type: String, default: null },
     removedAt: { type: String, default: null },
 
-    /**
-     * When the retention sweep stripped this message's content.
-     *
-     * Distinct from `removedAt` on purpose. `removedAt` means "the Front Office
-     * deleted this" and is what hides it from the next sync; `purgedAt` means
-     * "the body, the HTML and the attachment bytes are gone, and the rest of
-     * this row exists only so the next sync cannot re-ingest the message". A
-     * purge sets both, so `purgedAt != null` is the machine and
-     * `removedAt != null && purgedAt == null` is a person — a distinction that
-     * would be lost if the sweep reused `removedAt` alone.
-     */
     purgedAt: { type: String, default: null },
 
     toAddresses: { type: [String], default: [] },

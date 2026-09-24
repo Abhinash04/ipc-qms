@@ -8,38 +8,14 @@ import {
 } from '../../../models/MailboxTriage.js';
 import { classifyByRules } from './triageRules.js';
 
-/**
- * Writing and reading the machine's verdict on a message.
- *
- * `recordRules` runs on the intake path, inside the sync's read loop, so it is
- * built never to throw — a throw there aborts the read and costs the whole
- * batch. That is a property of this module rather than something each caller
- * has to remember to wrap, which is the contract auditService.record keeps for
- * the same reason.
- *
- * The model phase does NOT live here: it runs in the retention sweep, where it
- * is naturally rate-limited and adds latency to no request. See retention.js.
- */
-
 const toPlain = (doc) => {
   if (!doc) return null;
   const { _id, ...rest } = doc.toObject ? doc.toObject() : doc;
   return rest;
 };
 
-/** A hard rule is certain by construction; a soft one carries no weight of its own. */
 const confidenceFor = (ruleClass) => (ruleClass === RULE_CLASSES.HARD ? 1 : 0);
 
-/**
- * Record the deterministic verdict for a freshly stored message.
- *
- * A row is written for EVERY stored message, GENUINE by default — not only for
- * junk. The model phase queries this collection, and finding "messages with no
- * triage row" from the other side would need a `$nin` of every id ever written.
- *
- * `$setOnInsert`, so a re-sync of the same message never resets a verdict the
- * model has since refined or a person has since rescued.
- */
 async function recordRules(mailboxMessageId, message = {}, { source = null, now = new Date() } = {}) {
   if (!mailboxMessageId || !isConnected()) return null;
 
@@ -68,8 +44,6 @@ async function recordRules(mailboxMessageId, message = {}, { source = null, now 
           ruleClass: result.ruleClass,
           reason: result.reason,
           classifiedAt: nowIso,
-          // A hard rule is terminal: the model is never asked, so the row is
-          // stamped as already answered and the model phase skips it.
           gemmaAt: isHard ? nowIso : null,
           attempts: 0,
           rescuedAt: null,
@@ -87,7 +61,6 @@ async function recordRules(mailboxMessageId, message = {}, { source = null, now 
 
     return { ...result, confidence: confidenceFor(result.ruleClass) };
   } catch (error) {
-    // Two syncs racing on the same message: the other one wrote it.
     if (error?.code !== 11000) {
       console.warn(`[qms] triage: could not classify ${mailboxMessageId}: ${error.message}`);
     }
@@ -95,14 +68,6 @@ async function recordRules(mailboxMessageId, message = {}, { source = null, now 
   }
 }
 
-/**
- * A person says this is not junk. Terminal — the model phase skips a rescued
- * row and the sweep's candidate query excludes it, so nothing reclassifies or
- * purges it afterwards.
- *
- * Without this the only way to save junk would be to accept it, which mints a
- * Query Case nobody asked for.
- */
 async function rescue(mailboxMessageId, { userId = null, now = new Date() } = {}) {
   if (!isConnected()) return null;
   const nowIso = now.toISOString();
@@ -140,19 +105,12 @@ async function findTriage(mailboxMessageId) {
   return toPlain(await MailboxTriage.findOne({ mailboxMessageId }).lean());
 }
 
-/** The verdicts on these messages, by message id — one query for a whole inbox page. */
 async function findTriages(mailboxMessageIds) {
   if (!mailboxMessageIds?.length || !isConnected()) return new Map();
   const rows = await MailboxTriage.find({ mailboxMessageId: { $in: mailboxMessageIds } }).lean();
   return new Map(rows.map((row) => [row.mailboxMessageId, toPlain(row)]));
 }
 
-/**
- * The ids currently held to be junk in one mailbox, newest verdict first.
- *
- * Capped: this feeds a `$in` on the message query, and an unbounded one is a
- * real failure mode once a mailbox has seen years of marketing.
- */
 async function junkMessageIds({ limit = 500 } = {}) {
   if (!isConnected()) return [];
   const rows = await MailboxTriage.find({ verdict: TRIAGE_VERDICTS.JUNK, rescuedAt: null })

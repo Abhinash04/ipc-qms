@@ -47,8 +47,6 @@ router.get(
 
 router.post('/mailbox/messages/:messageId/read', verifyToken, verifyRole(FRONT_OFFICE_ONLY), markRead);
 
-// "Not junk." Clears the machine's verdict and spares the message from the
-// retention sweep, without minting a case the way accepting it would.
 router.post(
   '/mailbox/messages/:messageId/triage/rescue',
   verifyToken,

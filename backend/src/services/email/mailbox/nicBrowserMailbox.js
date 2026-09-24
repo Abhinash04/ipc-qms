@@ -116,10 +116,6 @@ async function sync(address = browserConfig.mailboxAddress, { reader = readInbox
         seen.add(id);
         if (await store(wanted, message)) {
           storedIds.push(id);
-          // The deterministic half of triage, which is cheap and needs no I/O
-          // beyond its own write. The model half runs in the retention sweep —
-          // a 12-second call per message here would wreck a 30-second poll.
-          // recordRules never throws: a throw would abort this read loop.
           await triage.recordRules(mailboxMessageId(id), message, { source: SOURCE });
         }
         attempts.delete(id);
@@ -210,14 +206,6 @@ function resetSyncState() {
 
 const scope = (recipient) => ({ to: normaliseAddress(recipient), source: SOURCE, removedAt: null });
 
-/**
- * Async only because of `junkOnly`, which needs the verdicts, and those live in
- * their own collection — the retention sweep must be able to scan them without
- * touching these rows and their megabyte-scale HTML bodies.
- *
- * The junk id list is capped inside `junkMessageIds`. An unbounded `$in` is a
- * real failure mode once a mailbox has seen a few years of marketing.
- */
 async function listFilter(recipient, { unreadOnly = false, junkOnly = false, q } = {}) {
   const filter = { ...scope(recipient), ...searchFilter(q) };
   if (unreadOnly) filter.ingested = false;

@@ -70,14 +70,6 @@ function parseSummaryJson(jsonStr, fallbackData) {
   return null;
 }
 
-/**
- * Whether the model has been answering — reported by `GET /health`.
- *
- * The fallback keeps the workflow moving when Gemma cannot be reached, which is
- * right, but it must not be silent: a deployment can run for days on
- * deterministic stand-in text with nothing but a `console.warn` per call to say
- * so. This is the record an operator can actually look at.
- */
 const ai = { lastSuccessAt: null, lastFailureAt: null, lastError: null };
 
 export function status() {
@@ -357,12 +349,8 @@ IPC AI Recommendations:`;
   }
 }
 
-// Each question is now its own small call rather than one call answering all of them, so the
-// per-call budget is much smaller than the old single-shot draft needed.
 const DRAFT_TIMEOUT_FACTOR = 2;
 
-// How many question calls may be in flight at once. The Gemma endpoint is shared, so a
-// ten-question enquiry must not open ten sockets on it.
 const DRAFT_CONCURRENCY = 4;
 
 const MAX_BODY_CHARS = 4000;
@@ -533,21 +521,8 @@ Questions JSON:`;
   return deterministic;
 }
 
-// ── Mail triage ──────────────────────────────────────────────────────────────
-
-/**
- * Half MAX_BODY_CHARS. Junk is identifiable from its opening, and a shorter
- * prompt is faster — which matters when the whole budget is one timeout.
- */
 const TRIAGE_BODY_CHARS = 2000;
 
-/**
- * The model may never claim rule-grade certainty. A hard rule scores 1; this
- * ceiling sits above the default purge floor (env.MAILBOX_JUNK_CONFIDENCE, 0.9)
- * so the model can still trigger a purge. Raising that floor to exactly 1
- * turns model-driven purging off while leaving the deterministic rules, which
- * score 1, still able to purge.
- */
 const MODEL_CONFIDENCE_CEILING = 0.95;
 
 const TRIAGE_SCHEMA =
@@ -556,15 +531,6 @@ const TRIAGE_SCHEMA =
 const FALLBACK_TRIAGE = Object.freeze({ verdict: 'GENUINE', confidence: 0, reason: '', aiGenerated: false });
 
 export function buildTriagePrompt({ from = '', subject = '', body = '', signals = [], attachments = [] }) {
-  /**
-   * How the message arrived, stated as circumstance rather than as evidence.
-   *
-   * Measured 2026-09-23: with these listed under a bare "signals the system
-   * found" heading, the model read them as a verdict it was being asked to
-   * ratify and condemned a real CDSCO circular 3 times out of 3. The heading
-   * and the two lines under it are load-bearing — do not shorten them without
-   * re-running `npm run triage:eval`.
-   */
   const signalBlock = signals?.length
     ? [
         'HOW THIS MESSAGE ARRIVED (circumstance, NOT evidence of junk):',
@@ -574,10 +540,6 @@ export function buildTriagePrompt({ from = '', subject = '', body = '', signals 
       ].join('\n')
     : 'HOW THIS MESSAGE ARRIVED: nothing unusual noted.';
 
-  /**
-   * The attachment list. Without it a "please see attached" enquiry reaches the
-   * model as a blank message and was condemned 3 times out of 3.
-   */
   const names = (Array.isArray(attachments) ? attachments : [])
     .map((attachment) => attachment?.filename)
     .filter(Boolean);
@@ -620,7 +582,6 @@ ${fenceSafe(body, TRIAGE_BODY_CHARS) || 'No body text. See the attachment list a
 Triage JSON:`;
 }
 
-/** Mirrors isAnswerShaped: rejects valid JSON that is not a triage reply. */
 function isTriageShaped(parsed) {
   return Boolean(parsed) && typeof parsed === 'object' && !Array.isArray(parsed) && typeof parsed.verdict === 'string';
 }
@@ -634,13 +595,11 @@ function parseTriageJson(raw) {
       const parsed = JSON.parse(candidate);
       if (isTriageShaped(parsed)) return parsed;
     } catch {
-      // Try the next candidate.
     }
   }
   return null;
 }
 
-/** Nothing the model claims is trusted — the discipline buildAnswer uses. */
 function buildTriage(parsed) {
   const verdict = String(parsed?.verdict || '').trim().toUpperCase();
   if (verdict !== 'JUNK' && verdict !== 'GENUINE') return FALLBACK_TRIAGE;
@@ -650,31 +609,16 @@ function buildTriage(parsed) {
   const claimed = Number(parsed?.confidence);
   let confidence = Number.isFinite(claimed) ? Math.min(Math.max(claimed, 0), MODEL_CONFIDENCE_CEILING) : 0;
 
-  // A model that cannot say why is not trusted to condemn. Rule 4 asked for a
-  // reason; a JUNK verdict without one keeps its verdict and loses its weight,
-  // so the message still shows in the Junk filter but can never be purged.
   if (verdict === 'JUNK' && !reason) confidence = 0;
-  // A GENUINE verdict carries no purge consequence, so its confidence is noise.
   if (verdict === 'GENUINE') confidence = 0;
 
   return { verdict, confidence, reason, aiGenerated: true };
 }
 
-/**
- * Is this one message a genuine enquiry?
- *
- * One call, no repair pass: a lost draft section is visible damage, but a lost
- * triage verdict costs nothing — the message stays GENUINE and is asked again
- * on the next sweep. Every failure path returns GENUINE at confidence 0, which
- * the retention sweep's `confidence >= floor` filter cannot reach. That is what
- * makes "a Gemma outage degrades to genuine" a structural property rather than
- * something a caller has to remember.
- */
 export async function classifyMail({ from = '', subject = '', body = '', signals = [], attachments = [] }) {
   if (!env.GEMMA_API_URL) return FALLBACK_TRIAGE;
 
   const raw = await askGemma(buildTriagePrompt({ from, subject, body, signals, attachments }), {
-    // Plain, no factor: the reply is a three-field object, not prose.
     timeoutMs: env.GEMMA_TIMEOUT_MS,
     label: 'Mail triage',
   });
@@ -737,14 +681,6 @@ function normaliseSufficiency(value, paragraphs) {
   return paragraphs.length > 0 ? SUFFICIENCY.PARTIAL : SUFFICIENCY.NOT_ESTABLISHED;
 }
 
-/**
- * Pulls the first balanced JSON object out of surrounding prose.
- *
- * A small model very often returns the right object wrapped in a sentence ("Sure, here is
- * the JSON: {...} Let me know if..."). Throwing that reply away wastes a correct answer, so
- * the object is salvaged before a repair call is considered. String contents are skipped so
- * a brace inside a quoted paragraph cannot close the object early.
- */
 export function extractJsonObject(text) {
   const str = String(text || '');
   const start = str.indexOf('{');
@@ -775,12 +711,6 @@ export function extractJsonObject(text) {
   return null;
 }
 
-/**
- * Valid JSON is not yet an answer. A reply that parses but carries none of the answer
- * fields — `{"subject":"S"}`, or some object the model invented — would otherwise be
- * accepted and rendered as an empty section, so it is treated as a parse failure and sent
- * to the repair call instead.
- */
 function isAnswerShaped(parsed) {
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return false;
   return typeof parsed.sufficiency === 'string' || Array.isArray(parsed.paragraphs);
@@ -796,7 +726,6 @@ function parseAnswerJson(rawAnswer) {
       const parsed = JSON.parse(candidate);
       if (isAnswerShaped(parsed)) return parsed;
     } catch {
-      // try the next candidate
     }
   }
 
@@ -806,18 +735,6 @@ function parseAnswerJson(rawAnswer) {
 const ANSWER_SCHEMA =
   '{"topic": "<at most six words>", "sufficiency": "ANSWERED" | "PARTIAL" | "NOT_ESTABLISHED", "paragraphs": ["..."], "notEstablished": "<one sentence, or empty>", "sources": ["<ids shown above>"]}';
 
-/**
- * Builds the prompt that answers ONE question from its own evidence.
- *
- * One call per question, rather than one call answering all of them: a small model holds a
- * flat five-field object far more reliably than an N-element numbered array, a single
- * question can fail without collapsing the whole draft, and evidence cannot bleed between
- * questions. The envelope ({ query, caseContext, previousCommunication }) is kept so the
- * template stays reusable, with caseContext carrying one question and its passages.
- *
- * Ordering matters: the evidence sits immediately before the schema, and the prompt ends on
- * the "Answer JSON:" anchor, which is what actually holds a completion model to JSON.
- */
 export function buildDraftPromptTemplate({ query = '', caseContext = '', previousCommunication = '' }) {
   return `You are drafting ONE section of an official reply from the Indian Pharmacopoeia Commission (IPC), Ministry of Health & Family Welfare, Government of India.
 
@@ -883,15 +800,6 @@ function notEstablishedAnswer(item) {
   };
 }
 
-/**
- * Turns one parsed model object into an answer, keeping the grounding rules in code.
- *
- * Nothing the model claims is taken on trust: a question with no qualified passage is
- * NOT_ESTABLISHED whatever the model said, and a claimed source survives only if it is an id
- * that was actually shown for this question. An unverifiable claim yields no sources at all
- * — the previous code backfilled every supplied passage id here, which presented the officer
- * with citations the model had never relied on.
- */
 function buildAnswer(item, parsed) {
   const paragraphs = Array.isArray(parsed?.paragraphs)
     ? parsed.paragraphs.map((p) => String(p).trim()).filter(Boolean)
@@ -944,13 +852,6 @@ ${formatContextForPrompt(item.glossary)}
 ${formatPassagesForPrompt(item.passages)}`;
 }
 
-/**
- * Answers one question: ask, salvage, repair once, else say nothing was established.
- *
- * A question with no qualified evidence is forced to NOT_ESTABLISHED anyway, so it never
- * reaches the network. Every failure path degrades to NOT_ESTABLISHED with no sources —
- * text that could not be parsed is never dressed up as a grounded answer.
- */
 async function answerQuestion(item, { queryBlock, previousCommBlock }) {
   if (item.passages.length === 0) {
     return { answer: notEstablishedAnswer(item), status: 'no-evidence' };
@@ -991,7 +892,6 @@ async function answerQuestion(item, { queryBlock, previousCommBlock }) {
   return { answer: notEstablishedAnswer(item), status: 'failed' };
 }
 
-/** Runs `fn` over `items` with at most `limit` in flight, preserving input order. */
 async function mapWithLimit(items, limit, fn) {
   const results = new Array(items.length);
   let next = 0;
@@ -1052,8 +952,6 @@ export async function generateDraft({
     noEvidence: tally('no-evidence'),
   };
 
-  // The model contributed nothing: report the fallback honestly rather than dressing up a
-  // draft of empty sections as an AI answer.
   if (stats.answered + stats.repaired === 0) {
     console.warn('[Gemma AI] No question produced a usable answer. Using fallback draft.');
     assertOneToOne(
@@ -1066,7 +964,6 @@ export async function generateDraft({
   return {
     subject: `Response regarding ${subject.trim() || 'your enquiry'}`,
     answers,
-    // Derived from what survived verification, not from a list the model asserts.
     termsUsed: [...new Set(answers.flatMap((answer) => answer.sources))],
     contextUsed,
     aiGenerated: true,

@@ -19,11 +19,6 @@ async function recordAi({ req, action, startedAt, output, error = null }) {
       latencyMs: Date.now() - startedAt,
       fallback,
       aiGenerated: error ? false : !fallback,
-      // Drafts ask one question at a time, so the draft as a whole is no longer
-      // simply "model" or "fallback": some questions can answer while others
-      // degrade. These counts (answered / repaired / failed / noEvidence) are what
-      // distinguish a healthy draft from one that mostly fell back. Still counts
-      // only — no prompts, no generated content.
       ...(output?.stats ? { stats: output.stats } : {}),
     },
   });

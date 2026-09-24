@@ -34,17 +34,12 @@ Abhinash Pritiraj`,
   keyPoints: [],
 };
 
-// A question that genuinely retrieves and qualifies corpus evidence. It has to be a real
-// one: a question with no qualified passage is forced to NOT_ESTABLISHED without a model
-// call at all, so a placeholder would silently skip the path these tests mean to exercise.
 const ANSWERABLE = 'What is the legal status of the Indian Pharmacopoeia?';
 
 const answerOf = (payload) => ({ ok: true, json: async () => ({ answer: payload }) });
 
 const decomposition = (questions) => answerOf(JSON.stringify({ questions }));
 
-// The draft is now one call per question, each returning a single flat answer object,
-// so a mocked reply is one answer rather than a whole {subject, answers[]} draft.
 const answerReply = (answer) => answerOf(JSON.stringify(answer));
 
 const ONE_ANSWER = { sufficiency: 'PARTIAL', paragraphs: ['Body.'], sources: [] };
@@ -56,13 +51,6 @@ function mockCalls(...responses) {
   return fetchMock;
 }
 
-/**
- * Decomposition first, then the same answer for every question call.
- *
- * Questions are asked concurrently and a question with no qualified evidence never reaches
- * the network at all, so queueing one `…Once` reply per question would couple the test to
- * which questions happen to retrieve evidence. A single standing reply does not.
- */
 function mockDraftRaw(questions, rawAnswer) {
   const fetchMock = vi.fn().mockResolvedValueOnce(decomposition(questions));
   fetchMock.mockResolvedValue(answerOf(rawAnswer));
@@ -75,7 +63,6 @@ function mockDraft(questions, answer = ONE_ANSWER) {
 }
 
 const promptAt = (index) => JSON.parse(global.fetch.mock.calls[index][1].body).prompt;
-// Call 0 is the decomposition; the first question's draft call follows it.
 const draftPrompt = () => promptAt(1);
 
 beforeEach(() => {
@@ -134,7 +121,6 @@ describe('the draft prompt carries one question and its own evidence', () => {
 
     await generateDraft(MULTI);
 
-    // One decomposition call, then one call per question.
     expect(global.fetch).toHaveBeenCalledTimes(3);
 
     const first = promptAt(1);
@@ -145,7 +131,6 @@ describe('the draft prompt carries one question and its own evidence', () => {
     expect(second).toContain('QUESTION 2');
     expect(second).not.toContain('QUESTION 1');
 
-    // Evidence cannot bleed between questions when each call carries only its own.
     expect(first).toContain('IPC REFERENCE PASSAGES FOR QUESTION 1');
     expect(first).toContain('IPC GLOSSARY FOR QUESTION 1');
     expect(first).not.toContain('IPC REFERENCE PASSAGES FOR QUESTION 2');
@@ -156,8 +141,6 @@ describe('the draft prompt carries one question and its own evidence', () => {
     await generateDraft(ENQUIRY);
     const prompt = draftPrompt();
 
-    // The regression this replaces asked for prose while the parser still wanted JSON, so
-    // the contract itself is asserted — not merely that a keyword appears somewhere.
     expect(prompt).toContain('"sufficiency"');
     expect(prompt).toContain('"paragraphs"');
     expect(prompt).toContain('"notEstablished"');
@@ -190,7 +173,6 @@ describe('the draft prompt carries one question and its own evidence', () => {
     await generateDraft(ENQUIRY);
     const prompt = draftPrompt();
 
-    // A model cannot cite an identifier it was never shown; verification depends on this.
     expect(prompt).toMatch(/\[[A-Z0-9-]+#\d+\]/);
   });
 
@@ -270,8 +252,6 @@ describe('parsing the draft reply', () => {
       sources: [],
     });
 
-    // The old code backfilled every supplied passage here, showing the officer citations
-    // the model had never relied on.
     const draft = await generateDraft(ENQUIRY);
     expect(draft.answers[0].sources).toEqual([]);
   });
@@ -318,7 +298,6 @@ describe('parsing the draft reply', () => {
 
     const draft = await generateDraft(ENQUIRY);
     expect(draft.answers[0].paragraphs).toEqual(['Salvaged body.']);
-    // Salvage happens before the repair call, so no second round trip is spent.
     expect(global.fetch).toHaveBeenCalledTimes(2);
   });
 
@@ -340,8 +319,6 @@ describe('parsing the draft reply', () => {
   });
 
   it('never launders unparseable prose into a grounded answer', async () => {
-    // The branch this replaces split prose on blank lines, assigned it to questions by
-    // position, attached every supplied passage as a source and reported success.
     mockDraftRaw(
       ['What is the legal status of the Indian Pharmacopoeia?'],
       'Dear Sir,\n\nThe IP is enforceable.\n\nRegards,\nIPC',
@@ -396,7 +373,6 @@ describe('the draft never throws', () => {
           'Can we apply an alternative analytical procedure instead of the official IP method?',
         ]),
       )
-      // Question 1 answers; question 2 fails outright, including its repair attempt.
       .mockResolvedValueOnce(
         answerReply({ sufficiency: 'PARTIAL', paragraphs: ['Answered body.'], sources: [] }),
       )
@@ -474,8 +450,6 @@ Regulatory Affairs`,
   });
 
   it('ignores stray fields the model adds to its answer', async () => {
-    // One call per question makes the 1:1 contract structural — the model no longer
-    // supplies the array, so it cannot over- or under-fill it.
     mockDraft(['What is the legal status of the Indian Pharmacopoeia?'], {
       question: 7,
       sufficiency: 'PARTIAL',
@@ -535,8 +509,6 @@ describe('a question with no qualified evidence', () => {
 
     const draft = await generateDraft(NO_EVIDENCE);
 
-    // The answer is forced to NOT_ESTABLISHED regardless of what the model says, so asking
-    // is wasted latency on a shared endpoint. Only the decomposition call goes out.
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(draft.answers[0].sufficiency).toBe(SUFFICIENCY.NOT_ESTABLISHED);
     expect(draft.answers[0].paragraphs).toEqual([]);
@@ -545,8 +517,6 @@ describe('a question with no qualified evidence', () => {
   });
 
   it('forces NOT_ESTABLISHED even if the model answers anyway', async () => {
-    // A question that does retrieve evidence is still overridden when its passages were
-    // dropped at qualification, so the override is asserted at the unit boundary below.
     mockDraft(['For a change in the manufacturing site, what supporting documentation is expected?'], {
       sufficiency: 'PARTIAL',
       paragraphs: ['Records must be complete and reliable throughout the product life cycle.'],
@@ -640,7 +610,6 @@ describe('POST /api/v1/ai/draft', () => {
     expect(draft.aiGenerated).toBe(true);
     expect(draft.fallback).toBe(false);
 
-    // have substituted an empty NOT_ESTABLISHED section.
     expect(draft.subject).toContain('legal status of IP monographs');
     expect(draft.answers).toHaveLength(1);
     expect(draft.answers[0].topic).toBe('Legal status of IP monographs');

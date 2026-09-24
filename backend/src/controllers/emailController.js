@@ -139,7 +139,6 @@ async function sendResponse(req, res, next) {
     return sendForCase(req, res, next, { emailType: 'OUTGOING_RESPONSE', send: caseMail.dispatchResponse });
   }
 
-  // Without a database, only used to trace the audit row back to its case.
   const queryId = req.body?.queryId ?? null;
 
   try {
