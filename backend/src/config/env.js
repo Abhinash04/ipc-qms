@@ -28,6 +28,8 @@ const env = {
 
   MAILBOX_RETENTION_HOURS: Number(process.env.MAILBOX_RETENTION_HOURS ?? '42'),
   MAILBOX_UNREGISTERED_RETENTION_HOURS: Number(process.env.MAILBOX_UNREGISTERED_RETENTION_HOURS ?? '336'),
+  MAILBOX_SYNC_ENABLED: (process.env.MAILBOX_SYNC_ENABLED ?? 'true') !== 'false',
+  MAILBOX_SYNC_INTERVAL_MS: parseInt(process.env.MAILBOX_SYNC_INTERVAL_MS || '15000', 10),
   MAILBOX_RETENTION_ENABLED: (process.env.MAILBOX_RETENTION_ENABLED ?? 'true') !== 'false',
   MAILBOX_JUNK_CONFIDENCE: Number(process.env.MAILBOX_JUNK_CONFIDENCE ?? '0.9'),
   MAILBOX_TRIAGE_BATCH: parseInt(process.env.MAILBOX_TRIAGE_BATCH || '25', 10),
@@ -126,6 +128,14 @@ function validateEmailConfig(config = env) {
     if (!Number.isFinite(config.MAILBOX_RETENTION_HOURS) || config.MAILBOX_RETENTION_HOURS <= 0) {
       errors.push(
         `MAILBOX_RETENTION_HOURS must be a positive number of hours (got "${config.MAILBOX_RETENTION_HOURS}")`,
+      );
+    }
+  }
+  if (config.MAILBOX_SYNC_INTERVAL_MS !== undefined) {
+    if (!Number.isInteger(config.MAILBOX_SYNC_INTERVAL_MS) || config.MAILBOX_SYNC_INTERVAL_MS < 1000) {
+      errors.push(
+        'MAILBOX_SYNC_INTERVAL_MS must be a whole number of milliseconds, at least 1000 ' +
+          `(got "${config.MAILBOX_SYNC_INTERVAL_MS}")`,
       );
     }
   }

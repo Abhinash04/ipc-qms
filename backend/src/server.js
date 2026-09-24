@@ -7,6 +7,7 @@ import { IDENTITY_ROLES, identityForRole } from './config/identities.js';
 import * as mailbox from './services/email/mailbox/index.js';
 import { outboundAllowed, internalForwardAllowed } from './services/email/nic/outboundGuard.js';
 import { startRetentionSweeps, stopRetentionSweeps } from './services/email/mailbox/retention.js';
+import { startMailboxSync, stopMailboxSync } from './services/email/mailbox/syncScheduler.js';
 
 
 try {
@@ -56,6 +57,7 @@ try {
 }
 
 startRetentionSweeps({ bootedAt: Date.now() });
+startMailboxSync();
 
 const server = app.listen(env.PORT, (error) => {
   if (error) return;
@@ -99,6 +101,7 @@ async function shutdown(signal) {
   console.log(`[qms] ${signal} received — shutting down`);
 
   stopRetentionSweeps();
+  stopMailboxSync();
 
   const forced = setTimeout(() => {
     console.error('[qms] shutdown timed out with requests still open — exiting anyway');

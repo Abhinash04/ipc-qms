@@ -52,7 +52,7 @@ const browserConfig = {
   },
 
   get syncTtlMs() {
-    return parseInt(process.env.NIC_BROWSER_SYNC_TTL_MS || '30000', 10);
+    return parseInt(process.env.NIC_BROWSER_SYNC_TTL_MS || '15000', 10);
   },
 
   get syncMax() {
