@@ -1,24 +1,3 @@
-/**
- * Recreate the database structure on a target MongoDB — collections and
- * indexes only, no workflow data.
- *
- * This is the "host it on Atlas" step. It is deliberately not a dump-and-
- * restore: src/config/db.js already treats the Mongoose schemas as the
- * authority for what collections and indexes exist, so a copy of a local
- * Compass database would only carry a developer's cases across and then be
- * overwritten by syncIndexes on the first connect anyway. What the cluster
- * needs is the shape, plus the staff directory the application cannot work
- * without.
- *
- *   npm run db:provision -- --uri "mongodb+srv://..."   # explicit target
- *   ATLAS_DATABASE_URL=... npm run db:provision          # or from the env
- *   npm run db:provision -- --dry-run                    # report, change nothing
- *   npm run db:provision -- --truncate                   # also clear existing workflow data
- *   npm run db:provision -- --no-seed                    # skip the user seed
- *
- * The target must name a database in the URI (…mongodb.net/query_management_system),
- * otherwise everything would land in `test`.
- */
 import mongoose from 'mongoose';
 import * as models from '../src/models/index.js';
 
@@ -34,13 +13,8 @@ function argValue(name) {
   return i >= 0 ? args[i + 1] : undefined;
 }
 
-/** Never print credentials, even to a local terminal. */
 const redact = (uri) => String(uri || '').replace(/\/\/[^@]+@/, '//<credentials>@');
 
-/**
- * Everything the workflow writes — the same list resetWorkflowState.mjs owns,
- * for the same reason: `users` is configuration and is never cleared here.
- */
 const WORKFLOW_COLLECTIONS = [
   'querycases', 'workflowsteps', 'reviews', 'responseversions', 'notifications',
   'emailmessages', 'emailthreads', 'outboundemails', 'mailboxmessages',
@@ -60,8 +34,6 @@ async function main() {
     return;
   }
 
-  // A `mongodb+srv://host/?opts` URI has no database name; Mongoose would then
-  // provision `test` and the app would read an empty cluster.
   const dbName = (uri.split('?')[0].split('/')[3] || '').trim();
   if (!dbName) {
     console.error(`The URI names no database: ${redact(uri)}\nAdd one, e.g. .../query_management_system?retryWrites=true`);
@@ -72,8 +44,6 @@ async function main() {
   console.log(`\nProvisioning ${redact(uri)}`);
   console.log(`Database: ${dbName}${dryRun ? '   (dry run — nothing will be written)' : ''}\n`);
 
-  // Atlas sits behind DNS SRV lookup and TLS, so the 3s the app uses against
-  // 127.0.0.1 is not enough for a first connect from a cold client.
   await mongoose.connect(uri, { serverSelectionTimeoutMS: 20000, maxPoolSize: 5 });
 
   const modelNames = Object.keys(models).filter(

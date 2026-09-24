@@ -1,24 +1,3 @@
-/**
- * Run the junk retention sweep by hand, and look at what it would do first.
- *
- * The sweep also runs hourly inside the server. This script exists for the
- * three things a timer cannot give you: seeing the candidates before anything
- * is destroyed, draining a backlog after an outage, and reading back the
- * indexes — which no test can see, because the suite's in-memory Mongo makes
- * syncIndexes a no-op.
- *
- *   npm run mailbox:purge -- --dry-run          # report, destroy nothing
- *   npm run mailbox:purge                       # classify, then purge
- *   npm run mailbox:purge -- --hours=72         # a wider junk window, for a backlog
- *   npm run mailbox:purge -- --unregistered-hours=720
- *   npm run mailbox:purge -- --classify-only    # ask the model, purge nothing
- *   npm run mailbox:purge -- --no-classify      # purge only what is already judged
- *   npm run mailbox:purge -- --backfill         # judge rows stored before triage existed
- *   npm run mailbox:purge -- --indexes          # print the triage indexes
- *   npm run mailbox:purge -- --force            # required when NODE_ENV=production
- *
- * Content is destroyed here. Start with --dry-run.
- */
 import env from '../src/config/env.js';
 import { connectDb, disconnectDb, mongoose } from '../src/config/db.js';
 import { MailboxMessage } from '../src/models/MailboxMessage.js';
@@ -49,7 +28,6 @@ const unregisteredHours = argValue('--unregistered-hours')
   : env.MAILBOX_UNREGISTERED_RETENTION_HOURS;
 const limit = argValue('--limit') ? parseInt(argValue('--limit'), 10) : env.MAILBOX_PURGE_BATCH;
 
-/** Never print credentials, even to a local terminal. */
 const redactUri = (uri) => String(uri || '').replace(/\/\/[^@]+@/, '//<credentials>@');
 
 const pad = (value, width) => String(value ?? '').padEnd(width);
@@ -109,13 +87,6 @@ async function main() {
 
   const now = Date.now();
 
-  // Rows stored before triage existed have no verdict, so they are not
-  // purgeable and nothing has to be done about them. This is how you choose to
-  // judge them anyway.
-  //
-  // `classifiedAt` is stamped NOW, not from the message's own `receivedAt`:
-  // every backfilled row gets a full fresh window even when the mail is months
-  // old, which is the safe direction and the same argument as the boot grace.
   if (backfill) {
     const scope = { source: { $in: PURGEABLE_SOURCES }, purgedAt: null };
     const rows = await MailboxMessage.find(scope)
@@ -136,8 +107,6 @@ async function main() {
     console.log(`Backfill: ${rows.length} row(s) examined, ${written} newly judged, ${junk} of them junk.\n`);
   }
 
-  // Show the candidates before doing anything to them. The counts a sweep
-  // returns are no use to someone deciding whether to let it run.
   if (!classifyOnly) {
     const candidates = await findPurgeable({ now, limit, retentionHours: hours, unregisteredHours });
     if (!candidates.length) {
@@ -177,8 +146,6 @@ async function main() {
     limit,
     classify: !noClassify,
     purge: !classifyOnly,
-    // The boot grace protects an unattended restart from purging a backlog
-    // nobody has seen. An operator running this deliberately has seen it.
     ignoreGrace: true,
   });
 
