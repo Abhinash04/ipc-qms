@@ -33,11 +33,14 @@ function describeConfiguration() {
     ? `${frontOffice.name} <${frontOffice.email}>`
     : env.IPC_QUERY_EMAIL;
   const source = store.persistence;
-  const nicAgent = browserConfig.mailboxEnabled
-    ? `on — ${browserConfig.mailboxAddress} via CDP ${browserConfig.cdpEndpoint}; sends the acknowledgement, ` +
-      `the forward to the Officer-in-Charge and the final response of NICeMail cases ` +
-      `(timeout ${browserConfig.timeoutMs} ms)`
-    : null;
+  const nicAgent = !browserConfig.mailboxEnabled
+    ? null
+    : browserConfig.mailboxViewer
+      ? `viewer — lists ${browserConfig.mailboxAddress} from the database and never reads NICeMail; ` +
+        `NICeMail sends are refused here (NIC_BROWSER_VIEWER=true) and retried from the mailbox host`
+      : `on — ${browserConfig.mailboxAddress} via CDP ${browserConfig.cdpEndpoint}; sends the acknowledgement, ` +
+        `the forward to the Officer-in-Charge and the final response of NICeMail cases ` +
+        `(timeout ${browserConfig.timeoutMs} ms)`;
 
   const guard = !browserConfig.mailboxEnabled
     ? null

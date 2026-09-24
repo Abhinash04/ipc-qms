@@ -1,5 +1,6 @@
 import env from '../../../config/env.js';
-import { isConnected } from '../../../config/db.js';
+import { isConnected, isSharedDatabase } from '../../../config/db.js';
+import browserConfig from '../../../config/browserConfig.js';
 import { MailboxMessage } from '../../../models/MailboxMessage.js';
 import { MailboxDecision } from '../../../models/MailboxDecision.js';
 import { MailboxTriage, RULE_CLASSES, TRIAGE_CLASSIFIERS, TRIAGE_VERDICTS } from '../../../models/MailboxTriage.js';
@@ -415,6 +416,8 @@ async function runSweep(options = {}) {
 export function startRetentionSweeps(options = {}) {
   if (env.NODE_ENV === 'test') return null;
   if (!env.MAILBOX_RETENTION_ENABLED) return null;
+  const mailboxHost = browserConfig.mailboxEnabled && !browserConfig.mailboxViewer;
+  if (isSharedDatabase() && env.NODE_ENV !== 'production' && !mailboxHost) return null;
   if (timer) return timer;
 
   bootedAt = options.bootedAt ?? Date.now();

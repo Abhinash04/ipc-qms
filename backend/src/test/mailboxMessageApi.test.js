@@ -371,3 +371,28 @@ describe('POST /mailbox/sync', () => {
     expect(res.body).toMatchObject({ supported: false, started: false });
   });
 });
+
+describe('a NICeMail viewer', () => {
+  beforeEach(async () => {
+    await seed();
+    nicMailbox.resetSyncState();
+    vi.stubEnv('NIC_BROWSER_VIEWER', 'true');
+  });
+
+  it('lists what the mailbox host stored, and never reads NICeMail itself', async () => {
+    const res = await request(app).get('/api/v1/mailbox/messages').set(cookieFor(nicUser()));
+
+    expect(res.status).toBe(200);
+    expect(res.body.messages).toHaveLength(2);
+    expect(res.body.sync).toMatchObject({ viewer: true, running: false });
+    expect(browser.readInbox).not.toHaveBeenCalled();
+  });
+
+  it('starts no sync when asked for one, and records none', async () => {
+    const res = await request(app).post('/api/v1/mailbox/sync').set(cookieFor(nicUser()));
+
+    expect(res.body).toMatchObject({ started: false, sync: { viewer: true, running: false } });
+    expect(browser.readInbox).not.toHaveBeenCalled();
+    expect(audits('SYNC_STARTED')).toEqual([]);
+  });
+});

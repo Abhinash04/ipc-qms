@@ -400,6 +400,15 @@ describe('outbound mail follows the case mailbox', () => {
     expect(browser.sendMail).not.toHaveBeenCalled();
   });
 
+  it('sends nothing from a NICeMail viewer, and names the mailbox host instead', async () => {
+    vi.stubEnv('NIC_BROWSER_VIEWER', 'true');
+
+    await expect(
+      nicBrowserTransport.send({ to: ['ravi@pharma.example'], subject: 's', body: 'b' }),
+    ).rejects.toMatchObject({ configuration: true, delivery: 'NOT_SENT', message: expect.stringMatching(/mailbox host/) });
+    expect(browser.sendMail).not.toHaveBeenCalled();
+  });
+
   it('confines browser sends to NIC_BROWSER_TEST_RECIPIENT until NIC_ALLOW_OUTBOUND=true', async () => {
     const message = { to: ['someone.else@example.com'], subject: 's', body: 'b' };
 
@@ -606,6 +615,27 @@ describe('outbound mail follows the case mailbox', () => {
       expect(res.body.stage).toBe('outbound_guard');
       expect(res.body.error).toMatch(/NIC_ALLOW_OUTBOUND/);
       expect(browser.sendMail).not.toHaveBeenCalled();
+    });
+
+    it('fails the send on a NICeMail viewer before the browser, and leaves it for the mailbox host to retry', async () => {
+      await storeCase('QRY-2026-00017', nicCase);
+      const retry = () =>
+        request(app).post('/api/v1/emails/acknowledgement').set(cookieFor(primaryFrontOffice())).send({ queryId: 'QRY-2026-00017' });
+
+      vi.stubEnv('NIC_BROWSER_VIEWER', 'true');
+      const refused = await retry();
+
+      expect(refused.status).toBe(503);
+      expect(refused.body).toMatchObject({ outcome: 'FAILED', configuration: true });
+      expect(refused.body.error).toMatch(/NIC_BROWSER_VIEWER=true/);
+      expect(db.rows('OutboundEmail')[0].status).toBe('FAILED');
+      expect(browser.sendMail).not.toHaveBeenCalled();
+
+      vi.stubEnv('NIC_BROWSER_VIEWER', '');
+      const host = await retry();
+
+      expect(host.status).toBe(201);
+      expect(browser.sendMail).toHaveBeenCalledTimes(1);
     });
 
     it('answers a repeat with the send that already happened, and sends nothing', async () => {

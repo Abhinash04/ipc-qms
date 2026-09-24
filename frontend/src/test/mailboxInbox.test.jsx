@@ -669,6 +669,19 @@ describe('Sync now', () => {
     expect(screen.queryByRole('button', { name: 'Sync now' })).toBeNull();
   });
 
+  it('is not offered by a backend that only views NICeMail, which says the host reads it', async () => {
+    fetchMailboxMessages.mockResolvedValue({
+      ...nicInbox(false),
+      sync: { ...nicInbox(false).sync, ok: null, viewer: true },
+    });
+    renderInbox();
+    await screen.findByText('Keep this one');
+
+    expect(screen.queryByRole('button', { name: 'Sync now' })).toBeNull();
+    expect(screen.getByText(/read by the mailbox host/)).toBeInTheDocument();
+    expect(screen.queryByText(/could not be read/)).toBeNull();
+  });
+
   it('starts one NICeMail sync and says so', async () => {
     const info = vi.spyOn(notify, 'info').mockImplementation(() => {});
     fetchMailboxMessages.mockResolvedValue(nicInbox(false));

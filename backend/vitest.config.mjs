@@ -31,6 +31,7 @@ export default defineConfig({
       NIC_CDP_ENDPOINT: 'http://127.0.0.1:1',
 
       NIC_BROWSER_MAILBOX: '',
+      NIC_BROWSER_VIEWER: '',
       NIC_FRONT_OFFICE_NAME: '',
       NIC_BROWSER_TEST_RECIPIENT: '',
       NIC_BROWSER_TIMEOUT_MS: '',

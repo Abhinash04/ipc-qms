@@ -189,6 +189,15 @@ function MailboxCheckSummary({ result }) {
   );
 }
 
+function MailboxViewerNotice() {
+  return (
+    <div role="status" className="rounded-2xl bg-[#f1f5fa] border border-white p-3.5 shadow-[4px_4px_8px_#d0d7e5,-4px_-4px_8px_#ffffff] text-[13px] font-bold text-slate-700 flex items-center gap-2">
+      <CloudDownload className="h-4.5 w-4.5 text-slate-500 shrink-0" aria-hidden="true" />
+      <span>NICeMail is read by the mailbox host, not by this backend. New mail appears here once the host has synced it.</span>
+    </div>
+  );
+}
+
 function InboxActions({
   autoRefresh,
   onAutoRefreshChange,
@@ -913,6 +922,7 @@ export function MailboxInboxPage() {
     : null;
   const loadError = loadFailure?.error || null;
   const syncFailure = [inbox.data?.sync, loadFailure?.sync].find((sync) => sync?.ok === false) || null;
+  const viewer = Boolean(inbox.data?.sync?.viewer);
 
   const decisionFor = (mailboxMessageId) =>
     (decisions.data?.decisions || []).find(
@@ -1010,7 +1020,7 @@ export function MailboxInboxPage() {
             onAutoRefreshChange={setAutoRefresh}
             running={running}
             onCheck={checkNow}
-            canSync={inbox.data?.backend === "nic-browser"}
+            canSync={inbox.data?.backend === "nic-browser" && !viewer}
             syncing={syncNow.isPending || Boolean(inbox.data?.sync?.running)}
             onSync={() => syncNow.mutate()}
           />
@@ -1020,6 +1030,8 @@ export function MailboxInboxPage() {
       {(error || loadError) && !syncFailure && <MailboxOfflineNotice reason={loadError} />}
 
       {syncFailure && <MailboxSyncNotice sync={syncFailure} />}
+
+      {viewer && !syncFailure && <MailboxViewerNotice />}
 
       {lastResult?.fetched !== undefined && !error && (
         <MailboxCheckSummary result={lastResult} />

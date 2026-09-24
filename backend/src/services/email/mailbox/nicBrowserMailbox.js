@@ -97,6 +97,7 @@ async function recordSync(action, { failed = false, error = null, details }) {
 }
 
 async function sync(address = browserConfig.mailboxAddress, { reader = readInbox, trigger = 'poll' } = {}) {
+  if (browserConfig.mailboxViewer) return syncStatus();
   if (inFlight) return inFlight;
 
   inFlight = (async () => {
@@ -194,7 +195,7 @@ function syncIfDue(address) {
   sync(address);
 }
 
-const syncStatus = () => ({ ...status, running: Boolean(inFlight) });
+const syncStatus = () => ({ ...status, running: Boolean(inFlight), viewer: browserConfig.mailboxViewer });
 
 function resetSyncState() {
   lastSyncAt = 0;
@@ -252,7 +253,7 @@ const MANUAL_SYNC_GAP_MS = 15000;
 
 function requestSync(address = browserConfig.mailboxAddress) {
   if (!isConnected()) throw unavailable();
-  const started = !inFlight && Date.now() - lastSyncAt >= MANUAL_SYNC_GAP_MS;
+  const started = !browserConfig.mailboxViewer && !inFlight && Date.now() - lastSyncAt >= MANUAL_SYNC_GAP_MS;
   if (started) sync(address, { trigger: 'manual' });
   return { started, sync: syncStatus() };
 }

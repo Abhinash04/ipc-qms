@@ -43,6 +43,10 @@ const browserConfig = {
     return String(process.env.NIC_BROWSER_MAILBOX || '').trim().toLowerCase() === 'true';
   },
 
+  get mailboxViewer() {
+    return String(process.env.NIC_BROWSER_VIEWER || '').trim().toLowerCase() === 'true';
+  },
+
   get mailboxAddress() {
     return (process.env.NIC_EMAIL || '').trim().toLowerCase();
   },

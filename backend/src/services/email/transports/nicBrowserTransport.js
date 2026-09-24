@@ -17,6 +17,13 @@ async function sendThroughBrowser(
   message,
   { asRole = null, sender = null, internalForward = false, onStage = null } = {},
 ) {
+  if (browserConfig.mailboxViewer) {
+    throw Object.assign(
+      new Error('This backend is a NICeMail viewer (NIC_BROWSER_VIEWER=true); send it from the mailbox host.'),
+      { configuration: true },
+    );
+  }
+
   const to = asList(message.to);
   const cc = asList(message.cc);
   const bcc = asList(message.bcc);
