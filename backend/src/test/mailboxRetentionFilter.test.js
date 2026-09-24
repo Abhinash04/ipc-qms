@@ -55,11 +55,17 @@ describe('the junk candidate filter', () => {
     expect(filter.confidence.$gte).toBeGreaterThan(0);
   });
 
-  it('honours a raised floor as a kill switch for model-driven purging', () => {
-    // The model is clamped below 1, so a floor above it leaves the Junk filter
-    // working while making every model verdict unpurgeable.
+  it('honours a floor of exactly 1 as the kill switch for model-driven purging', () => {
+    // The model is clamped to 0.95 and a hard rule scores exactly 1, so a floor
+    // of 1 admits the rules and excludes the model. The value is exact.
+    env.MAILBOX_JUNK_CONFIDENCE = 1;
+    expect(purgeCandidateFilter({ now: NOW }).confidence.$gte).toBe(1);
+  });
+
+  it('stops purging altogether above 1, since a hard rule only scores 1', () => {
+    // Documented so nobody reaches for 1.01 expecting the rules to survive it.
     env.MAILBOX_JUNK_CONFIDENCE = 1.01;
-    expect(purgeCandidateFilter({ now: NOW }).confidence.$gte).toBe(1.01);
+    expect(purgeCandidateFilter({ now: NOW }).confidence.$gte).toBeGreaterThan(1);
   });
 
   it('honours an overridden window', () => {

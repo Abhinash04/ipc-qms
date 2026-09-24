@@ -170,7 +170,11 @@ export async function classifyPending({ now = Date.now(), limit = env.MAILBOX_TR
   const messages = await MailboxMessage.find({
     mailboxMessageId: { $in: rows.map((row) => row.mailboxMessageId) },
   })
-    .select('mailboxMessageId from subject body')
+    // `attachments` is in the projection because the model needs to know one
+    // exists: a "please see attached" enquiry reaches it as a blank message
+    // otherwise, and was condemned 3 times out of 3 before this was passed.
+    // `bodyHtml` stays out — it can be a megabyte.
+    .select('mailboxMessageId from subject body attachments')
     .lean();
   const bodies = new Map(messages.map((message) => [message.mailboxMessageId, message]));
 
@@ -195,6 +199,7 @@ export async function classifyPending({ now = Date.now(), limit = env.MAILBOX_TR
       from: message.from,
       subject: message.subject,
       body: message.body,
+      attachments: message.attachments,
       // What the rules noticed, handed over as facts rather than as a verdict.
       signals: row.reason ? [row.reason] : [],
     });
@@ -389,7 +394,10 @@ export async function sweepOnce({
     classified: 0,
     purged: 0,
     attachmentsRemoved: 0,
-    skipped: { accepted: 0, linkedCase: 0, notPurgeableSource: 0 },
+    // `notEligible` covers both a source that may not be purged and a row an
+    // earlier pass already tombstoned — purgeMessageFilter excludes both, and
+    // the count is a subtraction, so the two cannot be told apart here.
+    skipped: { accepted: 0, linkedCase: 0, notEligible: 0 },
     errors: [],
     durationMs: 0,
     grace: false,
@@ -421,7 +429,7 @@ export async function sweepOnce({
       .select('mailboxMessageId source from subject receivedAt attachments removedAt')
       .lean();
 
-    result.skipped.notPurgeableSource = candidates.length - rows.length;
+    result.skipped.notEligible = candidates.length - rows.length;
 
     for (const row of rows) {
       const candidate = byId.get(row.mailboxMessageId);

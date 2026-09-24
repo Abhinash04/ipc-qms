@@ -49,6 +49,7 @@ Operational scripts:
 |---|---|
 | `npm run db:reset` | Clear the workflow state from MongoDB, keeping `users`. See [Resetting the workflow state](#resetting-the-workflow-state). |
 | `npm run mailbox:purge` | Triage inbound mail and strip the content of junk past the retention window. `--dry-run` first — it destroys content. See [Junk triage and retention](#junk-triage-and-retention). |
+| `npm run triage:eval` | Score the triage prompt against a fixture set on the live Gemma endpoint. Fails if any genuine fixture is judged destroyable. Not part of `npm test`. |
 | `npm run ingest:ipc` | Rebuild `src/data/ipcKnowledge.json` from `docs/markdown/`. See [AI grounding](#ai-grounding-layer). |
 | `npm run gmail:preflight` | Per-identity Gmail OAuth check — verifies scopes and detects a disabled Gmail API. |
 | `npm run nic:preflight` | Read-only NICeMail IMAP/SMTP reachability + auth probe. Never marks mail read. |
@@ -568,6 +569,22 @@ Five things make a wrong verdict survivable:
   received time, so once the body is gone "what was thrown away, and who sent it?" still has an
   answer.
 
+> **The prompt is evaluated, not assumed.** `npm run triage:eval` scores the classifier against a
+> fixture set on the live endpoint and fails the run if any *genuine* fixture comes back purgeable
+> even once. It was written because the first version of this prompt destroyed real mail: a CDSCO
+> circular from a `noreply@` address came back JUNK at 0.95 three times out of three, a relayed
+> ticket once in three, and a "please see attached" enquiry three times out of three.
+>
+> Two changes fixed it, and both are load-bearing. The arrival signals are now presented under
+> "HOW THIS MESSAGE ARRIVED (circumstance, NOT evidence of junk)" with two sentences saying so —
+> under the old neutral heading the model read them as a verdict to ratify. And the attachment list
+> is now in the prompt: without it an enquiry whose content is entirely in a PDF arrived as a blank
+> message. `classifyMail` takes `attachments`, and the sweep's projection selects it.
+>
+> After: **0/5 purgeable on all six genuine fixtures, 5/5 caught on all three junk fixtures.**
+> Re-run the eval after any change to the prompt — `mailboxTriageGemma.test.js` pins the wording,
+> but only the eval shows what the model does with it.
+
 The sweep runs hourly from `server.js`, unref'd, off under `NODE_ENV=test` and when
 `MAILBOX_RETENTION_ENABLED=false`, and purges nothing in the first two hours after boot — the
 retention window is wall-clock, but the rescue window only exists while somebody can see the inbox,
@@ -578,6 +595,8 @@ npm run mailbox:purge -- --dry-run     # what it would destroy, destroying nothi
 npm run mailbox:purge -- --backfill    # judge rows stored before triage existed
 npm run mailbox:purge -- --hours=72    # a wider window, to drain a backlog
 npm run mailbox:purge -- --indexes     # the triage indexes, which no test can see
+npm run triage:eval                   # score the classifier on the live endpoint
+npm run triage:eval -- --runs 5 --fixture circular-noreply
 ```
 
 Rows stored before this existed have no verdict, so they are not purgeable and **no migration is

@@ -19,7 +19,8 @@
     "db:provision": "node scripts/provisionAtlas.mjs",
     "mailbox:purge": "node scripts/purgeMailboxJunk.mjs",
     "draft:trace": "node src/scripts/testDraftLive.js",
-    "draft:eval": "node src/scripts/evalDraft.js"
+    "draft:eval": "node src/scripts/evalDraft.js",
+    "triage:eval": "node src/scripts/evalTriage.js"
   },
   "keywords": [],
   "author": "",

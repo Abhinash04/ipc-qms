@@ -80,9 +80,12 @@ const env = {
   // still reclaims space. `=false` disables the sweep timer entirely.
   MAILBOX_RETENTION_ENABLED: (process.env.MAILBOX_RETENTION_ENABLED ?? 'true') !== 'false',
   // The confidence a machine JUNK verdict needs before its content may go. A
-  // hard rule scores 1; the model is clamped below that. Setting this above 1
-  // leaves the Junk filter working but makes every model verdict non-purgeable,
-  // which is the kill switch.
+  // hard rule scores exactly 1; the model is clamped to 0.95.
+  //
+  // Set this to 1 and only the deterministic rules can purge: model verdicts
+  // still show in the Junk filter but can never destroy anything. That is the
+  // kill switch, and 1 is the exact value — ABOVE 1 nothing purges at all,
+  // because a hard rule scores 1 and would be excluded with the model.
   MAILBOX_JUNK_CONFIDENCE: Number(process.env.MAILBOX_JUNK_CONFIDENCE ?? '0.9'),
   MAILBOX_TRIAGE_BATCH: parseInt(process.env.MAILBOX_TRIAGE_BATCH || '25', 10),
   MAILBOX_PURGE_BATCH: parseInt(process.env.MAILBOX_PURGE_BATCH || '50', 10),

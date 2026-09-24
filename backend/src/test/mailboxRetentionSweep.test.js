@@ -239,7 +239,7 @@ describe('what the sweep refuses to touch', () => {
 
     const result = await sweep();
     expect(result.purged).toBe(0);
-    expect(result.skipped.notPurgeableSource).toBe(1);
+    expect(result.skipped.notEligible).toBe(1);
   });
 });
 

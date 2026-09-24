@@ -175,7 +175,7 @@ async function main() {
   console.log(`  attachments removed  ${result.attachmentsRemoved}`);
   console.log(`  skipped (accepted)   ${result.skipped.accepted}`);
   console.log(`  skipped (has a case) ${result.skipped.linkedCase}`);
-  console.log(`  skipped (source)     ${result.skipped.notPurgeableSource}`);
+  console.log(`  skipped (ineligible) ${result.skipped.notEligible}`);
   console.log(`  took                 ${result.durationMs}ms`);
   for (const error of result.errors) console.log(`  error                ${error}`);
 
