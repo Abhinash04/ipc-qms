@@ -55,7 +55,7 @@ These are development identities only, not real IPC employees, and every address
 
 | ID | Name | Role |
 | --- | --- | --- |
-| USR-0002 | Bhumika Makker | FRONT_OFFICE |
+| USR-0002 | Front Office (primary mailbox) | FRONT_OFFICE |
 | USR-0003 | Jatin Rawat | OFFICER_IN_CHARGE |
 | USR-0004 | Neha Singh | ASSIGNED_OFFICIAL |
 | USR-0009 | Rawat Jatin | ASSIGNED_OFFICIAL |

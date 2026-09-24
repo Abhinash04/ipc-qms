@@ -126,7 +126,7 @@ their roles, landing dashboards and section access. One per role:
 |---|---|---|
 | SUPER_ADMIN | `admin@ipc.example` | `/super-admin/dashboard` |
 | ADMIN | `suresh.gupta@ipc.example` | `/admin/dashboard` |
-| FRONT_OFFICE | `bhumika.makker@ipc.example` | `/front-officer/dashboard` |
+| FRONT_OFFICE | `front.office@ipc.example` | `/front-officer/dashboard` |
 | OFFICER_IN_CHARGE | `jatin.rawat@ipc.example` | `/officer-in-charge/dashboard` |
 | ASSIGNED_OFFICIAL | `neha.singh@ipc.example` | `/assigned-official/dashboard` |
 | REVIEWER | `amit.mehta@ipc.example` | `/reviewer/dashboard` |

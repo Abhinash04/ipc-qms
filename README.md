@@ -157,7 +157,7 @@ listed in [docs/auth.md](docs/auth.md):
 |---|---|
 | SUPER_ADMIN | `admin@ipc.example` |
 | ADMIN | `suresh.gupta@ipc.example` |
-| FRONT_OFFICE | `bhumika.makker@ipc.example` |
+| FRONT_OFFICE | `front.office@ipc.example` |
 | OFFICER_IN_CHARGE | `jatin.rawat@ipc.example` |
 | ASSIGNED_OFFICIAL | `neha.singh@ipc.example` |
 | REVIEWER | `amit.mehta@ipc.example` |

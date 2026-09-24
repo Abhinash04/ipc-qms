@@ -58,7 +58,7 @@ and a 13th that exists only when `NIC_BROWSER_MAILBOX=true`
 |---|---|---|---|
 | `SUPER_ADMIN` | System Administrator | `admin@ipc.example` | `/super-admin/dashboard` |
 | `ADMIN` | Suresh Gupta | `suresh.gupta@ipc.example` | `/admin/dashboard` |
-| `FRONT_OFFICE` | Bhumika Makker | `bhumika.makker@ipc.example` | `/front-officer/dashboard` |
+| `FRONT_OFFICE` | Front Office (primary mailbox) | `front.office@ipc.example` | `/front-officer/dashboard` |
 | `OFFICER_IN_CHARGE` | Jatin Rawat | `jatin.rawat@ipc.example` | `/officer-in-charge/dashboard` |
 | `ASSIGNED_OFFICIAL` | Neha Singh | `neha.singh@ipc.example` | `/assigned-official/dashboard` |
 | `REVIEWER` | Amit Mehta | `amit.mehta@ipc.example` | `/reviewer/dashboard` |
