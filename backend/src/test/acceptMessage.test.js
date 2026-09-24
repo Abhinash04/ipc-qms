@@ -123,6 +123,13 @@ describe('POST /mailbox/messages/:messageId/accept — an unseen message', () =>
     expect(stored.workflowState).toBe('PENDING_ASSIGNMENT');
   });
 
+  it('moves the case revision on for each step the server takes', async () => {
+    const res = await accept('msg-ravi-1');
+    const stored = await QueryCase.findOne({ queryId: res.body.queryId }).lean();
+
+    expect(stored.revision).toBe(3);
+  });
+
   it('keeps a copy of the acknowledgement and of the forward', async () => {
     const res = await accept('msg-ravi-1');
 
@@ -303,7 +310,6 @@ describe('accepting a message someone already rejected', () => {
     });
   });
 });
-
 
 describe('two accepts of the same message at once', () => {
   it('opens one case, and sends one acknowledgement and one forward', async () => {

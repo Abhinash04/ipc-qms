@@ -56,6 +56,7 @@ describe('the inquirer is written once', () => {
     const res = await persist(
       {
         query: { ...CASE, workflowState: 'ASSIGNED', inquirer: { id: null, name: 'Someone Else', email: 'elsewhere@example.com' } },
+        baseRevision: 1,
       },
       ROLES.OFFICER_IN_CHARGE,
     );
@@ -74,7 +75,7 @@ describe('closing a case is the server’s to do', () => {
   });
 
   it('refuses a client write that marks the case dispatched', async () => {
-    const res = await persist({ query: { ...CASE, workflowState: 'DISPATCHED' } });
+    const res = await persist({ query: { ...CASE, workflowState: 'DISPATCHED' }, baseRevision: 1 });
 
     expect(res.status).toBe(409);
     expect(res.body.error).toMatch(/closed by the server/i);
@@ -82,7 +83,7 @@ describe('closing a case is the server’s to do', () => {
   });
 
   it('refuses a client write that closes the case', async () => {
-    const res = await persist({ query: { ...CASE, workflowState: 'CLOSED', businessStatus: 'CLOSED' } });
+    const res = await persist({ query: { ...CASE, workflowState: 'CLOSED', businessStatus: 'CLOSED' }, baseRevision: 1 });
 
     expect(res.status).toBe(409);
     expect((await stored()).businessStatus).not.toBe('CLOSED');
@@ -91,7 +92,10 @@ describe('closing a case is the server’s to do', () => {
   it('allows a write to a case the server has already closed', async () => {
     await QueryCase.updateOne({ queryId: QUERY_ID }, { $set: { workflowState: 'CLOSED', businessStatus: 'CLOSED' } });
 
-    const res = await persist({ query: { ...CASE, workflowState: 'CLOSED', businessStatus: 'CLOSED', priority: 'HIGH' } });
+    const res = await persist({
+      query: { ...CASE, workflowState: 'CLOSED', businessStatus: 'CLOSED', priority: 'HIGH' },
+      baseRevision: 1,
+    });
 
     expect(res.status).toBe(200);
     expect((await stored()).priority).toBe('HIGH');
@@ -101,7 +105,7 @@ describe('closing a case is the server’s to do', () => {
     await QueryCase.updateOne({ queryId: QUERY_ID }, { $set: { workflowState: 'CLOSED', businessStatus: 'CLOSED' } });
 
     const res = await persist(
-      { query: { ...CASE, workflowState: 'DRAFTING', businessStatus: 'IN_PROGRESS' } },
+      { query: { ...CASE, workflowState: 'DRAFTING', businessStatus: 'IN_PROGRESS' }, baseRevision: 1 },
       ROLES.SUPER_ADMIN,
     );
 

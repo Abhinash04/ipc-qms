@@ -24,6 +24,7 @@ const queryCaseSchema = new mongoose.Schema(
     aiSummary: { type: Object, default: null },
     assignmentDecision: { type: Object, default: null },
     pullbackHistory: { type: Array, default: [] },
+    revision: { type: Number, default: 0 },
   },
   { versionKey: false },
 );

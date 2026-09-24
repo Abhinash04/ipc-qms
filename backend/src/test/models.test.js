@@ -49,6 +49,7 @@ describe('Backend MongoDB Models', () => {
     expect(caseDoc.businessStatus).toBe('OPEN');
     expect(caseDoc.workflowState).toBe('UNASSIGNED');
     expect(caseDoc.createdAt).toBeTypeOf('string');
+    expect(caseDoc.revision).toBe(0);
   });
 
   it('instantiates WorkflowStep document with correct sequence & type', () => {

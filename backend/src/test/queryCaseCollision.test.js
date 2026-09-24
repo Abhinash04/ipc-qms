@@ -25,11 +25,11 @@ const CASE = {
   updatedAt: '2026-09-17T09:00:00.000Z',
 };
 
-const persist = (query) =>
+const persist = (query, baseRevision) =>
   request(app)
     .post('/api/v1/queries/persist')
     .set(authHeader(ROLES.FRONT_OFFICE))
-    .send({ query });
+    .send({ query, baseRevision });
 
 const storedCases = () => memoryDb.rows('QueryCase');
 
@@ -49,7 +49,7 @@ describe('/api/v1/queries/persist — one id, one case', () => {
   it('updates the case it already holds', async () => {
     await persist(CASE);
 
-    const res = await persist({ ...CASE, workflowState: 'PENDING_ASSIGNMENT' });
+    const res = await persist({ ...CASE, workflowState: 'PENDING_ASSIGNMENT' }, 1);
 
     expect(res.status).toBe(200);
     expect(storedCases()).toHaveLength(1);
@@ -66,10 +66,10 @@ describe('/api/v1/queries/persist — one id, one case', () => {
       createdAt: '2026-09-17T11:30:00.000Z',
     };
 
-    const res = await persist(other);
+    const res = await persist(other, 1);
 
     expect(res.status).toBe(409);
-    expect(res.body).toMatchObject({ queryId: 'QRY-2026-00003' });
+    expect(res.body).toMatchObject({ code: 'ID_COLLISION', queryId: 'QRY-2026-00003' });
 
     expect(storedCases()).toHaveLength(1);
     expect(storedCases()[0].subject).toBe('Dissolution profile clarification');
@@ -79,7 +79,7 @@ describe('/api/v1/queries/persist — one id, one case', () => {
   it('allows the write when there is no createdAt to compare', async () => {
     await persist({ ...CASE, createdAt: undefined });
 
-    const res = await persist({ ...CASE, workflowState: 'PENDING_ASSIGNMENT' });
+    const res = await persist({ ...CASE, workflowState: 'PENDING_ASSIGNMENT' }, 1);
 
     expect(res.status).toBe(200);
     expect(storedCases()[0].workflowState).toBe('PENDING_ASSIGNMENT');

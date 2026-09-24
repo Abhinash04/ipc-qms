@@ -3,7 +3,10 @@ import { isConnected } from "../config/db.js";
 import * as audit from "../services/audit/auditService.js";
 import * as workflow from "../services/workflow/finalApproval.js";
 import * as caseMail from "../services/email/caseMail.js";
-import { toPublic as publicOutbound } from "../services/email/outbox.js";
+import {
+  toPublic as publicOutbound,
+  isDuplicateKey,
+} from "../services/email/outbox.js";
 import { ACTOR_TYPES } from "../constants/roles.js";
 import { isKnownAuditAction } from "../constants/auditActions.js";
 import { caseScopeFor, scopeFilter } from "../services/authz/caseAccess.js";
@@ -186,6 +189,7 @@ async function persistTransition(req, res, next) {
     const upsertVersions = body.upsertVersions ?? [];
     const addMessages = body.addMessages ?? [];
     const addThreads = body.addThreads ?? [];
+    const baseRevision = body.baseRevision ?? 0;
     const ops = [];
     const serverRecorded = addMessages.find(
       (msg) =>
@@ -211,6 +215,7 @@ async function persistTransition(req, res, next) {
         existing.createdAt !== query.createdAt
       ) {
         return res.status(HTTP_STATUS.CONFLICT).json({
+          code: "ID_COLLISION",
           error: "Query case id already belongs to a different case",
           queryId: query.queryId,
         });
@@ -235,21 +240,33 @@ async function persistTransition(req, res, next) {
         ...clientQuery
       } = query;
       const inquirer = submittedInquirer;
-      const update = { $set: clientQuery };
+      const update = { $set: clientQuery, $inc: { revision: 1 } };
       if (inquirer !== undefined) update.$setOnInsert = { inquirer };
 
-      ops.push(
-        QueryCase.findOneAndUpdate({ queryId: query.queryId }, update, {
-          upsert: true,
-          returnDocument: "after",
-        }),
+      const saved = await QueryCase.findOneAndUpdate(
+        {
+          queryId: query.queryId,
+          revision: baseRevision || { $in: [0, null] },
+        },
+        update,
+        { upsert: !existing && !baseRevision, returnDocument: "after" },
       );
+      if (!saved) {
+        return res.status(HTTP_STATUS.CONFLICT).json({
+          code: "STALE_CASE",
+          error: "This case was changed by someone else",
+          queryId: query.queryId,
+        });
+      }
     }
 
     if (notification?.notificationId) {
       ops.push(
         Notification.findOneAndUpdate(
-          { notificationId: notification.notificationId },
+          {
+            notificationId: notification.notificationId,
+            queryId: notification.queryId ?? null,
+          },
           { $set: notification },
           { upsert: true },
         ),
@@ -259,7 +276,7 @@ async function persistTransition(req, res, next) {
     for (const step of upsertSteps) {
       ops.push(
         WorkflowStep.findOneAndUpdate(
-          { stepId: step.stepId },
+          { stepId: step.stepId, queryId: step.queryId },
           { $set: step },
           { upsert: true },
         ),
@@ -267,13 +284,18 @@ async function persistTransition(req, res, next) {
     }
 
     for (const stepId of deleteStepIds) {
-      ops.push(WorkflowStep.findOneAndDelete({ stepId }));
+      ops.push(
+        WorkflowStep.findOneAndDelete({
+          stepId,
+          queryId: query?.queryId ?? null,
+        }),
+      );
     }
 
     for (const review of addReviews) {
       ops.push(
         Review.findOneAndUpdate(
-          { reviewId: review.reviewId },
+          { reviewId: review.reviewId, queryId: review.queryId },
           { $set: review },
           { upsert: true },
         ),
@@ -283,7 +305,7 @@ async function persistTransition(req, res, next) {
     for (const version of [...addVersions, ...upsertVersions]) {
       ops.push(
         ResponseVersion.findOneAndUpdate(
-          { responseId: version.responseId },
+          { responseId: version.responseId, queryId: version.queryId },
           { $set: version },
           { upsert: true },
         ),
@@ -293,7 +315,7 @@ async function persistTransition(req, res, next) {
     for (const msg of addMessages) {
       ops.push(
         EmailMessage.findOneAndUpdate(
-          { messageId: msg.messageId },
+          { messageId: msg.messageId, queryId: msg.queryId ?? null },
           { $set: msg },
           { upsert: true },
         ),
@@ -303,7 +325,7 @@ async function persistTransition(req, res, next) {
     for (const thread of addThreads) {
       ops.push(
         EmailThread.findOneAndUpdate(
-          { threadId: thread.threadId },
+          { threadId: thread.threadId, queryId: thread.queryId ?? null },
           { $set: thread },
           { upsert: true },
         ),
@@ -347,6 +369,13 @@ async function persistTransition(req, res, next) {
 
     res.status(HTTP_STATUS.OK).json({ success: true });
   } catch (error) {
+    if (isDuplicateKey(error)) {
+      return res.status(HTTP_STATUS.CONFLICT).json({
+        code: "ID_COLLISION",
+        error: "A record in this change already belongs to another case",
+        queryId: req.body?.query?.queryId ?? null,
+      });
+    }
     next(error);
   }
 }

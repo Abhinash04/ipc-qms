@@ -10,7 +10,15 @@ import { caseScopeFor, scopeKindForRole, SCOPE_KIND } from '../services/authz/ca
 import * as audit from '../services/audit/auditService.js';
 import { AUDIT_ACTIONS, AUDIT_RESULTS } from '../constants/auditActions.js';
 import { ACTOR_TYPES } from '../constants/roles.js';
-import { QueryCase, WorkflowStep, Review, ResponseVersion } from '../models/index.js';
+import {
+  QueryCase,
+  WorkflowStep,
+  Review,
+  ResponseVersion,
+  EmailMessage,
+  EmailThread,
+  Notification,
+} from '../models/index.js';
 import { isConnected } from '../config/db.js';
 
 const canPullBack = (role) => roleCanPerform(role, WORKFLOW_ACTION.PULLBACK);
@@ -73,7 +81,7 @@ async function storedStateFor(body) {
     .filter(Boolean);
 
   const [query, versions] = await Promise.all([
-    queryId ? QueryCase.findOne({ queryId }).select('workflowState currentAssigneeId').lean() : null,
+    queryId ? QueryCase.findOne({ queryId }).select('workflowState currentAssigneeId revision').lean() : null,
     responseIds.length
       ? ResponseVersion.find({ responseId: { $in: responseIds } }).select('responseId status').lean()
       : [],
@@ -112,13 +120,20 @@ async function storedParentIds(body) {
     .map((row) => row?.responseId)
     .filter(Boolean);
 
-  const [steps, reviews, versions] = await Promise.all([
+  const messageIds = (body?.addMessages || []).map((row) => row?.messageId).filter(Boolean);
+  const threadIds = (body?.addThreads || []).map((row) => row?.threadId).filter(Boolean);
+  const notificationIds = [body?.notification?.notificationId].filter(Boolean);
+
+  const found = await Promise.all([
     stepIds.length ? WorkflowStep.distinct('queryId', { stepId: { $in: stepIds } }) : [],
     reviewIds.length ? Review.distinct('queryId', { reviewId: { $in: reviewIds } }) : [],
     responseIds.length ? ResponseVersion.distinct('queryId', { responseId: { $in: responseIds } }) : [],
+    messageIds.length ? EmailMessage.distinct('queryId', { messageId: { $in: messageIds } }) : [],
+    threadIds.length ? EmailThread.distinct('queryId', { threadId: { $in: threadIds } }) : [],
+    notificationIds.length ? Notification.distinct('queryId', { notificationId: { $in: notificationIds } }) : [],
   ]);
 
-  return new Set([...steps, ...reviews, ...versions].filter(Boolean));
+  return new Set(found.flat().filter(Boolean));
 }
 
 function deny(req, res, message, { fields = [], queryIds = [] } = {}) {
@@ -153,6 +168,14 @@ async function authorizeCaseDelta(req, res, next) {
     }
 
     const stored = await storedStateFor(body);
+    if (body.query && (stored.query?.revision ?? 0) !== (body.baseRevision ?? 0)) {
+      return res.status(HTTP_STATUS.CONFLICT).json({
+        code: 'STALE_CASE',
+        error: 'This case was changed by someone else',
+        queryId: body.query.queryId,
+      });
+    }
+
     const violations = protectedValueViolations(req.user, body, stored);
     if (violations.length) {
       return deny(req, res, `${req.user.role} is not permitted to make that change`, {
@@ -160,11 +183,19 @@ async function authorizeCaseDelta(req, res, next) {
       });
     }
 
+    const named = queryIdsInBody(body);
+    const parents = await storedParentIds(body);
+    if ([...parents].some((id) => !named.has(id))) {
+      return res.status(HTTP_STATUS.CONFLICT).json({
+        code: 'ID_COLLISION',
+        error: 'A record in this change already belongs to another case',
+        queryId: body.query?.queryId ?? null,
+      });
+    }
+
     const scope = await caseScopeFor(req);
     if (scope.everything) return next();
 
-    const named = queryIdsInBody(body);
-    const parents = await storedParentIds(body);
     const touched = new Set([...named, ...parents]);
     if (!touched.size) return next();
 

@@ -117,6 +117,7 @@ const auditEventSchema = z.object({
 
 export const persistTransitionSchema = z.object({
   query: queryCaseSchema.nullable().optional(),
+  baseRevision: z.number().int().nonnegative().nullable().optional(),
   auditEvent: auditEventSchema.nullable().optional(),
   notification: notificationSchema.nullable().optional(),
   counters: countersSchema.nullable().optional(),

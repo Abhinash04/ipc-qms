@@ -155,6 +155,13 @@ describe('POST /queries/:queryId/final-approval — the happy path', () => {
     expect(step.status).toBe('COMPLETED');
   });
 
+  it('moves the case revision on for the approval, the dispatch and the close', async () => {
+    await approve();
+
+    const stored = await QueryCase.findOne({ queryId: QUERY_ID }).lean();
+    expect(stored.revision).toBe(3);
+  });
+
   it('writes the closing history in order', async () => {
     await approve();
 

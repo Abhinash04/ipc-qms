@@ -194,6 +194,15 @@ describe('/api/v1/queries/persist — the client contract', () => {
     expect(parsed.auditEvent.auditId).toBe('AUD-00013');
   });
 
+  it('keeps the revision the change was built on', () => {
+    const parsed = persistTransitionSchema.parse({
+      query: { queryId: 'QRY-2026-00001', workflowState: 'ASSIGNED' },
+      baseRevision: 4,
+    });
+
+    expect(parsed.baseRevision).toBe(4);
+  });
+
   it('rejects an audit event with no name, naming the field', () => {
     const result = persistTransitionSchema.safeParse({
       auditEvent: { auditId: 'AUD-00013', queryId: 'QRY-2026-00001', details: 'A summary.' },
@@ -298,6 +307,21 @@ describe('/api/v1/queries/persist — payload validation', () => {
     expect(parsed.query).toEqual({
       queryId: 'QRY-2026-00001',
       subject: 'Dissolution method',
+      workflowState: 'OPEN',
+    });
+  });
+
+  it('strips a revision the caller puts on the case, which only the server moves', () => {
+    const parsed = persistTransitionSchema.parse({
+      query: {
+        queryId: 'QRY-2026-00001',
+        workflowState: 'OPEN',
+        revision: 99,
+      },
+    });
+
+    expect(parsed.query).toEqual({
+      queryId: 'QRY-2026-00001',
       workflowState: 'OPEN',
     });
   });

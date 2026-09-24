@@ -45,7 +45,7 @@ export async function grantFinalApproval({ queryId, actor, comment = '' }) {
   if (needsApproval) {
     const moved = await QueryCase.findOneAndUpdate(
       { queryId, workflowState: { $in: NEEDS_APPROVAL } },
-      { $set: { workflowState: 'READY_FOR_DISPATCH', updatedAt: now() } },
+      { $set: { workflowState: 'READY_FOR_DISPATCH', updatedAt: now() }, $inc: { revision: 1 } },
       { returnDocument: 'after' },
     ).lean();
 

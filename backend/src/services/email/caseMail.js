@@ -195,7 +195,7 @@ async function forwardPlan(query, actor, source = null) {
       });
       await QueryCase.updateOne(
         { queryId, workflowState: { $in: ['RECEIVED', 'FRONT_OFFICE_VERIFICATION'] } },
-        { $set: { workflowState: 'PENDING_ASSIGNMENT', updatedAt: now() } },
+        { $set: { workflowState: 'PENDING_ASSIGNMENT', updatedAt: now() }, $inc: { revision: 1 } },
       );
       if (inserted) {
         await audit.record({
@@ -299,11 +299,11 @@ async function responsePlan(query, actor) {
       const at = now();
       await QueryCase.updateOne(
         { queryId, workflowState: 'READY_FOR_DISPATCH' },
-        { $set: { workflowState: 'DISPATCHED', updatedAt: at } },
+        { $set: { workflowState: 'DISPATCHED', updatedAt: at }, $inc: { revision: 1 } },
       );
       await QueryCase.updateOne(
         { queryId, workflowState: { $in: ['READY_FOR_DISPATCH', 'DISPATCHED'] } },
-        { $set: { workflowState: 'CLOSED', businessStatus: 'CLOSED', updatedAt: at } },
+        { $set: { workflowState: 'CLOSED', businessStatus: 'CLOSED', updatedAt: at }, $inc: { revision: 1 } },
       );
 
       if (inserted) {

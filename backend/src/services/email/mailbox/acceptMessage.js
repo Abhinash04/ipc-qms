@@ -210,7 +210,7 @@ export async function acceptMessage({ mailboxMessageId, message = {}, actor, sou
 
     await QueryCase.updateOne(
       { queryId },
-      { $set: { workflowState: 'FRONT_OFFICE_VERIFICATION', updatedAt: new Date().toISOString() } },
+      { $set: { workflowState: 'FRONT_OFFICE_VERIFICATION', updatedAt: new Date().toISOString() }, $inc: { revision: 1 } },
     );
   }
 
@@ -227,7 +227,7 @@ export async function acceptMessage({ mailboxMessageId, message = {}, actor, sou
 
     await QueryCase.updateOne(
       { queryId },
-      { $set: { aiSummary, updatedAt: new Date().toISOString() } },
+      { $set: { aiSummary, updatedAt: new Date().toISOString() }, $inc: { revision: 1 } },
     );
 
     await audit.record({
