@@ -1,49 +1,23 @@
-/**
- * Clear the workflow state from MongoDB, leaving configuration intact.
- *
- * This is a maintenance tool, NOT a seed. It inserts nothing. Its purpose is to
- * return a development database to the state a fresh install would have, so the
- * next real enquiry is case 00001 rather than continuing somebody else's
- * sequence.
- *
- *   npm run db:reset              # clear the default DATABASE_URL
- *   npm run db:reset -- --dry-run # report what would go, change nothing
- *   npm run db:reset -- --force   # required when NODE_ENV=production
- *
- * The `users` collection is deliberately untouched: it is re-seeded from
- * src/constants/users.js on every connect, and those 13 accounts are the staff
- * directory the application needs, not fixtures.
- */
 import env from '../src/config/env.js';
 import { connectDb, disconnectDb, mongoose } from '../src/config/db.js';
 
-/**
- * Everything the workflow writes. Order does not matter — there are no
- * foreign-key constraints in MongoDB — but the grouping documents intent.
- */
 const COLLECTIONS = [
-  // The case and everything hanging off it
   'querycases',
   'workflowsteps',
   'reviews',
   'responseversions',
   'notifications',
-  // The email record
   'emailmessages',
   'emailthreads',
-  // The send ledger — Case IDs restart, so it must go with the cases, or the
-  // next case 00001 would read as already answered.
   'outboundemails',
   'mailboxmessages',
   'mailboxdecisions',
   'mailboxtriages',
-  // Sequence state and history
   'querycounters',
   'counters',
   'auditevents',
 ];
 
-/** Configuration, not state. Never dropped by this script. */
 const PRESERVED = ['users'];
 
 const args = process.argv.slice(2);
@@ -51,7 +25,6 @@ const dryRun = args.includes('--dry-run');
 const force = args.includes('--force');
 
 function redactUri(uri) {
-  // Never print credentials, even to a local terminal.
   return String(uri || '').replace(/\/\/[^@]+@/, '//<credentials>@');
 }
 

@@ -5,7 +5,6 @@ import { retrieveContext, formatPassagesForPrompt } from '../../data/ipcKnowledg
 import { splitEnquiryQuestions } from '../../data/enquiryQuestions.js';
 import { qualifyPassages } from '../../data/evidenceQualification.js';
 
-
 const RECOMMENDATION_TIMEOUT_FACTOR = 3;
 
 function generateFallbackSummary({ subject = '', body = '', inquirerName = 'The Inquirer' }) {
@@ -109,14 +108,6 @@ const noteFailure = (reason) => {
   ai.lastError = reason;
 };
 
-/**
- * What actually went wrong.
- *
- * `fetch failed` on its own says nothing — and it was all the log carried
- * through a real outage, where the cause was a DNS resolver timing out
- * (`ENOTFOUND`) rather than anything about the model. undici puts the reason in
- * `error.cause`.
- */
 function aiFailureReason(error, timeoutMs) {
   if (error?.name === 'AbortError') return `timed out after ${timeoutMs}ms`;
   const code = error?.cause?.code || error?.cause?.name || null;
@@ -124,7 +115,6 @@ function aiFailureReason(error, timeoutMs) {
   return code && !message.includes(code) ? `${message} (${code})` : message;
 }
 
-/** One place to report a failed call: the log line, and the health record. */
 function reportAiFailure(label, error, timeoutMs) {
   const reason = aiFailureReason(error, timeoutMs);
   noteFailure(`${label}: ${reason}`);

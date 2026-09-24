@@ -4,19 +4,6 @@ import { QueryCase } from '../../../models/QueryCase.js';
 import { DECISIONS, findDecisions } from './decisions.js';
 import { findTriages } from './triage.js';
 
-/**
- * A stored mailbox message as the API returns it.
- *
- * The stored document is returned as it is — every field today's clients
- * read keeps its name and meaning — with what the dashboard needs worked out
- * on top: the real To list, whether the Front Office has read it, where it
- * stands (NEW / READ / ACCEPTED / REJECTED), and the case it became, with that
- * case's status. The status and the case are derived, never stored: the
- * decision record and the case are the truth, and a stored copy would drift.
- *
- * Must not import nicBrowserMailbox.js, which may only be loaded on demand.
- */
-
 export const MAIL_STATUS = Object.freeze({
   NEW: 'NEW',
   READ: 'READ',
@@ -26,19 +13,16 @@ export const MAIL_STATUS = Object.freeze({
   JUNK: 'JUNK',
 });
 
-/** Where a search looks. */
 const SEARCHED = ['from', 'subject', 'body'];
 
 const escapeRegExp = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-/** A MongoDB filter for a case-insensitive substring search, or nothing. */
 export function searchFilter(q) {
   if (!q) return {};
   const pattern = escapeRegExp(q);
   return { $or: SEARCHED.map((field) => ({ [field]: { $regex: pattern, $options: 'i' } })) };
 }
 
-/** The same search, for stores that are not queried in MongoDB. */
 export function matchesSearch(message, q) {
   if (!q) return true;
   const needle = q.toLowerCase();
@@ -64,12 +48,6 @@ async function casesFor(ids) {
   return new Map(rows.map((row) => [row.sourceMailboxMessageId, row]));
 }
 
-/**
- * The API view of each message, with decisions and cases looked up in one
- * query each for the whole list. `keepsReadState` is false for a mailbox that
- * has no QMS read state (every one but NICeMail's): `isRead` is then null —
- * unknown, not unread.
- */
 export async function toMessageViews(messages, { keepsReadState = false } = {}) {
   const ids = messages.map((message) => message.mailboxMessageId).filter(Boolean);
   let decisions = new Map();
