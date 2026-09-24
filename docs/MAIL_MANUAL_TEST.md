@@ -84,7 +84,10 @@ cd frontend && npm run dev    # http://localhost:5173
 To start clean: **Reset** in the header clears the QMS workflow domain, and is rendered for the
 **Super Admin only**, matching `POST /api/v1/queries/reset`. Local state is cleared only once the
 server has accepted the reset. From a terminal, `cd backend && npm run db:reset` does the same
-against the database (`--dry-run` to see what would go).
+against the database (`--dry-run` to see what would go). Both are refused on the team's shared
+Atlas database — Reset answers 409 and `db:reset` wants `--force`, which must not be used there. On
+the shared database, start each run with a fresh email instead; to start clean, point the backend at
+a local MongoDB.
 
 **Reset does not undo a decision.** `MailboxDecision` is keyed by the provider's message id and
 survives both the reset and anything you do to the mail itself — the first decision on a message

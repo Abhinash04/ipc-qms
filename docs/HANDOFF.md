@@ -25,7 +25,7 @@ message is found in NICeMail's Sent folder — see the NIC browser-agent row and
 | Frontend shell & routing | ✅ Done | Role-namespaced routes (`/<role-slug>/<section>`) generated from the RBAC grant table; nav derived from the same table. |
 | Authentication | ✅ Done | `POST /auth/login` → JWT in an httpOnly cookie. `verifyToken` → `verifyRole`/`verifyAction` on the server; `ProtectedRoute` on the client. |
 | Backend API | ✅ Done | 41 route registrations across ten routers: health, auth, emails, mailbox, AI, attachments, NIC, audit, queries, pullback. |
-| Persistence — server | ✅ Done | MongoDB via Mongoose. **Required in production** — the server exits rather than start unable to store anything. Degrades to memory in development for the mailbox and audit trail only. |
+| Persistence — server | ✅ Done | MongoDB via Mongoose. **Required in production** — the server exits rather than start unable to store anything. A `DATABASE_URL` that is set must name its database and be reachable in every environment. Only with it empty, in development, do the mailbox and audit trail degrade to memory. |
 | Persistence — cases | ✅ Done | 14 Mongoose models; the store syncs through `/api/v1/queries`. Cases are shared across users and browsers. The `inquirer` on a case is write-once, and closure and outbound mail records are server-owned: a client delta that writes them is refused with 409. |
 | Request validation | ✅ Done | Zod schemas on `/queries/*`, `/queries/:id/pullback` and the mailbox decision/accept routes; unknown keys are stripped rather than written. |
 | Workflow state-transition engine | ✅ Done | Single-writer `applyTransition` guarantees one audit event per transition; dynamic review levels. |
@@ -35,7 +35,7 @@ message is found in NICeMail's Sent folder — see the NIC browser-agent row and
 | Intake validation gate | ✅ Done | Arriving mail is listed, never registered. The Front Officer accepts (✓) or rejects (×) each message; reject creates nothing. **Accept is one server call** — `POST /mailbox/messages/:messageId/accept` mints the Case ID atomically, creates the case, records the decision, summarises the enquiry onto the case, acknowledges the sender **and forwards to the Officer-in-Charge**, landing at `PENDING_ASSIGNMENT`. Recorded in `MailboxDecision`; the first decision on a message wins. |
 | Attachments | ✅ Done | Upload, preview, download; **fail-closed** forwarding refuses to send if any file cannot be read. |
 | AI integration | ✅ Done | Pravah Gemma for summary/recommendation/drafting, grounded in an indexed IPC corpus, with a deterministic fallback the user is told about. The enquiry summary is generated once on accept and **stored** on the case with a `GENERATED` / `FALLBACK` / `FAILED` status, so the covering note and the case say the same thing. |
-| Audit trail | ✅ Done | Server-side, queryable, backing the Admin console. The actor is taken from the session, not the request body. Degrades to a bounded in-memory buffer without Mongo. |
+| Audit trail | ✅ Done | Server-side, queryable, backing the Admin console. The actor is taken from the session, not the request body. Degrades to a bounded in-memory buffer when `DATABASE_URL` is empty. |
 | Admin / Super Admin console | ✅ Done | Overview, audit trail, email activity, AI activity, roles; System Settings is Super-Admin-only. |
 | Notifications | ✅ Done | Sonner toasts wired to committed outcomes, never to button clicks. A provider outage produces **one** standing banner and one toast, not one per poll, and the poll backs off 1 → 2 → 5 minutes while it lasts. |
 | Outbound email idempotency | ✅ Done | Every case email — acknowledgement, forward, final response — is claimed in the `outboundemails` ledger under a unique `"${emailType}:${queryId}"` key before it is attempted, from intake, final approval and the retry buttons alike. A failure is classified `NOT_SENT` (safe to retry; one quick automatic retry for transient network errors) or `UNCERTAIN` (never retried automatically). Nothing settles an `UNCERTAIN` send automatically — every channel answers `UNKNOWN` — so a person answers it through `POST /queries/:queryId/outbound/resolve`, audited either way. |
@@ -74,24 +74,30 @@ Run `npm install` after every pull that touches `package.json`. The backend impo
 `mongoose`, `zod` and `express-rate-limit` at module load, so a stale `node_modules` fails at
 startup with `ERR_MODULE_NOT_FOUND` rather than degrading. Use `npm ci` on a deployment host.
 
-**MongoDB.** Set `DATABASE_URL` and have a server reachable:
+**MongoDB.** Set `DATABASE_URL` and have a server reachable. The team shares one Atlas database —
+connection string, seeding, the mailbox-host and teammate profiles and the rules are in
+[README.md, *Shared development database*](../README.md#shared-development-database-mongodb-atlas):
 
 ```bash
 mongosh "$DATABASE_URL" --eval 'db.runCommand({ping:1})'
 ```
 
-In development the backend still starts without it — the mailbox and audit trail fall back to memory
-and are cleared on restart, which the UI reports rather than hiding. Query Cases have no such
-fallback: `/api/v1/queries/*` answers `503` and the UI raises a toast saying changes were not saved.
-In production an unset or unreachable `DATABASE_URL` is a startup failure.
+A `DATABASE_URL` that is set must name its database and be reachable, in every environment, or the
+backend exits at startup. Only with it empty, in development, does the backend start without one —
+the mailbox and audit trail fall back to memory and are cleared on restart, which the UI reports
+rather than hiding. Query Cases have no such fallback: `/api/v1/queries/*` answers `503` and the UI
+raises a toast saying changes were not saved. In production an empty `DATABASE_URL` is a startup
+failure too.
 
 **Starting from a clean database.** `cd backend && npm run db:reset` clears the workflow state —
 cases, steps, reviews, versions, notifications, email records, the id counters and the audit trail —
 and deliberately **keeps `users`**, which is re-seeded from `src/constants/users.js` on every
 connect. It is a maintenance tool, not a seed: it inserts nothing, and the next accepted enquiry is
 case `00001`. `--dry-run` reports what would go and changes nothing; `--force` is required under
-`NODE_ENV=production`, where it otherwise refuses to run. The header **Reset** button does the same
-through `POST /queries/reset` and is Super-Admin-only on both sides.
+`NODE_ENV=production`, and to delete from a shared database, where it otherwise refuses. The header
+**Reset** button does the same through `POST /queries/reset` and is Super-Admin-only on both sides;
+it answers 409 under `NODE_ENV=production` or on a shared database. **Neither is for the team's
+shared database** — start clean on a local MongoDB.
 
 ### External prerequisites
 
@@ -99,7 +105,7 @@ Things that must be configured outside this repository. None of them can be fixe
 
 | Prerequisite | Needed for | Symptom when missing |
 |---|---|---|
-| A reachable MongoDB at `DATABASE_URL` | everything case-related | `503` on `/queries/*`; refusal to start in production |
+| A reachable MongoDB at `DATABASE_URL`, named in the URI | everything case-related | refusal to start when it is set but unnamed or unreachable, or empty in production; with it empty in development, `503` on `/queries/*` |
 | A NICeMail application-specific password | `EMAIL_TRANSPORT=nic`, `nic:verify` | IMAP `Invalid credentials`, SMTP `535`. A webmail password is rejected under MFA by design |
 | Network reach to `*.mgovcloud.in:993/465` | NICeMail IMAP/SMTP | `nic:preflight` reports the endpoint as unreachable |
 | `NIC_ALLOW_OUTBOUND=true` | NICeMail mail to anyone but the test recipient | the transport refuses the send and names the variable |
@@ -159,7 +165,9 @@ cd frontend && npm run build:check
 # JWT_SECRET is inherited from backend/.env).
 # Playwright starts both servers itself and refuses to adopt one it did not
 # start: a backend already on :5000 fails the run. Stop it first — that server
-# is usually pointed at the real database and a real mailbox.
+# is usually pointed at the real database and a real mailbox. The config also
+# refuses to start unless backend/.env.e2e exists and its DATABASE_URL is
+# exactly mongodb://127.0.0.1:27017/qms_e2e.
 cd frontend && npx playwright test           # or: npm run test:e2e
 
 # IPC knowledge base — expect "412 chunks from 22 documents (238142 chars)".

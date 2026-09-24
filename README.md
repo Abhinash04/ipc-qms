@@ -129,7 +129,7 @@ cd backend
 npm install
 cp .env.example .env
 # set JWT_SECRET (>=32 chars) and a sign-in credential for every account — the server
-# will not start without them
+# will not start without them — and DATABASE_URL (see "Shared development database")
 npm run dev        # http://localhost:5000
 ```
 
@@ -167,17 +167,109 @@ listed in [docs/auth.md](docs/auth.md):
 
 ### MongoDB
 
-Required. Set `DATABASE_URL` and have a reachable server:
+Required. Set `DATABASE_URL` and have a reachable server — the team's shared Atlas database (next
+section), or a local one such as `mongodb://127.0.0.1:27017/query_management_system`:
 
 ```bash
 mongosh "$DATABASE_URL" --eval 'db.runCommand({ping:1})'   # should print { ok: 1 }
 ```
 
-- **In development** the server still starts without it, and the mailbox and audit trail fall back
-  to memory. Query Cases do **not** — `/api/v1/queries/*` answers `503`, and the UI raises a toast
-  saying changes were not saved rather than pretending they were.
-- **In production** (`NODE_ENV=production`) an unset or unreachable `DATABASE_URL` is a startup
-  failure. The server exits with a non-zero code instead of serving requests it cannot persist.
+- **A `DATABASE_URL` that is set must name its database and be reachable, in every environment.**
+  Otherwise the server exits at startup with the reason (credentials redacted) instead of running
+  on in memory.
+- **Only an empty `DATABASE_URL` in development** starts without a database: the mailbox and audit
+  trail fall back to memory. Query Cases do **not** — `/api/v1/queries/*` answers `503`, and the UI
+  raises a toast saying changes were not saved rather than pretending they were.
+- **In production** (`NODE_ENV=production`) an empty `DATABASE_URL` is a startup failure too. The
+  server exits with a non-zero code instead of serving requests it cannot persist.
+
+### Shared development database (MongoDB Atlas)
+
+The team develops against **one** MongoDB Atlas database, so every developer's backend reads and
+writes the same cases, mailbox, dashboards and audit trail. Each developer still runs their own
+backend and frontend; the database is the single source of truth.
+
+**Connection string** — in `backend/.env` only:
+
+```env
+DATABASE_URL=mongodb+srv://<user>:<password>@<cluster>.mongodb.net/query_management_system?retryWrites=true&w=majority
+```
+
+- The path must name the database, `/query_management_system`. A URI without one is refused at
+  startup; otherwise every collection would land in `test`. URL-encode special characters in the
+  password.
+- The first connect waits up to 15 s (DNS SRV lookup and TLS). A wrong password, or a machine not on
+  the Atlas IP access list, stops the backend with a redacted error.
+- A `mongodb+srv://` URI or any host other than `localhost`/`127.0.0.1`/`::1` counts as **shared**.
+  On a shared database, startup only adds missing indexes (`createIndexes`) and never drops one.
+
+**Seeding** — once, when the database is new:
+
+```bash
+cd backend
+npm run db:provision -- --dry-run   # what it would create; writes nothing
+npm run db:provision                # the DATABASE_URL in backend/.env (or --uri "...")
+```
+
+It is idempotent: it creates the collections and indexes and inserts the 12 `@ipc.example`
+development identities from `src/constants/users.js` (`$setOnInsert`, so an existing account is left
+alone), and it writes **no cases**. A second run reports `0 newly inserted`. It syncs indexes to the
+models of the branch it runs from, so run it from this branch.
+
+**Two profiles.** Exactly one machine is the **mailbox host**: it runs the signed-in NICeMail Chrome
+session, syncs the inbox into the database and runs the retention sweep. Everyone else is a
+**teammate**, whose backend lists what the host stored and never touches NICeMail.
+
+| `backend/.env` | Mailbox host | Teammate |
+|---|---|---|
+| `NIC_BROWSER_MAILBOX` | `true` | `true`, with the same `NIC_EMAIL`, only to sign in as the NICeMail Front Office |
+| `NIC_BROWSER_VIEWER` | `false` | `true` |
+| `MAILBOX_SYNC_ENABLED` | `true` | `false` |
+| `MAILBOX_RETENTION_ENABLED` | `true` | `false` |
+| `EMAIL_TRANSPORT` | as agreed for the test | `mock` |
+| `NIC_ALLOW_OUTBOUND` | as agreed for the test | `false` |
+| `NIC_BROWSER_TEST_RECIPIENT` | the host's test address | your own address |
+
+The NICeMail Front Office (`USR-0014`) needs a credential in each developer's own passwords file;
+dev login refuses it. On a shared database the retention sweep starts only on the mailbox host.
+
+**Sends happen on the machine that clicks.** The acknowledgement and forward (on accept), a retry,
+and the final response (on final approval) go out from the backend of whoever pressed the button,
+under that backend's own configuration. A teammate's backend refuses a NICeMail send before touching
+Chrome: the case is saved, the email is recorded as failed, and the retry is made from the mailbox
+host. **Do the real NICeMail accept on the host.**
+
+**Verify the target** before doing anything else. The backend prints
+
+```
+[qms] MongoDB connected — <cluster-host>/query_management_system (shared: resets and mailbox wipes are refused)
+```
+
+and `GET /api/v1/health` answers `database: { connected: true }`. A teammate's backend also prints
+`NICeMail agent:  viewer — …`.
+
+**Rules:**
+
+- **No destructive operations.** The header **Reset** and `DELETE /api/v1/mailbox` answer 409 on a
+  shared database; `npm run db:reset`, `npm run mailbox:purge` and `npm run db:provision -- --truncate`
+  refuse without `--force`. Never pass `--force` here — use a local MongoDB to start clean.
+- **Pull before joining.** Update this branch and run `npm install` before pointing a backend at the
+  shared database.
+- **Never point an old branch at it** — `main`, `develop`, `Rawat`, `bhumika`, `aakash`,
+  `abhi-agent`. They lack these guards and the per-case revision check, and their startup drops
+  indexes this branch declares.
+- **One Atlas database user per developer**, and each developer adds their own IP to the Atlas access
+  list.
+- **Credentials live only in `backend/.env`** — never in `.env.example`, a commit, a chat or a
+  screenshot.
+- **Real citizen mail lives here.** Treat everything in it as personal data.
+- **Attachment bytes stay on the disk of the machine that stored them** — for NICeMail mail, the
+  host's. Elsewhere the attachment is listed but cannot be opened or forwarded.
+- **The e2e suite stays on the local `qms_e2e` database.** Playwright refuses to start otherwise.
+- **Keep development backends off shared networks.** A development backend answers password-less
+  dev login for every seeded account and listens on all interfaces, so anyone who can reach its port
+  can read and change the team's cases.
+- **Production must use a separate cluster and separate credentials**, never this database.
 
 ## Environment Variables
 
@@ -197,7 +289,7 @@ variable the code reads appears in it. The groups:
 | Email transport | `EMAIL_TRANSPORT` (`mock`\|`nic`), `MAILBOX_SOURCE` (`auto`\|`nic`) |
 | Stakeholder identities | front-office and officer-in-charge names and addresses (**required**), IPC query + acknowledgement addresses. There is deliberately no `INQUIRER_*` — an inquirer is whoever sent the mail. Only a Front Office mailbox is authenticated; nothing sends as an inquirer or as the Officer-in-Charge |
 | NICeMail IMAP/SMTP | hosts, ports, TLS flags, mailbox, app-password (or a file path to it), test recipient, `NIC_ALLOW_OUTBOUND`, `NIC_ALLOW_INTERNAL_FORWARD` |
-| NICeMail browser agent | `NIC_CDP_ENDPOINT`, tab-matching patterns, timeouts, artefact directory; as a second Front Office mailbox: `NIC_BROWSER_MAILBOX`, `NIC_FRONT_OFFICE_NAME`, `NIC_BROWSER_TEST_RECIPIENT`, `NIC_BROWSER_SYNC_TTL_MS`, `NIC_BROWSER_SYNC_MAX` |
+| NICeMail browser agent | `NIC_CDP_ENDPOINT`, tab-matching patterns, timeouts, artefact directory; as a second Front Office mailbox: `NIC_BROWSER_MAILBOX`, `NIC_BROWSER_VIEWER`, `NIC_FRONT_OFFICE_NAME`, `NIC_BROWSER_TEST_RECIPIENT`, `NIC_BROWSER_SYNC_TTL_MS`, `NIC_BROWSER_SYNC_MAX` |
 | Pravah Gemma | `GEMMA_API_URL`, `GEMMA_TIMEOUT_MS` |
 | Attachments | `ATTACHMENT_DIR` and the size/count caps |
 
@@ -205,8 +297,10 @@ The two NICeMail groups configure **two unrelated mechanisms** and must not be c
 [backend/README.md](backend/README.md) for the split.
 
 `JWT_SECRET` (≥32 characters) and a sign-in credential for every seeded account are **required —
-the server exits without them**, as is `DATABASE_URL` under `NODE_ENV=production`. Real `.env` files
-are gitignored and must never be committed; neither must NICeMail credentials.
+the server exits without them**, as is `DATABASE_URL` under `NODE_ENV=production`; a `DATABASE_URL`
+that is set must name its database and be reachable. Real `.env` files — `.env` and every `.env.*`
+except the `.env.example` files and `backend/.env.e2e` — are gitignored and must never be committed;
+neither must NICeMail credentials or a database URI with a password in it.
 
 ## Documentation
 

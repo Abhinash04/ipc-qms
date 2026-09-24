@@ -205,6 +205,7 @@ Browser-agent variables. All are optional, and the defaults come from
 | `NIC_BROWSER_TEST_RECIPIENT` | falls back to `NIC_TEST_RECIPIENT`, then `NIC_EMAIL` | The only address browser sends may reach until `NIC_ALLOW_OUTBOUND=true` | yes |
 | `NIC_ALLOW_INTERNAL_FORWARD` | `false` | `true` additionally allows `OFFICER_IN_CHARGE_EMAIL`, for the forward to the Officer-in-Charge alone, while `NIC_ALLOW_OUTBOUND` is still closed. A recipient allowance, not a second channel: the address is re-derived from configuration, never taken from a request. Read by `nic/outboundGuard.js`, and it requires a real `OFFICER_IN_CHARGE_EMAIL` at boot | yes |
 | `NIC_BROWSER_MAILBOX` | `false` | `true` makes NICeMail a second Front Office mailbox (§17). Only the exact string `true` enables it | yes |
+| `NIC_BROWSER_VIEWER` | `false` | `true` makes this backend a **viewer** on a shared database: it lists the NICeMail mail the mailbox host stored but never syncs, and refuses NICeMail sends before touching Chrome (§17, *Viewer mode*). Only the exact string `true` enables it | yes |
 | `NIC_FRONT_OFFICE_NAME` | `NICeMail Front Office` | A display **name**, not an address: the second Front Office user's name and the name on the From line of its mail. Empty falls back to the default | yes |
 | `NIC_BROWSER_SYNC_TTL_MS` | `30000` | Minimum gap between inbox syncs | yes |
 | `NIC_BROWSER_SYNC_MAX` | `20` | At most this many **new** messages opened per sync; the first sync takes the newest this many (§17, *How a sync reads the inbox*) | yes |
@@ -413,7 +414,8 @@ A connect failure is **not** an authentication failure. It says nothing about NI
 
 ### Terminal layout
 
-**Terminal 1 — MongoDB** (backend only; skip if the Windows service is already running)
+**Terminal 1 — MongoDB** (backend only, and a local MongoDB only: skip it on the team's shared Atlas
+database, or if the Windows service is already running)
 
 ```powershell
 Get-Service MongoDB                 # Status should be Running
@@ -1029,6 +1031,13 @@ Primary mailbox (FRONT_OFFICE_EMAIL)          NICeMail mailbox (NIC_EMAIL)
   `sync` field (*How a sync reads the inbox*, below), and the IPC Mailbox page shows it as **NICeMail
   could not be read — this list may be out of date** (§13). Stored mail still lists and the backend
   stays up.
+- **Viewer mode.** On a shared database only one backend, the mailbox host, reads NICeMail; every
+  other backend sets `NIC_BROWSER_VIEWER=true`. A viewer still lists the mail the host stored, but
+  every sync path returns before touching Chrome — `POST /mailbox/sync` answers `started: false` —
+  and the IPC Mailbox page hides **Sync now** and says NICeMail is read by the mailbox host. A
+  NICeMail send from a viewer is refused before any browser work, so the email is recorded as failed
+  and retried from the host: do real NICeMail accepts on the host. Profiles and rules:
+  [README.md, *Shared development database*](../README.md#shared-development-database-mongodb-atlas).
 - **In the dashboard.** The IPC Mailbox lists the stored messages with search, an All / Awaiting
   validation filter, pages of 50, a snippet of each body, and an unread dot for a message nobody has
   opened in the QMS. Opening one (`/front-officer/inbox/:messageId`) shows its headers, the body as

@@ -47,8 +47,9 @@ Operational scripts:
 
 | Script | Purpose |
 |---|---|
-| `npm run db:reset` | Clear the workflow state from MongoDB, keeping `users`. See [Resetting the workflow state](#resetting-the-workflow-state). |
-| `npm run mailbox:purge` | Triage inbound mail and strip the content of junk past the retention window. `--dry-run` first — it destroys content. See [Junk triage and retention](#junk-triage-and-retention). |
+| `npm run db:provision` | Create the collections and indexes at `DATABASE_URL` (or `--uri`) and insert the development identities; writes no cases, and is safe to repeat. `--dry-run` reports only; `--truncate` also clears workflow data and needs `--force` on a shared database. See [Shared development database](../README.md#shared-development-database-mongodb-atlas). |
+| `npm run db:reset` | Clear the workflow state from MongoDB, keeping `users`. Refuses a shared database without `--force`. See [Resetting the workflow state](#resetting-the-workflow-state). |
+| `npm run mailbox:purge` | Triage inbound mail and strip the content of junk past the retention window. `--dry-run` first — it destroys content. Refuses a shared database without `--force`. See [Junk triage and retention](#junk-triage-and-retention). |
 | `npm run triage:eval` | Score the triage prompt against a fixture set on the live Gemma endpoint. Fails if any genuine fixture is judged destroyable. Not part of `npm test`. |
 | `npm run ingest:ipc` | Rebuild `src/data/ipcKnowledge.json` from `docs/markdown/`. See [AI grounding](#ai-grounding-layer). |
 | `npm run nic:preflight` | Read-only NICeMail IMAP/SMTP reachability + auth probe. Never marks mail read. |
@@ -149,11 +150,12 @@ endpoints that must not be retried blindly.
 | POST | `/mailbox/messages/:messageId/ingested` | `verifyRole(FRONT_OFFICE, SUPER_ADMIN)` |
 | DELETE | `/mailbox/messages/:messageId` | `verifyRole(FRONT_OFFICE, SUPER_ADMIN)` |
 | POST | `/mailbox/receive` | `verifyRole(SUPER_ADMIN)` |
-| DELETE | `/mailbox` | `verifyRole(SUPER_ADMIN)` |
+| DELETE | `/mailbox` | `verifyRole(SUPER_ADMIN)` + `refuseDestructive` |
 
 The two `SUPER_ADMIN` routes are destructive/injection utilities, and both refuse outright (409) when
-`NODE_ENV=production`. They exist for tests; against a live NICeMail mailbox they would act on
-somebody's real mail.
+`NODE_ENV=production`; `DELETE /mailbox` also refuses when `DATABASE_URL` points at a shared
+database. They exist for tests; against a live NICeMail mailbox they would act on somebody's real
+mail.
 
 **Which mailbox a request acts on is decided by who is signed in** (`resolveMailbox` in
 `controllers/mailboxController.js`). With `NIC_BROWSER_MAILBOX=true`, the Front Office user whose
@@ -320,7 +322,7 @@ for any time window; the `today` half always overrides `from`.
 | GET | `/queries/is-empty` | `verifyToken` |
 | POST | `/queries/persist` | `verifyToken` + `validateBody(persistTransitionSchema)` |
 | POST | `/queries/:queryId/final-approval` | `verifyToken` + `verifyAction(FINAL_APPROVE)` + `validateBody(finalApprovalSchema)` |
-| POST | `/queries/reset` | `verifyToken` + `verifyRole(SUPER_ADMIN)` + `validateBody(resetQueryStateSchema)` |
+| POST | `/queries/reset` | `verifyToken` + `verifyRole(SUPER_ADMIN)` + `refuseDestructive` + `validateBody(resetQueryStateSchema)` |
 
 This is a delta-sync API, not a REST resource: the client hydrates the whole workflow store from
 `GET /queries` and posts one delta per committed transition. Every signed-in role uses both, which
@@ -337,6 +339,8 @@ Five things are enforced:
   signed-in user, including `INQUIRER`. The UI's Reset button is now rendered for `SUPER_ADMIN`
   only, and clears local state only once the server has accepted — a refused reset used to empty the
   tab anyway and leave it working against a zeroed counter while the server still held the cases.
+  `middleware/refuseDestructive.js` answers 409 with the reason when `NODE_ENV=production` or
+  `DATABASE_URL` points at a shared database, and the UI shows that reason.
 - **Bodies are schema-validated** (`validators/queryStateSchemas.js`). Zod strips keys the models
   never declared, so a caller cannot `$set` arbitrary fields into a document. The corollary is that
   a field the schema forgets is **lost in silence**, which is how three contract bugs survived: a
@@ -350,13 +354,19 @@ Five things are enforced:
 - **The audit actor comes from the session.** `actorType`, `actorRole` and `actorId` are taken from
   `req.user` and are rejected from the request body — an audit trail whose actor the caller names is
   an audit trail the caller can forge.
-- **`/queries/persist` answers 409 on a Case ID collision.** Every case write is an upsert keyed on
-  `queryId`, so the unique index can never fire: a second case minted with the same id does not
-  collide, it *replaces* the first and the original enquiry is gone. `createdAt` is the witness — a
-  genuine update carries the one the case was created with, a collision from another tab carries its
-  own — so a mismatch is refused and the stored case kept. Nothing mints a Case ID client-side any
-  more — intake is one server call — so this is now a backstop rather than a live race. It is kept
-  because the failure it prevents is a silently lost enquiry.
+- **`/queries/persist` refuses a stale or colliding write with 409 and a `code`**
+  (`{ code, error, queryId }`).
+  - `STALE_CASE`: every case carries a server-owned `revision` (a case stored before the field
+    existed counts as 0). The client sends the revision its change was built on as a top-level
+    `baseRevision`, 0 for a new case. The case write is a conditional update on that revision, run
+    before anything else, so a mismatch writes nothing — no step, review, notification, message,
+    counter or audit row. A client write moves `revision` on by one, and so do the server's own case
+    writes: pullback, final approval, the forward, dispatch and close, and mailbox accept.
+  - `ID_COLLISION`: a step, review, response version, message, thread or notification id in the delta
+    is already stored under another case, or the Case ID belongs to a different case (`createdAt` is
+    the witness — a genuine update carries the one the case was created with). Every sub-record
+    upsert is keyed on its `queryId` as well as its id, so a collision that slips past the checks hits
+    the unique index and is answered with this 409 instead of re-homing another case's row.
 - **Counters merge with `$max`, never `$set`.** A client reports the counter it believes it holds,
   and that belief goes stale: a second tab, a reload against an empty read, a refused reset. A
   wholesale `$set` let a stale value overwrite the server's, and the next case then re-issued an id
@@ -457,10 +467,13 @@ event; it previously returned a success envelope without writing anything.
 saying "PostgreSQL-ready" is obsolete.
 
 **Required in production, optional in development.** `server.js` awaits `connectDb()` and exits
-non-zero if it throws. `connectDb` throws when `NODE_ENV=production` and `DATABASE_URL` is unset or
-unreachable; otherwise it warns and returns `false`, and the process continues in degraded mode.
+non-zero if it throws. `connectDb` throws, in every environment, when `DATABASE_URL` is set but names
+no database or cannot be reached, and when it is unset under `NODE_ENV=production`. Only an unset
+`DATABASE_URL` in development makes it warn and return `false`, and the process continues in degraded
+mode. Error text passes through a redaction that drops the credentials from any connection string.
 
-The distinction matters because the degradation is uneven:
+The distinction matters because the degradation is uneven ("Without" means `DATABASE_URL` is
+unset):
 
 | Subsystem | With Mongo | Without |
 |---|---|---|
@@ -474,13 +487,20 @@ Nothing degrades silently: `mailbox.describe()` and `auditService.describe()` re
 and durability, the admin console surfaces "in-memory — not durable", and a failed write-through
 raises a toast in the UI rather than a false success.
 
-Connection options are set explicitly — `serverSelectionTimeoutMS: 3000`, `maxPoolSize: 20`,
+Connection options are set explicitly — `serverSelectionTimeoutMS: 15000`, `maxPoolSize: 20`,
 `minPoolSize: 2`, `socketTimeoutMS: 45000` — and `disconnected` / `reconnected` / `error` are logged,
-so an outage is visible rather than showing up as unexplained slowness.
+so an outage is visible rather than showing up as unexplained slowness. 15 s covers an Atlas SRV
+lookup and TLS handshake, and a typical primary election: while a configured database reconnects,
+the `requireDb` routes answer 503 at once, and the mailbox, audit trail and email ledger wait for the
+driver rather than switching to memory or sending without the ledger. The connect line names the
+host and database, never the URI, and says when the database is shared (a `mongodb+srv://` URI or
+any non-loopback host).
 
 **Indexes come from the schemas.** `connectDb()` calls `Model.syncIndexes()` on every model at
-startup. `createCollection()` builds an index that does not exist yet but will **not** rebuild one
-whose options have changed — which is how a unique index on `EmailMessage.sourceMessageId`, created
+startup — except on a shared development database, where it calls `Model.createIndexes()`, which
+only adds and never drops an index another branch declares. `npm run db:provision` remains the
+explicit sync there. `createCollection()` builds an index that does not exist yet but will **not**
+rebuild one whose options have changed — which is how a unique index on `EmailMessage.sourceMessageId`, created
 once without its filter, outlived the schema that said otherwise and made every outbound record
 collide on `null`. `syncIndexes()` drops and recreates what has drifted, and also drops indexes
 these model files do not declare. That is the intended contract: `src/models/` is where indexes are
@@ -592,9 +612,10 @@ Five things make a wrong verdict survivable:
 > Re-run the eval after any change to the prompt — `mailboxTriageGemma.test.js` pins the wording,
 > but only the eval shows what the model does with it.
 
-The sweep runs hourly from `server.js`, unref'd, off under `NODE_ENV=test` and when
-`MAILBOX_RETENTION_ENABLED=false`, and purges nothing in the first two hours after boot — the
-retention window is wall-clock, but the rescue window only exists while somebody can see the inbox,
+The sweep runs hourly from `server.js`, unref'd, off under `NODE_ENV=test`, when
+`MAILBOX_RETENTION_ENABLED=false`, and on a shared development database unless this backend is the
+mailbox host (`NIC_BROWSER_MAILBOX=true`, `NIC_BROWSER_VIEWER` off), and purges nothing in the
+first two hours after boot — the retention window is wall-clock, but the rescue window only exists while somebody can see the inbox,
 so a server back from a long outage must not purge its backlog before anyone has looked at it.
 
 ```bash
@@ -620,7 +641,7 @@ message's own `receivedAt`, so every backfilled row gets a full fresh window how
 ```bash
 npm run db:reset              # clear the workflow state at DATABASE_URL
 npm run db:reset -- --dry-run # report what would go, change nothing
-npm run db:reset -- --force   # required when NODE_ENV=production
+npm run db:reset -- --force   # required when NODE_ENV=production or the database is shared
 ```
 
 `scripts/resetWorkflowState.mjs` clears `querycases`, `workflowsteps`, `reviews`,
@@ -633,16 +654,18 @@ than continuing somebody else's sequence.
 
 `users` is deliberately untouched — it is re-seeded from `src/constants/users.js` on every connect,
 and those accounts are the staff directory the application needs, not fixtures. The script refuses
-to run under `NODE_ENV=production` without `--force`, exits if `DATABASE_URL` is unset, and redacts
-credentials out of the connection string before printing it.
+to run under `NODE_ENV=production` without `--force`, and to delete from a shared database (a
+`mongodb+srv://` URI or any non-loopback host) without it — do not pass it against the team's shared
+database. It exits if `DATABASE_URL` is unset, and prints the target, with credentials redacted, and
+whether it is shared before connecting.
 
 ## Email pipeline
 
 `services/email/mailbox/index.js` is a duck-typed swap seam: three implementations
 (`mockIpcMailbox`, `mongoIpcMailbox`, `nicInboxReader`) expose the same six functions (`deliver`,
 `list`, `markIngested`, `remove`, `reset`, `stats`), and the facade picks one at call time — forced
-override, then `MAILBOX_SOURCE=nic`, then Mongo if connected, else in-memory. `supportsDelivery()`
-is false for NICeMail, because a real inbox cannot be written into. The facade's
+override, then `MAILBOX_SOURCE=nic`, then Mongo if connected or `DATABASE_URL` is set, else
+in-memory. `supportsDelivery()` is false for NICeMail, because a real inbox cannot be written into. The facade's
 `get(recipient, id)` uses a store's own lookup, or finds the message in its list. `mongoIpcMailbox`
 shares its collection with the NICeMail browser mailbox and never lists, changes, deletes or clears
 a `source: 'nic-browser'` row.
@@ -905,6 +928,7 @@ mailbox, alongside whatever `MAILBOX_SOURCE` selects:
 | Variable | Default | Effect |
 |---|---|---|
 | `NIC_BROWSER_MAILBOX` | off | enables everything in this section |
+| `NIC_BROWSER_VIEWER` | off | `true` (the exact string) makes this backend a **viewer** of a mailbox another backend — the mailbox host — reads into a shared database: it lists the stored mail but never syncs (`sync.viewer: true`, no Sync now), and refuses NICeMail sends before touching Chrome, so the email is recorded as failed and retried from the host |
 | `NIC_EMAIL` | — | **required** with the flag, and must differ from `FRONT_OFFICE_EMAIL` (boot-blocking). The mailbox's address and its Front Office's sign-in |
 | `NIC_FRONT_OFFICE_NAME` | `NICeMail Front Office` | a display name, not an address — that user's name and the From-line name on its mail; empty falls back to the default |
 | `NIC_BROWSER_TEST_RECIPIENT` | `NIC_TEST_RECIPIENT`, then `NIC_EMAIL` | the only address browser sends may reach until `NIC_ALLOW_OUTBOUND=true` |
@@ -1024,7 +1048,7 @@ with the full boot-refusal table; the rules most often hit are:
 |---|---|
 | `JWT_SECRET` | required, ≥32 characters |
 | any account | must have a credential — `QMS_PASSWORDS_FILE`, `QMS_PASSWORD_<ID>`, or the shared mode explicitly enabled |
-| `DATABASE_URL` | required, and must be reachable, **when `NODE_ENV=production`** |
+| `DATABASE_URL` | required **when `NODE_ENV=production`**; whenever set, must name its database and be reachable |
 | `EMAIL_TRANSPORT` | must be `mock` or `nic`; `mock` is refused when `NODE_ENV=production` |
 | `MAILBOX_SOURCE` | must be `auto` or `nic` |
 | `SESSION_COOKIE_SAMESITE` | must be `lax`, `strict` or `none` |
@@ -1075,7 +1099,7 @@ What `NODE_ENV=production` changes, beyond the usual:
 
 | | Effect |
 |---|---|
-| `DATABASE_URL` | unset or unreachable is now a **startup failure**, not a degraded start |
+| `DATABASE_URL` | unset is now a **startup failure**, not a degraded start (unreachable already is in every environment) |
 | `trust proxy` | enabled (one hop), so `secure` cookies and rate-limit keys use the real client address |
 | Error bodies | 5xx returns a generic message; stacks never leave the process |
 | morgan | `combined` format rather than `dev` |
@@ -1101,8 +1125,10 @@ Also required:
 |---|---|---|
 | `ERR_MODULE_NOT_FOUND: Cannot find package '…'` at startup | `node_modules` is older than `package.json` | `npm install` (or `npm ci`) in `backend/` |
 | `DATABASE_URL is required when NODE_ENV=production` | no database configured | set `DATABASE_URL`; the server will not start without it in production |
-| `MongoDB is unreachable at DATABASE_URL` | server down, wrong host, firewall | `mongosh "$DATABASE_URL" --eval 'db.runCommand({ping:1})'` |
-| `/queries/*` returns 503 | MongoDB not connected | as above. In development the rest of the API keeps working |
+| `MongoDB is unreachable at DATABASE_URL` | server down, wrong host or password, firewall; on Atlas, this machine's IP missing from the access list | `mongosh "$DATABASE_URL" --eval 'db.runCommand({ping:1})'`; on Atlas, check your database user and add your IP |
+| `DATABASE_URL must be a mongodb:// or mongodb+srv:// URI that names its database` | the URI has no `/<database>` path | add `/query_management_system` before the `?` |
+| `/queries/*` returns 503 | MongoDB not connected: `DATABASE_URL` unset in development, or the connection lost mid-run | set it and restart. A loss mid-run (an Atlas primary election) recovers by itself |
+| Reset or `DELETE /mailbox` answers 409 `… refused when DATABASE_URL points at a shared database` | intended: destructive routes are refused on a shared database | use a local MongoDB to start clean |
 | Browser reports a CORS failure | `CLIENT_URL` does not match the frontend's actual origin | set it exactly; `http://localhost:5173` ≠ `http://127.0.0.1:5173` |
 | 401 on every API call after sign-in | cookie not being sent | check `SESSION_COOKIE_SAMESITE`, and that the frontend uses `withCredentials` (it does by default) |
 | `nic:verify` → `Invalid credentials` / `535` | webmail password used instead of an app password | generate one at webmail → Security → App Passwords |
@@ -1176,11 +1202,15 @@ legitimately writes through `/queries/persist`, so the substance is per-case mem
   Front Office, Officer-in-Charge, Admin and Super Admin see everything; an Assigned Official and a
   Reviewer see only the cases they are on; any other role sees none. `GET /queries` is filtered by
   it.
-- `middleware/authorizeCaseDelta.js` guards `POST /queries/persist` with two checks, both against
-  state as **stored before** the delta: the protected values a role may set, and membership of every
-  case the delta touches — including cases reached through a stored row rather than named, which is
-  what stops a foreign workflow step being re-homed onto a case you are entitled to. Membership is
-  never read from the body, because the body writes the very fields membership is derived from.
+- `middleware/authorizeCaseDelta.js` guards `POST /queries/persist`, always against state as
+  **stored before** the delta. It answers **409** `STALE_CASE` when `baseRevision` is not the case's
+  stored `revision`, checks the protected values a role may set, and answers **409** `ID_COLLISION`
+  when a row id in the delta is stored under a case the delta does not name, which is what stops a
+  foreign row being re-homed onto a case you are entitled to. Both 409s come before the scope check,
+  so a stale or colliding write gets a conflict the client reloads on rather than a 403. Only then
+  is membership checked for every case the delta touches, including cases reached through a stored
+  row rather than named. Membership is never read from the body, because the body writes the very
+  fields membership is derived from.
 - `middleware/authorizeAttachmentAccess.js` resolves an attachment's owning case — through the
   message it arrived on, when the attachment predates the case — and admits only a principal party to
   it. An attachment with no case yet is readable by its uploader and by the roles that see
@@ -1191,9 +1221,9 @@ All three fail closed: no store means **503**, not a pass, because "cannot tell"
 
 Destructive routes are restricted to `SUPER_ADMIN`: `DELETE /api/v1/mailbox` and
 `POST /mailbox/receive`, because against a live mailbox they act on somebody's real mail, and
-`POST /queries/reset`, because it deletes every case in the system. The first two additionally refuse
-with **409** when `NODE_ENV=production`. `POST /queries/reset` does **not**, and it is the most
-destructive of the three — see [what is not enforced yet](#what-is-not-enforced-yet).
+`POST /queries/reset`, because it deletes every case in the system. All three additionally refuse
+with **409** when `NODE_ENV=production`, and `DELETE /mailbox` and `POST /queries/reset` also when
+`DATABASE_URL` points at a shared database — see [what is not enforced yet](#what-is-not-enforced-yet).
 
 Request bodies on `/queries/*` and `/queries/:id/pullback` are validated against Zod schemas by
 `middleware/validateBody.js`, which **replaces** `req.body` with the parsed result — validating
@@ -1238,9 +1268,9 @@ Both guards fail closed with **401** if `req.user` is absent, so a route mis-wir
    default when `NODE_ENV` is unset — and the process listens on all interfaces, so anyone who can
    reach the port can sign in as any seeded account. Only the NICeMail Front Office is refused (403,
    audited). Do not run a development-mode backend where untrusted hosts can reach it.
-5. **`POST /queries/reset` in production.** It deletes every case in the system and, unlike the two
-   mailbox fixtures, has no production refusal. It is `SUPER_ADMIN`-only, which is the whole of its
-   protection.
+5. **`POST /queries/reset` on a local database.** It deletes every case in the system. It is refused
+   under `NODE_ENV=production` and on a shared database; elsewhere `SUPER_ADMIN`-only is the whole of
+   its protection.
 6. **Mailbox pinning is not complete.** The primary mailbox's `?recipient=` no longer reaches
    NICeMail rows, but its accept still takes a message by id from the request body, and the decision
    routes are not scoped. See

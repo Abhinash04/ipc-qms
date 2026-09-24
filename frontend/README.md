@@ -34,7 +34,9 @@ on here, because `NODE_ENV` is development. Sign-in uses one distinct password p
 gives to both the server and the test process. Only `JWT_SECRET` is inherited from the gitignored
 `backend/.env`. **Stop a hand-started backend first**: `reuseExistingServer`
 is `false` for the backend, so anything already on `:5000` makes the run fail outright rather than be
-adopted along with whatever database and mail transport it holds.
+adopted along with whatever database and mail transport it holds. The config also refuses to start
+unless `backend/.env.e2e` exists and its `DATABASE_URL` is exactly
+`mongodb://127.0.0.1:27017/qms_e2e`, so the suite can never wipe the shared development database.
 
 **Environment** — one variable:
 
@@ -182,7 +184,10 @@ write-through is reported rather than swallowed:
 - `loadAll()` throws on failure. `hydrate()` turns that into `persistenceError`.
 - the write paths keep the optimistic local update — the user's action already took effect on
   screen — and raise one toast, `"Changes were not saved"`, under a fixed id so a mailbox sweep
-  produces one message rather than a dozen. A 403 and a 503 get their own wording.
+  produces one message rather than a dozen. A 403 and a 503 get their own wording; a 409 without a
+  conflict code shows the server's reason (a Reset refused on a shared database, say). The reload
+  that follows every write (below) then replaces a refused update with the saved state; with the
+  server unreachable the optimistic update stays until a reload succeeds.
 - a **400** names the field. `validateBody` has always answered `{ error, fields: ['auditEvent.event'] }`
   and this module discarded the list, so a contract mismatch between this client and the server's
   schema — a bug, not something a user can retry their way out of — read as an unactionable "changes
@@ -193,6 +198,42 @@ write-through is reported rather than swallowed:
 
 What else crosses the wire: authentication, emails (send/forward/acknowledge/ingest/delete),
 attachment bytes and metadata, AI requests, health, and the server-side audit trail.
+
+### Staying current with a shared database
+
+Teammates write to the same database, so the store reloads in the background. There is no polling.
+
+- **Triggers.** Window focus, the tab becoming visible and every route change
+  (`components/workflow/WorkflowRevalidation.jsx`, mounted in `MainLayout`) — skipped within 2 s of
+  the last reload, while offline and while signed out; every write this tab persists, whatever its
+  outcome; and the server actions — accept, forward, final approval, dispatch, resolve — which read
+  their result back. Background reloads that overlap share one request (`revalidate()` is
+  single-flight).
+- **Quiet.** Rows that did not change keep their identity (`replaceEqualDeep`), so nothing
+  re-renders and the AI recommendation is not requested again. A background reload batches its
+  toasts, so a teammate's history does not arrive as a burst; if it fails it raises nothing, and if
+  it lands after sign-out it is dropped.
+- **Ordered.** Writes and reads share one queue in `queryState.js`, and `loadAll` fetches again if a
+  write was queued behind its read, so a reload never undoes an optimistic change still in flight.
+- **Missing cases.** A case this tab has not loaded — a teammate's new case, reached from a
+  notification — triggers one reload from `useQueryCase`. The detail pages show *Loading case…*
+  until it lands, then the case or *Query not found*.
+
+**Conflicts.** Every delta carries `baseRevision`, the case `revision` its change was built on
+(`computeTransition` stamps the local copy with that plus one). The server answers **409** with a
+code. A `STALE_CASE`, or an `ID_COLLISION` caught by the checks that run before the write, writes
+nothing; a collision that only the unique index catches can leave the case row and some of its
+records written, and the reload that follows shows what was saved.
+
+| Code | Meaning | Toast, after a quiet reload |
+|---|---|---|
+| `STALE_CASE` | a teammate changed the case first | *QRY-… was changed by someone else* — "Showing the latest; redo your last step." |
+| `ID_COLLISION` | an id this tab minted from its counters already belongs to another case | *QRY-… clashed with a teammate's change* — "Record ids were reused; the latest is shown — please retry." |
+
+After any failed write, later writes for that case built before the next reload are dropped rather
+than sent, so a queued step cannot land on top of a teammate's change. The five server actions above
+first wait for this tab's queued writes, so the revision the server moves on never makes the user's
+own write look stale.
 
 ## Mail intake — the validation gate
 
@@ -205,7 +246,10 @@ each undecided row carries two circular icon buttons:
 | ✕ **Reject** | records the decision and nothing else: no case, no Case ID, no acknowledgement. The message stays listed, marked *Rejected*. |
 
 Both confirm first, and both are final — the server keeps the first decision on a message and
-ignores any later one.
+ignores any later one. With teammates on one database the controls follow the polled list: a row
+someone else decided loses them on the next list refresh (every 15 s while auto-refresh is on). A ✗
+on a message already decided warns *Already decided by someone else* and changes nothing; a ✓ on a
+message already rejected is refused with a 409, and the toast gives the server's reason.
 
 **Accepting mints nothing in the browser.** The whole sequence runs server-side, and
 `acceptMailboxMessage` then calls `refreshFromServer()` to read the result back rather than
@@ -407,6 +451,14 @@ and no retries. Playwright starts both servers itself and **refuses to adopt one
 a backend already listening on `:5000` fails the run with *"http://localhost:5000 is already used"*.
 That is deliberate — a backend left over from a development session is typically pointed at the real
 database and a real mailbox, and adopting it would run the suite against both. Stop it and re-run.
+
+Two more guards keep the suite off the shared development database. `playwright.config.js` throws
+before starting anything if `backend/.env.e2e` is missing — without it the backend would load
+`backend/.env` and its database — or if its `DATABASE_URL` is not exactly
+`mongodb://127.0.0.1:27017/qms_e2e`. And the Vite server it starts is given
+`VITE_API_BASE_URL=http://localhost:5000/api/v1`, so the UI talks to the e2e backend. A Vite server
+already running on `:5173` is still reused outside CI and keeps its own `VITE_API_BASE_URL`, so stop
+one that points anywhere else.
 
 Four specs:
 
