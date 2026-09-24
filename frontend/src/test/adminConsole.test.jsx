@@ -16,6 +16,7 @@ vi.mock('@/services/api/healthService', () => ({
   fetchHealth: vi.fn().mockResolvedValue({ status: 'healthy', service: 'qms-backend' }),
 }));
 vi.mock('@/services/api/mailboxService', () => ({
+  rescueMailboxMessage: vi.fn().mockResolvedValue({ rescued: true }),
   fetchEmailConfig: vi.fn().mockResolvedValue({ transport: 'mock', ipcQueryEmail: 'ipc@test.invalid', participants: [] }),
   fetchMailboxMessages: vi.fn().mockResolvedValue({ messages: [] }),
   fetchMailboxDecisions: vi.fn().mockResolvedValue({ decisions: [] }),

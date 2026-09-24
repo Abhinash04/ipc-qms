@@ -13,6 +13,7 @@ import { bucketsForRole } from '@/constants/queryBuckets';
 import { ROLES } from '@/constants/roles';
 
 vi.mock('@/services/api/mailboxService', () => ({
+  rescueMailboxMessage: vi.fn().mockResolvedValue({ rescued: true }),
   fetchEmailConfig: vi.fn().mockResolvedValue({}),
   fetchMailboxMessages: vi.fn().mockResolvedValue({ messages: [] }),
   fetchMailboxDecisions: vi.fn().mockResolvedValue({ decisions: [] }),

@@ -12,6 +12,7 @@ import { installFakeCaseMail } from '@/test/fakeCaseMail';
 import { EXTERNAL_INQUIRER as INQUIRER } from '@/test/externalInquirer';
 
 vi.mock('@/services/api/mailboxService', () => ({
+  rescueMailboxMessage: vi.fn().mockResolvedValue({ rescued: true }),
   fetchEmailConfig: vi.fn().mockResolvedValue({}),
   fetchMailboxMessages: vi.fn().mockResolvedValue({ messages: [] }),
   fetchMailboxDecisions: vi.fn().mockResolvedValue({ decisions: [] }),

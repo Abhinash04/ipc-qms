@@ -9,6 +9,7 @@ import { useWorkflowStore } from '@/store/useWorkflowStore';
 import { findUserById } from '@/constants/mockUsers';
 
 vi.mock('@/services/api/mailboxService', () => ({
+  rescueMailboxMessage: vi.fn().mockResolvedValue({ rescued: true }),
   fetchEmailConfig: vi.fn().mockResolvedValue({}),
   fetchMailboxMessages: vi.fn().mockResolvedValue({ messages: [] }),
   fetchMailboxDecisions: vi.fn().mockResolvedValue({ decisions: [] }),

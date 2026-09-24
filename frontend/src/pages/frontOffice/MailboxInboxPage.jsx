@@ -10,6 +10,8 @@ import {
   MailIcon,
   RefreshCwIcon,
   ShieldAlert,
+  ShieldCheck,
+  Clock,
   CheckCircle2,
   ArrowRight,
   Trash2Icon,
@@ -43,6 +45,7 @@ import {
   fetchMailboxMessages,
   fetchMailboxDecisions,
   deleteMailboxMessage,
+  rescueMailboxMessage,
   syncMailbox,
 } from "@/services/api/mailboxService";
 import { notify } from "@/services/notify";
@@ -61,10 +64,33 @@ const SYNC_POLL_MS = 3000;
 const PAGE_SIZE = 50;
 const SEARCH_DEBOUNCE_MS = 300;
 
-const MAIL_FILTERS = [
-  { awaiting: false, label: "All mail" },
-  { awaiting: true, label: "Awaiting" },
+// A three-way view rather than two booleans. `awaiting` and `junkOnly` are
+// mutually exclusive by construction on the server: rejecting a message sets
+// `ingested`, and `awaiting` means `ingested: false`, so asking for both at once
+// would always return nothing.
+const MAIL_VIEWS = [
+  { value: "all", label: "All mail", awaiting: false, junkOnly: false },
+  { value: "awaiting", label: "Awaiting", awaiting: true, junkOnly: false },
+  { value: "junk", label: "Junk", awaiting: false, junkOnly: true },
 ];
+
+const viewByValue = (value) => MAIL_VIEWS.find((entry) => entry.value === value) || MAIL_VIEWS[0];
+
+/**
+ * How long before the retention sweep strips this message's content.
+ *
+ * Rounded coarsely on purpose: the sweep runs hourly, so a to-the-minute
+ * countdown would promise a precision the schedule does not have.
+ */
+function describePurge(purgesAt, now = Date.now()) {
+  if (!purgesAt) return null;
+  const at = Date.parse(purgesAt);
+  if (Number.isNaN(at)) return null;
+  const hours = Math.round((at - now) / 3600000);
+  if (hours <= 0) return "purges next sweep";
+  if (hours < 48) return `purges in ${hours}h`;
+  return `purges in ${Math.round(hours / 24)}d`;
+}
 
 function useDebouncedValue(value, ms) {
   const [debounced, setDebounced] = useState(value);
@@ -226,7 +252,7 @@ function InboxActions({
   );
 }
 
-function InboxToolbar({ search, onSearchChange, awaiting, onAwaitingChange }) {
+function InboxToolbar({ search, onSearchChange, view, onViewChange }) {
   return (
     <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-5">
       <div role="search" className="relative flex-1">
@@ -253,20 +279,20 @@ function InboxToolbar({ search, onSearchChange, awaiting, onAwaitingChange }) {
         aria-label="Filter mail"
         className="flex self-start sm:self-auto bg-slate-100/80 p-1 rounded-xl shrink-0"
       >
-        {MAIL_FILTERS.map((filter) => (
+        {MAIL_VIEWS.map((entry) => (
           <button
-            key={filter.label}
+            key={entry.value}
             type="button"
-            aria-pressed={awaiting === filter.awaiting}
-            onClick={() => onAwaitingChange(filter.awaiting)}
+            aria-pressed={view === entry.value}
+            onClick={() => onViewChange(entry.value)}
             className={cn(
               "px-3 py-1.5 text-[12px] font-bold rounded-lg transition-colors cursor-pointer",
-              awaiting === filter.awaiting
+              view === entry.value
                 ? "bg-white text-slate-800 shadow-sm"
                 : "text-slate-500 hover:text-slate-700",
             )}
           >
-            {filter.label}
+            {entry.label}
           </button>
         ))}
       </div>
@@ -402,7 +428,7 @@ function QueryCaseCell({ known, queryId, detailPath, rejected }) {
   );
 }
 
-function RowValidationControls({ message, decision, pending, confirming, onAsk, onCancel, onConfirm }) {
+function RowValidationControls({ message, decision, junk, pending, confirming, onAsk, onCancel, onConfirm, onRescue }) {
   if (decision) return null;
 
   if (confirming) {
@@ -479,6 +505,29 @@ function RowValidationControls({ message, decision, pending, confirming, onAsk, 
           </TooltipContent>
         </Tooltip>
       </TooltipProvider>
+
+      {junk ? (
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                aria-label={`Rescue message ${message.mailboxMessageId}`}
+                onClick={onRescue}
+                disabled={pending}
+                className="border border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100 hover:text-amber-800"
+              >
+                <ShieldCheck className="h-4 w-4" aria-hidden="true" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent className="max-w-70 wrap-break-word">
+              Not junk. Clears the verdict so it is never purged, without opening
+              a Query Case the way accepting would.
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      ) : null}
     </div>
   );
 }
@@ -568,12 +617,18 @@ function MailboxRow({
   onAskDecision,
   onCancelDecision,
   onConfirmDecision,
+  onRescue,
 }) {
   const navigate = useNavigate();
   const sender = parseSender(message.from);
   const received = formatReceived(message.receivedAt);
   const rejected = decision?.decision === "REJECTED";
   const unread = message.isRead === false;
+  const junk = message.triage?.verdict === "JUNK" && !message.triage?.rescuedAt;
+  // Shown for both retention tiers, so nothing is destroyed without notice. A
+  // message that already became a case is safe and says so through its case
+  // link instead.
+  const purge = describePurge(message.triage?.purgesAt);
 
   const openFromRow = (event) => {
     if (
@@ -662,6 +717,17 @@ function MailboxRow({
               {message.attachments.length}
             </span>
           )}
+          {purge && !known ? (
+            <span
+              className={cn(
+                "ml-1 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10.5px] font-bold",
+                junk ? "bg-amber-100 text-amber-700" : "bg-slate-100 text-slate-500",
+              )}
+            >
+              <Clock className="h-3 w-3" aria-hidden="true" />
+              {purge}
+            </span>
+          ) : null}
         </div>
       </div>
 
@@ -692,11 +758,13 @@ function MailboxRow({
         <RowValidationControls
           message={message}
           decision={decision}
+          junk={junk}
           pending={pending}
           confirming={confirming?.action === "accept" || confirming?.action === "reject" ? confirming.action : null}
           onAsk={onAskDecision}
           onCancel={onCancelDecision}
           onConfirm={onConfirmDecision}
+          onRescue={onRescue}
         />
         <RowDeleteControls
           message={message}
@@ -776,16 +844,17 @@ export function MailboxInboxPage() {
   const [confirming, setConfirming] = useState(null);
   const [deciding, setDeciding] = useState(false);
   const [search, setSearch] = useState("");
-  const [awaiting, setAwaiting] = useState(false);
+  const [view, setView] = useState("all");
+  const current = viewByValue(view);
   const [offset, setOffset] = useState(0);
   const q = useDebouncedValue(search.trim(), SEARCH_DEBOUNCE_MS);
 
   const queryClient = useQueryClient();
 
   const inbox = useQuery({
-    queryKey: ["mailbox", "list", { q, awaiting, offset }],
+    queryKey: ["mailbox", "list", { q, view, offset }],
     queryFn: () =>
-      fetchMailboxMessages({ unreadOnly: awaiting, q, limit: PAGE_SIZE, offset }),
+      fetchMailboxMessages({ unreadOnly: current.awaiting, junkOnly: current.junkOnly, q, limit: PAGE_SIZE, offset }),
     placeholderData: keepPreviousData,
     retry: false,
     refetchInterval: (query) => {
@@ -828,6 +897,21 @@ export function MailboxInboxPage() {
     onSuccess: () => {
       setConfirming(null);
       queryClient.invalidateQueries({ queryKey: ["mailbox"] });
+    },
+  });
+
+  const rescueMessage = useMutation({
+    mutationFn: (mailboxMessageId) => rescueMailboxMessage(mailboxMessageId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["mailbox"] });
+      notify.success("Kept", {
+        description: "The junk verdict is cleared. This message will not be purged.",
+      });
+    },
+    onError: (error) => {
+      notify.error("Could not keep that message", {
+        description: error?.response?.data?.error || error?.message || "Please try again.",
+      });
     },
   });
 
@@ -905,12 +989,14 @@ export function MailboxInboxPage() {
     setOffset(0);
   };
 
-  const onAwaitingChange = (value) => {
-    setAwaiting(value);
+  const onViewChange = (value) => {
+    setView(value);
+    // Page 3 of the old view is rarely page 3 of the new one, and landing past
+    // the end makes the pager walk itself back a page per render.
     setOffset(0);
   };
 
-  const filtered = Boolean(q) || awaiting;
+  const filtered = Boolean(q) || view !== "all";
 
   const getQueryDetailPath = (queryId) => {
     if (paths.QUERY_DETAIL) {
@@ -962,8 +1048,8 @@ export function MailboxInboxPage() {
         <InboxToolbar
           search={search}
           onSearchChange={onSearchChange}
-          awaiting={awaiting}
-          onAwaitingChange={onAwaitingChange}
+          view={view}
+          onViewChange={onViewChange}
         />
 
         {inbox.isPending ? (
@@ -1019,6 +1105,7 @@ export function MailboxInboxPage() {
                     onDelete={() =>
                       deleteMessage.mutate(message.mailboxMessageId)
                     }
+                    onRescue={() => rescueMessage.mutate(message.mailboxMessageId)}
                     onAskDecision={(action) =>
                       setConfirming({ id: message.mailboxMessageId, action })
                     }

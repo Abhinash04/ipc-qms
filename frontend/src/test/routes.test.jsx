@@ -11,6 +11,7 @@ import { buildPath } from '@/constants/routePaths';
 import { findUserById } from '@/constants/mockUsers';
 
 vi.mock('@/services/api/mailboxService', () => ({
+  rescueMailboxMessage: vi.fn().mockResolvedValue({ rescued: true }),
   fetchEmailConfig: vi.fn().mockResolvedValue({
     transport: 'mock',
     ipcQueryEmail: 'ipc-query-mock@example.com',

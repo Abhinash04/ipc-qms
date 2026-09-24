@@ -15,6 +15,7 @@ import {
   acceptMailboxMessage,
   deleteMailboxMessage,
   markMessageIngested,
+  rescueMailboxMessage,
   sendAcknowledgement,
   forwardQuery,
   syncMailbox,
@@ -22,6 +23,7 @@ import {
 import { fakeAcceptEndpoint } from '@/test/fakeAcceptEndpoint';
 
 vi.mock('@/services/api/mailboxService', () => ({
+  rescueMailboxMessage: vi.fn().mockResolvedValue({ rescued: true }),
   fetchEmailConfig: vi.fn().mockResolvedValue({}),
   fetchMailboxMessages: vi.fn(),
   fetchMailboxMessage: vi.fn().mockResolvedValue(null),
@@ -743,5 +745,145 @@ describe('Sync now', () => {
       vi.clearAllTimers();
       vi.useRealTimers();
     }
+  });
+});
+
+describe('the Junk view', () => {
+  const hoursFromNow = (n) => new Date(Date.now() + n * 3600000).toISOString();
+
+  const junkMessage = (n, subject, over = {}) => ({
+    ...message(n, subject, 'Blast <news@marketing.invalid>'),
+    triage: {
+      verdict: 'JUNK',
+      confidence: 1,
+      reason: 'one-click unsubscribe',
+      classifier: 'rules',
+      rule: 'bulk',
+      classifiedAt: '2026-08-18T09:00:00.000Z',
+      rescuedAt: null,
+      purgesAt: hoursFromNow(12),
+      ...over,
+    },
+  });
+
+  it('asks the server for junk only, and starts at the first page', async () => {
+    // The filter has to be server-side: the page asks for 50 rows at a time and
+    // renders the server's `total`, so filtering the page in the browser would
+    // report counts for rows it did not show.
+    fetchMailboxMessages.mockResolvedValue({ messages: [junkMessage(9, 'Half price reagents')] });
+    renderInbox();
+    await screen.findByText('Half price reagents');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Junk' }));
+
+    expect(screen.getByRole('button', { name: 'Junk' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: 'All mail' })).toHaveAttribute('aria-pressed', 'false');
+    await waitFor(() =>
+      expect(fetchMailboxMessages).toHaveBeenLastCalledWith(
+        expect.objectContaining({ junkOnly: true, unreadOnly: false, offset: 0 }),
+      ),
+    );
+  });
+
+  it('never asks for Awaiting and Junk at once, since that pair is always empty', async () => {
+    fetchMailboxMessages.mockResolvedValue({ messages: [junkMessage(9, 'Half price reagents')] });
+    renderInbox();
+    await screen.findByText('Half price reagents');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Awaiting' }));
+    await waitFor(() =>
+      expect(fetchMailboxMessages).toHaveBeenLastCalledWith(
+        expect.objectContaining({ unreadOnly: true, junkOnly: false }),
+      ),
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Junk' }));
+    await waitFor(() =>
+      expect(fetchMailboxMessages).toHaveBeenLastCalledWith(
+        expect.objectContaining({ unreadOnly: false, junkOnly: true }),
+      ),
+    );
+  });
+
+  it('warns how long is left before the content is destroyed', async () => {
+    fetchMailboxMessages.mockResolvedValue({ messages: [junkMessage(9, 'Half price reagents')] });
+    renderInbox();
+
+    expect(await screen.findByText('purges in 12h')).toBeInTheDocument();
+  });
+
+  it('counts a long window in days rather than a three-figure number of hours', async () => {
+    fetchMailboxMessages.mockResolvedValue({
+      messages: [junkMessage(9, 'Unactioned enquiry', { verdict: 'GENUINE', confidence: 0, purgesAt: hoursFromNow(336) })],
+    });
+    renderInbox();
+
+    expect(await screen.findByText('purges in 14d')).toBeInTheDocument();
+  });
+
+  it('warns on a genuine message too, because the second tier will take it', async () => {
+    // The countdown is not a junk badge. A message nobody registered is
+    // destroyed on the longer window whatever its verdict, and the inbox must
+    // not imply otherwise.
+    fetchMailboxMessages.mockResolvedValue({
+      messages: [junkMessage(9, 'Unactioned enquiry', { verdict: 'GENUINE', confidence: 0, purgesAt: hoursFromNow(20) })],
+    });
+    renderInbox();
+
+    expect(await screen.findByText('purges in 20h')).toBeInTheDocument();
+  });
+
+  it('says nothing about purging for a message with no verdict at all', async () => {
+    fetchMailboxMessages.mockResolvedValue({ messages: [message(1, 'Ordinary enquiry')] });
+    renderInbox();
+    await screen.findByText('Ordinary enquiry');
+
+    expect(screen.queryByText(/purges in/)).not.toBeInTheDocument();
+  });
+
+  it('offers Rescue on a junk row and clears the verdict without opening a case', async () => {
+    fetchMailboxMessages.mockResolvedValue({ messages: [junkMessage(9, 'Half price reagents')] });
+    renderInbox();
+    await screen.findByText('Half price reagents');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Rescue message MSG-00009' }));
+
+    await waitFor(() => expect(rescueMailboxMessage).toHaveBeenCalledWith('MSG-00009'));
+    // Rescuing is not accepting: no case, no acknowledgement, no forward.
+    expect(acceptMailboxMessage).not.toHaveBeenCalled();
+    expect(sendAcknowledgement).not.toHaveBeenCalled();
+    expect(useWorkflowStore.getState().queries).toHaveLength(0);
+  });
+
+  it('offers no Rescue on a message that was never judged junk', async () => {
+    fetchMailboxMessages.mockResolvedValue({ messages: [message(1, 'Ordinary enquiry')] });
+    renderInbox();
+    await screen.findByText('Ordinary enquiry');
+
+    expect(screen.queryByRole('button', { name: /Rescue message/ })).not.toBeInTheDocument();
+  });
+
+  it('offers no Rescue once the verdict has already been cleared', async () => {
+    fetchMailboxMessages.mockResolvedValue({
+      messages: [junkMessage(9, 'Half price reagents', { rescuedAt: '2026-08-19T09:00:00.000Z', purgesAt: null })],
+    });
+    renderInbox();
+    await screen.findByText('Half price reagents');
+
+    expect(screen.queryByRole('button', { name: /Rescue message/ })).not.toBeInTheDocument();
+    expect(screen.queryByText(/purges in/)).not.toBeInTheDocument();
+  });
+
+  it('tells the Front Officer when a rescue could not be recorded', async () => {
+    fetchMailboxMessages.mockResolvedValue({ messages: [junkMessage(9, 'Half price reagents')] });
+    rescueMailboxMessage.mockRejectedValueOnce({ response: { data: { error: 'Mailbox unavailable' } } });
+    const failed = vi.spyOn(notify, 'error');
+    renderInbox();
+    await screen.findByText('Half price reagents');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Rescue message MSG-00009' }));
+
+    await waitFor(() => expect(failed).toHaveBeenCalled());
+    expect(failed.mock.calls[0][1].description).toMatch(/Mailbox unavailable/);
   });
 });
