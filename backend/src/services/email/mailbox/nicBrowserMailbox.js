@@ -316,6 +316,7 @@ export {
   stats,
   describe,
   sync,
+  syncIfDue,
   syncStatus,
   resetSyncState,
 };

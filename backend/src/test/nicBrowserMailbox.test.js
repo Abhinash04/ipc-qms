@@ -189,6 +189,10 @@ describe('signing in as the NICeMail Front Office', () => {
 });
 
 describe('syncing the NICeMail inbox', () => {
+  it('offers the scheduler the syncIfDue it calls on every tick', () => {
+    expect(nicMailbox.syncIfDue).toBeTypeOf('function');
+  });
+
   it('stores each provider message exactly once, however often the inbox is read', async () => {
     const reader = vi.fn(async ({ skip }) => [read('row-1'), read('row-2')].filter((m) => !skip.has(m.providerMessageId)));
 
