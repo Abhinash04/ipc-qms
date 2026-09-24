@@ -127,9 +127,10 @@ Run both halves. The frontend needs the backend for sign-in, email, attachments 
 ```bash
 cd backend
 npm install
-cp .env.example .env
+cp .env.example .env.local
 # set JWT_SECRET (>=32 chars) and a sign-in credential for every account — the server
-# will not start without them — and DATABASE_URL (see "Shared development database")
+# will not start without them — and DATABASE_URL (see "Shared development database").
+# Every variable is described in docs/ENVIRONMENT.md
 npm run dev        # http://localhost:5000
 ```
 
@@ -143,7 +144,7 @@ npm run dev        # http://localhost:5000
 ```bash
 cd frontend
 npm install
-cp .env.example .env
+cp .env.example .env.local
 npm run dev        # http://localhost:5173
 ```
 
@@ -189,7 +190,7 @@ The team develops against **one** MongoDB Atlas database, so every developer's b
 writes the same cases, mailbox, dashboards and audit trail. Each developer still runs their own
 backend and frontend; the database is the single source of truth.
 
-**Connection string** — in `backend/.env` only:
+**Connection string** — in `backend/.env.local` only:
 
 ```env
 DATABASE_URL=mongodb+srv://<user>:<password>@<cluster>.mongodb.net/query_management_system?retryWrites=true&w=majority
@@ -208,7 +209,7 @@ DATABASE_URL=mongodb+srv://<user>:<password>@<cluster>.mongodb.net/query_managem
 ```bash
 cd backend
 npm run db:provision -- --dry-run   # what it would create; writes nothing
-npm run db:provision                # the DATABASE_URL in backend/.env (or --uri "...")
+npm run db:provision                # the DATABASE_URL in backend/.env.local (or --uri "...")
 ```
 
 It is idempotent: it creates the collections and indexes and inserts the 12 `@ipc.example`
@@ -220,24 +221,29 @@ models of the branch it runs from, so run it from this branch.
 session, syncs the inbox into the database and runs the retention sweep. Everyone else is a
 **teammate**, whose backend lists what the host stored and never touches NICeMail.
 
-| `backend/.env` | Mailbox host | Teammate |
-|---|---|---|
-| `NIC_BROWSER_MAILBOX` | `true` | `true`, with the same `NIC_EMAIL`, only to sign in as the NICeMail Front Office |
-| `NIC_BROWSER_VIEWER` | `false` | `true` |
-| `MAILBOX_SYNC_ENABLED` | `true` | `false` |
-| `MAILBOX_RETENTION_ENABLED` | `true` | `false` |
-| `EMAIL_TRANSPORT` | as agreed for the test | `mock` |
-| `NIC_ALLOW_OUTBOUND` | as agreed for the test | `false` |
-| `NIC_BROWSER_TEST_RECIPIENT` | the host's test address | your own address |
+The `backend/.env.local` settings for each profile are listed in
+[docs/ENVIRONMENT.md](docs/ENVIRONMENT.md), under the local profiles; a teammate's backend runs as a
+viewer (`NIC_BROWSER_VIEWER=true`) with sync and retention off. Set the viewer flag on every teammate
+backend, even one that never opens the NICeMail inbox: it is what refuses NICeMail sends there, and
+`NIC_BROWSER_MAILBOX=true` without it turns that backend into a second mailbox host. To see the
+NICeMail inbox a teammate also needs `NIC_BROWSER_MAILBOX=true` and exactly the host's `NIC_EMAIL`, and
+signs in as the NICeMail Front Office; every other Front Office inbox shows no NICeMail mail.
 
-The NICeMail Front Office (`USR-0014`) needs a credential in each developer's own passwords file;
-dev login refuses it. On a shared database the retention sweep starts only on the mailbox host.
+**How teammates see each other's changes.** Every backend reads the shared database on each request,
+and nothing is cached per backend. There is no server push: a browser tab reloads the shared data when
+it gains focus, becomes visible or changes route, and after each of its own writes, and the mailbox
+list polls every 15 s. A tab left idle in front of someone does not refresh until they click into it or
+change page. No extra synchronisation, polling or cache invalidation is needed for correctness.
+
+The NICeMail Front Office (`USR-0014`) needs a credential like every other account — in auto mode
+the shared `QMS_SEED_PASSWORD` covers it; dev login refuses it. On a shared database the retention sweep starts only on the mailbox host.
 
 **Sends happen on the machine that clicks.** The acknowledgement and forward (on accept), a retry,
 and the final response (on final approval) go out from the backend of whoever pressed the button,
 under that backend's own configuration. A teammate's backend refuses a NICeMail send before touching
-Chrome: the case is saved, the email is recorded as failed, and the retry is made from the mailbox
-host. **Do the real NICeMail accept on the host.**
+Chrome: the case is saved, the email is recorded as failed, and the host re-sends it from the case page
+(Retry acknowledgement / Retry forwarding) or, for a final response, the Dispatch page. **Do the real
+NICeMail accept on the host.**
 
 **Verify the target** before doing anything else. The backend prints
 
@@ -246,21 +252,25 @@ host. **Do the real NICeMail accept on the host.**
 ```
 
 and `GET /api/v1/health` answers `database: { connected: true }`. A teammate's backend also prints
-`NICeMail agent:  viewer — …`.
+`NICeMail agent:  viewer — …`. Check the database name in that line: a URI with no name is refused,
+but a misspelled name silently opens a separate, empty database.
 
 **Rules:**
 
 - **No destructive operations.** The header **Reset** and `DELETE /api/v1/mailbox` answer 409 on a
   shared database; `npm run db:reset`, `npm run mailbox:purge` and `npm run db:provision -- --truncate`
   refuse without `--force`. Never pass `--force` here — use a local MongoDB to start clean.
-- **Pull before joining.** Update this branch and run `npm install` before pointing a backend at the
-  shared database.
+- **Pull before joining.** The mailbox host commits and pushes first; teammates then pull this branch
+  (at least the commit "feat(config): load exactly one env file, chosen from backend/") and run
+  `npm install` before pointing a backend at the shared database. Older code ignores `.env.local`.
 - **Never point an old branch at it** — `main`, `develop`, `Rawat`, `bhumika`, `aakash`,
   `abhi-agent`. They lack these guards and the per-case revision check, and their startup drops
   indexes this branch declares.
-- **One Atlas database user per developer**, and each developer adds their own IP to the Atlas access
-  list.
-- **Credentials live only in `backend/.env`** — never in `.env.example`, a commit, a chat or a
+- **One Atlas database user per developer**, with the `readWrite` role on `query_management_system`
+  only (not `atlasAdmin`), and each developer adds their own IP to the Atlas access list. If your
+  public IP changes, Atlas refuses the connection: a running backend keeps running but its database
+  calls fail. Add the new IP and restart.
+- **Credentials live only in `backend/.env.local`** — never in `.env.example`, a commit, a chat or a
   screenshot.
 - **Real citizen mail lives here.** Treat everything in it as personal data.
 - **Attachment bytes stay on the disk of the machine that stored them** — for NICeMail mail, the
@@ -273,34 +283,45 @@ and `GET /api/v1/health` answers `database: { connected: true }`. A teammate's b
 
 ## Environment Variables
 
-**`frontend/.env.example`** — one variable:
+The full reference — every variable, where it is required, its default and whether it is a secret —
+is **[docs/ENVIRONMENT.md](docs/ENVIRONMENT.md)**. This section only says which file is used where.
 
-```env
-VITE_API_BASE_URL=http://localhost:5000/api/v1
-```
+| File | Tracked | Used by |
+|---|---|---|
+| `backend/.env.example` | yes | the template: the variables a deployment sets, without comments or working secrets — `JWT_SECRET` is empty, so a fresh copy refuses to start until it is set |
+| `backend/.env.local` | no | a developer's backend, mailbox host or teammate |
+| `backend/.env.production` | no | the production VM's backend, selected only when `NODE_ENV=production` is set in the real environment |
+| `backend/.env.e2e` | yes | the Playwright suite, which loads it alone through `ENV_FILE`; credential-free, with its own test-only `JWT_SECRET` |
+| `frontend/.env.example` | yes | the frontend template |
+| `frontend/.env.local` | no | a developer's Vite server |
+| Render dashboard | — | the production frontend build: `VITE_API_BASE_URL=/api/v1` and `NODE_VERSION=22`, nothing secret |
 
-**`backend/.env.example`** is the authoritative reference — it is heavily commented, and every
-variable the code reads appears in it. The groups:
+**The backend loads exactly one file**, resolved against `backend/` whatever the working directory:
+`ENV_FILE` if it is set (a missing file stops the backend), otherwise `.env.production` when
+`NODE_ENV=production` is set in the real environment, otherwise `.env.local`, otherwise a legacy
+`backend/.env`, with a warning to rename it. The server and every npm script that reads configuration
+go through this loader, except `nic:preflight`, which reads no file. A variable already set in the
+real environment always wins over the file, and `ENV_FILE` only works there — written inside a file
+it does nothing.
+dotenv's startup line `injected env (N) from <file>` names the file that was loaded.
 
-| Group | Contains |
-|---|---|
-| Core | `PORT`, `NODE_ENV`, `CLIENT_URL`, `DATABASE_URL` |
-| Authentication | `JWT_SECRET`, the per-account credentials (`QMS_PASSWORDS_FILE` or `QMS_PASSWORD_<USER_ID>`), `QMS_ALLOW_SHARED_PASSWORD` with `QMS_SEED_PASSWORD`, `SESSION_TTL_SECONDS`, `SESSION_COOKIE_NAME`, `SESSION_COOKIE_SAMESITE` |
-| Email transport | `EMAIL_TRANSPORT` (`mock`\|`nic`), `MAILBOX_SOURCE` (`auto`\|`nic`) |
-| Stakeholder identities | front-office and officer-in-charge names and addresses (**required**), IPC query + acknowledgement addresses. There is deliberately no `INQUIRER_*` — an inquirer is whoever sent the mail. Only a Front Office mailbox is authenticated; nothing sends as an inquirer or as the Officer-in-Charge |
-| NICeMail IMAP/SMTP | hosts, ports, TLS flags, mailbox, app-password (or a file path to it), test recipient, `NIC_ALLOW_OUTBOUND`, `NIC_ALLOW_INTERNAL_FORWARD` |
-| NICeMail browser agent | `NIC_CDP_ENDPOINT`, tab-matching patterns, timeouts, artefact directory; as a second Front Office mailbox: `NIC_BROWSER_MAILBOX`, `NIC_BROWSER_VIEWER`, `NIC_FRONT_OFFICE_NAME`, `NIC_BROWSER_TEST_RECIPIENT`, `NIC_BROWSER_SYNC_TTL_MS`, `NIC_BROWSER_SYNC_MAX` |
-| Pravah Gemma | `GEMMA_API_URL`, `GEMMA_TIMEOUT_MS` |
-| Attachments | `ATTACHMENT_DIR` and the size/count caps |
+**The frontend** reads two variables, both public because Vite bakes them into the bundle:
+`VITE_API_BASE_URL` (`http://localhost:5000/api/v1` locally, `/api/v1` on Render, which rewrites
+`/api/*` to the backend) and `VITE_NIC_FRONT_OFFICE_EMAIL`, used only by the development quick-login
+panel.
 
-The two NICeMail groups configure **two unrelated mechanisms** and must not be conflated — see
-[backend/README.md](backend/README.md) for the split.
+The NICeMail browser agent and the NICeMail IMAP/SMTP settings configure **two unrelated
+mechanisms** and must not be conflated — see [backend/README.md](backend/README.md) for the split.
 
 `JWT_SECRET` (≥32 characters) and a sign-in credential for every seeded account are **required —
 the server exits without them**, as is `DATABASE_URL` under `NODE_ENV=production`; a `DATABASE_URL`
-that is set must name its database and be reachable. Real `.env` files — `.env` and every `.env.*`
-except the `.env.example` files and `backend/.env.e2e` — are gitignored and must never be committed;
-neither must NICeMail credentials or a database URI with a password in it.
+that is set must name its database and be reachable. A credential is an entry in `QMS_PASSWORDS_FILE`
+(a JSON file of `userId` → password) or a `QMS_PASSWORD_<USER_ID>` variable — `QMS_PASSWORD_USR_0008`
+for `USR-0008` — which `.env.example` does not list, because the names follow the accounts. Outside
+production one `QMS_SEED_PASSWORD` also opens every account unless `QMS_ALLOW_SHARED_PASSWORD=false`.
+Real `.env` files — `.env` and every `.env.*` except the `.env.example` files and
+`backend/.env.e2e` — are gitignored and must never be committed; neither must NICeMail credentials
+or a database URI with a password in it.
 
 ## Documentation
 

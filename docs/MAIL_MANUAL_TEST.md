@@ -30,7 +30,7 @@ confusing run.
 | Posture | Configuration | What leaves the machine |
 |---|---|---|
 | **Mock** | `EMAIL_TRANSPORT=mock`, `MAILBOX_SOURCE=auto` | Nothing. Sends are recorded as delivered and deposited into the local mock inbox, so the enquiry → ingestion loop closes without a network. |
-| **NICeMail browser agent** | `NIC_BROWSER_MAILBOX=true`, `NIC_EMAIL` set, a signed-in Chrome on `NIC_CDP_ENDPOINT` | Real mail, from the NICeMail mailbox, for cases that arrived in it — **held to the interlock**, below. |
+| **NICeMail browser agent** | `NIC_BROWSER_MAILBOX=true`, `NIC_EMAIL` set, a signed-in Chrome on `NIC_CDP_ENDPOINT` — locally alongside `EMAIL_TRANSPORT=mock`; production also needs `EMAIL_TRANSPORT=nic` with `NIC_IMAP_HOST`/`NIC_SMTP_HOST` set ([ENVIRONMENT.md](ENVIRONMENT.md)) | Real mail, from the NICeMail mailbox, for cases that arrived in it — **held to the interlock**, below. |
 | **NICeMail SMTP** | `EMAIL_TRANSPORT=nic`, the `NIC_IMAP_*`/`NIC_SMTP_*` block, an app password | Real mail over SMTP, for every case that did *not* arrive through the agent. |
 
 The last two are not alternatives: a deployment can run both, and which one a given case uses is
@@ -251,13 +251,15 @@ Run `npm run nic:browser:calibrate -- --attach` first, or the forward will refus
   server answers 409 for a mailbox that keeps none.
 - **The QMS needs a reachable database.** Without Mongo, `/api/v1/queries` answers 503 and nothing is
   saved. Check the backend printed "MongoDB connected" before a run.
-- `ipc-query-mock@example.com` is the mock address and **can never receive mail**: `example.com` is
-  reserved with a null MX, so anything sent there bounces. Deliberate.
+- Left unset, `FRONT_OFFICE_EMAIL` is `front-office-unconfigured@example.com`, the address the mock
+  mailbox is keyed to, and it **can never receive mail**: `example.com` is reserved with a null MX,
+  so anything sent there bounces. Deliberate.
 
 ## Switching back
 
 Set `EMAIL_TRANSPORT=mock`, `MAILBOX_SOURCE=auto`, `NIC_BROWSER_MAILBOX=false` and
-`NIC_ALLOW_OUTBOUND=false`, then restart the backend. Nothing then leaves the machine.
+`NIC_ALLOW_OUTBOUND=false` in `backend/.env.local`, then restart the backend. Nothing then leaves
+the machine.
 
 ## Mailbox persistence
 

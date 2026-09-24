@@ -24,11 +24,15 @@ but not whether the case was in a state that allowed it. See
 
 ```bash
 npm install
-cp .env.example .env
+cp .env.example .env.local
 ```
 
-Then set at minimum `JWT_SECRET` (≥32 characters) and `QMS_SEED_PASSWORD` — **the server refuses to
-start without them.** Generate a secret with `openssl rand -base64 48`.
+Then set `JWT_SECRET` (≥32 characters) and a sign-in credential for every account —
+`QMS_PASSWORDS_FILE`, `QMS_PASSWORD_<USER_ID>`, or outside production the shared
+`QMS_SEED_PASSWORD` — **the server refuses to start without them**, so a fresh copy of the example
+does not boot until they are set. Generate a secret with `openssl rand -base64 48`. Set
+`DATABASE_URL` too (see [Database](#database)). Every variable is described in
+[docs/ENVIRONMENT.md](../docs/ENVIRONMENT.md).
 
 `npm install` after every pull that changes `package.json`. The app imports `compression`,
 `mongoose`, `zod` and `express-rate-limit` at module load, so a stale `node_modules` fails at
@@ -632,9 +636,8 @@ required**. `--backfill` judges them on the rules alone and stamps `classifiedAt
 message's own `receivedAt`, so every backfilled row gets a full fresh window however old the mail is.
 
 > Only the NICeMail browser mailbox stores rows, so it is the only purgeable source
-> (`PURGEABLE_SOURCES`). Under `MAILBOX_SOURCE=gmail` or `nic` the inbox is a live view of a remote
-> account and nothing is stored in Mongo at all — though Gmail attachment *bytes* are written to
-> disk on every poll and are never reaped, which is a separate leak this feature does not address.
+> (`PURGEABLE_SOURCES`). Under `MAILBOX_SOURCE=nic` the inbox is a live, read-only IMAP view of a
+> remote account and nothing is stored in Mongo at all.
 
 ### Resetting the workflow state
 
@@ -840,8 +843,8 @@ be enough to start mailing the public from a `.gov.in` address.
 
 **The mailbox address is not hardcoded anywhere.** Moving to production is a one-variable change:
 set `NIC_EMAIL=lab.ipc@gov.in` (and `NIC_TEST_RECIPIENT` to match). `contact.ecoclubs-edu@gov.in`
-appears in no executable source at all — only in `.env`, `.env.example` and one usage example in a
-script's docblock.
+appears in no executable source at all — only in a developer's own `backend/.env.local`, one test
+and the docs.
 
 > Grepping for `lab.ipc@gov.in` returns 18 hits inside `src/data/ipcKnowledge.json`. **Those are not
 > configuration.** They are IPC letterhead and FAQ text carried verbatim out of the source corpus by
@@ -923,24 +926,21 @@ then sign in to NICeMail in that window and run `npm run nic:browser:discover`. 
 #### The second Front Office mailbox
 
 `NIC_BROWSER_MAILBOX=true` (the exact string) turns the NICeMail mailbox into a second Front Office
-mailbox, alongside whatever `MAILBOX_SOURCE` selects:
-
-| Variable | Default | Effect |
-|---|---|---|
-| `NIC_BROWSER_MAILBOX` | off | enables everything in this section |
-| `NIC_BROWSER_VIEWER` | off | `true` (the exact string) makes this backend a **viewer** of a mailbox another backend — the mailbox host — reads into a shared database: it lists the stored mail but never syncs (`sync.viewer: true`, no Sync now), and refuses NICeMail sends before touching Chrome, so the email is recorded as failed and retried from the host |
-| `NIC_EMAIL` | — | **required** with the flag, and must differ from `FRONT_OFFICE_EMAIL` (boot-blocking). The mailbox's address and its Front Office's sign-in |
-| `NIC_FRONT_OFFICE_NAME` | `NICeMail Front Office` | a display name, not an address — that user's name and the From-line name on its mail; empty falls back to the default |
-| `NIC_BROWSER_TEST_RECIPIENT` | `NIC_TEST_RECIPIENT`, then `NIC_EMAIL` | the only address browser sends may reach until `NIC_ALLOW_OUTBOUND=true` |
-| `NIC_BROWSER_SYNC_TTL_MS` | `15000` | minimum gap between inbox syncs, measured from the end of the last one. A ceiling on frequency whoever asked, so it must not exceed `MAILBOX_SYNC_INTERVAL_MS` |
-| `NIC_BROWSER_SYNC_MAX` | `20` | new messages opened per sync, at most |
-| `NIC_BROWSER_TIMEOUT_MS` | `20000` | every browser wait, including how long a send waits to be confirmed |
+mailbox, alongside whatever `MAILBOX_SOURCE` selects. It requires `NIC_EMAIL`, distinct from
+`FRONT_OFFICE_EMAIL`, and a test recipient while `NIC_ALLOW_OUTBOUND` is closed.
+`NIC_BROWSER_VIEWER=true` makes a backend a **viewer** of the mail the mailbox host stored in a
+shared database: it lists that mail but never syncs (`sync.viewer: true`, no Sync now), and refuses
+NICeMail sends before touching Chrome, so the email is recorded as failed and retried from the host.
+These and the other agent variables, with their defaults, are described in
+[docs/ENVIRONMENT.md](../docs/ENVIRONMENT.md), under the NICeMail browser agent.
 
 The IMAP settings are not needed. MongoDB is: the mailbox is stored in `MailboxMessage` and answers
 503 without it.
 
 - **A second Front Office account.** `nicFrontOfficeUser()` in `constants/users.js` adds `USR-0014`,
-  role `FRONT_OFFICE`, email `NIC_EMAIL`, signing in with `QMS_SEED_PASSWORD`. Dev login refuses it.
+  role `FRONT_OFFICE`, email `NIC_EMAIL`, signing in with its own credential
+  (`QMS_PASSWORD_USR_0014` or its `QMS_PASSWORDS_FILE` entry; outside production the shared
+  `QMS_SEED_PASSWORD` also works unless `QMS_ALLOW_SHARED_PASSWORD=false`). Dev login refuses it.
 - **Routing by mailbox, not sender.** `mailbox.forUser(user)` gives that user the NICeMail store and
   everyone else the primary one; the mailbox routes cannot be pointed elsewhere with `?recipient=`.
 - **Reading.** The server's own timer asks every `MAILBOX_SYNC_INTERVAL_MS` (15 s), so ingestion no
@@ -1041,22 +1041,9 @@ as `FALLBACK`: real summaries, deterministically derived from the enquiry, and r
 
 ## Configuration
 
-`.env.example` is the authoritative reference and lists **every** variable the code reads. It ends
-with the full boot-refusal table; the rules most often hit are:
-
-| Variable | Rule |
-|---|---|
-| `JWT_SECRET` | required, ≥32 characters |
-| any account | must have a credential — `QMS_PASSWORDS_FILE`, `QMS_PASSWORD_<ID>`, or the shared mode explicitly enabled |
-| `DATABASE_URL` | required **when `NODE_ENV=production`**; whenever set, must name its database and be reachable |
-| `EMAIL_TRANSPORT` | must be `mock` or `nic`; `mock` is refused when `NODE_ENV=production` |
-| `MAILBOX_SOURCE` | must be `auto` or `nic` |
-| `SESSION_COOKIE_SAMESITE` | must be `lax`, `strict` or `none` |
-| `NIC_EMAIL`, `NIC_IMAP_HOST`, `NIC_SMTP_HOST` | required when `EMAIL_TRANSPORT=nic` or `MAILBOX_SOURCE=nic` |
-| `NIC_EMAIL` | required when `NIC_BROWSER_MAILBOX=true`, and must differ from `FRONT_OFFICE_EMAIL` |
-| `NIC_BROWSER_TEST_RECIPIENT` | required while `NIC_ALLOW_OUTBOUND` is not `true` and the agent is on |
-| `NIC_ALLOW_INTERNAL_FORWARD=true` | requires a real `OFFICER_IN_CHARGE_EMAIL` |
-| a real channel | production needs `EMAIL_TRANSPORT=nic` or `NIC_BROWSER_MAILBOX=true` |
+The reference is **[docs/ENVIRONMENT.md](../docs/ENVIRONMENT.md)**: every variable the code reads,
+where it is required, its default, and the full table of configurations the server refuses to start
+with. A refusal names the variable, and ends with the env file that was loaded.
 
 **Nothing here is a mailbox password.** The NICeMail browser mailbox
 (`NIC_BROWSER_MAILBOX=true`) holds no credential at all — it reads and sends through a Chrome
@@ -1073,47 +1060,76 @@ forward alone, re-derived server-side and never taken from a request. Without it
 NICeMail case stops at the forward while the interlock is closed. It is a recipient allowance, not a
 second channel.
 
-NIC configuration is otherwise *not* asserted at boot — a deployment that only uses the diagnostic
-`/nic/*` endpoints starts normally, and NIC errors surface per-request as a `stage: 'config'`
-failure. The **browser agent** itself — Chrome, CDP, a signed-in tab — is never asserted at boot
-under any configuration and cannot prevent the server starting; the only boot check it brings is the
-`NIC_EMAIL` rule above, when `NIC_BROWSER_MAILBOX=true`.
+With `EMAIL_TRANSPORT=nic` or `MAILBOX_SOURCE=nic` — and so always in production, where `nic` is the
+only transport accepted — boot requires `NIC_EMAIL`, `NIC_IMAP_HOST` and `NIC_SMTP_HOST` (nothing
+connects to them at boot, and boot needs no app password). NIC configuration is otherwise *not*
+asserted at boot — a deployment that only uses the diagnostic `/nic/*` endpoints starts normally,
+and NIC errors surface per-request as a `stage: 'config'` failure. The **browser agent** itself — Chrome, CDP, a signed-in tab — is never asserted at boot
+under any configuration and cannot prevent the server starting; the only boot checks it brings are
+the `NIC_EMAIL` and test-recipient rules, when `NIC_BROWSER_MAILBOX=true`.
 
 `ATTACHMENT_DIR` is resolved against the **backend package root**, not `process.cwd()`, so a
 relative value means the same directory however the process was launched.
 
-`dotenv.config()` is called with no `path`, so it resolves `.env` relative to `process.cwd()`. Start
-the backend **from `backend/`**, or pass the file explicitly — launching from the repository root
-silently loads no `.env` at all. The `injected env (N) from .env` banner on startup is dotenv v17's
-own notice, not an error; `N` should match the number of `KEY=` lines in your file.
+`config/env.js` loads **exactly one** env file, resolved against `backend/` rather than
+`process.cwd()`, so the choice is the same however the process was launched:
+
+1. `ENV_FILE`, when it is set in the real environment — written inside a file it does nothing. It
+   is the only file loaded, and one that does not exist stops the backend.
+2. `.env.production`, when `NODE_ENV=production` is set in the real environment. It is never loaded
+   otherwise.
+3. `.env.local`, the developer's file.
+4. A legacy `.env`, which still works but prints
+   `[qms] backend/.env is deprecated; rename it to backend/.env.local`.
+
+The file never overrides a variable already set in the environment. Every npm script that reads
+configuration, and the live Gemma checks in `src/scripts/`, load through the same module;
+`nic:preflight` reads no file. Relative paths *inside* the file are another matter:
+`ATTACHMENT_DIR` resolves against `backend/`, but `QMS_PASSWORDS_FILE`, `NIC_APP_PASSWORD_FILE` and
+`NIC_BROWSER_ARTIFACT_DIR` resolve against the working directory, so use absolute paths on a server.
+
+The `injected env (N) from .env.local` banner on startup is dotenv v17's own notice, not an error:
+it names the file that was loaded, and `N` counts the keys the file supplied — a key already set in
+the environment is not counted. When the configuration is refused, the error ends with
+`(env file: <path>)`, or `(env file: none)` when no file was found.
 
 ## Production deployment
 
 ```bash
 npm ci                 # exact versions from package-lock.json
-export NODE_ENV=production
+export NODE_ENV=production   # in the real environment: this is what selects backend/.env.production
 npm start
 ```
+
+On the production VM, set `NODE_ENV=production` machine-wide rather than per shell, so the service
+and the operator scripts (`db:*`, `mailbox:purge`) all select `backend/.env.production` — the
+`NODE_ENV` line inside that file cannot select it. Keep that file readable only by the service
+account, and never put a `.env.local` on the VM: a process started without `NODE_ENV` would load it.
+The hosting layout — the frontend as a Render Static Site that rewrites `/api/*` to this VM — is in
+[deployment_strategy.md §11.5](../docs/deployment_strategy.md); the production values are in
+[docs/ENVIRONMENT.md](../docs/ENVIRONMENT.md).
 
 What `NODE_ENV=production` changes, beyond the usual:
 
 | | Effect |
 |---|---|
 | `DATABASE_URL` | unset is now a **startup failure**, not a degraded start (unreachable already is in every environment) |
-| `trust proxy` | enabled (one hop), so `secure` cookies and rate-limit keys use the real client address |
+| `trust proxy` | enabled (one hop), so `secure` cookies and rate-limit keys use the real client address. Behind Render's rewrite **and** the VM's own proxy there are two hops, and one hop keys the rate limiters on a Render address shared by every user — check `req.ip` at first deploy; the follow-up is `app.set('trust proxy', 2)` |
 | Error bodies | 5xx returns a generic message; stacks never leave the process |
 | morgan | `combined` format rather than `dev` |
 | Session cookie | `Secure` is set automatically — the deployment must therefore be HTTPS |
 
 Also required:
 
-- **`CLIENT_URL` must be the exact browser origin of the frontend** (scheme, host and port). CORS is
-  built from this single value with credentials enabled, so it cannot be a wildcard — the browser
-  rejects `*` alongside credentials. A mismatch here looks like a CORS failure in the console but is
-  a configuration error.
-- **`SESSION_COOKIE_SAMESITE`**: `lax` when the frontend and API share a registrable domain, `none`
-  only for a genuinely cross-site deployment (and `none` forces `Secure`, so it cannot work over
-  plain http).
+- **`CLIENT_URL` must be the exact browser origin of the frontend** (scheme, host and port) — in
+  production, the Render site's origin, `https://<render-site>`. CORS is built from this single
+  value with credentials enabled, so it cannot be a wildcard — the browser rejects `*` alongside
+  credentials. A mismatch here looks like a CORS failure in the console but is a configuration
+  error.
+- **`SESSION_COOKIE_SAMESITE`**: leave it at `lax`. The frontend reaches the API same-origin, through
+  the Render `/api/*` rewrite, so the session cookie is first-party. `none` is only for a genuinely
+  cross-site deployment: it forces `Secure`, so it cannot work over plain http, and it breaks the
+  text and PDF attachment previews.
 - Run behind a reverse proxy terminating TLS. The process listens on `PORT` on all interfaces.
 - `SIGTERM` and `SIGINT` are handled: the server stops accepting connections, lets in-flight
   requests finish, closes MongoDB, and exits — with a 10-second cap before it exits anyway. An
@@ -1162,10 +1178,11 @@ unroutable address on purpose. `setup.js` forces the in-memory mailbox and gives
 its own temp attachment directory** — Vitest runs files concurrently across worker threads, and a
 single shared `ATTACHMENT_DIR` caused real cross-file races.
 
-It is also pinned so **the suite does not depend on your `.env`.** `env.js` loads `backend/.env`,
-and dotenv only skips keys already set, so any key `vitest.config.mjs` does not pin comes from the
-developer's own file. Every `NIC_BROWSER_*` variable, `NIC_FRONT_OFFICE_NAME`, the `NIC_WEBMAIL_*`
-patterns and `NIC_ALLOW_OUTBOUND` are therefore pinned blank — the NICeMail mailbox off and the
+It is also pinned so **the suite does not depend on your `.env.local`.** Under `NODE_ENV=test` the
+loader still loads the developer's `backend/.env.local` (or a legacy `.env`), and dotenv only skips
+keys already set, so any key `vitest.config.mjs` does not pin comes from the developer's own file.
+Every `NIC_BROWSER_*` variable, `NIC_FRONT_OFFICE_NAME`, the `NIC_WEBMAIL_*` patterns and
+`NIC_ALLOW_OUTBOUND` are therefore pinned blank — the NICeMail mailbox off and the
 outbound interlock closed — so enabling the feature locally cannot change what the suite sees. Tests
 that exercise it switch it on themselves with `vi.stubEnv`.
 
@@ -1242,7 +1259,7 @@ rather than the proxy's.
 
 Required configuration — the server refuses to start without it: `JWT_SECRET` (≥32 chars), a
 credential for every seeded account, and `DATABASE_URL` when `NODE_ENV=production`. The full list is
-the boot-refusal table at the end of `.env.example`.
+the boot-refusal table in [docs/ENVIRONMENT.md](../docs/ENVIRONMENT.md).
 
 5xx responses carry a generic `Internal Server Error` outside development. The full message and
 stack go to stderr; a Mongoose error naming a collection or a driver error carrying a connection

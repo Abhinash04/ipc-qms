@@ -7,7 +7,7 @@ TypeScript. Path alias `@` → `./src` (set in both `vite.config.js` and `jsconf
 
 ```bash
 npm install
-cp .env.example .env
+cp .env.example .env.local
 npm run dev        # http://localhost:5173
 ```
 
@@ -31,18 +31,27 @@ credential-free and committed on purpose. It pins `QMS_SEED_PASSWORD` to **empty
 `QMS_ALLOW_SHARED_PASSWORD=false`, deliberately — unset, the shared-password mode would switch itself
 on here, because `NODE_ENV` is development. Sign-in uses one distinct password per account from
 `src/test/fixtures/passwords.json`, which `playwright.config.js` resolves to an absolute path and
-gives to both the server and the test process. Only `JWT_SECRET` is inherited from the gitignored
-`backend/.env`. **Stop a hand-started backend first**: `reuseExistingServer`
+gives to both the server and the test process. `ENV_FILE=.env.e2e` makes the backend load that file
+alone — it carries its own test-only `JWT_SECRET` — so nothing is inherited from a developer's env
+file. **Stop a hand-started backend first**: `reuseExistingServer`
 is `false` for the backend, so anything already on `:5000` makes the run fail outright rather than be
 adopted along with whatever database and mail transport it holds. The config also refuses to start
 unless `backend/.env.e2e` exists and its `DATABASE_URL` is exactly
 `mongodb://127.0.0.1:27017/qms_e2e`, so the suite can never wipe the shared development database.
 
-**Environment** — one variable:
+**Environment** — two variables, both public: Vite bakes every `VITE_` value into the bundle.
 
 ```env
 VITE_API_BASE_URL=http://localhost:5000/api/v1
+VITE_NIC_FRONT_OFFICE_EMAIL=
 ```
+
+`VITE_API_BASE_URL` is fixed at build time and falls back to `http://localhost:5000/api/v1` when
+unset. The production build on Render uses `/api/v1`, which the site rewrites to the backend.
+`vite build` also reads `.env.local`, so for a local production build pass the value in the
+environment instead. `VITE_NIC_FRONT_OFFICE_EMAIL` is the backend's `NIC_EMAIL`, used only by the
+dev quick-login panel, which exists only under `npm run dev`. Both are described in
+[`../docs/ENVIRONMENT.md`](../docs/ENVIRONMENT.md).
 
 The backend must be running for sign-in, email, attachments, AI and the admin console. See
 [`../backend/README.md`](../backend/README.md), and [`../docs/auth.md`](../docs/auth.md) for the
@@ -441,10 +450,11 @@ Playwright, run with `npx playwright test` (or `npm run test:e2e`), configured b
 Express server and a real MongoDB, with nothing mocked. Prerequisites are a local MongoDB on
 `127.0.0.1:27017` and a one-off `npx playwright install chromium`; backend configuration comes from
 `backend/.env.e2e`, which points at its own `qms_e2e` database and pins **every** mail variable —
-most of them to an empty value — so that none is inherited from a developer's `.env`. That
-inheritance is the trap: a key the overlay omits is taken from `.env`, so an overlay naming no
-`NIC_*` variable would have run the suite against whatever mailbox the developer had configured.
-Credentials come from the per-account fixture; only `JWT_SECRET` is inherited.
+most of them to an empty value. `ENV_FILE=.env.e2e` makes it the only file the backend loads, so no
+key comes from a developer's `.env.local`; the blank lines still matter, because Playwright hands
+the backend the runner's own environment too, and a blank here overrides a variable exported in
+that shell. Credentials come from the per-account fixture, and the file carries its own test-only
+`JWT_SECRET`.
 
 The specs share one database and each wipes it first, so the config runs one worker, no parallelism
 and no retries. Playwright starts both servers itself and **refuses to adopt one it did not start**:
@@ -453,8 +463,8 @@ That is deliberate — a backend left over from a development session is typical
 database and a real mailbox, and adopting it would run the suite against both. Stop it and re-run.
 
 Two more guards keep the suite off the shared development database. `playwright.config.js` throws
-before starting anything if `backend/.env.e2e` is missing — without it the backend would load
-`backend/.env` and its database — or if its `DATABASE_URL` is not exactly
+before starting anything if `backend/.env.e2e` is missing — without it the backend refuses to start,
+because `ENV_FILE` names a missing file — or if its `DATABASE_URL` is not exactly
 `mongodb://127.0.0.1:27017/qms_e2e`. And the Vite server it starts is given
 `VITE_API_BASE_URL=http://localhost:5000/api/v1`, so the UI talks to the e2e backend. A Vite server
 already running on `:5173` is still reused outside CI and keeps its own `VITE_API_BASE_URL`, so stop

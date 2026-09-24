@@ -57,16 +57,16 @@ Run both halves; the frontend needs the backend for sign-in, email, attachments 
 ```bash
 cd backend
 npm install
-cp .env.example .env
+cp .env.example .env.local
 # set JWT_SECRET (>=32 chars) and a sign-in credential for every account — the server
-# exits without them
+# exits without them — and DATABASE_URL. Every variable is described in docs/ENVIRONMENT.md
 npm run dev        # http://localhost:5000
 ```
 
 ```bash
 cd frontend
 npm install
-cp .env.example .env
+cp .env.example .env.local
 npm run dev        # http://localhost:5173
 ```
 
@@ -106,7 +106,7 @@ Things that must be configured outside this repository. None of them can be fixe
 | Prerequisite | Needed for | Symptom when missing |
 |---|---|---|
 | A reachable MongoDB at `DATABASE_URL`, named in the URI | everything case-related | refusal to start when it is set but unnamed or unreachable, or empty in production; with it empty in development, `503` on `/queries/*` |
-| A NICeMail application-specific password | `EMAIL_TRANSPORT=nic`, `nic:verify` | IMAP `Invalid credentials`, SMTP `535`. A webmail password is rejected under MFA by design |
+| A NICeMail application-specific password | `MAILBOX_SOURCE=nic`, SMTP sends for cases that did not arrive through the browser agent, `nic:verify` — not for booting with `EMAIL_TRANSPORT=nic` | IMAP `Invalid credentials`, SMTP `535`. A webmail password is rejected under MFA by design |
 | Network reach to `*.mgovcloud.in:993/465` | NICeMail IMAP/SMTP | `nic:preflight` reports the endpoint as unreachable |
 | `NIC_ALLOW_OUTBOUND=true` | NICeMail mail to anyone but the test recipient | the transport refuses the send and names the variable |
 | A manually authenticated Chrome exposing CDP on `9222` | the NICeMail browser agent only | `nic:browser:discover` cannot connect; with `NIC_BROWSER_MAILBOX=true` the NICeMail Front Office's inbox shows **The mailbox could not be read**, and sends on NICeMail cases fail before anything is typed. **Never blocks the backend** |
@@ -161,8 +161,9 @@ cd frontend && npm run build:check
 #   cd frontend && npx playwright install chromium
 # Specs live in frontend/e2e/, the config is frontend/playwright.config.js, and
 # the backend settings come from backend/.env.e2e (credential-free and committed
-# on purpose; sign-in uses the committed per-account fixture it names, and only
-# JWT_SECRET is inherited from backend/.env).
+# on purpose, and self-contained: ENV_FILE makes it the only file the backend
+# loads, with its own test-only JWT_SECRET; sign-in uses the committed
+# per-account fixture it names).
 # Playwright starts both servers itself and refuses to adopt one it did not
 # start: a backend already on :5000 fails the run. Stop it first — that server
 # is usually pointed at the real database and a real mailbox. The config also

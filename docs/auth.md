@@ -27,27 +27,22 @@ or `<a download>` cannot send an `Authorization` header, but it does send the co
 The frontend never stores the session: `useAuthStore` calls `/auth/me` at startup rather than
 mirroring anything into `localStorage`.
 
-### Required environment (backend/.env)
+### Required environment (backend/.env.local)
 
-The server **refuses to boot** without these — see `validateAuthConfig()` in
-`backend/src/config/authConfig.js`.
-
-| Variable | Required | Notes |
-|---|---|---|
-| `JWT_SECRET` | yes | at least 32 characters; generate with `openssl rand -base64 48` |
-| `QMS_PASSWORDS_FILE` | one per account | a path to a JSON file of `userId` -> password, kept **outside** the repository. The production form: config then holds a path, not a set of secrets |
-| `QMS_PASSWORD_<USER_ID>` | one per account | one account's own password, e.g. `QMS_PASSWORD_USR_0008`. Simpler for development; the value lives in gitignored `backend/.env` |
-| `QMS_ALLOW_SHARED_PASSWORD` | no | `true` restores the legacy mode in which one `QMS_SEED_PASSWORD` opens **every** account, `SUPER_ADMIN` included. Left unset it is **on outside production** whenever `QMS_SEED_PASSWORD` is non-empty; `false` is the only value that cannot change meaning |
-| `QMS_SEED_PASSWORD` | with the above | the one secret that mode falls back to |
-| `SESSION_TTL_SECONDS` | no | defaults to `28800` (8 hours) |
-| `SESSION_COOKIE_NAME` | no | defaults to `qms.session` |
-| `SESSION_COOKIE_SAMESITE` | no | `lax` (default), `strict`, or `none` for cross-site deployments |
+The server **refuses to boot** without `JWT_SECRET` (at least 32 characters; generate with
+`openssl rand -base64 48`) and a credential for every account — an entry in `QMS_PASSWORDS_FILE` (a
+JSON file of `userId` -> password kept outside the repository), a `QMS_PASSWORD_<USER_ID>` such as
+`QMS_PASSWORD_USR_0008`, or, outside production, the shared `QMS_SEED_PASSWORD` unless
+`QMS_ALLOW_SHARED_PASSWORD=false`. See `validateAuthConfig()` in
+`backend/src/config/authConfig.js`. These and the `SESSION_*` settings are described in
+[ENVIRONMENT.md](ENVIRONMENT.md), under authentication and session.
 
 > **Each account below has its own password**, resolved per account by
 > `backend/src/services/auth/credentials.js` — the file first, then the account's own variable, then
 > the shared secret if that mode is on. The server refuses to start if any account has none, naming
 > the account and the variable that would supply it. No value is written here: read them from your own
-> `.env` or passwords file, and if you are setting the project up, choose them and put them there.
+> `.env.local` or passwords file, and if you are setting the project up, choose them and put them
+> there.
 
 ---
 

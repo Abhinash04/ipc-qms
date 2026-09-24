@@ -118,7 +118,7 @@ If `Test-Path` is `False`, Chrome may be a per-user install at
 ipc-qms/
 ├── frontend/                         React + Vite SPA
 ├── backend/
-│   ├── .env.example                  authoritative env reference
+│   ├── .env.example                  env template (reference: docs/ENVIRONMENT.md)
 │   ├── package.json                  scripts incl. nic:browser:discover, nic:browser:calibrate
 │   └── src/
 │       ├── config/
@@ -184,48 +184,38 @@ Chromium". A freshly launched browser would not be signed in, so it would be use
 
 ```powershell
 cd backend
-Copy-Item .env.example .env     # skip if .env already exists
+Copy-Item .env.example .env.local     # skip if .env.local already exists
 ```
 
 The backend itself also needs `JWT_SECRET` and a credential for every account — its entry in
-`QMS_PASSWORDS_FILE`, or `QMS_PASSWORD_<USER_ID>` — to start. `QMS_SEED_PASSWORD` is required only
-when the shared-password mode is explicitly on, which it must not be in production (see
-[backend/README.md](../backend/README.md)). The browser agent does not.
+`QMS_PASSWORDS_FILE`, a `QMS_PASSWORD_<USER_ID>`, or, outside production, the shared
+`QMS_SEED_PASSWORD` (auto mode; never in production, see [backend/README.md](../backend/README.md))
+— to start. The browser agent does not.
 
-Browser-agent variables. All are optional, and the defaults come from
-`src/config/browserConfig.js`:
-
-| Variable | Default | Purpose | Read by code? |
-|---|---|---|---|
-| `NIC_CDP_ENDPOINT` | `http://localhost:9222` | Where Chrome exposes CDP | yes |
-| `NIC_WEBMAIL_URL_PATTERNS` | `mail.gov.in,mgovcloud.in` | Comma-separated URL fragments that identify a NICeMail tab | yes |
-| `NIC_WEBMAIL_TITLE_PATTERNS` | `mail,inbox,nic` | Comma-separated title fragments, a secondary signal | yes |
-| `NIC_WEBMAIL_APP_URL` | `https://mail.mgovcloud.in/zm/` | The URL the agent opens in **its own** background tab. Not the operator's URL: on the workplace front door the mail UI is a cross-origin iframe with a debugging target of its own, which one session cannot drive; this URL serves the same mailbox as a single top-level document | yes |
-| `NIC_BROWSER_TIMEOUT_MS` | `20000` | The CDP connect, loading the work tab, and every wait inside a read or send — including how long a send waits for the compose form to close before it is reported **unconfirmed** (§17) | yes |
-| `NIC_BROWSER_TEST_RECIPIENT` | falls back to `NIC_TEST_RECIPIENT`, then `NIC_EMAIL` | The only address browser sends may reach until `NIC_ALLOW_OUTBOUND=true` | yes |
-| `NIC_ALLOW_INTERNAL_FORWARD` | `false` | `true` additionally allows `OFFICER_IN_CHARGE_EMAIL`, for the forward to the Officer-in-Charge alone, while `NIC_ALLOW_OUTBOUND` is still closed. A recipient allowance, not a second channel: the address is re-derived from configuration, never taken from a request. Read by `nic/outboundGuard.js`, and it requires a real `OFFICER_IN_CHARGE_EMAIL` at boot | yes |
-| `NIC_BROWSER_MAILBOX` | `false` | `true` makes NICeMail a second Front Office mailbox (§17). Only the exact string `true` enables it | yes |
-| `NIC_BROWSER_VIEWER` | `false` | `true` makes this backend a **viewer** on a shared database: it lists the NICeMail mail the mailbox host stored but never syncs, and refuses NICeMail sends before touching Chrome (§17, *Viewer mode*). Only the exact string `true` enables it | yes |
-| `NIC_FRONT_OFFICE_NAME` | `NICeMail Front Office` | A display **name**, not an address: the second Front Office user's name and the name on the From line of its mail. Empty falls back to the default | yes |
-| `NIC_BROWSER_SYNC_TTL_MS` | `30000` | Minimum gap between inbox syncs | yes |
-| `NIC_BROWSER_SYNC_MAX` | `20` | At most this many **new** messages opened per sync; the first sync takes the newest this many (§17, *How a sync reads the inbox*) | yes |
-| `NIC_BROWSER_ARTIFACT_DIR` | `storage/nic-browser` | Where `npm run nic:browser:discover -- --json` writes its reports; under the gitignored `backend/storage/` | yes |
+The browser-agent variables — `NIC_CDP_ENDPOINT`, the `NIC_WEBMAIL_*` tab settings, the
+`NIC_BROWSER_*` switches, timeouts and sync limits, and `NIC_FRONT_OFFICE_NAME` — take their defaults
+from `src/config/browserConfig.js`, and `NIC_ALLOW_INTERNAL_FORWARD` is read by
+`src/services/email/nic/outboundGuard.js`; the only ones the backend insists on are named below.
+Each one, with its default and purpose, is described in [ENVIRONMENT.md](ENVIRONMENT.md), under the
+NICeMail browser agent.
 
 There is **no** password, token or cookie variable for the browser agent, and there must never be
 one.
 
-With `NIC_BROWSER_MAILBOX=true`, `NIC_EMAIL` is required and must differ from `FRONT_OFFICE_EMAIL`;
-the backend refuses to start otherwise. `NIC_ALLOW_OUTBOUND` (the IMAP/SMTP block's interlock) also
-governs browser sends, and `NIC_ALLOW_INTERNAL_FORWARD` is the one allowance inside it — without it,
-intake of a NICeMail case stops at the forward while the interlock is closed.
+With `NIC_BROWSER_MAILBOX=true`, `NIC_EMAIL` is required and must differ from `FRONT_OFFICE_EMAIL`,
+and while `NIC_ALLOW_OUTBOUND` is not `true` a test recipient (`NIC_BROWSER_TEST_RECIPIENT`, or
+`NIC_TEST_RECIPIENT`) is required too; the backend refuses to start otherwise.
+`NIC_ALLOW_OUTBOUND` (the IMAP/SMTP block's interlock) also governs browser sends, and
+`NIC_ALLOW_INTERNAL_FORWARD` is the one allowance inside it — without it, intake of a NICeMail case
+stops at the forward while the interlock is closed.
 
 That allowance exists on the **browser channel only**. `transports/nicTransport.js` runs its own
 recipient check against `NIC_TEST_RECIPIENT` alone and never consults
 `NIC_ALLOW_INTERNAL_FORWARD`, so under `EMAIL_TRANSPORT=nic` with the interlock closed the forward is
 refused whatever that variable says.
 
-The backend test suite does not read these from your `.env`: `backend/vitest.config.mjs` pins every
-`NIC_BROWSER_*` variable, `NIC_FRONT_OFFICE_NAME`, the `NIC_WEBMAIL_*` patterns and
+The backend test suite does not read these from your `.env.local`: `backend/vitest.config.mjs` pins
+every `NIC_BROWSER_*` variable, `NIC_FRONT_OFFICE_NAME`, the `NIC_WEBMAIL_*` patterns and
 `NIC_ALLOW_OUTBOUND` to blank — the feature off, the interlock closed, code defaults for the rest —
 and points `NIC_CDP_ENDPOINT` at an unroutable address. Enabling the feature locally therefore cannot
 change what the suite sees; tests that exercise it switch it on themselves.
@@ -423,7 +413,7 @@ Start-Service MongoDB               # if stopped (elevated PowerShell)
 mongosh "mongodb://127.0.0.1:27017/query_management_system" --eval "db.runCommand({ping:1})"
 ```
 
-Use the `DATABASE_URL` from your `backend/.env` in the `mongosh` line.
+Use the `DATABASE_URL` from your `backend/.env.local` in the `mongosh` line.
 
 **Terminal 2 — Backend**
 
@@ -454,7 +444,8 @@ npm run nic:browser:discover
 
 Order: terminals 1–3 and terminal 4 are independent, because the backend does not need Chrome and the
 agent does not need the backend. Terminal 5 must come **after** Chrome is running and NICeMail is
-signed in. The discover script loads `backend/.env` itself.
+signed in. The discover script loads the backend's env file (`backend/.env.local`) through the same
+loader as the server.
 
 ### Quick Start
 
@@ -651,7 +642,7 @@ What to check:
 - [ ] `node --version` ≥ 22 (the agent's CDP client needs Node's global `WebSocket`), `npm --version` works
 - [ ] `npm install` done in `backend/` (no browser-automation package is needed)
 - [ ] Google Chrome ≥ 136 installed
-- [ ] `backend/.env` exists (browser-agent variables optional; defaults shown above)
+- [ ] `backend/.env.local` exists (browser-agent variables optional; defaults in [ENVIRONMENT.md](ENVIRONMENT.md))
 
 **Database** (backend only)
 - [ ] MongoDB service running
@@ -880,8 +871,8 @@ starts without MongoDB, but this mailbox does not work until it is connected (§
 
 - **Never commit credentials**: no NICeMail passwords, no application-specific passwords, no OAuth
   refresh tokens, no session cookies.
-- **Never put secrets in Markdown** or any other tracked file. Secrets go in `backend/.env`, which is
-  gitignored.
+- **Never put secrets in Markdown** or any other tracked file. Secrets go in `backend/.env.local`,
+  which is gitignored.
 - The browser agent has **no** credential variable, by design.
 - Use the **dedicated** profile only, never your normal Chrome profile.
 - **Do not automate NICeMail authentication** and do not bypass MFA.
@@ -955,7 +946,7 @@ With `NIC_BROWSER_MAILBOX=true` a QMS account can read the live mailbox and make
 |---|---|
 | Check Node / npm | `node --version; npm --version` |
 | Install deps | `cd backend; npm install` |
-| Create env file | `cd backend; Copy-Item .env.example .env` |
+| Create env file | `cd backend; Copy-Item .env.example .env.local` |
 | Check MongoDB | `Get-Service MongoDB` |
 | Start backend | `cd backend; npm run dev` |
 | Start frontend | `cd frontend; npm run dev` |
@@ -1342,6 +1333,8 @@ ruled out.
 
 ### Configuration
 
+In `backend/.env.local` on the mailbox host:
+
 ```env
 NIC_BROWSER_MAILBOX=true
 NIC_EMAIL=contact.ecoclubs-edu@gov.in       # the mailbox, and the second Front Office's sign-in
@@ -1353,7 +1346,10 @@ NIC_ALLOW_INTERNAL_FORWARD=false            # true also allows the forward to OF
 
 `NIC_EMAIL` must differ from `FRONT_OFFICE_EMAIL` (the backend refuses to start otherwise), and
 MongoDB must be running. Moving to the IPC mailbox is `NIC_EMAIL=lab.ipc@gov.in` plus signing in to
-that account in the dedicated Chrome — see §15 for what else follows `NIC_EMAIL`.
+that account in the dedicated Chrome — see §15 for what else follows `NIC_EMAIL`. In production the
+backend also needs `EMAIL_TRANSPORT=nic`, and with it `NIC_IMAP_HOST` and `NIC_SMTP_HOST` set, though
+it never connects to them for NICeMail cases; the production values are in
+[ENVIRONMENT.md](ENVIRONMENT.md).
 
 ### Testing both paths
 
