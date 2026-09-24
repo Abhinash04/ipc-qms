@@ -9,7 +9,8 @@
  *
  *   npm run mailbox:purge -- --dry-run          # report, destroy nothing
  *   npm run mailbox:purge                       # classify, then purge
- *   npm run mailbox:purge -- --hours=72         # a wider window, for a backlog
+ *   npm run mailbox:purge -- --hours=72         # a wider junk window, for a backlog
+ *   npm run mailbox:purge -- --unregistered-hours=720
  *   npm run mailbox:purge -- --classify-only    # ask the model, purge nothing
  *   npm run mailbox:purge -- --no-classify      # purge only what is already judged
  *   npm run mailbox:purge -- --backfill         # judge rows stored before triage existed
@@ -43,6 +44,9 @@ const classifyOnly = has('--classify-only');
 const noClassify = has('--no-classify');
 const backfill = has('--backfill');
 const hours = argValue('--hours') ? Number(argValue('--hours')) : env.MAILBOX_RETENTION_HOURS;
+const unregisteredHours = argValue('--unregistered-hours')
+  ? Number(argValue('--unregistered-hours'))
+  : env.MAILBOX_UNREGISTERED_RETENTION_HOURS;
 const limit = argValue('--limit') ? parseInt(argValue('--limit'), 10) : env.MAILBOX_PURGE_BATCH;
 
 /** Never print credentials, even to a local terminal. */
@@ -71,6 +75,12 @@ async function main() {
     return;
   }
 
+  if (!Number.isFinite(unregisteredHours) || unregisteredHours <= 0) {
+    console.error(
+      `--unregistered-hours must be a positive number (got "${argValue('--unregistered-hours')}").`,
+    );
+    process.exit(1);
+  }
   if (!Number.isFinite(hours) || hours <= 0) {
     console.error(`--hours must be a positive number (got "${argValue('--hours')}").`);
     process.exitCode = 1;
@@ -80,7 +90,8 @@ async function main() {
   console.log(`Database         ${redactUri(env.DATABASE_URL)}`);
   console.log(`NODE_ENV         ${env.NODE_ENV}`);
   console.log(`Mode             ${dryRun ? 'dry run — nothing will be destroyed' : 'purge'}`);
-  console.log(`Window           ${hours} hours`);
+  console.log(`Junk window      ${hours} hours`);
+  console.log(`Unregistered     ${unregisteredHours} hours`);
   console.log(`Confidence floor ${env.MAILBOX_JUNK_CONFIDENCE}`);
   console.log(`Purgeable source ${PURGEABLE_SOURCES.join(', ')}`);
   console.log(`Model            ${env.GEMMA_API_URL ? 'configured' : 'not configured — rules only'}\n`);
@@ -128,7 +139,7 @@ async function main() {
   // Show the candidates before doing anything to them. The counts a sweep
   // returns are no use to someone deciding whether to let it run.
   if (!classifyOnly) {
-    const candidates = await findPurgeable({ now, limit, retentionHours: hours });
+    const candidates = await findPurgeable({ now, limit, retentionHours: hours, unregisteredHours });
     if (!candidates.length) {
       console.log('No message is old enough to purge.\n');
     } else {
@@ -146,7 +157,9 @@ async function main() {
         const how =
           candidate.why === 'machine-junk'
             ? `${candidate.classifier}/${candidate.confidence}`
-            : 'rejected by a person';
+            : candidate.why === 'human-rejected'
+              ? 'rejected by a person'
+              : 'unregistered, expired';
         console.log(
           `  ${dryRun ? 'would purge' : 'purge'}  ${pad(candidate.mailboxMessageId, 22)} ${pad(`${age}h`, 6)} ` +
             `${pad(how, 18)} ${pad(row.from, 34)} "${String(row.subject || '').slice(0, 44)}"`,
@@ -160,6 +173,7 @@ async function main() {
     now,
     dryRun,
     retentionHours: hours,
+    unregisteredHours,
     limit,
     classify: !noClassify,
     purge: !classifyOnly,

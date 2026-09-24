@@ -554,13 +554,21 @@ Five things make a wrong verdict survivable:
   the public was silently discarded before anyone saw it — the worse of the two failures" — and this feature is
   built to respect that. ESP bounce-domain matching was considered for the rule set and rejected on
   the same reasoning.
-- **Junk stays whole and visible for `MAILBOX_RETENTION_HOURS`** (46 by default) in the Junk filter,
+- **Junk stays whole and visible for `MAILBOX_RETENTION_HOURS`** (42 by default) in the Junk filter,
   with a `purgesAt` countdown. `POST /mailbox/messages/:id/triage/rescue` clears the verdict
   permanently, without minting the Query Case that accepting it would.
 - **Every failure degrades to genuine, structurally.** Every failure path in `classifyMail` returns
-  GENUINE at confidence 0, and the sweep's candidate query requires `confidence >= 0.9`. A Gemma
-  outage can only reduce purging; it cannot cause a wrong one. No code enforces that — the filter
-  shape does.
+  GENUINE at confidence 0, and the junk tier's candidate query requires `confidence >= 0.9`. A Gemma
+  outage can only reduce purging on that tier; it cannot cause a wrong one. No code enforces that —
+  the filter shape does.
+- **A second, much longer tier is what actually bounds the collection.**
+  `MAILBOX_UNREGISTERED_RETENTION_HOURS` (336, two weeks) takes anything still unregistered
+  whatever its verdict, because the tier above can never reach a genuine enquiry — GENUINE is pinned
+  at confidence 0 by construction, so without this a message nobody ever Ticks would be kept whole
+  forever. The trade is explicit: this tier offers no outage protection, and the long window is the
+  margin instead. It refuses to be configured shorter than the junk window, since the age rule would
+  then fire first and the confidence floor would never be consulted. Registered and rescued mail are
+  exempt from both tiers.
 - **Absolute vetoes**, re-checked immediately before each update: an `ACCEPTED` decision, or a
   `QueryCase` linked to the message. The re-check closes a race against `acceptMessage`, which
   copies the body onto the case.

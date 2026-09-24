@@ -34,6 +34,29 @@ export function matchesSearch(message, q) {
  * always beats the machine's verdict, and a rescued message is GENUINE, so it
  * falls through to READ/NEW exactly as it did before it was ever classified.
  */
+/**
+ * When the sweep would destroy this message's content, or null if it would not.
+ *
+ * Mirrors the two candidate filters in retention.js and must stay in step with
+ * them: a confident junk verdict on MAILBOX_RETENTION_HOURS, anything else
+ * unrescued on MAILBOX_UNREGISTERED_RETENTION_HOURS. Both clocks are
+ * `classifiedAt` — first sight, not the message's own date — for the reason
+ * MailboxTriage records: a mail first synced days after it arrived would
+ * otherwise be born already expired.
+ *
+ * A rescued row returns null, which is the whole point of rescuing.
+ */
+export function purgesAtFor(row) {
+  if (!row || row.rescuedAt || !row.classifiedAt) return null;
+  const from = Date.parse(row.classifiedAt);
+  if (Number.isNaN(from)) return null;
+  const hours =
+    row.verdict === 'JUNK' && row.confidence >= env.MAILBOX_JUNK_CONFIDENCE
+      ? env.MAILBOX_RETENTION_HOURS
+      : env.MAILBOX_UNREGISTERED_RETENTION_HOURS;
+  return new Date(from + hours * 3600000).toISOString();
+}
+
 export function deriveStatus({ isRead, decision, linkedCase, triage }) {
   if (linkedCase || decision?.decision === DECISIONS.ACCEPTED) return MAIL_STATUS.ACCEPTED;
   if (decision?.decision === DECISIONS.REJECTED) return MAIL_STATUS.REJECTED;
@@ -81,10 +104,12 @@ export async function toMessageViews(messages, { keepsReadState = false } = {}) 
           rescuedAt: triageRow.rescuedAt,
           // What makes the rescue window legible in the inbox: "purges in 12
           // hours", rather than a date the reader has to do arithmetic on.
-          purgesAt:
-            triageRow.verdict === 'JUNK' && !triageRow.rescuedAt && triageRow.classifiedAt
-              ? new Date(Date.parse(triageRow.classifiedAt) + env.MAILBOX_RETENTION_HOURS * 3600000).toISOString()
-              : null,
+          //
+          // Both tiers, because both destroy content. A confident junk verdict
+          // goes on the short window; everything else unrescued goes on the long
+          // unregistered one. A row with neither is a message already saved by
+          // its case, and `linkedCase` is what the UI shows for those.
+          purgesAt: purgesAtFor(triageRow),
         }
       : null;
 

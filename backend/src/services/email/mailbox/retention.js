@@ -95,6 +95,36 @@ export function rejectedCandidateFilter({ now = Date.now(), retentionHours = env
 }
 
 /**
+ * The second tier: anything still unregistered after a much longer window.
+ *
+ * Deliberately verdict-agnostic and confidence-agnostic, which is what makes it
+ * different in kind from `purgeCandidateFilter`. That filter asks "was this
+ * judged junk?" and needs the confidence floor so a model outage cannot destroy
+ * a real enquiry. This one asks only "has anyone done anything with this in two
+ * weeks?", so a verdict clause would be meaningless and the floor would
+ * exclude exactly the GENUINE rows it exists to reach — every one of which is
+ * pinned at confidence 0.
+ *
+ * "Registered" is not tested here. It cannot be: the answer lives in
+ * MailboxDecision and QueryCase, not on this row. `vetoFor` is where it is
+ * asked, immediately before each write, and that ordering is the point — a case
+ * created while the sweep was running still saves its message.
+ *
+ * So the safety of this tier rests on three things and not on a verdict: the
+ * window is long, `rescuedAt` is honoured, and the veto is re-checked late.
+ */
+export function unregisteredCandidateFilter({
+  now = Date.now(),
+  unregisteredHours = env.MAILBOX_UNREGISTERED_RETENTION_HOURS,
+} = {}) {
+  return {
+    purgedAt: null,
+    rescuedAt: null,
+    classifiedAt: { $lt: new Date(now - hoursToMs(unregisteredHours)).toISOString() },
+  };
+}
+
+/**
  * The messages those candidates point at.
  *
  * Three things are deliberately absent, each covered by a named test so that a
@@ -149,10 +179,10 @@ async function mapWithLimit(items, limit, fn) {
  * Ask the model about rows the rules could not settle.
  *
  * Runs here rather than on intake or on inbox read: intake is a CDP sync loop
- * polled every 30 seconds and a 12-second call per message would wreck it, and
+ * polled every few seconds and a 12-second call per message would wreck it, and
  * inbox read is polled every few seconds at fifty rows a page. Here it is one
- * batch an hour, and a message gets roughly forty-five attempts inside a
- * forty-six hour window.
+ * batch an hour, so a row exhausts its MAX_TRIAGE_ATTEMPTS asks within the first
+ * half day of the 42-hour window and is left GENUINE for good after that.
  */
 export async function classifyPending({ now = Date.now(), limit = env.MAILBOX_TRIAGE_BATCH, dryRun = false } = {}) {
   if (!isConnected() || !env.GEMMA_API_URL) return { classified: 0, junk: 0 };
@@ -256,8 +286,13 @@ export async function classifyPending({ now = Date.now(), limit = env.MAILBOX_TR
 // ── The purge phase ──────────────────────────────────────────────────────────
 
 /** Everything old enough to purge, from the small collections only. */
-export async function findPurgeable({ now = Date.now(), limit = env.MAILBOX_PURGE_BATCH, retentionHours } = {}) {
-  const [junk, rejected] = await Promise.all([
+export async function findPurgeable({
+  now = Date.now(),
+  limit = env.MAILBOX_PURGE_BATCH,
+  retentionHours,
+  unregisteredHours,
+} = {}) {
+  const [junk, rejected, unregistered] = await Promise.all([
     MailboxTriage.find(purgeCandidateFilter({ now, retentionHours }))
       .select('mailboxMessageId verdict confidence classifier rule classifiedAt')
       .sort({ classifiedAt: 1 })
@@ -266,6 +301,11 @@ export async function findPurgeable({ now = Date.now(), limit = env.MAILBOX_PURG
     MailboxDecision.find(rejectedCandidateFilter({ now, retentionHours }))
       .select('mailboxMessageId decidedAt')
       .sort({ decidedAt: 1 })
+      .limit(limit)
+      .lean(),
+    MailboxTriage.find(unregisteredCandidateFilter({ now, unregisteredHours }))
+      .select('mailboxMessageId verdict confidence classifier rule classifiedAt')
+      .sort({ classifiedAt: 1 })
       .limit(limit)
       .lean(),
   ]);
@@ -292,6 +332,22 @@ export async function findPurgeable({ now = Date.now(), limit = env.MAILBOX_PURG
       classifier: null,
       rule: null,
       since: row.decidedAt,
+    });
+  }
+  // Last on purpose. A message can qualify under more than one rule, and the
+  // first writer wins, so the audit row records the most specific reason it was
+  // destroyed for — judged junk, or a person's rejection — rather than the
+  // catch-all.
+  for (const row of unregistered) {
+    if (candidates.has(row.mailboxMessageId)) continue;
+    candidates.set(row.mailboxMessageId, {
+      mailboxMessageId: row.mailboxMessageId,
+      why: 'unregistered-expired',
+      verdict: row.verdict,
+      confidence: row.confidence,
+      classifier: row.classifier,
+      rule: row.rule,
+      since: row.classifiedAt,
     });
   }
 
@@ -383,6 +439,7 @@ export async function sweepOnce({
   now = Date.now(),
   dryRun = false,
   retentionHours,
+  unregisteredHours,
   limit = env.MAILBOX_PURGE_BATCH,
   classify = true,
   purge = true,
@@ -418,7 +475,7 @@ export async function sweepOnce({
       return { ...result, grace: true, durationMs: Date.now() - started };
     }
 
-    const candidates = await findPurgeable({ now, limit, retentionHours });
+    const candidates = await findPurgeable({ now, limit, retentionHours, unregisteredHours });
     result.scanned = candidates.length;
     if (!candidates.length) return { ...result, durationMs: Date.now() - started };
 
@@ -487,6 +544,7 @@ export async function sweepOnce({
           attachmentsRemoved: result.attachmentsRemoved,
           skipped: result.skipped,
           retentionHours: retentionHours ?? env.MAILBOX_RETENTION_HOURS,
+          unregisteredHours: unregisteredHours ?? env.MAILBOX_UNREGISTERED_RETENTION_HOURS,
         },
       });
     }

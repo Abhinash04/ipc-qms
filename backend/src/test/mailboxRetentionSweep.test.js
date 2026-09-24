@@ -331,3 +331,137 @@ describe('the audit trail', () => {
     expect(await AuditEvent.countDocuments({ action: 'EMAIL_PURGED' })).toBe(0);
   });
 });
+
+describe('the unregistered tier', () => {
+  /** A real enquiry: rules found nothing, so GENUINE pinned at confidence 0. */
+  const genuine = (id, hours) =>
+    triage(id, {
+      verdict: 'GENUINE',
+      confidence: 0,
+      classifier: 'rules',
+      rule: null,
+      ruleClass: 'none',
+      reason: '',
+      classifiedAt: hoursAgo(hours),
+      gemmaAt: hoursAgo(hours),
+      createdAt: hoursAgo(hours),
+    });
+
+  const longSweep = (options = {}) => sweep({ unregisteredHours: 336, ...options });
+
+  it('purges a genuine message nobody registered, once the long window passes', async () => {
+    // The whole reason this tier exists: the junk filter can never reach a
+    // GENUINE row, because GENUINE is pinned at confidence 0.
+    await storeMessage('NICB-stale', { receivedAt: hoursAgo(400), createdAt: hoursAgo(400) });
+    await genuine('NICB-stale', 400);
+
+    const result = await longSweep();
+
+    expect(result.purged).toBe(1);
+    const row = await MailboxMessage.findOne({ mailboxMessageId: 'NICB-stale' }).lean();
+    expect(row.body).toBe('');
+    expect(row.bodyHtml).toBeNull();
+    expect(row.purgedAt).toBe('2026-09-23T12:00:00.000Z');
+  });
+
+  it('still keeps the provider id, so the next sync cannot bring it back', async () => {
+    await storeMessage('NICB-stale', { receivedAt: hoursAgo(400), createdAt: hoursAgo(400) });
+    await genuine('NICB-stale', 400);
+    await longSweep();
+
+    const row = await MailboxMessage.findOne({ mailboxMessageId: 'NICB-stale' }).lean();
+    expect(row.providerMessageId).toBe('provider-NICB-stale');
+    expect(row.mailboxMessageId).toBe('NICB-stale');
+  });
+
+  it('leaves a genuine message alone just inside the long window', async () => {
+    await storeMessage('NICB-recent');
+    await genuine('NICB-recent', 335);
+
+    expect((await longSweep()).purged).toBe(0);
+    const row = await MailboxMessage.findOne({ mailboxMessageId: 'NICB-recent' }).lean();
+    expect(row.body).toBe('Buy now.');
+    expect(row.purgedAt).toBeNull();
+  });
+
+  it('spares a stale message that became a case — registered means keep, at any age', async () => {
+    await storeMessage('NICB-cased', { receivedAt: hoursAgo(900), createdAt: hoursAgo(900) });
+    await genuine('NICB-cased', 900);
+    await QueryCase.create({ queryId: 'QRY-2026-00001', sourceMailboxMessageId: 'NICB-cased' });
+
+    const result = await longSweep();
+
+    expect(result.purged).toBe(0);
+    expect(result.skipped.linkedCase).toBe(1);
+    expect((await MailboxMessage.findOne({ mailboxMessageId: 'NICB-cased' }).lean()).body).toBe('Buy now.');
+  });
+
+  it('spares a stale message somebody accepted', async () => {
+    await storeMessage('NICB-accepted', { receivedAt: hoursAgo(900), createdAt: hoursAgo(900) });
+    await genuine('NICB-accepted', 900);
+    await MailboxDecision.create({
+      mailboxMessageId: 'NICB-accepted',
+      decision: 'ACCEPTED',
+      decidedAt: hoursAgo(890),
+    });
+
+    const result = await longSweep();
+
+    expect(result.purged).toBe(0);
+    expect(result.skipped.accepted).toBe(1);
+  });
+
+  it('spares a stale message a person rescued', async () => {
+    await storeMessage('NICB-rescued', { receivedAt: hoursAgo(900), createdAt: hoursAgo(900) });
+    await genuine('NICB-rescued', 900);
+    await MailboxTriage.updateOne(
+      { mailboxMessageId: 'NICB-rescued' },
+      { $set: { rescuedAt: hoursAgo(10), classifier: 'human' } },
+    );
+
+    expect((await longSweep()).purged).toBe(0);
+  });
+
+  it('names the catch-all reason in the audit row, not a junk verdict', async () => {
+    await storeMessage('NICB-stale', { receivedAt: hoursAgo(400), createdAt: hoursAgo(400) });
+    await genuine('NICB-stale', 400);
+    await longSweep();
+
+    const rows = await AuditEvent.find({ action: 'EMAIL_PURGED' }).lean();
+    const one = rows.find((row) => row.messageId === 'NICB-stale');
+    expect(one.details.reason).toBe('unregistered-expired');
+    expect(one.details.verdict).toBe('GENUINE');
+    // Still answerable once the body is gone.
+    expect(one.details.subject).toBe('Half price reagents this week');
+  });
+
+  it('lets judged junk go on the short window, and still calls it junk', async () => {
+    // 50 hours old: past the 46-hour junk window, nowhere near 336. The reason
+    // recorded must be the specific one, which is why the unregistered pass runs
+    // last in findPurgeable.
+    await storeMessage('NICB-junk');
+    await triage('NICB-junk');
+
+    expect((await longSweep()).purged).toBe(1);
+    const rows = await AuditEvent.find({ action: 'EMAIL_PURGED' }).lean();
+    expect(rows.find((row) => row.messageId === 'NICB-junk').details.reason).toBe('machine-junk');
+  });
+
+  it('cannot see a message that has no triage row at all', async () => {
+    // Rows stored before triage existed. `npm run mailbox:purge -- --backfill`
+    // is what gives them one; until then neither tier can reach them, and that
+    // is a documented gap rather than an accident.
+    await storeMessage('NICB-pre-feature', { receivedAt: hoursAgo(900), createdAt: hoursAgo(900) });
+
+    expect((await longSweep()).purged).toBe(0);
+    expect((await MailboxMessage.findOne({ mailboxMessageId: 'NICB-pre-feature' }).lean()).body).toBe('Buy now.');
+  });
+
+  it('is idempotent — a second pass purges nothing more', async () => {
+    await storeMessage('NICB-stale', { receivedAt: hoursAgo(400), createdAt: hoursAgo(400) });
+    await genuine('NICB-stale', 400);
+
+    expect((await longSweep()).purged).toBe(1);
+    expect((await longSweep()).purged).toBe(0);
+  });
+});

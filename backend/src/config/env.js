@@ -26,7 +26,8 @@ const env = {
   GEMMA_API_URL: process.env.GEMMA_API_URL ?? 'https://pravahai.aicte-india.org/llm/api/gemma',
   GEMMA_TIMEOUT_MS: parseInt(process.env.GEMMA_TIMEOUT_MS || '12000', 10),
 
-  MAILBOX_RETENTION_HOURS: Number(process.env.MAILBOX_RETENTION_HOURS ?? '46'),
+  MAILBOX_RETENTION_HOURS: Number(process.env.MAILBOX_RETENTION_HOURS ?? '42'),
+  MAILBOX_UNREGISTERED_RETENTION_HOURS: Number(process.env.MAILBOX_UNREGISTERED_RETENTION_HOURS ?? '336'),
   MAILBOX_RETENTION_ENABLED: (process.env.MAILBOX_RETENTION_ENABLED ?? 'true') !== 'false',
   MAILBOX_JUNK_CONFIDENCE: Number(process.env.MAILBOX_JUNK_CONFIDENCE ?? '0.9'),
   MAILBOX_TRIAGE_BATCH: parseInt(process.env.MAILBOX_TRIAGE_BATCH || '25', 10),
@@ -125,6 +126,29 @@ function validateEmailConfig(config = env) {
     if (!Number.isFinite(config.MAILBOX_RETENTION_HOURS) || config.MAILBOX_RETENTION_HOURS <= 0) {
       errors.push(
         `MAILBOX_RETENTION_HOURS must be a positive number of hours (got "${config.MAILBOX_RETENTION_HOURS}")`,
+      );
+    }
+  }
+  if (config.MAILBOX_UNREGISTERED_RETENTION_HOURS !== undefined) {
+    if (
+      !Number.isFinite(config.MAILBOX_UNREGISTERED_RETENTION_HOURS) ||
+      config.MAILBOX_UNREGISTERED_RETENTION_HOURS <= 0
+    ) {
+      errors.push(
+        'MAILBOX_UNREGISTERED_RETENTION_HOURS must be a positive number of hours ' +
+          `(got "${config.MAILBOX_UNREGISTERED_RETENTION_HOURS}")`,
+      );
+    } else if (
+      Number.isFinite(config.MAILBOX_RETENTION_HOURS) &&
+      config.MAILBOX_UNREGISTERED_RETENTION_HOURS < config.MAILBOX_RETENTION_HOURS
+    ) {
+      // A second tier shorter than the first would purge every message on the
+      // longer rule before the junk rule could ever apply, which silently makes
+      // the confidence floor — the whole protection against a wrong verdict —
+      // irrelevant.
+      errors.push(
+        `MAILBOX_UNREGISTERED_RETENTION_HOURS (${config.MAILBOX_UNREGISTERED_RETENTION_HOURS}) must not be ` +
+          `shorter than MAILBOX_RETENTION_HOURS (${config.MAILBOX_RETENTION_HOURS})`,
       );
     }
   }
