@@ -237,6 +237,77 @@ describe('Scenario B — the Front Officer rejects an unwanted email', () => {
   });
 });
 
+describe('a message someone else has already decided', () => {
+  it('offers no accept or reject on rows the server lists as decided, and shows the rejection', async () => {
+    fetchMailboxMessages.mockResolvedValue({
+      messages: [
+        {
+          ...message(1, 'Keep this one'),
+          status: 'ACCEPTED',
+          linkedCase: { queryId: 'QRY-2026-00007', workflowState: 'PENDING_ASSIGNMENT', businessStatus: 'OPEN' },
+        },
+        { ...message(2, 'Doomed enquiry'), status: 'REJECTED' },
+        message(3, 'Still waiting'),
+      ],
+    });
+    renderInbox();
+    await screen.findByText('Still waiting');
+
+    for (const id of ['MSG-00001', 'MSG-00002']) {
+      expect(screen.queryByRole('button', { name: `Accept message ${id}` })).toBeNull();
+      expect(screen.queryByRole('button', { name: `Reject message ${id}` })).toBeNull();
+    }
+    expect(screen.getByText('Rejected')).toBeInTheDocument();
+    expect(acceptFor('MSG-00003')).toBeInTheDocument();
+    expect(rejectFor('MSG-00003')).toBeInTheDocument();
+  });
+
+  it('takes the controls away once a refetch shows the message was decided', async () => {
+    renderInbox();
+    await screen.findByText('Doomed enquiry');
+    expect(acceptFor('MSG-00002')).toBeInTheDocument();
+
+    fetchMailboxMessages.mockResolvedValue({
+      messages: [message(1, 'Keep this one'), { ...message(2, 'Doomed enquiry'), status: 'REJECTED' }],
+    });
+    act(() => {
+      window.dispatchEvent(new Event('visibilitychange'));
+    });
+
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: 'Accept message MSG-00002' })).toBeNull(),
+    );
+    expect(screen.queryByRole('button', { name: 'Reject message MSG-00002' })).toBeNull();
+    expect(screen.getByText('Rejected')).toBeInTheDocument();
+    expect(acceptFor('MSG-00001')).toBeInTheDocument();
+  });
+
+  it('says who got there first when a reject finds the message already decided', async () => {
+    recordMailboxDecision.mockResolvedValueOnce({
+      alreadyDecided: true,
+      decision: { mailboxMessageId: 'MSG-00001', decision: 'ACCEPTED', queryId: 'QRY-2026-00009' },
+    });
+    const warning = vi.spyOn(notify, 'warning').mockImplementation(() => {});
+    const info = vi.spyOn(notify, 'info').mockImplementation(() => {});
+    renderInbox();
+    await screen.findByText('Keep this one');
+
+    fireEvent.click(rejectFor('MSG-00001'));
+    fireEvent.click(confirm());
+
+    await waitFor(() =>
+      expect(warning).toHaveBeenCalledWith(
+        'Already decided by someone else',
+        expect.stringMatching(/accepted as QRY-2026-00009/),
+      ),
+    );
+    expect(info).not.toHaveBeenCalledWith('Message rejected', expect.anything());
+    expect(markMessageIngested).not.toHaveBeenCalled();
+    warning.mockRestore();
+    info.mockRestore();
+  });
+});
+
 describe('Scenario C — many inquirers, one mailbox', () => {
   it('accepts each message on its own and shows every row its own case', async () => {
     fetchMailboxMessages.mockResolvedValue({

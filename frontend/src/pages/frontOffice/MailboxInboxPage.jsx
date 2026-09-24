@@ -134,6 +134,13 @@ function describeAccept(result, message) {
     : `${sentence}. The case is saved — retry from the case page.${reason}`;
 }
 
+function describeEarlierDecision(decision) {
+  if (decision?.decision === "ACCEPTED") {
+    return `It was already accepted${decision.queryId ? ` as ${decision.queryId}` : ""}. Nothing was changed.`;
+  }
+  return "It was already rejected. Nothing was changed.";
+}
+
 function MailboxSyncNotice({ sync }) {
   const since = sync.since ? new Date(sync.since).toLocaleTimeString() : null;
 
@@ -599,6 +606,13 @@ const railColour = (known, rejected) => {
   return "bg-amber-500";
 };
 
+const decisionFromRow = (message) => {
+  const decision = message.linkedCase ? "ACCEPTED" : message.status;
+  return decision === "ACCEPTED" || decision === "REJECTED"
+    ? { mailboxMessageId: message.mailboxMessageId, decision, queryId: message.linkedCase?.queryId ?? null }
+    : null;
+};
+
 function MailboxRow({
   message,
   index,
@@ -967,6 +981,8 @@ export function MailboxInboxPage() {
 
     if (result.error) {
       notify.error("Could not reject that message", result.error);
+    } else if (result.alreadyDecided) {
+      notify.warning("Already decided by someone else", describeEarlierDecision(result.decision));
     } else {
       notify.info(
         "Message rejected",
@@ -1084,7 +1100,7 @@ export function MailboxInboxPage() {
                         ? getQueryDetailPath(queryId)
                         : null
                     }
-                    decision={decisionFor(message.mailboxMessageId)}
+                    decision={decisionFor(message.mailboxMessageId) || decisionFromRow(message)}
                     confirming={
                       confirming?.id === message.mailboxMessageId
                         ? confirming

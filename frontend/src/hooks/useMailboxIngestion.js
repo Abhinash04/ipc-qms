@@ -37,7 +37,7 @@ export function useMailboxIngestion() {
   const reject = useCallback(async (message, reason = "") => {
     setState((prev) => ({ ...prev, running: true, error: null }));
     try {
-      const { alreadyDecided } = await recordMailboxDecision(message.mailboxMessageId, {
+      const { alreadyDecided, decision } = await recordMailboxDecision(message.mailboxMessageId, {
         decision: DECISION.REJECTED,
         reason,
         message: {
@@ -47,9 +47,9 @@ export function useMailboxIngestion() {
         },
       });
 
-      await markMessageIngested(message.mailboxMessageId).catch(() => {});
+      if (!alreadyDecided) await markMessageIngested(message.mailboxMessageId).catch(() => {});
 
-      const outcome = { rejected: true, alreadyDecided };
+      const outcome = { rejected: !alreadyDecided, alreadyDecided, decision: decision ?? null };
       setState({ running: false, error: null, lastResult: outcome });
       return outcome;
     } catch (error) {
