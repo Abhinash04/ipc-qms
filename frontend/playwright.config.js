@@ -25,7 +25,7 @@ function readEnvFile(file) {
 const E2E_ENV_FILE = path.join(BACKEND_ROOT, '.env.e2e');
 if (!fs.existsSync(E2E_ENV_FILE)) {
   throw new Error(
-    `The e2e backend settings are missing: ${E2E_ENV_FILE}. Without them the backend would load backend/.env and its database.`,
+    `The e2e backend settings are missing: ${E2E_ENV_FILE}. ENV_FILE makes it the only file the backend loads.`,
   );
 }
 const backendEnv = readEnvFile(E2E_ENV_FILE);

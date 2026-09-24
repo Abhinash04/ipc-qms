@@ -1,11 +1,36 @@
 import dotenv from 'dotenv';
+import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { validateNicConfig } from './nicConfig.js';
 
-if (process.env.ENV_FILE) dotenv.config({ path: process.env.ENV_FILE });
-dotenv.config();
 const BACKEND_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+const PRODUCTION_ENV_FILE = '.env.production';
+const LEGACY_ENV_FILE = '.env';
+const LOCAL_ENV_FILES = ['.env.local', LEGACY_ENV_FILE];
+
+function resolveEnvFile({ envFile, nodeEnv, exists }) {
+  if (envFile) return envFile;
+  if (nodeEnv === 'production') return exists(PRODUCTION_ENV_FILE) ? PRODUCTION_ENV_FILE : null;
+  return LOCAL_ENV_FILES.find((file) => exists(file)) ?? null;
+}
+
+const requestedEnvFile = (process.env.ENV_FILE || '').trim();
+const envFile = resolveEnvFile({
+  envFile: requestedEnvFile,
+  nodeEnv: process.env.NODE_ENV,
+  exists: (file) => fs.existsSync(path.resolve(BACKEND_ROOT, file)),
+});
+const ENV_SOURCE = envFile ? path.resolve(BACKEND_ROOT, envFile) : null;
+
+if (ENV_SOURCE) {
+  const { error } = dotenv.config({ path: ENV_SOURCE });
+  if (error) throw new Error(`Could not load the env file ${ENV_SOURCE}: ${error.message}`);
+  if (!requestedEnvFile && envFile === LEGACY_ENV_FILE) {
+    console.warn('[qms] backend/.env is deprecated; rename it to backend/.env.local');
+  }
+}
+
 const EMAIL_TRANSPORTS = { MOCK: 'mock', NIC: 'nic' };
 const MAILBOX_SOURCES = { AUTO: 'auto', NIC: 'nic' };
 
@@ -161,5 +186,13 @@ function assertValidEmailConfig(config = env) {
   }
 }
 
-export { EMAIL_TRANSPORTS, MAILBOX_SOURCES, isProduction, validateEmailConfig, assertValidEmailConfig };
+export {
+  EMAIL_TRANSPORTS,
+  MAILBOX_SOURCES,
+  ENV_SOURCE,
+  isProduction,
+  resolveEnvFile,
+  validateEmailConfig,
+  assertValidEmailConfig,
+};
 export default env;
