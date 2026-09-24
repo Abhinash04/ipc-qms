@@ -3,6 +3,7 @@ import verifyToken from '../middleware/verifyToken.js';
 import { verifyRole, verifyAction } from '../middleware/verifyRole.js';
 import validateBody from '../middleware/validateBody.js';
 import authorizeCaseDelta from '../middleware/authorizeCaseDelta.js';
+import refuseDestructive from '../middleware/refuseDestructive.js';
 import { ROLES } from '../constants/roles.js';
 import { WORKFLOW_ACTION } from '../constants/workflowActions.js';
 import {
@@ -53,6 +54,7 @@ router.post(
   '/queries/reset',
   verifyToken,
   verifyRole(ROLES.SUPER_ADMIN),
+  refuseDestructive('Resetting the workflow state'),
   validateBody(resetQueryStateSchema),
   resetQueryState,
 );

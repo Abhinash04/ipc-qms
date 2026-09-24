@@ -3,6 +3,7 @@ import verifyToken from '../middleware/verifyToken.js';
 import { verifyRole } from '../middleware/verifyRole.js';
 import validateBody from '../middleware/validateBody.js';
 import validateQuery from '../middleware/validateQuery.js';
+import refuseDestructive from '../middleware/refuseDestructive.js';
 import { ROLES } from '../constants/roles.js';
 import {
   mailboxDecisionSchema,
@@ -90,6 +91,12 @@ router.delete(
   deleteMessage,
 );
 
-router.delete('/mailbox', verifyToken, verifyRole(ROLES.SUPER_ADMIN), resetMailbox);
+router.delete(
+  '/mailbox',
+  verifyToken,
+  verifyRole(ROLES.SUPER_ADMIN),
+  refuseDestructive('Clearing the mailbox'),
+  resetMailbox,
+);
 
 export default router;

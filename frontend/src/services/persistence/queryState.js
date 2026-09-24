@@ -19,7 +19,7 @@ function reportFailure(error) {
       : status === 400
         ? `The server rejected this change as malformed${fields?.length ? ` (${fields.join(', ')})` : ''}. This is a bug — please report it.`
         : status === 409
-          ? 'That case id already belongs to a different case. Reload to see the saved one.'
+          ? error?.response?.data?.error || 'The server refused this change.'
           : status === 503
             ? 'The server cannot reach its database.'
             : 'Recent changes are held in this tab only and will be lost on refresh.';

@@ -277,7 +277,6 @@ async function syncMailbox(req, res, next) {
 }
 
 async function resetMailbox(req, res, next) {
-  if (refuseInProduction(res, 'DELETE /mailbox')) return;
   try {
     await mailbox.reset();
     const stats = await mailbox.stats();
