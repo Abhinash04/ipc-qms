@@ -1016,8 +1016,13 @@ Primary mailbox (FRONT_OFFICE_EMAIL)          NICeMail mailbox (NIC_EMAIL)
   message is stored once. A message the Front Office already ingested or removed is never reset or
   brought back while its stored row exists. Accepting it twice reuses the same case, as it does for
   the primary mailbox.
-- **When reading happens.** The NICeMail Front Officer's inbox poll (every 30 s) starts a background
-  sync at most every `NIC_BROWSER_SYNC_TTL_MS`; nobody signed in as that user, no sync. **Sync now**
+- **When reading happens.** The server asks for a sync every `MAILBOX_SYNC_INTERVAL_MS` (15 s) on its
+  own timer whenever Chrome's CDP endpoint answers, so mail arrives with nobody signed in;
+  `MAILBOX_SYNC_ENABLED=false` returns to browser-driven ingestion. The Front Officer's inbox poll
+  still asks too. Either way a sync starts at most every `NIC_BROWSER_SYNC_TTL_MS`, measured from the
+  end of the previous one, and never while browser work is queued — so the interval is a floor and a
+  waiting send always goes first. Consecutive failures back the timer off to 2x, 4x then 20x the
+  interval and recover on the first success. **Sync now**
   on the IPC Mailbox page (`POST /mailbox/sync`) starts one at once, unless one is running or the
   last ended less than 15 s ago. A new message appears on the poll after the sync that found it. A
   failed sync (Chrome closed, signed out, selectors not matching) is reported in the inbox response's

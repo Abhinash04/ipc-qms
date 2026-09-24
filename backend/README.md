@@ -908,7 +908,7 @@ mailbox, alongside whatever `MAILBOX_SOURCE` selects:
 | `NIC_EMAIL` | — | **required** with the flag, and must differ from `FRONT_OFFICE_EMAIL` (boot-blocking). The mailbox's address and its Front Office's sign-in |
 | `NIC_FRONT_OFFICE_NAME` | `NICeMail Front Office` | a display name, not an address — that user's name and the From-line name on its mail; empty falls back to the default |
 | `NIC_BROWSER_TEST_RECIPIENT` | `NIC_TEST_RECIPIENT`, then `NIC_EMAIL` | the only address browser sends may reach until `NIC_ALLOW_OUTBOUND=true` |
-| `NIC_BROWSER_SYNC_TTL_MS` | `30000` | minimum gap between inbox syncs |
+| `NIC_BROWSER_SYNC_TTL_MS` | `15000` | minimum gap between inbox syncs, measured from the end of the last one. A ceiling on frequency whoever asked, so it must not exceed `MAILBOX_SYNC_INTERVAL_MS` |
 | `NIC_BROWSER_SYNC_MAX` | `20` | new messages opened per sync, at most |
 | `NIC_BROWSER_TIMEOUT_MS` | `20000` | every browser wait, including how long a send waits to be confirmed |
 
@@ -919,8 +919,11 @@ The IMAP settings are not needed. MongoDB is: the mailbox is stored in `MailboxM
   role `FRONT_OFFICE`, email `NIC_EMAIL`, signing in with `QMS_SEED_PASSWORD`. Dev login refuses it.
 - **Routing by mailbox, not sender.** `mailbox.forUser(user)` gives that user the NICeMail store and
   everyone else the primary one; the mailbox routes cannot be pointed elsewhere with `?recipient=`.
-- **Reading.** Listing starts a background sync when the last one is older than
-  `NIC_BROWSER_SYNC_TTL_MS`, and `POST /mailbox/sync` starts one on demand. The sync
+- **Reading.** The server's own timer asks every `MAILBOX_SYNC_INTERVAL_MS` (15 s), so ingestion no
+  longer depends on anyone being signed in; listing also starts one when the last is older than
+  `NIC_BROWSER_SYNC_TTL_MS`, and `POST /mailbox/sync` starts one on demand. All three go through
+  `syncIfDue`, which will not start a sync while an acknowledgement, forward or response is queued —
+  a person outranks a timer. The sync
   (`nicBrowserMailbox.sync`) takes as new only the unstored rows above the deepest stored row still
   loaded, opens them oldest first through `readInbox.js`, at most `NIC_BROWSER_SYNC_MAX`, and stores
   each as soon as it is read, keyed on Zoho's message id (`$setOnInsert` under a unique index), never
