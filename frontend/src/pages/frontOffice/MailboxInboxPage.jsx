@@ -64,10 +64,6 @@ const SYNC_POLL_MS = 3000;
 const PAGE_SIZE = 50;
 const SEARCH_DEBOUNCE_MS = 300;
 
-// A three-way view rather than two booleans. `awaiting` and `junkOnly` are
-// mutually exclusive by construction on the server: rejecting a message sets
-// `ingested`, and `awaiting` means `ingested: false`, so asking for both at once
-// would always return nothing.
 const MAIL_VIEWS = [
   { value: "all", label: "All mail", awaiting: false, junkOnly: false },
   { value: "awaiting", label: "Awaiting", awaiting: true, junkOnly: false },
@@ -76,12 +72,6 @@ const MAIL_VIEWS = [
 
 const viewByValue = (value) => MAIL_VIEWS.find((entry) => entry.value === value) || MAIL_VIEWS[0];
 
-/**
- * How long before the retention sweep strips this message's content.
- *
- * Rounded coarsely on purpose: the sweep runs hourly, so a to-the-minute
- * countdown would promise a precision the schedule does not have.
- */
 function describePurge(purgesAt, now = Date.now()) {
   if (!purgesAt) return null;
   const at = Date.parse(purgesAt);
@@ -625,9 +615,6 @@ function MailboxRow({
   const rejected = decision?.decision === "REJECTED";
   const unread = message.isRead === false;
   const junk = message.triage?.verdict === "JUNK" && !message.triage?.rescuedAt;
-  // Shown for both retention tiers, so nothing is destroyed without notice. A
-  // message that already became a case is safe and says so through its case
-  // link instead.
   const purge = describePurge(message.triage?.purgesAt);
 
   const openFromRow = (event) => {
@@ -991,8 +978,6 @@ export function MailboxInboxPage() {
 
   const onViewChange = (value) => {
     setView(value);
-    // Page 3 of the old view is rarely page 3 of the new one, and landing past
-    // the end makes the pager walk itself back a page per render.
     setOffset(0);
   };
 

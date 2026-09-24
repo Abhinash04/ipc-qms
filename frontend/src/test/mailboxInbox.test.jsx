@@ -767,9 +767,6 @@ describe('the Junk view', () => {
   });
 
   it('asks the server for junk only, and starts at the first page', async () => {
-    // The filter has to be server-side: the page asks for 50 rows at a time and
-    // renders the server's `total`, so filtering the page in the browser would
-    // report counts for rows it did not show.
     fetchMailboxMessages.mockResolvedValue({ messages: [junkMessage(9, 'Half price reagents')] });
     renderInbox();
     await screen.findByText('Half price reagents');
@@ -822,9 +819,6 @@ describe('the Junk view', () => {
   });
 
   it('warns on a genuine message too, because the second tier will take it', async () => {
-    // The countdown is not a junk badge. A message nobody registered is
-    // destroyed on the longer window whatever its verdict, and the inbox must
-    // not imply otherwise.
     fetchMailboxMessages.mockResolvedValue({
       messages: [junkMessage(9, 'Unactioned enquiry', { verdict: 'GENUINE', confidence: 0, purgesAt: hoursFromNow(20) })],
     });
@@ -849,7 +843,6 @@ describe('the Junk view', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Rescue message MSG-00009' }));
 
     await waitFor(() => expect(rescueMailboxMessage).toHaveBeenCalledWith('MSG-00009'));
-    // Rescuing is not accepting: no case, no acknowledgement, no forward.
     expect(acceptMailboxMessage).not.toHaveBeenCalled();
     expect(sendAcknowledgement).not.toHaveBeenCalled();
     expect(useWorkflowStore.getState().queries).toHaveLength(0);

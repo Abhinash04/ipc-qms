@@ -17,9 +17,6 @@ export async function fetchMailboxMessages({
     params: {
       ...(recipient ? { recipient } : {}),
       unreadOnly: String(unreadOnly),
-      // Only sent when asked for. The server's schema strips keys it does not
-      // know, so an unrecognised one fails silently rather than loudly — worth
-      // keeping the query string to what is actually meant.
       ...(junkOnly ? { junkOnly: 'true' } : {}),
       ...(q ? { q } : {}),
       ...(limit ? { limit, offset: offset ?? 0 } : {}),
@@ -80,14 +77,6 @@ export async function fetchMailboxDecisions() {
   return data;
 }
 
-/**
- * Clear a junk verdict for good.
- *
- * Not the same as accepting: accepting mints a Query Case, sends the
- * acknowledgement and forwards to the Officer-in-Charge. This only says "the
- * machine was wrong", which is why it exists — before it, the only way to save a
- * message from the retention sweep was to register it as a case.
- */
 export async function rescueMailboxMessage(mailboxMessageId) {
   const { data } = await axiosClient.post(
     `/mailbox/messages/${encodeURIComponent(mailboxMessageId)}/triage/rescue`,
