@@ -178,6 +178,7 @@ function computeTransition(state, { queryId, event, actor, patch = {}, details, 
   }
 
   const timestamp = now();
+  const baseRevision = state.queries.find((q) => q.queryId === queryId)?.revision ?? 0;
   const minted = mintId(state.counters, 'AUD');
   let counters = { ...state.counters, ...minted.bump };
 
@@ -217,11 +218,15 @@ function computeTransition(state, { queryId, event, actor, patch = {}, details, 
   }
 
   const base = { ...state, queries, auditEvents, notifications, counters };
-  const next = mutate ? { ...base, ...mutate(base) } : base;
-  return { next, auditEvent, notification };
+  const mutated = mutate ? { ...base, ...mutate(base) } : base;
+  const next = {
+    ...mutated,
+    queries: mutated.queries.map((q) => (q.queryId === queryId ? { ...q, revision: baseRevision + 1 } : q)),
+  };
+  return { next, auditEvent, notification, baseRevision };
 }
 
-async function persistDelta(prev, next, queryId, auditEvent, notification) {
+async function persistDelta(prev, next, queryId, auditEvent, notification, baseRevision) {
   const prevStepIds = byQuery(prev.workflowSteps, queryId).map((s) => s.stepId);
   const nextSteps = byQuery(next.workflowSteps, queryId);
   const nextStepIds = new Set(nextSteps.map((s) => s.stepId));
@@ -245,6 +250,7 @@ async function persistDelta(prev, next, queryId, auditEvent, notification) {
   const { persistTransition } = db ?? (await dbModule());
   return persistTransition({
     query: next.queries.find((q) => q.queryId === queryId) || null,
+    baseRevision,
     auditEvent,
     notification,
     counters: next.counters,
@@ -256,6 +262,11 @@ async function persistDelta(prev, next, queryId, auditEvent, notification) {
     addThreads: next.emailThreads.filter((t) => !prevThreadIds.has(t.threadId)),
     addMessages: next.emailMessages.filter((m) => !prevMessageIds.has(m.messageId)),
   });
+}
+
+async function writesSettled() {
+  const { settled } = db ?? (await dbModule());
+  return settled();
 }
 
 function describeSendFailure(error) {
@@ -338,11 +349,24 @@ export const useWorkflowStore = create((set, get) => ({
 
   applyTransition: (options) => {
     const prev = get();
-    const { next, auditEvent, notification } = computeTransition(prev, options);
+    const { next, auditEvent, notification, baseRevision } = computeTransition(prev, options);
     set(next);
 
-    persistDelta(prev, next, options.queryId, auditEvent, notification)
-      .then(() => get().revalidate())
+    persistDelta(prev, next, options.queryId, auditEvent, notification, baseRevision)
+      .then(async (outcome) => {
+        await get().revalidate();
+        if (!outcome?.conflict) return;
+        const stale = outcome.conflict === 'STALE_CASE';
+        notify.error(
+          stale
+            ? `${options.queryId} was changed by someone else`
+            : `${options.queryId} clashed with a teammate's change`,
+          stale
+            ? 'Showing the latest; redo your last step.'
+            : 'Record ids were reused; the latest is shown — please retry.',
+          { id: `case-conflict-${options.queryId}` },
+        );
+      })
       .catch((error) => {
         console.error('[qms] failed to persist workflow transition', error);
         set({ persistenceError: String(error?.message || error) });
@@ -546,6 +570,7 @@ export const useWorkflowStore = create((set, get) => ({
       throw new Error('acceptMailboxMessage: message must carry a mailboxMessageId');
     }
 
+    await writesSettled();
     const result = await accept(mailboxMessageId, message);
 
     if (result?.queryId) await get().refreshFromServer();
@@ -582,6 +607,7 @@ export const useWorkflowStore = create((set, get) => ({
   forwardToOic: async (queryId, actor, forward = forwardQuery) => {
     assertCan(get(), WORKFLOW_ACTION.FORWARD, queryId, actor);
 
+    await writesSettled();
     try {
       const result = await forward({ queryId });
       await get().refreshFromServer();
@@ -1008,6 +1034,7 @@ export const useWorkflowStore = create((set, get) => ({
     if (running) return running;
 
     const work = (async () => {
+      await writesSettled();
       try {
         return await approve(queryId, { comment });
       } finally {
@@ -1020,6 +1047,7 @@ export const useWorkflowStore = create((set, get) => ({
   },
 
   resolveOutboundEmail: async (queryId, { emailType, outcome }, resolve = resolveOutboundOnServer) => {
+    await writesSettled();
     try {
       return await resolve(queryId, { emailType, outcome });
     } finally {
@@ -1098,6 +1126,7 @@ export const useWorkflowStore = create((set, get) => ({
 
     if (actor) assertCan(state, WORKFLOW_ACTION.DISPATCH, queryId, actor);
 
+    await writesSettled();
     try {
       const result = await send({ queryId });
       await get().refreshFromServer();

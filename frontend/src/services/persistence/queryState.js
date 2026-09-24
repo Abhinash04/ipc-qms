@@ -43,14 +43,20 @@ let memoryStore = createDefaultStore();
 
 export const COUNTER_KEY = 'counters';
 
+const CONFLICT_CODES = new Set(['STALE_CASE', 'ID_COLLISION']);
+
 let pending = Promise.resolve();
 let writes = 0;
+let generation = 0;
+const refused = new Map();
 
 function enqueue(work) {
   const result = pending.then(work, work);
   pending = result.catch(() => {});
   return result;
 }
+
+export const settled = () => pending;
 
 export async function loadAll() {
   let seen;
@@ -62,6 +68,7 @@ export async function loadAll() {
 
   if (data && Array.isArray(data.queries)) {
     memoryStore = data;
+    generation += 1;
   }
   return memoryStore;
 }
@@ -140,12 +147,20 @@ export async function persistTransition(delta) {
   if (addThreads.length) memoryStore.emailThreads.push(...addThreads);
   if (counters) memoryStore.counters = counters;
 
+  const queryId = query?.queryId;
+  const builtIn = generation;
   writes += 1;
   return enqueue(async () => {
+    if (queryId && refused.get(queryId) >= builtIn) return { ok: false };
     try {
       await persistQueryTransition(delta);
       return { ok: true };
     } catch (error) {
+      if (queryId) refused.set(queryId, builtIn);
+      const code = error?.response?.data?.code;
+      if (error?.response?.status === 409 && CONFLICT_CODES.has(code)) {
+        return { ok: false, conflict: code };
+      }
       reportFailure(error);
       return { ok: false };
     }

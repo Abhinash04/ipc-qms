@@ -4,6 +4,7 @@ import { useWorkflowStore } from '@/store/useWorkflowStore';
 import { findUserById } from '@/constants/mockUsers';
 import { AUDIT_EVENT, RESPONSE_STATUS, WORKFLOW_STATE } from '@/constants/statusEnums';
 import * as queryCaseService from '@/services/api/queryCaseService';
+import { notify } from '@/services/notify';
 import { persistTransitionSchema } from '../../../backend/src/validators/queryStateSchemas.js';
 
 vi.mock('@/services/api/mailboxService');
@@ -472,5 +473,123 @@ describe('the server would accept every delta the store emits', () => {
     await settled();
 
     assertEveryDeltaParses();
+  });
+});
+
+describe('a write built on an outdated case', () => {
+  const conflict = (code, queryId) =>
+    Object.assign(new Error('Request failed with status code 409'), {
+      response: { status: 409, data: { code, queryId } },
+    });
+
+  const teammateMovesOn = (queryId) => {
+    const saved = JSON.parse(
+      JSON.stringify(
+        serverSnapshot({
+          queries: s().queries.map((q) =>
+            q.queryId === queryId
+              ? { ...q, revision: 40, workflowState: WORKFLOW_STATE.PENDING_ASSIGNMENT }
+              : q,
+          ),
+        }),
+      ),
+    );
+    queryCaseService.fetchAllQueries.mockImplementation(async () => JSON.parse(JSON.stringify(saved)));
+  };
+
+  const summarise = (queryId, text) =>
+    s().applyTransition({
+      queryId,
+      actor: null,
+      actorLabel: 'AI Summary Assistant',
+      event: AUDIT_EVENT.AI_SUMMARY_GENERATED,
+      patch: { aiSummary: { text } },
+      details: text,
+    });
+
+  it('sends each change on the revision the one before it left', async () => {
+    const queryId = await caseAwaitingReview();
+
+    const sent = captured.filter((d) => d.query?.queryId === queryId);
+    expect(sent.length).toBeGreaterThan(3);
+    expect(sent.map((d) => d.baseRevision)).toEqual(sent.map((_, index) => index));
+    expect(s().getQuery(queryId).revision).toBe(sent.length);
+  });
+
+  it.each([
+    ['STALE_CASE', 'was changed by someone else', /redo your last step/],
+    ['ID_COLLISION', "clashed with a teammate's change", /please retry/],
+  ])('reloads the case and explains a %s refusal exactly once', async (code, title, detail) => {
+    const queryId = await caseAwaitingReview();
+    const failed = vi.spyOn(notify, 'error').mockImplementation(() => {});
+    queryCaseService.persistQueryTransition.mockRejectedValueOnce(conflict(code, queryId));
+    teammateMovesOn(queryId);
+
+    s().approveReview(queryId, 'Reads correctly.', REVIEWER);
+
+    await vi.waitFor(() => {
+      expect(s().getQuery(queryId).revision).toBe(40);
+    });
+    await settled();
+
+    expect(s().getQuery(queryId).workflowState).toBe(WORKFLOW_STATE.PENDING_ASSIGNMENT);
+    expect(failed).toHaveBeenCalledTimes(1);
+    expect(failed).toHaveBeenCalledWith(`${queryId} ${title}`, expect.stringMatching(detail), {
+      id: `case-conflict-${queryId}`,
+    });
+    failed.mockRestore();
+  });
+
+  it('never sends a change built on the refused one, and builds the next on the saved revision', async () => {
+    const queryId = await caseAwaitingReview();
+    const failed = vi.spyOn(notify, 'error').mockImplementation(() => {});
+    queryCaseService.persistQueryTransition.mockClear();
+    queryCaseService.persistQueryTransition.mockRejectedValueOnce(conflict('STALE_CASE', queryId));
+    teammateMovesOn(queryId);
+    captured.length = 0;
+
+    summarise(queryId, 'First summary.');
+    summarise(queryId, 'Second summary.');
+
+    await vi.waitFor(() => {
+      expect(s().getQuery(queryId).revision).toBe(40);
+    });
+    await settled();
+
+    expect(queryCaseService.persistQueryTransition).toHaveBeenCalledTimes(1);
+    expect(captured).toEqual([]);
+    expect(failed).toHaveBeenCalledTimes(1);
+
+    summarise(queryId, 'Third summary.');
+    await settled();
+
+    expect(captured.map((d) => d.baseRevision)).toEqual([40]);
+    expect(captured[0].query.aiSummary.text).toBe('Third summary.');
+    failed.mockRestore();
+  });
+
+  it('lets its own queued write land before a server action moves the revision', async () => {
+    const { queryId } = s().ingestEmail(enquiry(), async () => null);
+    await s().verifyQuery(queryId, FRONT_OFFICE);
+    await settled();
+    let release;
+    queryCaseService.persistQueryTransition.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          release = () => resolve({ success: true });
+        }),
+    );
+    const forward = vi.fn(fakeForward);
+
+    summarise(queryId, 'Summary written before the forward.');
+    const forwarding = s().forwardToOic(queryId, FRONT_OFFICE, forward);
+    await settled();
+
+    expect(forward).not.toHaveBeenCalled();
+
+    release();
+    await forwarding;
+
+    expect(forward).toHaveBeenCalledTimes(1);
   });
 });
