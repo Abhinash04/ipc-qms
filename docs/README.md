@@ -12,6 +12,9 @@ design system).
 
 ## Operational Guides
 
+- [ENVIRONMENT.md](./ENVIRONMENT.md) — the environment reference: every variable the backend and
+  frontend read, which env file the backend loads, which values are secret, the local profiles, the
+  production values for the VM backend and the Render static site, and every boot refusal.
 - [auth.md](./auth.md) — the 12 seeded accounts (a 13th, the NICeMail Front Office, when `NIC_BROWSER_MAILBOX=true`), their roles and landing dashboards, how
   sign-in works, and the known limitations of the seeded-account mechanism. **Contains no
   credentials** — each account's password is referenced by environment-variable name.
