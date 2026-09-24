@@ -1,7 +1,5 @@
-import dotenv from 'dotenv';
+import '../config/env.js';
 import { recommendOfficial } from '../services/ai/gemmaService.js';
-
-dotenv.config();
 
 async function runLiveRecommendationTest() {
   console.log('======================================================================');

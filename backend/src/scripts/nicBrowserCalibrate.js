@@ -1,4 +1,4 @@
-import 'dotenv/config';
+import '../config/env.js';
 import { mkdir, rm, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import path from 'path';

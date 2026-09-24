@@ -1,4 +1,4 @@
-import 'dotenv/config';
+import '../config/env.js';
 
 import { read_nicemail, send_nicemail, describeNicSetup } from '../services/email/nic/actions.js';
 const PASS = 'PASS';
