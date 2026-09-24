@@ -112,6 +112,9 @@ export async function acceptMessage({ mailboxMessageId, message = {}, actor, sou
   const errors = [];
 
   const existingDecision = await decisions.findDecision(mailboxMessageId);
+  if (existingDecision?.decision === 'REJECTED') {
+    throw Object.assign(new Error('This message was already rejected; it cannot be registered.'), { status: 409 });
+  }
   const decidedQueryId =
     existingDecision?.decision === 'ACCEPTED' ? existingDecision.queryId : null;
 

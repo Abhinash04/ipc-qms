@@ -26,7 +26,7 @@ export function useMailboxIngestion() {
         setState({ running: false, error: null, lastResult: result });
         return result;
       } catch (error) {
-        const detail = error?.message || String(error);
+        const detail = error?.response?.data?.error || error?.message || String(error);
         setState({ running: false, error: detail, lastResult: null });
         return { accepted: false, error: detail };
       }

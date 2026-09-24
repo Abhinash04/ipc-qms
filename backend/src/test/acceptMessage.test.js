@@ -283,6 +283,28 @@ describe('accepting the same message twice', () => {
   });
 });
 
+describe('accepting a message someone already rejected', () => {
+  it('is refused, without a case or an email', async () => {
+    await request(app)
+      .post('/api/v1/mailbox/messages/msg-ravi-1/decision')
+      .set(authHeader(ROLES.FRONT_OFFICE))
+      .send({ decision: 'REJECTED', reason: 'Advertisement' });
+
+    const res = await accept('msg-ravi-1');
+
+    expect(res.status).toBe(409);
+    expect(res.body.error).toMatch(/already rejected/);
+    expect(await QueryCase.find({}).lean()).toHaveLength(0);
+    expect(await EmailMessage.find({}).lean()).toHaveLength(0);
+    expect(ackSpy).not.toHaveBeenCalled();
+    expect(forwardSpy).not.toHaveBeenCalled();
+    expect(await MailboxDecision.findOne({ mailboxMessageId: 'msg-ravi-1' }).lean()).toMatchObject({
+      decision: 'REJECTED',
+    });
+  });
+});
+
+
 describe('two accepts of the same message at once', () => {
   it('opens one case, and sends one acknowledgement and one forward', async () => {
     const [first, second] = await Promise.all([

@@ -169,6 +169,25 @@ describe('Scenario A — the Front Officer accepts a genuine enquiry', () => {
       'PENDING_ASSIGNMENT',
     );
   });
+
+  it('shows why the server refused to register the message', async () => {
+    const reason = 'MSG-00001 was already rejected, so it cannot be registered.';
+    acceptMailboxMessage.mockRejectedValueOnce(
+      Object.assign(new Error('Request failed with status code 409'), {
+        response: { status: 409, data: { error: reason } },
+      }),
+    );
+    const failed = vi.spyOn(notify, 'error').mockImplementation(() => {});
+    renderInbox();
+    await screen.findByText('Keep this one');
+
+    fireEvent.click(acceptFor('MSG-00001'));
+    fireEvent.click(confirm());
+
+    await waitFor(() => expect(failed).toHaveBeenCalledWith('Could not register that message', reason));
+    expect(useWorkflowStore.getState().queries).toHaveLength(0);
+    failed.mockRestore();
+  });
 });
 
 describe('Scenario B — the Front Officer rejects an unwanted email', () => {
