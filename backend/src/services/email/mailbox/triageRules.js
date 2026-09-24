@@ -1,4 +1,3 @@
-import env from '../../../config/env.js';
 import { IDENTITY_ROLES, identityForRole } from '../../../config/identities.js';
 import browserConfig from '../../../config/browserConfig.js';
 import nicConfig from '../../../config/nicConfig.js';
@@ -40,8 +39,6 @@ function ownAddresses() {
   return [
     identityForRole(IDENTITY_ROLES.FRONT_OFFICE)?.email,
     identityForRole(IDENTITY_ROLES.OFFICER_IN_CHARGE)?.email,
-    env.IPC_ACK_FROM_EMAIL,
-    env.IPC_QUERY_EMAIL,
     browserConfig.mailboxAddress,
     nicConfig.email,
   ]

@@ -44,10 +44,7 @@ function getEmailConfig() {
     nicBrowserMailbox: browserConfig.mailboxEnabled,
     outboundAllowed: outboundAllowed(),
 
-    ipcQueryEmail: frontOffice?.email || env.IPC_QUERY_EMAIL,
-    mockMailboxEmail: env.IPC_QUERY_EMAIL,
-
-    ipcReplyFrom: { email: env.IPC_ACK_FROM_EMAIL, name: env.IPC_ACK_FROM_NAME },
+    ipcQueryEmail: frontOffice?.email,
 
     participants: publicDirectory(),
   };
@@ -90,8 +87,8 @@ function composeAcknowledgement({ to, queryId, sourceMailbox = null }) {
   const frontOffice = senderFor(sourceMailbox);
   return buildAcknowledgement({
     to,
-    fromEmail: frontOffice?.email || env.IPC_ACK_FROM_EMAIL,
-    fromName: frontOffice?.name || env.IPC_ACK_FROM_NAME,
+    fromEmail: frontOffice?.email,
+    fromName: frontOffice?.name,
     queryId,
   });
 }

@@ -64,7 +64,6 @@ beforeEach(async () => {
   vi.mocked(mailboxService.fetchEmailConfig).mockResolvedValue({
     transport: 'mock',
     ipcQueryEmail: 'ipc-query-mock@example.com',
-    ipcReplyFrom: { email: 'arnd-ipc-mock@example.com', name: 'AR&D Division' },
   });
 
   useAuthStore.setState({ currentUser: findUserById('USR-0008') });

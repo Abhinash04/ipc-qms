@@ -1,5 +1,5 @@
 import HTTP_STATUS from '../constants/httpStatus.js';
-import env, { isProduction } from '../config/env.js';
+import { isProduction } from '../config/env.js';
 import { IDENTITY_ROLES, identityForRole } from '../config/identities.js';
 import * as audit from '../services/audit/auditService.js';
 import { AUDIT_ACTIONS } from '../constants/auditActions.js';
@@ -20,8 +20,7 @@ const recordMailbox = (req, action, message) =>
     },
   });
 
-const defaultRecipient = () =>
-  identityForRole(IDENTITY_ROLES.FRONT_OFFICE)?.email || env.IPC_QUERY_EMAIL;
+const defaultRecipient = () => identityForRole(IDENTITY_ROLES.FRONT_OFFICE)?.email;
 import * as mailbox from '../services/email/mailbox/index.js';
 import * as decisions from '../services/email/mailbox/decisions.js';
 import * as triage from '../services/email/mailbox/triage.js';

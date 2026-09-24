@@ -3,7 +3,7 @@ import env, { assertValidEmailConfig, EMAIL_TRANSPORTS } from './config/env.js';
 import { assertValidAuthConfig } from './config/authConfig.js';
 import { connectDb, disconnectDb } from './config/db.js';
 import browserConfig from './config/browserConfig.js';
-import { IDENTITY_ROLES, identityForRole } from './config/identities.js';
+import { IDENTITY_ROLES, identityForRole, formatSender } from './config/identities.js';
 import * as mailbox from './services/email/mailbox/index.js';
 import { outboundAllowed, internalForwardAllowed } from './services/email/nic/outboundGuard.js';
 import { startRetentionSweeps, stopRetentionSweeps } from './services/email/mailbox/retention.js';
@@ -29,9 +29,7 @@ function describeConfiguration() {
   };
 
   const transport = TRANSPORT_LABELS[env.EMAIL_TRANSPORT] || env.EMAIL_TRANSPORT;
-  const recipient = frontOffice?.email
-    ? `${frontOffice.name} <${frontOffice.email}>`
-    : env.IPC_QUERY_EMAIL;
+  const recipient = formatSender(frontOffice);
   const source = store.persistence;
   const nicAgent = !browserConfig.mailboxEnabled
     ? null

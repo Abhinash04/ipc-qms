@@ -90,7 +90,6 @@ describe('Tier B — the sender', () => {
   beforeEach(() => {
     process.env.FRONT_OFFICE_EMAIL = 'front.office@ipc.invalid';
     process.env.OFFICER_IN_CHARGE_EMAIL = 'oic@ipc.invalid';
-    process.env.INQUIRER_EMAIL = 'member.of.public@example.invalid';
   });
   afterEach(() => {
     process.env = { ...ORIGINAL };
@@ -105,7 +104,7 @@ describe('Tier B — the sender', () => {
     },
   );
 
-  it('does NOT treat the configured inquirer address as a loop', () => {
+  it('does NOT treat a member of the public as a loop', () => {
     const result = classifyByRules(enquiry({ from: 'Public <member.of.public@example.invalid>' }));
     expect(result.verdict).toBe(GENUINE);
   });

@@ -19,10 +19,6 @@ const env = {
 
   MAILBOX_SOURCE: (process.env.MAILBOX_SOURCE || MAILBOX_SOURCES.AUTO).toLowerCase(),
 
-  IPC_QUERY_EMAIL: process.env.IPC_QUERY_EMAIL || 'ipc-query-mock@example.com',
-
-  IPC_ACK_FROM_EMAIL: process.env.IPC_ACK_FROM_EMAIL || 'arnd-ipc-mock@example.com',
-  IPC_ACK_FROM_NAME: process.env.IPC_ACK_FROM_NAME || 'AR&D Division',
   GEMMA_API_URL: process.env.GEMMA_API_URL ?? 'https://pravahai.aicte-india.org/llm/api/gemma',
   GEMMA_TIMEOUT_MS: parseInt(process.env.GEMMA_TIMEOUT_MS || '12000', 10),
 
@@ -114,8 +110,6 @@ function validateEmailConfig(config = env) {
       );
     }
   }
-
-  if (!config.IPC_QUERY_EMAIL) errors.push('IPC_QUERY_EMAIL is required');
 
   if (config.MAILBOX_RETENTION_HOURS !== undefined) {
     if (!Number.isFinite(config.MAILBOX_RETENTION_HOURS) || config.MAILBOX_RETENTION_HOURS <= 0) {

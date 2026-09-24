@@ -40,10 +40,6 @@ describe('email configuration', () => {
       expect.stringContaining('MAILBOX_SOURCE must be one of: auto, nic'),
     );
 
-    expect(validateEmailConfig({ ...env, IPC_QUERY_EMAIL: '' })).toContainEqual(
-      expect.stringContaining('IPC_QUERY_EMAIL is required'),
-    );
-
     expect(validateEmailConfig(env)).toEqual([]);
   });
 

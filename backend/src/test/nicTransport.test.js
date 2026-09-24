@@ -46,7 +46,6 @@ describe('EMAIL_TRANSPORT=nic', () => {
     const errors = validateEmailConfig({
       EMAIL_TRANSPORT: EMAIL_TRANSPORTS.NIC,
       MAILBOX_SOURCE: MAILBOX_SOURCES.AUTO,
-      IPC_QUERY_EMAIL: 'ipc@example.com',
     });
     expect(errors).toEqual([]);
   });
@@ -59,7 +58,6 @@ describe('EMAIL_TRANSPORT=nic', () => {
     const errors = validateEmailConfig({
       EMAIL_TRANSPORT: EMAIL_TRANSPORTS.NIC,
       MAILBOX_SOURCE: MAILBOX_SOURCES.AUTO,
-      IPC_QUERY_EMAIL: 'ipc@example.com',
     });
 
     expect(errors.join('\n')).toMatch(/NIC_EMAIL is required/);

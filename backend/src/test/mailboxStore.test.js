@@ -84,7 +84,7 @@ describe('facade behaviour is identical regardless of backend', () => {
     expect(next.mailboxMessageId).toBe('MSG-00002');
   });
 
-  it('keeps separate inboxes per recipient, so IPC_QUERY_EMAIL can change', async () => {
+  it('keeps separate inboxes per recipient, so the Front Office address can change', async () => {
     await mailbox.deliver({ to: 'ipc-query-mock@example.com', from: 'a@example.com', subject: 'Dev' });
     await mailbox.deliver({ to: 'lab.ipc@gov.in', from: 'a@example.com', subject: 'Prod' });
 
