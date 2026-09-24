@@ -91,7 +91,7 @@ and Appendix B.
 
 | What was checked | Finding |
 |---|---|
-| Where AI inference happens | Every AI feature (summary, officer recommendation, draft, and the question split used by the draft) is an HTTPS `POST` to one external endpoint, `GEMMA_API_URL`. It defaults to `https://pravahai.aicte-india.org/llm/api/gemma`. No model is loaded or run inside IPC-QMS. [Verified] (`backend/src/services/ai/gemmaService.js:170, 315, 440`; `backend/src/config/env.js:56-59`) |
+| Where AI inference happens | Every AI feature (summary, officer recommendation, draft, and the question split used by the draft) is an HTTPS `POST` to one external endpoint, `GEMMA_API_URL`. It defaults to `https://pravahai.aicte-india.org/llm/api/gemma`. No model is loaded or run inside IPC-QMS. [Verified] (`backend/src/services/ai/gemmaService.js:170, 315, 440`; `backend/src/config/env.js:47-48`) |
 | Local ML, CUDA, ONNX, TensorFlow, PyTorch, embeddings, vector DB, OCR | None in either `package.json` or either lockfile, and none in the source code. [Verified] (dependency and source scan of `backend/` and `frontend/`) |
 | The "knowledge grounding" used by the AI draft | Plain JavaScript word matching over a 0.46 MB JSON index shipped in the repository (412 text chunks). No embeddings, no vectors, no native code. [Verified] (`backend/src/data/ipcKnowledge.js`, `backend/src/data/ipcKnowledge.json`) |
 | PDF / document / image processing | Attachments are only type-checked, size-checked, checksummed and stored. They are never parsed, OCR'd or sent to the AI. [Verified] (`backend/src/services/attachments/attachmentPolicy.js`, `attachmentStore.js`) |
@@ -138,13 +138,13 @@ The Browser Agent is currently exercised with a test account (`contact.ecoclubs-
 
 | # | Item | What it controls | Action for production | Evidence |
 |---|---|---|---|---|
-| 1 | `NIC_EMAIL` | The mailbox address. The sign-in email of the NICeMail Front Office user (`USR-0014`). The **expected "From" address** checked before every send. The address stored messages are filed under. | Set to `lab.ipc@gov.in` | `browserConfig.js:98-100`; `constants/users.js:45-54`; `nic/browser/sendMail.js:358-368`; `mailbox/nicBrowserMailbox.js:68` |
-| 2 | Boot rule | `NIC_EMAIL` must differ from `FRONT_OFFICE_EMAIL` or the backend refuses to start | Decide what `FRONT_OFFICE_EMAIL` is in production (see 17.4) | `config/env.js:130-137` |
+| 1 | `NIC_EMAIL` | The mailbox address. The sign-in email of the NICeMail Front Office user (`USR-0014`). The **expected "From" address** checked before every send. The address stored messages are filed under. | Set to `lab.ipc@gov.in` | `browserConfig.js:50-52`; `constants/users.js:19-28`; `nic/browser/sendMail.js:358-368`; `mailbox/nicBrowserMailbox.js:68` |
+| 2 | Boot rule | `NIC_EMAIL` must differ from `FRONT_OFFICE_EMAIL` or the backend refuses to start | Set `FRONT_OFFICE_EMAIL` to a real address that is not `lab.ipc@gov.in` and never mails that inbox (it is on the triage loop list). The production values are in [docs/ENVIRONMENT.md](ENVIRONMENT.md) | `config/env.js:114-120`; `mailbox/triageRules.js:38-47` |
 | 3 | Chrome sign-in | Reads use whatever account the Chrome window is signed into: sync has **no account check** and files what it reads under the current `NIC_EMAIL`. Sends are refused unless the compose From contains `NIC_EMAIL`. If `NIC_EMAIL` and the Chrome sign-in are switched at different times, one account's mail is filed under the other address. | Sign in to `lab.ipc@gov.in` in the dedicated Chrome profile (MFA/OTP if NIC requires it [Unknown]). **Switch `NIC_EMAIL` and the Chrome sign-in together, with the backend stopped.** | `nic/browser/attach.js:4-15`; `session.js:43-75`; `sendMail.js:358-368`; `nicBrowserMailbox.js:68, 145` |
-| 4 | `NIC_ALLOW_OUTBOUND` | Outbound safety interlock. Until it is `true`, NICeMail sends only go to the test recipient. `NIC_ALLOW_INTERNAL_FORWARD=true` additionally opens exactly `OFFICER_IN_CHARGE_EMAIL`, for the forward alone — a recipient allowance, not a second channel [Verified, 2026-09-23] | Set `NIC_ALLOW_OUTBOUND=true` **only** at go-live, deliberately. Build the production configuration from `.env.example`, never from a development `.env`. Start with `NIC_ALLOW_OUTBOUND=false`, and use `NIC_ALLOW_INTERNAL_FORWARD=true` so intake completes end to end while it is closed. | `nic/outboundGuard.js`; `config/env.js` |
-| 5 | `NIC_BROWSER_TEST_RECIPIENT` | The only allowed recipient while the interlock is closed; also used by the calibration tool. If unset, it falls back to `NIC_TEST_RECIPIENT`, then to `NIC_EMAIL`, so with both unset `lab.ipc@gov.in` itself becomes the only allowed recipient. | Set explicitly to an IPC-controlled test inbox | `browserConfig.js:67-74` |
+| 4 | `NIC_ALLOW_OUTBOUND` | Outbound safety interlock. Until it is `true`, NICeMail sends only go to the test recipient. `NIC_ALLOW_INTERNAL_FORWARD=true` additionally opens exactly `OFFICER_IN_CHARGE_EMAIL`, for the forward alone — a recipient allowance, not a second channel [Verified, 2026-09-23] | Set `NIC_ALLOW_OUTBOUND=true` **only** at go-live, deliberately. Build the production configuration (`backend/.env.production`) from [docs/ENVIRONMENT.md](ENVIRONMENT.md), never from a development `.env.local`. Start with `NIC_ALLOW_OUTBOUND=false`, and use `NIC_ALLOW_INTERNAL_FORWARD=true` so intake completes end to end while it is closed. | `nic/outboundGuard.js`; `config/env.js` |
+| 5 | `NIC_BROWSER_TEST_RECIPIENT` | The only allowed recipient while the interlock is closed; also used by the calibration tool. If unset, it falls back to `NIC_TEST_RECIPIENT`. One of the two is **required at boot** while the agent is on and `NIC_ALLOW_OUTBOUND` is not `true`; only the standalone scripts still fall back to `NIC_EMAIL`. | Set explicitly to an IPC-controlled test inbox | `browserConfig.js:25-32`; `config/env.js:121-127` |
 | 6 | `NIC_FRONT_OFFICE_NAME` | Display name inside IPC-QMS only. The name recipients see comes from the NICeMail account profile. | Set an IPC name; check the NICeMail profile display name | `emailService.js:75-78`; `transports/nicBrowserTransport.js` |
-| 7 | `NIC_WEBMAIL_APP_URL`, `NIC_WEBMAIL_URL_PATTERNS`, `NIC_WEBMAIL_TITLE_PATTERNS` | Which web address the agent opens, and which browser tab it recognises as NICeMail | Confirm `lab.ipc@gov.in` is on the same NICeMail (Zoho / mgovcloud) platform and URLs [Unknown] | `browserConfig.js:23-61` |
+| 7 | `NIC_WEBMAIL_APP_URL`, `NIC_WEBMAIL_URL_PATTERNS`, `NIC_WEBMAIL_TITLE_PATTERNS` | Which web address the agent opens, and which browser tab it recognises as NICeMail | Confirm `lab.ipc@gov.in` is on the same NICeMail (Zoho / mgovcloud) platform and URLs [Unknown] | `browserConfig.js:6-23` |
 | 8 | Password for `USR-0014` | The boot check runs in every mode, but **outside production an unset `QMS_ALLOW_SHARED_PASSWORD` still switches the shared mode ON whenever `QMS_SEED_PASSWORD` is non-empty** — so a successful start in development or staging proves nothing about the production credential set. In production each of the 13 accounts, plus the NICeMail Front Office, needs its own credential. The `USR-0014` id itself comes from the hard-coded directory and changes when that directory is replaced. | Set `QMS_PASSWORD_USR_0014` (or add it to `QMS_PASSWORDS_FILE`), set `QMS_ALLOW_SHARED_PASSWORD=false` explicitly rather than leaving it unset, and test the production credential set with `NODE_ENV=production` | `config/authConfig.js`; `services/auth/credentials.js:73-78`; `constants/users.js` |
 | 9 | UI calibration | Selectors were calibrated against the test account's NICeMail interface | Run `npm run nic:browser:discover` and `npm run nic:browser:calibrate` after signing in to `lab.ipc@gov.in` | `scripts/nicBrowserDiscover.js`, `scripts/nicBrowserCalibrate.js` |
 
@@ -172,7 +172,7 @@ IPC-QMS backend (Node.js) ──► MongoDB (MailboxMessage)
    ▼
 Front Officer ✓ Accept ──► Case + Case ID ──► AI summary (Pravah API)
    │                     ├─► Acknowledgement to inquirer  (Browser Agent → NICeMail → Sent-folder check)
-   │                     └─► Forward to OIC               (EMAIL_TRANSPORT — Gmail today; NOT the Browser Agent)
+   │                     └─► Forward to OIC               (Browser Agent for NICeMail cases, otherwise EMAIL_TRANSPORT)
    ▼
 OIC ──► AI officer recommendation (Pravah API) ──► assigns Assigned Officer
    ▼
@@ -192,12 +192,12 @@ Final response ──► Browser Agent ──► compose → verify From / recip
 
 MongoDB is required by **every** step. If it is down, the retry endpoints in rows 2b, 2c and 6r do not fail: they switch to an older path that sends through `EMAIL_TRANSPORT` with no outbound ledger and no at-most-once guarantee, taking the subject, body and attachments (and, for the response, the recipient) from the request — the acknowledgement path takes only the recipient, `queryId` and timestamp (`controllers/emailController.js:131-200`). **Block them or make them fail closed before production.** "Server" means the server decides and enforces the step. "Client" means the browser decides, and the server checks only the role and the case scope.
 
-| # | Step | API endpoint(s) | Role | External AI | Browser Agent | Gmail (current setup) | Authority |
+| # | Step | API endpoint(s) | Role | External AI | Browser Agent | `EMAIL_TRANSPORT` (non-agent cases) | Authority |
 |---|---|---|---|---|---|---|---|
 | 1 | NICeMail inbox sync | `GET /mailbox/messages` (triggers background sync), `POST /mailbox/sync` | NICeMail Front Officer | – | **Yes (read)** | – | Triggered by the client; stored by the server |
 | 2a | Accept: case, Case ID, summary | `POST /mailbox/messages/:id/accept` | Front Office | Optional (fallback if down) | – | – | Server |
 | 2b | Acknowledgement | inside Accept; retry `POST /emails/acknowledgement` | Front Office | – | **Yes** (NICeMail cases) | Yes (other cases) | Server |
-| 2c | Forward to OIC | inside Accept; retry `POST /emails/forward` | Front Office | the stored summary (a timed-out summary is stored as `FALLBACK` and is still used); a second Pravah call only when the case holds no usable summary | **No** | **Yes** | Server |
+| 2c | Forward to OIC | inside Accept; retry `POST /emails/forward` | Front Office | the stored summary (a timed-out summary is stored as `FALLBACK` and is still used); a second Pravah call only when the case holds no usable summary | **Yes** (NICeMail cases) | Yes (other cases) | Server |
 | 3 | Assignment | `POST /ai/recommend`, `POST /queries/persist` | OIC | Optional | – | – | Client |
 | 4 | Draft, reviewers, submit | `POST /ai/draft`, `POST /queries/persist` | Assigned Officer | Optional | – | – | Client |
 | 5 | Review loop | `POST /queries/persist` | Reviewer | – | – | – | Client |
@@ -209,7 +209,7 @@ Evidence: `backend/src/routes/mailboxRoutes.js`, `routes/queryRoutes.js`, `route
 
 On the summary in row 2c: `generateSummary` does not throw for a timeout, an unreachable model or a non-2xx reply — those are stored as `FALLBACK`, which the forward treats as usable (`acceptMessage.js:124-148`; `caseMail.js:133, 195`). Only a summary stored as `FAILED` makes the forward call Pravah again (`emailService.js:237-265`). So **intake** sends the enquiry text to Pravah once: the forward does not make a second call. Later steps send case text again — the officer recommendation (Section 5) and the draft, which makes two calls (Section 6).
 
-Under `EMAIL_TRANSPORT=mock` (the default when the variable is unset, `config/env.js:38`), the forward is recorded as sent and the case moves to `PENDING_ASSIGNMENT` although no email went out; the OIC then relies only on the in-app notification (`caseMail.js:78-87`).
+Under `EMAIL_TRANSPORT=mock` (the default when the variable is unset, `config/env.js:43`), the forward is recorded as sent and the case moves to `PENDING_ASSIGNMENT` although no email went out; the OIC then relies only on the in-app notification (`caseMail.js:78-87`).
 
 ---
 
@@ -220,7 +220,7 @@ Under `EMAIL_TRANSPORT=mock` (the default when the variable is unset, `config/en
 1. The inquirer emails the NICeMail mailbox. For the production mailbox (`lab.ipc@gov.in`), no inquirer-side setup is needed.
 2. Ingestion is **triggered by the browser, not the server**:
    - While the NICeMail Front Officer has IPC-QMS open, the page polls the inbox: every 30 s app-wide, every 15 s on the inbox page, and every 3 s while a sync runs. While the mailbox cannot be reached, the poll backs off to 1, 2 and then 5 minutes (`frontend/src/components/workflow/MailboxAutoSync.jsx:7, 16, 85`; `pages/frontOffice/MailboxInboxPage.jsx:59-61`).
-   - The backend starts a background sync when the last one *ended* more than `NIC_BROWSER_SYNC_TTL_MS` (default 30 s) ago (`mailbox/nicBrowserMailbox.js:226, 236-239, 271`). A **"Sync now"** button requests one (`POST /mailbox/sync`); it is ignored while a sync is running or if the last one ended less than 15 s ago (`nicBrowserMailbox.js:311-324`).
+   - The backend starts a background sync when the last one *ended* more than `NIC_BROWSER_SYNC_TTL_MS` (default 15 s) ago (`mailbox/nicBrowserMailbox.js:192-196, 217-219`). The server-side timer asks for one every `MAILBOX_SYNC_INTERVAL_MS` (default 15 s) while `MAILBOX_SYNC_ENABLED` is not `false`, so mail is read even when nobody has the inbox open (`mailbox/syncScheduler.js`). A **"Sync now"** button requests one (`POST /mailbox/sync`); it is ignored while a sync is running or if the last one ended less than 15 s ago (`nicBrowserMailbox.js:252-259`).
    - **Ingestion now has a server-side scheduler**, so mail arrives with nobody signed in. `services/email/mailbox/syncScheduler.js` asks for a sync every `MAILBOX_SYNC_INTERVAL_MS` (15 s) whenever Chrome's CDP endpoint answers, and `MAILBOX_SYNC_ENABLED=false` returns the deployment to browser-driven ingestion. Cron and a job queue are still absent. [Verified, 2026-09-24]
    - **The interval is a floor, not a period.** Every tick goes through `syncIfDue`, which keeps its single-flight, its `NIC_BROWSER_SYNC_TTL_MS` gap measured from the *end* of the previous sync, and its refusal to start while any browser work is queued. A full twenty-message sync was measured at 91 s, so ticks landing inside one are absorbed and the real cadence is whichever is longer. An acknowledgement or a final response always goes before a sync. [Verified, 2026-09-24]
    - **A closed Chrome is not hammered.** Consecutive sync failures move the next tick out to 2x, 4x then 20x the interval, recovering the moment one succeeds. `SYNC_FAILED` is still audited on the edge only, so an outage writes one row rather than one per tick. [Verified, 2026-09-24]
@@ -263,7 +263,7 @@ One server call, `POST /mailbox/messages/:id/accept`, performs the whole intake 
 | 3. Case ID | Atomic counter gives `QRY-YYYY-NNNNN`; the sequence does not restart yearly | MongoDB | CPU |
 | 4. AI summary | One call to the Pravah endpoint, timeout 12 s (`GEMMA_TIMEOUT_MS`). A timeout, an unreachable model or a non-2xx reply stores a deterministic fallback with status `FALLBACK`, which later steps still use; only an unexpected error stores `FAILED` (`acceptMessage.js:145-170`). Accept never fails because of AI. | Outbound HTTPS to Pravah | **External AI** |
 | 5. Acknowledgement | Through the outbound ledger, **once per case**. For NICeMail cases it goes through the Browser Agent: compose, verify, send, Sent-folder check (Section 8). | Browser Agent + NICeMail | CPU + NICeMail |
-| 6. Forward to OIC | Through `EMAIL_TRANSPORT` (Gmail today), carrying the stored AI summary and the message's attachments. Before sending, every attachment is checked; if one is missing (a received attachment refused by policy or not downloaded is stored with `attachmentId: null`), the **whole forward is refused**, every retry fails the same way, and the case stays at `FRONT_OFFICE_VERIFICATION`. On success: case → `PENDING_ASSIGNMENT`, audit `QUERY_FORWARDED`, in-app notification to the OIC role. | Gmail / NIC SMTP (**not** NICeMail agent) | CPU + external mail |
+| 6. Forward to OIC | Through the case's own mailbox — the Browser Agent for NICeMail cases, otherwise `EMAIL_TRANSPORT` — carrying the stored AI summary and the message's attachments. Before sending, every attachment is checked; if one is missing (a received attachment refused by policy or not downloaded is stored with `attachmentId: null`), the **whole forward is refused**, every retry fails the same way, and the case stays at `FRONT_OFFICE_VERIFICATION`. On success: case → `PENDING_ASSIGNMENT`, audit `QUERY_FORWARDED`, in-app notification to the OIC role. | Browser Agent + NICeMail / NIC SMTP | CPU + external mail |
 | 7. Decision record | `MailboxDecision` ACCEPTED (first decision wins); audit `EMAIL_CLASSIFIED` | MongoDB | CPU |
 
 **Result shown to the Front Officer:** HTTP 200 with a per-step report: `acknowledged`, `acknowledgement.outcome` / `providerMessageId`, `forwarded`, `aiSummaryStatus`, and `errors[]` naming the step and stage that failed. The toast shows the acknowledgement's error reason; a failed forward shows only "not forwarded to the Officer-in-Charge", and its reason is on the case page. [Verified] (`acceptMessage.js:103-121, 368-387`; `MailboxInboxPage.jsx:131-150`; evidence for the attachment rule in step 6: `readInbox.js:383-423`, `emailService.js:225`, `services/attachments/resolveAttachments.js:26-60`)
@@ -273,7 +273,7 @@ One server call, `POST /mailbox/messages/:id/accept`, performs the whole intake 
 - The outbound ledger (`outboundemails`, unique key `emailType:queryId`) guarantees the acknowledgement and the forward are sent **at most once**. A repeat returns `ALREADY_SENT` with the original provider message id.
 - **Reject:** `POST /mailbox/messages/:id/decision` records the decision. No case is created and no email is sent. **However, the server does not stop a later Accept of a rejected message:** a direct `POST …/accept` creates the case and sends both emails, while the stored decision still says `REJECTED`. Only the UI hides the buttons (`acceptMessage.js:187-193`; `decisions.js:35-36`; `MailboxInboxPage.jsx:471`).
 
-**Timing:** Accept waits for the AI summary (≤ 12 s), the NICeMail acknowledgement, and the forward, one after another. **There is no upper bound:** a send can wait behind a running sync, then run several 20 s NICeMail step timeouts, and Gmail has a 30 s timeout. Accept (and final approval) can therefore run well past 60 s, so any reverse proxy needs a longer read timeout (Section 11.3). In the live test on 2026-09-22:
+**Timing:** Accept waits for the AI summary (≤ 12 s), the NICeMail acknowledgement, and the forward, one after another. **There is no upper bound:** a send can wait behind a running sync, then run several 20 s NICeMail step timeouts. Accept (and final approval) can therefore run well past 60 s, so any reverse proxy needs a longer read timeout (Section 11.3). In the live test on 2026-09-22:
 - NICeMail sends (acknowledgement or final response) took about 4.7–6.1 seconds each;
 - a complete Accept took about 18 seconds on a run whose AI call timed out at 12 s (the figures are indicative single observations, not a measured decomposition; the Gmail forward was not timed separately);
 - earlier attempts took up to 54 seconds, while a since-fixed NICeMail prompt caused send timeouts. [Live-tested]
@@ -411,7 +411,7 @@ Delivery into the recipients' own inboxes was not independently checked by the a
 
 | Requirement | Finding | Status |
 |---|---|---|
-| Chrome / Chromium | Google Chrome, launched manually with `--remote-debugging-port=9222 --user-data-dir=<dedicated>`. Chrome 136+ requires a non-default profile directory for remote debugging. | [Documented only] (`docs/NIC_BROWSER_AGENT.md`, `backend/.env.example:168-175`) |
+| Chrome / Chromium | Google Chrome, launched manually with `--remote-debugging-port=9222 --user-data-dir=<dedicated>`. Chrome 136+ requires a non-default profile directory for remote debugging. | [Documented only] (`docs/NIC_BROWSER_AGENT.md` §7) |
 | Version compatibility | The project notes measurements against Chrome 152 on Windows (2026-09-21) | [Documented only] `docs/NIC_BROWSER_AGENT.md:624` |
 | CDP | `localhost:9222` by default. No authentication, no TLS. The code does not enforce localhost. | [Verified] |
 | Browser profile | Holds the NICeMail session cookies, so it **is the credential**. It must persist and be locked down. | [Documented only] |
@@ -503,14 +503,13 @@ Every component, classified from the code:
 | Embeddings / vector search | Not present | – | – | Dependency and source scan: none |
 | OCR / PDF / image processing | Not present | – | – | Attachments stored only, never parsed |
 | Background workers | 15 s mailbox sync + hourly junk-retention sweep, both in process | Sync is browser-bound, not CPU-bound | Negligible | Both `unref`'d and env-disableable; no cron, queue or worker threads |
-| Gmail transport (legacy) | Yes | **No** | Google Gmail API | To be removed (Section 17) |
 | NIC SMTP / IMAP (optional path) | Yes | **No** | NIC mail servers | App password pending [Documented only] |
 | The AI model itself (Gemma, at Pravah) | – | Almost certainly (outside IPC) | Pravah | [Unknown]: hosted by Pravah/AICTE, not by IPC-QMS |
 
 **Hardware recommendation** [Recommendation]: standard CPU virtual machines, with no GPU and no special hardware, **but** the application VM must provide an interactive desktop session for the agent's Chrome, and that Chrome should run on the backend's host (Sections 9.2 and 11). The resource drivers are:
 - **Chrome with the NICeMail web app loaded**: the largest memory consumer on the application host.
 - **MongoDB**: grows with cases, the audit trail and stored mailbox messages (including HTML bodies of up to 1 MB each) (`nicBrowserMailbox.js:50, 75-76`).
-- **Attachment disk (`ATTACHMENT_DIR`) on the application host**: grows with attachments, which are files on disk, not in MongoDB; it must be persistent and backed up (`attachmentStore.js:5-15, 95-96`; `env.js:78`).
+- **Attachment disk (`ATTACHMENT_DIR`) on the application host**: grows with attachments, which are files on disk, not in MongoDB; it must be persistent and backed up (`attachmentStore.js:5-15, 95-96`; `env.js:59`).
 - **Node.js**: modest.
 
 Other infrastructure needs that are not hardware: outbound HTTPS and DNS to `pravahai.aicte-india.org`; and a separate static web server or reverse proxy for the frontend, because the backend does not serve the built frontend (no `express.static` in `app.js`).
@@ -526,12 +525,19 @@ Section 11 gives starting sizes, labelled as assumptions to be validated in the 
 
 ### 11.1 Recommended topology (first production release) [Recommendation]
 
+The static frontend is served by Render (§11.5); the VM proxy serves `/api` only.
+
 ```text
                          Users (IPC staff) — HTTPS
                                    │
                     ┌──────────────▼──────────────┐
-                    │ Reverse proxy (TLS)         │  IIS / nginx — the only component
-                    │  • serves frontend (static) │  reachable from users' network
+                    │ Render Static Site (§11.5)  │  the only component users reach;
+                    │  • /api/* → rewrite to VM   │  nothing secret is set on Render
+                    │  • /* → /index.html         │
+                    └──────────────┬──────────────┘
+                                   │ HTTPS; inbound 443 from Render's outbound IP ranges only
+                    ┌──────────────▼──────────────┐
+                    │ Reverse proxy (TLS)         │  IIS / nginx on the application VM
                     │  • /api → 127.0.0.1:5000    │
                     └──────────────┬──────────────┘
                                    │ (same host)
@@ -548,12 +554,11 @@ Section 11 gives starting sizes, labelled as assumptions to be validated in the 
 └───────┬───────────────────────────┬───────────────────────┬──────────────┘
         │ MongoDB (TLS, auth)       │ HTTPS                 │ HTTPS
 ┌───────▼─────────┐       ┌─────────▼──────────┐   ┌────────▼──────────────┐
-│ DATABASE VM     │       │ NICeMail (NIC)     │   │ Pravah Gemma AI API   │
-│ MongoDB         │       │ mail.mgovcloud.in  │   │ pravahai.aicte-india  │
-│ backups →       │       │ + sign-in hosts    │   │ .org  (external)      │
-│ backup store    │       └────────────────────┘   └───────────────────────┘
+│ MongoDB Atlas   │       │ NICeMail (NIC)     │   │ Pravah Gemma AI API   │
+│ separate        │       │ mail.mgovcloud.in  │   │ pravahai.aicte-india  │
+│ production      │       │ + sign-in hosts    │   │ .org  (external)      │
+│ cluster         │       └────────────────────┘   └───────────────────────┘
 └─────────────────┘
-   (+ during migration only: Gmail API, or NIC SMTP for the OIC forward — Section 17)
 ```
 
 ### 11.2 Where the Browser Agent should run
@@ -570,18 +575,18 @@ Section 11 gives starting sizes, labelled as assumptions to be validated in the 
 
 | Component | Recommendation | Basis |
 |---|---|---|
-| Frontend | Build once with `VITE_API_BASE_URL` set to the production API URL (it is fixed at build time). Serve the `dist/` folder from the reverse proxy with an SPA fallback to `index.html`. | [Verified] `frontend/.env.example`; `axiosClient.js:5` falls back to `http://localhost:5000/api/v1` if unset |
-| Backend | `node src/server.js` under a process manager (for example NSSM as a Windows service, or pm2) with automatic restart. **Exactly one instance.** `NODE_ENV=production`. There is no bind-address setting: the server listens on all interfaces, so only the host firewall keeps port 5000 private. The service's **working directory must be `backend\`**, because `.env` (and a relative `QMS_PASSWORDS_FILE`) is read from the working directory. Set `CLIENT_URL` to the public origin (CORS allows exactly one origin). | [Verified] `server.js:97`; `config/env.js:18`; `credentials.js:45-55`; `app.js:21-29` |
+| Frontend | Render Static Site (§11.5): built with `VITE_API_BASE_URL=/api/v1` (it is fixed at build time), `/api/*` rewritten to the VM, SPA fallback to `index.html`. | [Verified] `frontend/.env.example`; `axiosClient.js:5` falls back to `http://localhost:5000/api/v1` if unset |
+| Backend | `node src/server.js` under a process manager (for example NSSM as a Windows service, or pm2) with automatic restart. **Exactly one instance.** `NODE_ENV=production`, set machine-wide on the VM: it is what selects `backend/.env.production` (or `ENV_FILE` names the file), and a relative env-file name is resolved against `backend\`, whatever the working directory. There is no bind-address setting: the server listens on all interfaces, so only the host firewall keeps port 5000 private. Keep the service's **working directory at `backend\`**, and give `QMS_PASSWORDS_FILE` an absolute path, because it is resolved against the working directory. Set `CLIENT_URL` to the Render site origin (CORS allows exactly one origin). | [Verified] `server.js:63`; `config/env.js:7-32`; `credentials.js:9-20`; `app.js:20` |
 | Chrome | Headed, dedicated profile, localhost CDP. Started at logon by a scheduled task or startup script with the same flags. The profile folder is ACL-restricted to the agent account. | [Recommendation]; nothing in the repo manages Chrome |
 | Process accounts | Run Chrome and the backend under the **same dedicated Windows account**, so CDP stays local and any attachment the backend stages in its `os.tmpdir()` is readable by Chrome (otherwise every agent send with an attachment would fail). | [Recommendation]; `sendMail.js:440-462`; to validate |
-| Database | MongoDB on its own VM (or a managed instance inside the network), **with authentication and TLS**, reachable only from the application VM. At every start the backend recreates the indexes declared in code and **drops any index a DBA added manually**. | [Verified] `db.js:47-71`; [Unknown] production MongoDB version and host |
-| File storage | `ATTACHMENT_DIR` on a dedicated, backed-up data disk. Files are never deleted by the application (no retention policy). | [Verified] `attachmentStore.js`, `env.js:78` |
+| Database | A **separate MongoDB Atlas cluster** for production, with its own project, database user and database name (`qms_production`), **with authentication and TLS**; its IP access list holds only the application VM. Never point production at the shared development database: at every start the backend recreates the indexes declared in code and **drops any index a DBA added manually**, and in production the retention sweep always runs. | [Verified] `db.js:83`; `retention.js:420`; [Unknown] production cluster tier and region |
+| File storage | `ATTACHMENT_DIR` on a dedicated, backed-up data disk. Files are never deleted by the application (no retention policy). | [Verified] `attachmentStore.js`, `env.js:59` |
 | AI | Allow outbound HTTPS from the application VM to the Pravah endpoint. Obtain approval to send enquiry text to it; no authentication is used today. | [Verified] `gemmaService.js:170-172` |
-| Reverse proxy / HTTPS | TLS terminates at the proxy; the app speaks plain HTTP on localhost. The app trusts one proxy hop only when `NODE_ENV=production`. **Raise the proxy read timeout to at least 5 minutes:** sends run inside the HTTP request, can wait behind a sync and then run 20 s step timeouts and a Sent-folder poll, so a proxy default (of the order of 60–120 s for nginx and IIS ARR — check your own product's default) returns a 504 to the user while the send carries on. Also keep `/api/v1/health` unreachable from the staff network (Section 13 #12). | [Verified] one proxy hop in production: `app.js:21-23`; sends run in-request: `finalApproval.js:155`, `acceptMessage.js:356-364`. [Unknown] proxy defaults (not in the repository) |
+| Reverse proxy / HTTPS | TLS terminates at the proxy; the app speaks plain HTTP on localhost. The app trusts one proxy hop only when `NODE_ENV=production`; behind Render's rewrite there are two (Render, then the VM proxy), a first-deploy check in §11.5. **Raise the proxy read timeout to at least 5 minutes:** sends run inside the HTTP request, can wait behind a sync and then run 20 s step timeouts and a Sent-folder poll, so a proxy default (of the order of 60–120 s for nginx and IIS ARR — check your own product's default) returns a 504 to the user while the send carries on. Render's rewrite timeout is a first-deploy check too. Also keep `/api/v1/health` off the host Render proxies to (Section 13 #12). | [Verified] one proxy hop in production: `app.js:15-17`; sends run in-request: `finalApproval.js:155`, `acceptMessage.js:356-364`. [Unknown] proxy defaults (not in the repository) |
 | Logging | Capture stdout/stderr to rotating log files (the app writes only to the console). Logs contain personal data (inquirer addresses, subjects), so restrict access and set retention. | [Verified] `sendTrace.js`; morgan |
 | Monitoring | See Section 15. | – |
-| Network segmentation | Only the proxy is exposed to users. The DB VM is reachable only from the app VM. Outbound allow-list: NICeMail hosts, Pravah, NTP, and Gmail / NIC SMTP during migration. Remote desktop to the app VM only from an admin jump host, for the named operators. | [Recommendation] |
-| Secrets and configuration | `backend/.env` on the server only, ACL-restricted. Per-account passwords via `QMS_PASSWORDS_FILE` (a protected file) or `QMS_PASSWORD_<ID>`. Strong unique `JWT_SECRET`. No secrets in the repository. | [Verified] `credentials.js`, `authConfig.js` |
+| Network segmentation | Users reach only the Render site. The VM proxy accepts inbound 443 only from Render's published outbound IP ranges (§11.5). The Atlas cluster accepts connections only from the app VM. Outbound allow-list: NICeMail hosts, Pravah, NTP, the Atlas cluster, and NIC SMTP once enabled. Remote desktop to the app VM only from an admin jump host, for the named operators. | [Recommendation] |
+| Secrets and configuration | `backend/.env.production` on the VM only, ACL-restricted, selected by `NODE_ENV=production` in the machine environment (or named by `ENV_FILE`); never a `.env.local` on the VM. Per-account passwords via `QMS_PASSWORDS_FILE` (a protected file) or `QMS_PASSWORD_<ID>`. Strong unique `JWT_SECRET`. No secrets in the repository, and nothing secret on Render. Every variable: [docs/ENVIRONMENT.md](ENVIRONMENT.md). | [Verified] `config/env.js`, `credentials.js`, `authConfig.js` |
 | Backup | **MongoDB and `ATTACHMENT_DIR` together**, because MongoDB only references the attachment files. **The repository contains no backup tooling.** The Chrome profile should be **protected, not backed up**: after a rebuild, sign in again. | [Verified] |
 | Disaster recovery | Rebuild the app VM from a documented runbook, restore MongoDB and attachments, start Chrome, reopen a NICeMail tab, and have the account owner sign in. The SRS does not define RTO or RPO; it lists availability and backup frequency/retention as "to be confirmed", and wrongly says one database backup covers the whole system (Appendix B #11). | [Documented only] `docs/srs/06-non-functional-requirements.md:7, 15` |
 
@@ -591,10 +596,135 @@ The code and documentation contain no volume figures. These are conservative sta
 
 | VM | vCPU | RAM | Disk | Reasoning |
 |---|---|---|---|---|
-| Application VM (backend + Chrome + proxy + frontend) | 4 | 16 GB | 100 GB system + separate attachment disk sized to retention policy | Chrome with the NICeMail web app is the heaviest process; Node is modest |
-| Database VM (MongoDB) | 2–4 | 8–16 GB | SSD sized for data growth + local backup staging | Text records are small; attachments live on the app VM, not in MongoDB |
+| Application VM (backend + Chrome + proxy) | 4 | 16 GB | 100 GB system + separate attachment disk sized to retention policy | Chrome with the NICeMail web app is the heaviest process; Node is modest. The frontend is on Render (§11.5) |
+| MongoDB Atlas (separate production cluster) | – (Atlas tier) | – (Atlas tier) | Storage sized for data growth; Atlas backups | Managed, so there is no database VM to size. Text records are small; attachments live on the app VM, not in MongoDB |
 
-**No GPU on either VM.** Measure CPU, memory and disk during the pilot (Phase 7) — in particular Chrome's CPU and memory with the NICeMail web app loaded and rendering in software — and adjust.
+**No GPU on the VM, and none for the database.** Measure CPU, memory and disk during the pilot (Phase 7) — in particular Chrome's CPU and memory with the NICeMail web app loaded and rendering in software — and adjust.
+
+### 11.5 Hosting decision: Render Static Site + application VM
+
+Added 2026-09-25. The frontend is a **Render Static Site**. The backend and the agent's signed-in,
+headed Chrome run together on **one application VM** behind HTTPS, and the database is a separate
+MongoDB Atlas cluster (§11.3). The backend cannot move to Render: the Browser Agent needs a Chrome
+that a person signed in to, on the backend's own host, with CDP on `localhost` and attachments handed
+over by local path (Sections 9.2 and 11.2).
+
+```text
+Browser (IPC staff)
+   │  HTTPS: https://<render-site>, the only origin the browser ever sees
+   ▼
+Render Static Site ──► dist/ (hashed assets); /* → /index.html (SPA fallback)
+   │  /api/* → https://<vm-api-host>/api/*   (Render rewrite)
+   ▼
+Application VM: reverse proxy (TLS, /api only, inbound 443 from Render's outbound IP ranges only)
+   │  http://127.0.0.1:5000
+   ▼
+IPC-QMS backend (NODE_ENV=production, exactly one instance) ──► MongoDB Atlas (separate production cluster)
+   │  CDP http://localhost:9222 (never leaves the VM)
+   ▼
+Headed Chrome, dedicated profile, signed in to lab.ipc@gov.in by its owner ──► NICeMail (HTTPS)
+```
+
+**Render settings.** They live in the Render dashboard only. No `render.yaml` is added: it would put
+the VM host name in the repository, and the dashboard stays the single source of truth.
+
+| Setting | Value | Why |
+|---|---|---|
+| Service type | Static Site | The build output is static files, and the backend does not serve them (no `express.static` in `app.js`) |
+| Root directory | `frontend` | |
+| Build command | `npm ci && npm run build` | `npm run build:check` also enforces the bundle budget, if that should gate deploys (`frontend/package.json:8-9`) |
+| Publish directory | `dist` | Relative to the root directory. If Render does not find it, use `frontend/dist` [Unknown] |
+| Environment | `VITE_API_BASE_URL=/api/v1`, `NODE_VERSION=22` | The API base is fixed at build time and is relative, so every call goes to the Render origin. Unset, it silently falls back to `http://localhost:5000/api/v1` (`axiosClient.js:5`) |
+| Not set | `NODE_ENV`, `VITE_NIC_FRONT_OFFICE_EMAIL` | `vite` is a devDependency (`frontend/package.json:50`), and `npm ci` skips devDependencies under `NODE_ENV=production`. The second is a development quick-login shortcut, compiled out of builds |
+| Redirects / rewrites, in this order | 1. `/api/*` → `https://<vm-api-host>/api/*`, action **Rewrite**<br>2. `/*` → `/index.html`, action **Rewrite** | The API rule must come first. The app uses `BrowserRouter` (`App.jsx:2, 41`), and `frontend/public` has no `_redirects` file |
+| Pull-request previews | Off | A preview would be proxied to the production API |
+
+Nothing secret is set on Render. Every `VITE_*` value ends up in the public bundle, and no backend
+secret has a `VITE_` name.
+
+**The VM environment** [Recommendation]. Every variable, which values are secret, the production
+values and the boot-refusal table are in [docs/ENVIRONMENT.md](ENVIRONMENT.md). The rules below are
+about the host, not about any one variable:
+
+- **Set `NODE_ENV=production` machine-wide**, not only on the service. The backend loads exactly one
+  env file, and `NODE_ENV=production` in the real environment is what selects `backend/.env.production`;
+  operator commands run from a shell (`npm run mailbox:purge`, `npm run db:provision`,
+  `npm run nic:browser:discover`) then load the same file. Without it the backend never loads
+  `.env.production`: it refuses to start with `(env file: none)` at the end of the error, or, worse,
+  starts as development from a stray `.env.local` [Verified] (`config/env.js:12-32`; `server.js:13-19`).
+- `ENV_FILE=<path>` in the service environment names the file instead, for example to keep it outside
+  the checkout. It is exclusive: nothing else is loaded, and a missing file stops the start. A relative
+  name is resolved against `backend\`.
+- The env file is ACL-restricted to the service account and administrators. **Never put a `.env.local`
+  on the VM.**
+- The real environment always wins over the file. At start, dotenv's line
+  `injected env (N) from <file>` names the file that was loaded.
+- Use absolute paths. `QMS_PASSWORDS_FILE`, `NIC_APP_PASSWORD_FILE` and `NIC_BROWSER_ARTIFACT_DIR` are
+  resolved against the working directory. `ATTACHMENT_DIR` is resolved against `backend\`; give it an
+  absolute path on the backed-up data disk.
+
+**Same-origin cookie model** [Verified, 2026-09-25]:
+
+- The browser only ever talks to `https://<render-site>`. API calls go to `/api/v1` on that origin, and
+  Render forwards them. The session cookie `qms.session` is therefore a first-party, host-only cookie
+  on the Render host: HttpOnly, Secure in production, SameSite `lax` (`authConfig.js:7-24`). Leave
+  `SESSION_COOKIE_SAMESITE` at its default.
+- Attachment URLs are built from the same relative base (`attachmentService.js:4`;
+  `mailboxService.js:46`). So the text preview's plain `fetch` sends the cookie, and the PDF preview's
+  iframe passes Helmet's default `frame-ancestors 'self'` (`AttachmentViewerDialog.jsx:34, 81`;
+  `app.js:19`).
+- Serving the frontend and the API from two origins is **not supported**. It needs `SameSite=None`,
+  breaks both previews, and fails outright in browsers that block third-party cookies (Safari).
+- The browser makes no CORS check on same-origin requests, so `CLIENT_URL` is not load-bearing behind
+  the rewrite. Set it to the Render origin anyway (`app.js:20`).
+
+**First-deploy checklist.** These can only be verified on the real deployment:
+
+1. The Render settings match the table above. The build log shows Node 22 and `vite build`, and
+   `NODE_ENV` is unset.
+2. `curl -sI https://<render-site>/some/deep/route` returns 200 `text/html`. A hashed `/assets/*.js`
+   file returns a JavaScript content type, not `index.html`.
+3. `curl -s https://<render-site>/api/v1/auth/me` returns 401 (`Authentication required`) from the VM,
+   which proves the rewrite reaches the backend.
+4. **Set-Cookie passes through.** Signing in sets `qms.session` (HttpOnly; Secure; SameSite=Lax) on the
+   Render host, and `/auth/me` returns 200 after a reload.
+5. Query strings and bodies survive the rewrite: `?download=1` on an attachment gives
+   `Content-Disposition: attachment`, audit filters work, and POSTs succeed.
+6. Text and PDF attachment previews render.
+7. **Rewrite timeout for long sends.** An Accept or final approval that takes more than 60 s completes
+   without a 502 or 504. Record the observed limit: Render does not document one [Unknown], and after a
+   gateway timeout the send carries on in the backend (Section 4, Timing).
+8. **No caching of `/api`.** The backend sets no `Cache-Control`, so the VM proxy adds
+   `Cache-Control: no-store` on `/api/*`. Confirm the header arrives, and that two users each get their
+   own `/auth/me`.
+9. **`trust proxy` hop count.** The backend trusts one hop (`app.js:15-17`), but Render plus the VM
+   proxy is two. Check the address the VM's request log records for a sign-in (morgan's `combined`
+   format logs `req.ip`). If it is a Render address, every user shares the login limit (10 failures per
+   15 minutes) and the API limit (600 per minute). The follow-up is a code change to
+   `app.set('trust proxy', 2)` once the `X-Forwarded-For` chain is confirmed.
+10. `POST /api/v1/auth/dev-login` returns 404, and the start-up banner shows `(production)`, the agent
+    on and the guard closed.
+11. `/api/v1/health` is not served on the host Render proxies to, only on an internal vhost or port
+    (Section 13 #12).
+12. **Inbound 443 on the VM accepts only Render's published outbound IP ranges**, and ports 5000 and
+    9222 are unreachable from any other machine.
+13. Pull-request previews are off.
+
+**Accepted risks** [Recommendation]:
+
+- **The API host is reachable from the internet.** The VM's API vhost must accept HTTPS from Render with
+  a publicly trusted certificate, yet the server's own start-up warning says not to expose it outside a
+  trusted network, because there is no server-side workflow state machine (`server.js:73-78`;
+  Section 13 #15). Limiting inbound 443 to Render's outbound ranges narrows who can connect, but every
+  Render customer shares those ranges, so it is not authentication. Accepted for the first release,
+  together with the rate limits and the `/api/v1/health` rule.
+- **Staff traffic passes through Render.** Every API request and response, including enquiry text and
+  the session cookie, crosses Render's proxy. Whether that meets IPC's data-protection and residency
+  rules must be confirmed [Unknown].
+- **Until the hop count is confirmed,** the rate limiters may key on Render's address and be shared by
+  all staff (checklist item 9).
+- **Render's rewrite timeout is undocumented** [Unknown]. A long send can end in a gateway error for the
+  user while it completes on the VM (checklist item 7).
 
 ---
 
@@ -608,7 +738,7 @@ The code and documentation contain no volume figures. These are conservative sta
 | Stage | Procedure |
 |---|---|
 | **Account ownership** | `lab.ipc@gov.in` has a named **account owner** (IPC) who holds the MFA/OTP device, plus at least one named deputy. Only they may sign the agent's browser in. |
-| **Initial authentication** | The owner logs on to the application VM (from the admin jump host), opens the dedicated Chrome (already started with the agent flags), signs in to NICeMail **by hand** including any MFA/OTP step, and leaves the NICeMail tab open. Then runs `npm run nic:browser:discover` from `backend\` (read-only check; the scripts read `.env` from the working directory). **Calibrate only on first setup or after a NICeMail UI change**, with the backend stopped or idle: `npm run nic:browser:calibrate` types a draft into the live mailbox and discards it (nothing is sent), and runs in its own process with its own queue (`scripts/nicBrowserCalibrate.js:23-25`; `session.js:27`). |
+| **Initial authentication** | The owner logs on to the application VM (from the admin jump host), opens the dedicated Chrome (already started with the agent flags), signs in to NICeMail **by hand** including any MFA/OTP step, and leaves the NICeMail tab open. Then runs `npm run nic:browser:discover` from `backend\` (read-only check; the scripts load the same env file as the backend, `backend/.env.production` on the VM). **Calibrate only on first setup or after a NICeMail UI change**, with the backend stopped or idle: `npm run nic:browser:calibrate` types a draft into the live mailbox and discards it (nothing is sent), and runs in its own process with its own queue (`scripts/nicBrowserCalibrate.js:23-25`; `session.js:27`). |
 | **Persistent profile** | The dedicated profile directory keeps the session across Chrome restarts, **if NICeMail's session cookies allow it** [Unknown]. The directory is readable only by the agent account and administrators; it holds a live session, so it is as sensitive as the password. |
 | **Session expiry** | Expiry is detected as `SESSION_EXPIRED` / `NOT_AUTHENTICATED`, or as a generic readiness timeout if NICeMail shows some other sign-in page (Section 9.3). All sends fail safely before Send and ingestion pauses. The owner signs in again — but note that **no dependable expiry alert exists today** (Section 15.2): the scheduled discover check both false-alarms and can miss, so until the readiness endpoint is built, treat a run of failed sends or syncs as the signal. |
 | **Re-authentication** | Sign in by hand, then run `nic:browser:discover`. No calibration is needed for a routine sign-in. Afterwards, check the IPC Mailbox sync status and any `FAILED` / `UNCERTAIN` sends on the Dispatch and case pages. |
@@ -638,12 +768,12 @@ The code and documentation contain no volume figures. These are conservative sta
 |---|---|---|---|---|
 | 1 | **CDP (port 9222)** | No authentication, no TLS. Whoever reaches it gets **full control of the signed-in browser**: every cookie of the lab.ipc session (which bypasses MFA), reading and sending as the official mailbox, and any other site in that profile. Defaults to localhost, but the code does not enforce that. [Verified] `browserConfig.js:24`, `cdp.js:77-100` | **Critical** if exposed | **Never expose CDP.** Localhost only; host firewall blocks 9222 inbound; no port forwarding; the app VM is not shared with other users or workloads; the endpoint must stay `http://localhost:9222`. |
 | 2 | Chrome profile directory | Contains the live session (equivalent to a signed-in password). Note that Chrome 144+ can turn remote debugging on for an **already-running instance, including the default profile**, from `chrome://inspect` — which would expose that whole profile over the unauthenticated CDP port. [Documented only] (a code comment, `browserConfig.js:16-21`; confirm against Chrome's own documentation) | High | ACL to the agent account only; disk encryption; exclude from general backups; not on shared drives; **only the dedicated profile may ever have remote debugging enabled**, and no personal browsing in it |
-| 3 | `NODE_ENV` default | Defaults to **development**, which means:<br>• dev-login signs into any account (except the NICeMail Front Office) without a password<br>• the session cookie is not `Secure`<br>• error responses include stack traces<br>• the database becomes optional<br>• the shared seed-password mode is on whenever `QMS_SEED_PASSWORD` is set<br>[Verified] `env.js:34`, `authController.js:117-155`, `authConfig.js:35, 46-51`, `credentials.js:73-78`, `errorHandler.js:41`, `db.js:13` | **High** if not set | Set `NODE_ENV=production`, and verify dev-login returns 404 |
+| 3 | `NODE_ENV` default | Defaults to **development**, which means:<br>• dev-login signs into any account (except the NICeMail Front Office) without a password<br>• the session cookie is not `Secure`<br>• error responses include stack traces<br>• the database becomes optional<br>• the shared seed-password mode is on whenever `QMS_SEED_PASSWORD` is set<br>[Verified] `env.js:39`, `authController.js:117-155`, `authConfig.js:35, 46-51`, `credentials.js:73-78`, `errorHandler.js:41`, `db.js:13` | **High** if not set | Set `NODE_ENV=production`, and verify dev-login returns 404 |
 | 4 | Network binding | The server listens on all interfaces | Medium | Firewall 5000; expose only the reverse proxy |
 | 5 | Passwords and accounts | In production every account needs its own credential (bcrypt). The shared seed-password mode is off in production, but **outside production it is on by default whenever `QMS_SEED_PASSWORD` is non-empty** (`credentials.js:73-78`), so set it to `false` explicitly. The user list is **13 hard-coded accounts** in code (plus the NICeMail Front Office); every address is on the unroutable `@ipc.example` domain, so none of them can receive mail [Verified, 2026-09-23]. It is mirrored in `frontend/src/constants/mockUsers.js` (which must stay in step), seeded into the MongoDB `users` collection on every connect with `$setOnInsert` — so rows already seeded are **never refreshed**, and replacing the directory needs a data step on any environment that has booted — and the `active` flag is not read by authentication: disabling an account needs a code change and redeploy, and existing sessions stay valid until they expire. [Verified] `credentials.js`, `constants/users.js:12-19`, `config/db.js:73-92` | High | Replace the development account list (backend and frontend) with real IPC staff accounts before production; unique strong passwords; keep `QMS_ALLOW_SHARED_PASSWORD` unset or `false` |
 | 6 | Sessions | JWT in an httpOnly cookie, 8 h default; **no revocation** (a stolen cookie stays valid until expiry) [Verified] | Medium | Keep the TTL short; rotate `JWT_SECRET` to revoke all sessions if needed |
-| 7 | Secrets management | Plain `.env` file; no secret manager. `.env` is git-ignored. | Medium | ACL-restricted `.env`; passwords file; no secrets in logs or tickets |
-| 8 | Database credentials | The example URL is unauthenticated localhost; production auth and TLS are not configured in the repo [Unknown] | High | MongoDB authentication, TLS, network restriction |
+| 7 | Secrets management | Plain env file (`backend/.env.production` on the VM); no secret manager. Every `.env` and `.env.*` file except `.env.example` and `backend/.env.e2e` is git-ignored, and nothing secret is set on Render. | Medium | ACL-restricted `backend/.env.production`; passwords file; no secrets in logs or tickets |
+| 8 | Database credentials | The example URL is an Atlas placeholder; production uses a separate Atlas cluster (Section 11.3) with its own user, TLS and IP access list, none of which the repo configures [Unknown] | High | MongoDB authentication, TLS, network restriction |
 | 9 | AI API | Enquiry text (possibly containing personal data) is sent to Pravah **with no authentication header**. The `/ai/summary`, `/ai/recommend` and `/ai/draft` routes only check that the user is signed in, so any signed-in staff role can send arbitrary text to Pravah through IPC-QMS. [Verified] `gemmaService.js:170-172`; `routes/aiRoutes.js:7-11`. **Changed 2026-09-24:** mail triage now sends the sender, subject and plain body of every message the deterministic rules could not settle to the same endpoint **automatically**, once an hour, with no person in the loop — so unsolicited mail from the public, not just text a member of staff chose to submit, now leaves the deployment. `GEMMA_API_URL=` blank disables it and triage falls back to GENUINE. [Verified, 2026-09-24] `retention.js#classifyPending`; `gemmaService.js#classifyMail` | Medium | Data-sharing approval; confirm endpoint access controls with Pravah/AICTE; restrict the AI routes to staff roles (code change) |
 | 10 | Email addresses and PII | Inquirer addresses, subjects and bodies are stored in MongoDB. Addresses and subjects **appear in application logs**. Retention now covers **all unregistered mail, in two tiers**: body, HTML and attachment bytes are stripped after `MAILBOX_RETENTION_HOURS` (42) for mail judged junk or rejected by a person, and after `MAILBOX_UNREGISTERED_RETENTION_HOURS` (336, two weeks) for anything else nobody registered. An id stub is kept so the message cannot be re-ingested. Every purge writes an `EMAIL_PURGED` audit row naming the sender and subject — so the audit trail deliberately retains the PII the message body loses, and that row is now the long-lived copy. Mail that became a case, and the logs, still have **no retention policy**. [Verified, 2026-09-24] | Medium | Restrict log access; define retention for accepted mail and for logs; include logs and the `EMAIL_PURGED` rows in the data-protection assessment |
 | 11 | Attachments | Type, size and checksum checks. Files stored unencrypted on disk; never deleted. Case-scoped access control. [Verified] | Medium | Disk encryption; retention policy; backup |
@@ -666,7 +796,7 @@ The code and documentation contain no volume figures. These are conservative sta
 
 | Dimension | What the code imposes | Assessment |
 |---|---|---|
-| Incoming email | One sync at a time; at most 20 new messages per sync, with at least 30 s between the end of one poll-driven sync and the start of the next (15 s for a manual "Sync now", `nicBrowserMailbox.js:312, 321`). Throughput is therefore 20 messages per (sync duration + 30 s) — a formula, not a figure, because sync duration was never measured — and **nothing is read unless the NICeMail Front Officer's pages are polling** [Verified] (`nicBrowserMailbox.js:226, 237, 271`; `mailbox/index.js:164-168`). Only the rows the web app loads are visible (about 50 [Documented only]). | Expected to be adequate for tens of messages per hour [Assumption] — this cannot be stated as a capacity figure until **sync duration is measured** in the pilot (the live test timed only sends, 4.7–6.1 s). Mail beyond the loaded window (about 50 rows) is **never ingested by the agent and nothing raises an alert**; after a burst or a long outage it must be found and handled by hand in NICeMail. |
+| Incoming email | One sync at a time; at most 20 new messages per sync, with at least `NIC_BROWSER_SYNC_TTL_MS` (default 15 s) between the end of one poll-driven sync and the start of the next (15 s for a manual "Sync now", `nicBrowserMailbox.js:252-259`). Throughput is therefore 20 messages per (sync duration + `NIC_BROWSER_SYNC_TTL_MS`) — a formula, not a figure, because sync duration was never measured. Syncs are requested both by the Front Officer's inbox polling and by the server-side timer (`MAILBOX_SYNC_ENABLED`, `MAILBOX_SYNC_INTERVAL_MS`; `mailbox/syncScheduler.js`), so mail is read even when nobody is signed in [Verified] (`nicBrowserMailbox.js:192-196, 217-219`). Only the rows the web app loads are visible (about 50 [Documented only]). | Expected to be adequate for tens of messages per hour [Assumption] — this cannot be stated as a capacity figure until **sync duration is measured** in the pilot (the live test timed only sends, 4.7–6.1 s). Mail beyond the loaded window (about 50 rows) is **never ingested by the agent and nothing raises an alert**; after a burst or a long outage it must be found and handled by hand in NICeMail. |
 | Browser Agent concurrency | **Strictly serial**, one job at a time per process. Sends observed at **~4.7–6.1 s** each in testing; a sync can hold the queue for minutes. [Verified] [Live-tested] | One agent handles low-to-moderate volumes. Sends queue behind syncs, and users wait because sends run inside the request. |
 | Backend instances | **Must be one.** The browser queue, quarantine state and rate limits live in process memory; a second instance would drive the same NICeMail session concurrently [Verified] | No horizontal scaling without code changes |
 | NICeMail rate limits | Not known [Unknown] | Confirm with NIC (Section 12.2) |
@@ -682,7 +812,7 @@ The code and documentation contain no volume figures. These are conservative sta
 - users accept that Accept and final approval wait for the send (typically seconds).
 
 **Plan a dedicated browser-agent worker** (a separate process consuming a job queue, with a server-side sync schedule) if any of these hold:
-- incoming volume exceeds what 20 messages per (sync duration + 30 s) can absorb;
+- incoming volume exceeds what 20 messages per (sync duration + `NIC_BROWSER_SYNC_TTL_MS`) can absorb;
 - sends must not block the user interface;
 - ingestion must run without a Front Officer signed in.
 
@@ -697,7 +827,7 @@ The code and documentation contain no volume figures. These are conservative sta
 |---|---|
 | Request log (morgan) | stdout |
 | Per-send stage log: `ACK / FORWARD / RESPONSE` START → RESOLUTION → NIC BROWSER steps → VERIFICATION → RESULT (status, stage, provider message id, error) | stdout (`sendTrace.js`) |
-| Primary mailbox (Gmail/IMAP) outage begin, end and 5-minute reminders | stdout; audit rows `SYNC_FAILED`, `SYNC_RECOVERED` (`mailbox/health.js:52-75`, fed when a mailbox list call throws) |
+| Primary mailbox (IMAP) outage begin, end and 5-minute reminders | stdout; audit rows `SYNC_FAILED`, `SYNC_RECOVERED` (`mailbox/health.js:52-75`, fed when a mailbox list call throws) |
 | NICeMail browser sync | **Audit rows only** (`details.source='nic-browser'`): `SYNC_FAILED` when a failure run begins and on every failed manual sync, `SYNC_RECOVERED` on recovery, `SYNC_COMPLETED` for every sync that stored or failed a message and for every manual sync — plus the `sync` field of the inbox API. **No stdout line and no reminders.** The browser sync never throws and its list reads MongoDB, so a Chrome or session failure is recorded as a mailbox *success* in the health snapshot (`nicBrowserMailbox.js:137-139, 187-224`). |
 | Ledger state per case email (`SENT`, `FAILED`, `UNCERTAIN`, attempts, last error with stage) | MongoDB `outboundemails`; shown on the case and Dispatch pages |
 | `GET /api/v1/health` | database connected flag, primary-mailbox health, AI last success, failure and error. **Always HTTP 200 "healthy"; never checks Chrome, CDP or the NICeMail browser sync.** |
@@ -769,11 +899,12 @@ load-bearing.
 6. Obtain the NIC/IT confirmations in Section 12.2, and the AI data-sharing approval.
 
 ### Phase 1 — Infrastructure preparation
-- Provision the **application VM** (Windows, desktop experience) and the **database VM**. No GPU.
+- Provision the **application VM** (Windows, desktop experience), a **separate production MongoDB Atlas cluster**, and the **Render Static Site** (§11.5). No GPU.
 - Network:
-  - allow outbound to the NICeMail hosts, Pravah, NTP, and Gmail / NIC SMTP during migration;
+  - allow outbound to the NICeMail hosts, Pravah, NTP and the Atlas cluster; NIC SMTP only once the app password is issued;
+  - allow inbound 443 on the VM API host from Render's published outbound IP ranges only;
   - block inbound 9222 and 5000;
-  - reverse proxy with a TLS certificate, a read timeout of at least 5 minutes, and a rule refusing `/api/v1/health` from the staff network;
+  - reverse proxy with a publicly trusted TLS certificate, a read timeout of at least 5 minutes, `Cache-Control: no-store` on `/api`, and `/api/v1/health` served only on an internal vhost or port, not on the host Render proxies to;
   - admin jump host for remote desktop.
 - MongoDB with authentication and TLS; a backup job for **MongoDB + attachment directory**; a restore test.
 - NTP on all servers.
@@ -791,14 +922,15 @@ load-bearing.
 
 ### Phase 4 — Application deployment
 - Node.js 22 LTS. Backend with `NODE_ENV=production`, per-account passwords, a strong `JWT_SECRET`, `CLIENT_URL`, and `ATTACHMENT_DIR` on the data disk. Set **every** one of these explicitly, because the defaults are wrong for production:
-  - `NIC_BROWSER_MAILBOX=true` — without it the agent is off (`browserConfig.js:90-92`; `server.js:105`);
+  - `NIC_BROWSER_MAILBOX=true` — without it the agent is off (`browserConfig.js:42-44`; `server.js:71`);
   - `NIC_EMAIL=lab.ipc@gov.in`;
   - **`NIC_ALLOW_OUTBOUND=false`** and `NIC_BROWSER_TEST_RECIPIENT` set to an IPC test inbox;
-  - `EMAIL_TRANSPORT` — it defaults to `mock`, which records the OIC forward as SENT without sending anything (`env.js:38`; `caseMail.js:79`);
-  - `OFFICER_IN_CHARGE_EMAIL` and `FRONT_OFFICE_EMAIL` — they default to `@example.com` placeholders (`config/identities.js:18-31`);
-  - the NICeMail Front Office credential `QMS_PASSWORD_USR_0014` (or the passwords file) — boot fails without it (`authConfig.js:73-83`; `constants/users.js:45-54`).
-- Frontend built with `VITE_API_BASE_URL`; served by the proxy.
-- Process manager with auto-restart, **working directory `backend\`**, running under the agent's Windows account (or with read access to the backend's temp folder, Section 11.3); log capture and rotation. Check the start-up banner: agent on, guard **closed**.
+  - `EMAIL_TRANSPORT=nic` — it defaults to `mock`, which production refuses even with the agent on; `nic` then requires `NIC_IMAP_HOST` and `NIC_SMTP_HOST` to be non-empty, although nothing connects to them at boot and no app password is needed (`env.js:43, 78-106`; `nicConfig.js:39-44`). Keep `MAILBOX_SOURCE=auto`: `nic` would read the primary inbox over IMAP, which needs the app password;
+  - `OFFICER_IN_CHARGE_EMAIL` and `FRONT_OFFICE_EMAIL` — they default to `@example.com` placeholders (`config/identities.js:6-15`);
+  - the NICeMail Front Office credential `QMS_PASSWORD_USR_0014` (or the passwords file) — boot fails without it (`authConfig.js:42-52`; `constants/users.js:19-33`).
+- The full variable list, with the production values: [docs/ENVIRONMENT.md](ENVIRONMENT.md).
+- Frontend: Render Static Site, built with `VITE_API_BASE_URL=/api/v1` and `/api/*` rewritten to the VM (§11.5). Run the §11.5 first-deploy checklist.
+- Process manager with auto-restart, **working directory `backend\`**, `NODE_ENV=production` set in the machine environment so that the backend and operator scripts load `backend/.env.production` (§11.5), running under the agent's Windows account (or with read access to the backend's temp folder, Section 11.3); log capture and rotation. Check the start-up banner: agent on, guard **closed**.
 
 ### Phase 5 — AI service validation
 - Confirm the Pravah endpoint is reachable from the VM, its latency, and its behaviour under the timeouts (summary 12 s, recommendation 36 s, draft ~72 s). Check fallback behaviour when unreachable.
@@ -933,8 +1065,8 @@ Statuses are based **only** on what the repository and the controlled live test 
 | Backend | Health / readiness check | **PARTIALLY READY** | `/api/v1/health` exists but always returns "healthy" and never checks Chrome, CDP or the NICeMail sync |
 | Backend | Email endpoints fail closed without MongoDB | **BLOCKED** | The retry endpoints fall back to unguarded sends (`emailController.js:131-200`) |
 | Frontend | Automated tests (839), lint, production build | **READY** | All passing at `438997e` |
-| Frontend | Production API URL (`VITE_API_BASE_URL`) | **REQUIRES VALIDATION** | Must be set at build time |
-| Frontend | Hosting with SPA fallback | **UNKNOWN** | Not provided |
+| Frontend | Production API URL (`VITE_API_BASE_URL`) | **REQUIRES VALIDATION** | `/api/v1`, set in the Render build environment and reached through the Render `/api/*` rewrite (§11.5); confirm at first deploy |
+| Frontend | Hosting with SPA fallback | **REQUIRES VALIDATION** | Render Static Site with the `/* → /index.html` rewrite (§11.5); the settings live in the Render dashboard, not the repository |
 | Database | MongoDB integration, indexes, idempotency keys | **READY** | `db.js`; unique ledger and message keys |
 | Database | Production MongoDB with authentication and TLS | **UNKNOWN** | Not in the repository |
 | AI services | Integration with timeouts and deterministic fallbacks | **READY** | `gemmaService.js`; never *fails* Accept (Accept does wait up to 12 s for the summary) |
@@ -945,7 +1077,7 @@ Statuses are based **only** on what the repository and the controlled live test 
 | AI services | Accurate AI audit labels | **PARTIALLY READY** | Fallbacks labelled as model output (Sections 5–6) |
 | Security | Role-based access and case-level scoping | **READY** | `verifyRole.js`, `caseAccess.js`, `authorizeCaseDelta.js` |
 | Security | Server-side workflow state machine | **PARTIALLY READY** | Destination-state and scope checks only. The scope half is now real per-case membership on the persist route and on every attachment (§13 item 14); the source-state half is still client-side |
-| Security | Secrets management | **PARTIALLY READY** | `.env` only; must be protected on the host |
+| Security | Secrets management | **PARTIALLY READY** | `backend/.env.production` only; must be protected on the VM. Nothing secret is set on Render |
 | Security | Personal data in logs: access and retention | **REQUIRES VALIDATION** | Logs contain addresses and subjects |
 | Monitoring | Logs and stage traces | **PARTIALLY READY** | stdout only; no files or rotation |
 | Monitoring | Alerting (session expiry, UNCERTAIN sends, Chrome down) | **BLOCKED** | None exists (Section 15.2) |
@@ -963,11 +1095,9 @@ Statuses are based **only** on what the repository and the controlled live test 
 | Testing | Browser E2E suite (Playwright) | **READY** | `backend/.env.e2e` rewritten to mock mail, unroutable addresses and every NIC_* variable pinned blank so nothing is inherited from a developer's `.env`. 11 tests across 4 specs pass [Verified, 2026-09-23] |
 | Testing | CI | **PARTIALLY READY** | Lint + unit tests on pull requests and pushes to `main` (`.github/workflows/test.yml:19-22`); no E2E or build check |
 | UAT | User acceptance testing with IPC roles | **REQUIRES VALIDATION** | Not started (Phases 6–7) |
-| Production configuration | Configuration reference (`.env.example`) | **READY** | Rewritten and cross-checked both ways: every documented variable is read by the code, and every variable the code reads is documented. Ends with the boot-refusal table, each row fired against the real validators [Verified, 2026-09-23] |
+| Production configuration | Configuration reference ([docs/ENVIRONMENT.md](ENVIRONMENT.md), with `backend/.env.example` as the template) | **READY** | Every variable the code reads is documented in the reference, together with the production values for the VM and the boot-refusal table. `.env.example` ships an empty `JWT_SECRET`, so a copied example refuses to boot |
 | Production configuration | NICeMail account-switch procedure | **PARTIALLY READY** | Defined in Section 2.2; to be rehearsed |
 | Rollback | Code rollback (redeploy the previous commit) | **REQUIRES VALIDATION** | Clean commit history; no data migrations. Indexes are re-synced from code at start-up: `syncIndexes` **drops indexes not declared in the code**, and a failed build only logs a warning while start-up continues, so check index state after a rollback (`db.js:64-70`) |
-| Rollback | Fallback to Gmail during migration | **PARTIALLY READY** | Possible while Gmail stays configured (Section 17.3) |
-
 ---
 
 <a id="19-management-summary"></a>
@@ -988,8 +1118,9 @@ Statuses are based **only** on what the repository and the controlled live test 
 - **NIC SMTP:** for cases that did *not* arrive through the agent. Production refuses the `mock` transport, so this needs the application password (Section 12.2).
 
 **5. What infrastructure is required?**
-- one **application VM** (Windows with desktop, hosting the backend, the agent's Chrome, the reverse proxy and the frontend);
-- one **database VM** (MongoDB with authentication and TLS);
+- one **application VM** (Windows with desktop, hosting the backend, the agent's Chrome and the reverse proxy);
+- a **Render Static Site** serving the frontend and rewriting `/api/*` to the VM (Section 11.5);
+- a **separate production MongoDB Atlas cluster** (`qms_production`, with authentication and TLS), reachable only from the application VM;
 - a TLS certificate;
 - firewall rules (CDP never exposed);
 - outbound access to NICeMail and Pravah;
@@ -1044,7 +1175,7 @@ No GPU.
 Separately, with AICTE/Pravah and IPC policy: data-sharing approval for the AI service, and whether an external AI service is acceptable at all.
 
 **9. What is the recommended deployment topology?**
-A **single application VM**: the deployment must keep the backend and the agent's Chrome on the same host, so that the CDP port never leaves it (the code allows a remote endpoint but nothing protects it — Sections 9.2 and 13). One backend instance, a signed-in Chrome with a dedicated profile. Plus a **separate MongoDB VM**, and TLS at a reverse proxy. A dedicated browser-agent worker is the recommended future step if volumes grow or sends must not block users.
+A **single application VM**: the deployment must keep the backend and the agent's Chrome on the same host, so that the CDP port never leaves it (the code allows a remote endpoint but nothing protects it — Sections 9.2 and 13). One backend instance, a signed-in Chrome with a dedicated profile. Plus a **separate MongoDB Atlas cluster**, the frontend on a **Render Static Site** (Section 11.5), and TLS at a reverse proxy. A dedicated browser-agent worker is the recommended future step if volumes grow or sends must not block users.
 
 **10. What is the migration strategy from Gmail to NICeMail?**
 **Completed** (Section 17). Gmail is gone from code, dependencies and configuration; the forward
@@ -1065,12 +1196,12 @@ follows the case mailbox. What remains is operational, not a migration:
 - 990 backend and 839 frontend automated tests were run and passed at commit `438997e` (a test run, not a reading of the repository). Acknowledgement and final-response sending was live-tested on 2026-09-22 against the test account only.
 
 ### Deployment recommendations
-- Windows application VM with desktop plus a MongoDB VM; no GPU.
+- Windows application VM with desktop, plus a separate Atlas cluster and a Render Static Site; no GPU.
 - CDP on localhost only, behind a host firewall; ACL-restricted Chrome profile; NTP.
 - One backend instance under a process manager; `NODE_ENV=production`.
 - Monitoring and alerts for session expiry, Chrome down, and FAILED / UNCERTAIN / stuck sends.
 - A named NICeMail account owner and deputy; an operator runbook.
-- Put the OIC-forward replacement in place before removing Gmail: the Browser Agent path (code change) or NIC SMTP (configuration, once the application password exists).
+- Keep the Browser Agent as the only channel for NICeMail cases; add NIC SMTP (configuration, once the application password exists) as the channel for other cases.
 - Phased rollout with the outbound interlock closed until the pilot.
 
 ### Assumptions
@@ -1087,7 +1218,7 @@ Listed in Section 12.2. In addition:
 
 ### Production risks
 Ranked in Section 9.5 (Browser Agent) and Section 13 (security). The top five:
-1. OIC forward still on `EMAIL_TRANSPORT` (Gmail today), with a silent `mock` default.
+1. One channel for every NICeMail case email: a session outage stops the acknowledgement, the forward and the response together (§9.5 #2).
 2. Single attended browser session with no alerting.
 3. CDP exposure.
 4. NICeMail UI changes.
@@ -1100,7 +1231,7 @@ Ranked in Section 9.5 (Browser Agent) and Section 13 (security). The top five:
 
 | Topic | Primary files (under `backend/src/` unless noted) |
 |---|---|
-| AI calls, timeouts, fallbacks | `services/ai/gemmaService.js`; `config/env.js:56-66`; `controllers/aiController.js`; `routes/aiRoutes.js` |
+| AI calls, timeouts, fallbacks | `services/ai/gemmaService.js`; `config/env.js:47-48`; `controllers/aiController.js`; `routes/aiRoutes.js` |
 | Knowledge retrieval | `data/ipcKnowledge.js`, `data/ipcKnowledge.json`, `data/ipcContextBrain.js`, `data/evidenceQualification.js`; `backend/scripts/ingestIpcDocs.mjs` |
 | Browser Agent core | `services/email/nic/browser/cdp.js`, `attach.js`, `session.js`, `selectors.js`, `pageKit.js`, `readInbox.js`, `sendMail.js`, `inspect.js`; `config/browserConfig.js` |
 | Browser Agent tools | `scripts/nicBrowserDiscover.js`, `scripts/nicBrowserCalibrate.js` |
@@ -1116,7 +1247,7 @@ Ranked in Section 9.5 (Browser Agent) and Section 13 (security). The top five:
 | Mailbox health and Front Office pages | `services/email/mailbox/health.js`; `frontend/src/components/workflow/MailboxAutoSync.jsx`; `frontend/src/pages/frontOffice/MailboxInboxPage.jsx` |
 | Platform | `server.js`, `app.js`, `config/db.js`, `config/env.js`; `controllers/healthController.js`; `frontend/src/services/api/axiosClient.js` |
 | Attachments | `services/attachments/attachmentPolicy.js`, `attachmentStore.js`, `resolveAttachments.js` |
-| Configuration reference | `backend/.env.example`, `frontend/.env.example`, `backend/.env.e2e` |
+| Configuration reference | `docs/ENVIRONMENT.md`; `backend/.env.example`, `frontend/.env.example`, `backend/.env.e2e`; the loader in `config/env.js` |
 | CI and tests | `.github/workflows/test.yml`; `backend/src/test/*`; `frontend/src/test/*`; `frontend/e2e/*` |
 
 ---
@@ -1128,7 +1259,7 @@ Closed on 2026-09-23, except where noted. Each line carries the check that prove
 | # | Was | Now |
 |---|---|---|
 | 1 | `docs/NIC_BROWSER_AGENT.md` and `nicTransport.js` described IMAP/SMTP as the production mail path and the Browser Agent as a supervised tool | **Closed.** §17 of the runbook states the agent as the production path for cases that arrive in its mailbox, and SMTP as the channel for the rest |
-| 2 | `docs/NIC_BROWSER_AGENT.md` and `.env.example` said the NICeMail Front Office signs in with `QMS_SEED_PASSWORD` | **Closed.** Both describe per-account credentials, and `.env.example` spells out all three states of `QMS_ALLOW_SHARED_PASSWORD` |
+| 2 | `docs/NIC_BROWSER_AGENT.md` and `.env.example` said the NICeMail Front Office signs in with `QMS_SEED_PASSWORD` | **Closed.** `docs/NIC_BROWSER_AGENT.md` describes per-account credentials, and `docs/ENVIRONMENT.md` spells out all three states of `QMS_ALLOW_SHARED_PASSWORD` |
 | 3 | `docs/HANDOFF.md` and the Admin settings page said case-level authorization is not implemented | **Closed.** Both corrected; `backend/README.md` documents the three guards. Check: `grep -rn "case-level" docs/ backend/README.md` |
 | 4 | `.env.example` said AI drafts use 3× the timeout; the code uses 5× | **Closed.** Check: `grep -n "TIMEOUT_FACTOR" backend/src/services/ai/gemmaService.js` |
 | 5 | `docs/HANDOFF.md` listed a duplicate-acknowledgement race and "no control to record an uncertain send" | **Closed.** Both are addressed in code (the outbound ledger; `POST /queries/:queryId/outbound/resolve`) and the document says so |
