@@ -19,13 +19,13 @@ import { RULE_CLASSES, TRIAGE_VERDICTS } from '../../../models/MailboxTriage.js'
  *   `soft`  recorded as JUNK, but still sent to the model, and the fired signals
  *           are handed to it as *facts about the message*, never as a verdict.
  *
- * Nothing here filters by sender domain or reputation. services/email/mailbox/
- * gmailInboxReader.js records why a `from:` filter was removed: "an enquiry from
- * an unknown member of the public was silently discarded before anyone saw it —
- * the worse of the two failures." ESP bounce-domain matching (`sendgrid.net`,
- * `amazonses.com`, `bounces.*`) was considered for this module and rejected on
- * that reasoning: the transport an enquiry travelled over says nothing about
- * whether a person is waiting for a reply. Do not re-add it.
+ * Nothing here filters by sender domain or reputation. The reader that once did
+ * has since been removed, but it recorded why its `from:` filter went first:
+ * "an enquiry from an unknown member of the public was silently discarded before
+ * anyone saw it — the worse of the two failures." ESP bounce-domain matching
+ * (`sendgrid.net`, `amazonses.com`, `bounces.*`) was considered for this module
+ * and rejected on that reasoning: the transport an enquiry travelled over says
+ * nothing about whether a person is waiting for a reply. Do not re-add it.
  *
  * `headers` is optional and every Tier-A rule no-ops without it. That is the
  * normal case, not an edge one: the NICeMail browser agent scrapes a rendered
@@ -70,10 +70,11 @@ const htmlText = (html) =>
 /**
  * The addresses that mean "this is our own mail coming back".
  *
- * Deliberately NOT `allIdentities()`: that includes the INQUIRER identity,
- * which is the address enquiries are *sent from* in development and in the
- * end-to-end suite. Hard-junking it would discard exactly the mail this system
- * exists to handle.
+ * Named one by one rather than taken from `allIdentities()`. The two are the same
+ * set today, but the list there is the staff directory and this one is "mail that
+ * came back from us". An identity added for anyone the system corresponds *with*
+ * would silently start hard-junking their mail, which is exactly the enquiry this
+ * system exists to handle.
  */
 function ownAddresses() {
   return [
@@ -202,9 +203,10 @@ export function classifyByRules({
   // attached" is the commonest shape a real enquiry takes, and an empty body
   // with a PDF wrongly purged is the worst outcome this feature can produce.
   //
-  // Soft even so, because extractBody in gmailInboxReader.js decodes with
-  // 'base64' rather than 'base64url' — a known live bug that turns a good body
-  // containing '-' or '_' into nothing.
+  // Soft, never hard: an empty body is as often a reader that failed to extract
+  // one as it is a message with nothing in it. The browser reader lifts the body
+  // out of the live DOM, so a page that had not finished rendering yields the
+  // same emptiness as genuine junk, and only one of those may be purged.
   const hasAttachment = Array.isArray(attachments) && attachments.length > 0;
   if (!hasAttachment && !String(body || '').trim() && !htmlText(bodyHtml)) {
     soft('empty', 'no body and no attachments');

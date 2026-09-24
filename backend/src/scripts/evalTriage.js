@@ -43,7 +43,7 @@ const FIXTURES = [
     name: 'circular-noreply',
     why: 'a real regulatory circular from a no-reply address — the measured failure of 2026-09-23',
     mail: {
-      from: 'CDSCO Updates <noreply@cdsco.gov.in>',
+      from: 'CDSCO Updates <noreply@cdsco.gov.invalid>',
       subject: 'Circular: revised Schedule M timelines',
       body:
         'The Central Drugs Standard Control Organisation has issued a revised circular on ' +

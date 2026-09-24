@@ -122,9 +122,10 @@ describe('Tier B — the sender', () => {
   );
 
   it('does NOT treat the configured inquirer address as a loop', () => {
-    // allIdentities() includes the INQUIRER identity, which is the address
-    // enquiries are sent FROM in development and end-to-end runs. Hard-junking
-    // it would discard exactly the mail this system exists to handle.
+    // A member of the public is not loop-back mail. `ownAddresses()` names the
+    // staff identities one by one for this reason: were it to take the whole
+    // directory, an identity added for someone the system corresponds with would
+    // start hard-junking their enquiries.
     const result = classifyByRules(enquiry({ from: 'Public <member.of.public@example.invalid>' }));
     expect(result.verdict).toBe(GENUINE);
   });

@@ -549,9 +549,9 @@ job: a TTL index can only remove a whole document.
 
 Five things make a wrong verdict survivable:
 
-- **GENUINE is the default** that evidence has to overcome. `gmailInboxReader.js` records why a
-  sender filter was removed once already — "an enquiry from an unknown member of the public was
-  silently discarded before anyone saw it — the worse of the two failures" — and this feature is
+- **GENUINE is the default** that evidence has to overcome. A sender filter was removed from the
+  inbound reader once already, and the reason was recorded — "an enquiry from an unknown member of
+  the public was silently discarded before anyone saw it — the worse of the two failures" — and this feature is
   built to respect that. ESP bounce-domain matching was considered for the rule set and rejected on
   the same reasoning.
 - **Junk stays whole and visible for `MAILBOX_RETENTION_HOURS`** (46 by default) in the Junk filter,
