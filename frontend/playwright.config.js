@@ -2,6 +2,7 @@ import { defineConfig, devices } from '@playwright/test';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { E2E_MONGO_URL } from './e2e/helpers/db.js';
 
 const FRONTEND_ROOT = path.dirname(fileURLToPath(import.meta.url));
 const BACKEND_ROOT = path.resolve(FRONTEND_ROOT, '../backend');
@@ -21,7 +22,18 @@ function readEnvFile(file) {
       }),
   );
 }
-const backendEnv = readEnvFile(path.join(BACKEND_ROOT, '.env.e2e'));
+const E2E_ENV_FILE = path.join(BACKEND_ROOT, '.env.e2e');
+if (!fs.existsSync(E2E_ENV_FILE)) {
+  throw new Error(
+    `The e2e backend settings are missing: ${E2E_ENV_FILE}. Without them the backend would load backend/.env and its database.`,
+  );
+}
+const backendEnv = readEnvFile(E2E_ENV_FILE);
+if (backendEnv.DATABASE_URL !== E2E_MONGO_URL) {
+  throw new Error(
+    `backend/.env.e2e must set DATABASE_URL to exactly ${E2E_MONGO_URL}; the suite wipes that database between specs.`,
+  );
+}
 const PASSWORDS_FIXTURE = path.join(BACKEND_ROOT, 'src', 'test', 'fixtures', 'passwords.json');
 if (!fs.existsSync(PASSWORDS_FIXTURE)) {
   throw new Error(`The e2e credential fixture is missing: ${PASSWORDS_FIXTURE}`);
@@ -55,6 +67,7 @@ export default defineConfig({
     {
       command: 'npm run dev -- --strictPort --port 5173',
       cwd: FRONTEND_ROOT,
+      env: { ...process.env, VITE_API_BASE_URL: 'http://localhost:5000/api/v1' },
       port: 5173,
       reuseExistingServer: !process.env.CI,
       timeout: 60_000,
