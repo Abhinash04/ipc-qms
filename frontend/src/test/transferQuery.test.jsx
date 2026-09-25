@@ -105,8 +105,9 @@ describe('Transfer Query Functionality Unit & Integration Tests', () => {
       expect(transferAudit.details).toContain('Reason: Query belongs to another department');
 
       const notifs = s().getNotifications();
-      const transferNotif = notifs.find((n) => n.queryId === queryId && n.recipientRole === 'ASSIGNED_OFFICIAL');
+      const transferNotif = notifs.find((n) => n.queryId === queryId && n.recipientUserId === OFFICIAL_B.id);
       expect(transferNotif).toBeDefined();
+      expect(transferNotif.recipientRole).toBeNull();
       expect(transferNotif.message).toContain(OFFICIAL_B.name);
       expect(transferNotif.message).toContain('Query belongs to another department');
     });

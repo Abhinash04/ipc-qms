@@ -60,7 +60,10 @@ export function Sidebar() {
   const open = !collapsed;
 
   const notifCount = notifications.filter(
-    (n) => n.recipientRole === currentUser?.role,
+    (n) =>
+      n.recipientUserId
+        ? n.recipientUserId === currentUser?.id
+        : n.recipientRole === currentUser?.role,
   ).length;
 
   const toggle = () => {

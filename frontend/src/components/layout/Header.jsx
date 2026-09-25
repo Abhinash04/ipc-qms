@@ -48,7 +48,10 @@ export function Header() {
   const notifRef = useRef(null);
 
   const userNotifications = notifications.filter(
-    (n) => n.recipientRole === currentUser?.role,
+    (n) =>
+      n.recipientUserId
+        ? n.recipientUserId === currentUser?.id
+        : n.recipientRole === currentUser?.role,
   );
   const notifCount = userNotifications.length;
 

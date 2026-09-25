@@ -226,6 +226,7 @@ function computeTransition(state, { queryId, event, actor, patch = {}, details, 
       notificationId: notifMint.id,
       queryId,
       recipientRole: notify.recipientRole,
+      ...(notify.recipientUserId ? { recipientUserId: notify.recipientUserId } : {}),
       message: notify.message,
       at: timestamp,
     };
@@ -1208,7 +1209,8 @@ export const useWorkflowStore = create((set, get) => ({
       patch: { currentAssigneeId: newAssigneeId },
       details: auditDetails,
       notify: {
-        recipientRole: 'ASSIGNED_OFFICIAL',
+        recipientRole: null,
+        recipientUserId: newAssigneeId,
         message: `${queryId} (${query.subject}) was transferred to ${newName} by ${actorLabelStr}. Reason: ${trimmedReason}`,
       },
       mutate: (base) => ({

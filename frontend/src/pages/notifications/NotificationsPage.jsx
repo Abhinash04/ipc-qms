@@ -11,6 +11,7 @@ import { Breadcrumb } from "@/components/common/Breadcrumb";
 import { PageHeader } from "@/components/common/PageHeader";
 import { useWorkflowStore } from "@/store/useWorkflowStore";
 import { ROLE_LABELS } from "@/constants/roles";
+import { findUserById } from "@/constants/mockUsers";
 import { buildPath } from "@/constants/routePaths";
 import { useRoutePaths } from "@/hooks/useRoutePaths";
 import { stableKey } from "@/utils/stableKey";
@@ -105,7 +106,9 @@ export function NotificationsPage() {
             const config = getNodeConfig(item);
             const Icon = config.icon;
             const roleLabel =
-              ROLE_LABELS[item.recipientRole] || item.recipientRole;
+              ROLE_LABELS[item.recipientRole] ||
+              item.recipientRole ||
+              findUserById(item.recipientUserId)?.name;
 
             return (
               <div
