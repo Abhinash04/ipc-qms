@@ -2,7 +2,11 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import { useWorkflowStore } from "@/store/useWorkflowStore";
 import { useAuthStore } from "@/store/useAuthStore";
-import { canPerform } from "@/constants/workflowRules";
+import {
+  canPerform,
+  ASSIGNEE_ONLY_ACTIONS,
+  isCaseAssignee,
+} from "@/constants/workflowRules";
 import { findUserById } from "@/constants/mockUsers";
 
 export function useQueryCase() {
@@ -83,8 +87,9 @@ export function useQueryCase() {
   const can = useCallback(
     (action) =>
       Boolean(query) &&
-      canPerform(currentUser?.role, action, query.workflowState),
-    [query, currentUser?.role],
+      canPerform(currentUser?.role, action, query.workflowState) &&
+      (!ASSIGNEE_ONLY_ACTIONS.includes(action) || isCaseAssignee(currentUser, query)),
+    [query, currentUser],
   );
 
   return useMemo(

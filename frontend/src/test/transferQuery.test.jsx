@@ -123,6 +123,20 @@ describe('Transfer Query Functionality Unit & Integration Tests', () => {
       }).toThrow(/Only the currently assigned official/);
     });
 
+    it('refuses the previous assignee every drafting action once the query is transferred', async () => {
+      s().transferQuery(queryId, OFFICIAL_B.id, 'Workload redistribution', OFFICIAL_A);
+
+      await expect(s().generateAiDraft(queryId, OFFICIAL_A, async () => null)).rejects.toThrow(
+        /Only the currently assigned official/,
+      );
+      expect(() => s().saveDraftVersion(queryId, 'Draft text', OFFICIAL_A)).toThrow(
+        /Only the currently assigned official/,
+      );
+      expect(() => s().transferQuery(queryId, OFFICIAL_A.id, 'Taking it back', OFFICIAL_A)).toThrow(
+        /Only the currently assigned official/,
+      );
+    });
+
     it('refuses transfer when no reason is provided', () => {
       expect(() => {
         s().transferQuery(queryId, OFFICIAL_B.id, '   ', OFFICIAL_A);
@@ -176,6 +190,24 @@ describe('Transfer Query Functionality Unit & Integration Tests', () => {
       });
 
       unmount();
+    });
+
+    it('moves Start drafting and Transfer Query from the previous assignee to the new one', () => {
+      const before = renderAs(OFFICIAL_A, `/assigned-official/queries/${queryId}`);
+      expect(screen.getByRole('button', { name: /Start drafting/ })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Transfer Query/ })).toBeInTheDocument();
+      before.unmount();
+
+      s().transferQuery(queryId, OFFICIAL_B.id, 'Workload redistribution', OFFICIAL_A);
+
+      const previous = renderAs(OFFICIAL_A, `/assigned-official/queries/${queryId}`);
+      expect(screen.queryByRole('button', { name: /Start drafting/ })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /Transfer Query/ })).not.toBeInTheDocument();
+      previous.unmount();
+
+      renderAs(OFFICIAL_B, `/assigned-official/queries/${queryId}`);
+      expect(screen.getByRole('button', { name: /Start drafting/ })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Transfer Query/ })).toBeInTheDocument();
     });
 
     it('reflects updated assignee and transfer audit event on Query Detail page for OIC / Super Admin', () => {

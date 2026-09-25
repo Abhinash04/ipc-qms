@@ -9,7 +9,13 @@ import {
   RESPONSE_SOURCE,
   RESPONSE_STATUS,
 } from '@/constants/statusEnums';
-import { deriveBusinessStatus, canPerform, WORKFLOW_ACTION } from '@/constants/workflowRules';
+import {
+  deriveBusinessStatus,
+  canPerform,
+  WORKFLOW_ACTION,
+  ASSIGNEE_ONLY_ACTIONS,
+  isCaseAssignee,
+} from '@/constants/workflowRules';
 import { ROLES, ROLE_LABELS } from '@/constants/roles';
 import { MOCK_USERS, findUserById, findUserByEmail } from '@/constants/mockUsers';
 import { createEmailMessage, EMAIL_DIRECTION, EMAIL_TYPE } from '@/constants/emailModel';
@@ -146,7 +152,16 @@ function assertCan(state, action, queryId, actor) {
     );
   }
 
+  if (ASSIGNEE_ONLY_ACTIONS.includes(action)) assertAssignee(query, actor, action);
   return query;
+}
+
+function assertAssignee(query, actor, action) {
+  if (isCaseAssignee(actor, query)) return;
+  const assignee = findUserById(query.currentAssigneeId);
+  throw new Error(
+    `Only the currently assigned official (${assignee?.name || query.currentAssigneeId || 'none'}) may perform ${action} on ${query.queryId}.`,
+  );
 }
 
 function assertOwnsStep(step, actor, action) {
@@ -1145,13 +1160,6 @@ export const useWorkflowStore = create((set, get) => ({
 
   transferQuery: (queryId, newAssigneeId, reason, actor) => {
     const query = assertCan(get(), WORKFLOW_ACTION.TRANSFER, queryId, actor);
-
-    if (query.currentAssigneeId && actor?.id && query.currentAssigneeId !== actor.id && actor.role !== ROLES.SUPER_ADMIN) {
-      const currentOfficial = findUserById(query.currentAssigneeId);
-      throw new Error(
-        `Only the currently assigned official (${currentOfficial?.name || query.currentAssigneeId}) can transfer this query.`
-      );
-    }
 
     if (!newAssigneeId) {
       throw new Error('A colleague/official must be selected for transfer.');

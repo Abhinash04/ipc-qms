@@ -27,6 +27,19 @@ export const CLARIFICATION_REQUIRED_ACTIONS = {
   },
 };
 
+export const ASSIGNEE_ONLY_ACTIONS = [
+  WORKFLOW_ACTION.GENERATE_AI_DRAFT,
+  WORKFLOW_ACTION.SAVE_DRAFT,
+  WORKFLOW_ACTION.SUBMIT_FOR_REVIEW,
+  WORKFLOW_ACTION.ADD_REVIEW_LEVEL,
+  WORKFLOW_ACTION.TRANSFER,
+];
+
+export function isCaseAssignee(user, query) {
+  if (user?.role === ROLES.SUPER_ADMIN) return true;
+  return Boolean(query?.currentAssigneeId) && query.currentAssigneeId === user?.id;
+}
+
 export function deriveBusinessStatus(workflowState) {
   if (workflowState === WORKFLOW_STATE.RECEIVED) return BUSINESS_STATUS.OPEN;
   if (workflowState === WORKFLOW_STATE.CLOSED || workflowState === WORKFLOW_STATE.CANCELLED) {
