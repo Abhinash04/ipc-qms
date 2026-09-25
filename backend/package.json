@@ -16,6 +16,7 @@
     "ingest:ipc": "node scripts/ingestIpcDocs.mjs",
     "db:reset": "node scripts/resetWorkflowState.mjs",
     "db:provision": "node scripts/provisionAtlas.mjs",
+    "db:check": "node scripts/checkAtlas.mjs",
     "mailbox:purge": "node scripts/purgeMailboxJunk.mjs",
     "draft:trace": "node src/scripts/testDraftLive.js",
     "draft:eval": "node src/scripts/evalDraft.js",
