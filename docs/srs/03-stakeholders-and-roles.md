@@ -48,15 +48,14 @@ workflow action (assign, draft, review, transfer, pull back, approve, dispatch) 
 
 ## 3.3 Mock Users
 
-Twelve development identities are seeded from `backend/src/constants/users.js` (mirrored for
+Eleven development identities are seeded from `backend/src/constants/users.js` (mirrored for
 display in `frontend/src/constants/mockUsers.js`, which the backend file is authoritative over).
 These are development identities only, not real IPC employees, and every address is on
 `@ipc.example`, which RFC 2606 reserves and which cannot receive mail:
 
 | ID | Name | Role |
 | --- | --- | --- |
-| USR-0002 | Front Office (primary mailbox) | FRONT_OFFICE |
-| USR-0003 | Jatin Rawat | OFFICER_IN_CHARGE |
+| USR-0003 | EduTR Zairza | OFFICER_IN_CHARGE |
 | USR-0004 | Neha Singh | ASSIGNED_OFFICIAL |
 | USR-0009 | Rawat Jatin | ASSIGNED_OFFICIAL |
 | USR-0010 | Meera Iyer | ASSIGNED_OFFICIAL |
@@ -68,17 +67,14 @@ These are development identities only, not real IPC employees, and every address
 | USR-0007 | Suresh Gupta | ADMIN |
 | USR-0008 | System Administrator | SUPER_ADMIN |
 
-Note `Rawat Jatin` (USR-0009) and `Jatin Rawat` (USR-0003) are **different people** — a deliberate
-near-collision the test suite pins, so name-matching code cannot conflate them.
-
 **No row here is the inquirer.** A real inquirer is any member of the public who emails the Front
 Office mailbox; they hold no account here and sign in to nothing. Their name and address are read off
 the incoming message and stored on the case, so the system supports arbitrarily many inquirers
 against one mailbox. There used to be a `USR-0001` / `INQUIRER` row; it existed only to exercise the
 in-app "Raise Enquiry" harness, and both are gone.
 
-A thirteenth account, `USR-0014`, is added from configuration rather than listed above when
-`NIC_BROWSER_MAILBOX=true`: a second `FRONT_OFFICE` identity that signs in as `NIC_EMAIL` and owns
+A twelfth account, `USR-0014`, is added from configuration rather than listed above when
+`NIC_BROWSER_MAILBOX=true`: the only `FRONT_OFFICE` identity, which signs in as `NIC_EMAIL` and owns
 the NICeMail mailbox.
 
 There is a real login screen, and **each account has its own credential**, resolved per account in

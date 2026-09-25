@@ -140,8 +140,8 @@ The root `.gitignore` ignores `.env` and every `.env.*`, except the `.env.exampl
 | Variable | Required | Secret | Default | Purpose |
 |---|---|---|---|---|
 | `JWT_SECRET` | both | **yes** | empty | Signs the session token. Required in every environment, at least 32 characters. Generate one with `openssl rand -base64 48`. Use a different value in production; never reuse a development one |
-| `QMS_PASSWORDS_FILE` | production (local: optional) | path no; **contents yes** | empty | The path to a JSON object of user id → password, for example `{ "USR-0002": "…" }`. It is read relative to the **working directory**, so use an absolute path on the VM, kept outside the checkout. In production it must cover USR-0002 through USR-0014. If the file is set but unreadable, not JSON, or not an object, startup stops |
-| `QMS_PASSWORD_<USER_ID>` | optional (instead of the file) | **yes** | — | One account's own password. The key is `QMS_PASSWORD_` plus the user id with each non-alphanumeric character turned into `_`, in upper case: `QMS_PASSWORD_USR_0002` through `QMS_PASSWORD_USR_0013`, plus `QMS_PASSWORD_USR_0014` when the NICeMail Front Office exists |
+| `QMS_PASSWORDS_FILE` | production (local: optional) | path no; **contents yes** | empty | The path to a JSON object of user id → password, for example `{ "USR-0003": "…" }`. It is read relative to the **working directory**, so use an absolute path on the VM, kept outside the checkout. In production it must cover USR-0003 through USR-0014. If the file is set but unreadable, not JSON, or not an object, startup stops |
+| `QMS_PASSWORD_<USER_ID>` | optional (instead of the file) | **yes** | — | One account's own password. The key is `QMS_PASSWORD_` plus the user id with each non-alphanumeric character turned into `_`, in upper case: `QMS_PASSWORD_USR_0003` through `QMS_PASSWORD_USR_0013`, plus `QMS_PASSWORD_USR_0014` when the NICeMail Front Office exists |
 | `QMS_SEED_PASSWORD` | local | **yes** | empty | The shared development password. In auto mode (next row) it is the password of every account that has no credential of its own, outside production only. Never on the VM |
 | `QMS_ALLOW_SHARED_PASSWORD` | production (`false`) | no | empty, meaning auto | `true`: the seed password opens every account without its own credential, `SUPER_ADMIN` included, **even in production**. `false`: shared mode is off everywhere. Unset, or any other value: shared mode is on outside production whenever `QMS_SEED_PASSWORD` is set. Leave it unset locally, and set `false` in production. `true` with an empty `QMS_SEED_PASSWORD` stops boot |
 | `SESSION_TTL_SECONDS` | optional | no | `28800` (8 h) | Session lifetime. It must be positive |
@@ -149,7 +149,7 @@ The root `.gitignore` ignores `.env` and every `.env.*`, except the `.env.exampl
 | `SESSION_COOKIE_SAMESITE` | optional | no | `lax` | `lax`, `strict` or `none`; anything else stops boot. **Keep `lax`**: production is same-origin through the Render rewrite. `none` forces `Secure` and is only for a cross-site deployment, which is not supported: there, text and PDF attachment previews break, and browsers that block third-party cookies fail outright |
 
 **Which accounts need a credential:**
-- USR-0002 through USR-0013, the 12 accounts in `backend/src/constants/users.js`.
+- USR-0003 through USR-0013, the 11 accounts in `backend/src/constants/users.js`.
 - USR-0014, the NICeMail Front Office, whenever `NIC_BROWSER_MAILBOX=true` and `NIC_EMAIL` is set.
 
 If any account has no credential, boot stops and names each such account with the variable that would
@@ -167,11 +167,11 @@ which production rejects.
 | Variable | Required | Secret | Default | Purpose |
 |---|---|---|---|---|
 | `EMAIL_TRANSPORT` | production (`nic`) | no | `mock` | `mock` or `nic`; anything else stops boot. It is the channel for mail on cases that did **not** arrive through the browser agent. NICeMail cases always go out through the agent, whatever this says. `mock` records mail as sent without sending it, and is the local value. **Production refuses `mock`, even with `NIC_BROWSER_MAILBOX=true`, so production must set `nic`.** `nic` then requires `NIC_EMAIL`, `NIC_IMAP_HOST` and `NIC_SMTP_HOST` at boot ([§3.5](#35-nicemail-imapsmtp-dormant)) |
-| `MAILBOX_SOURCE` | optional (keep `auto`) | no | `auto` | Where the **primary** Front Office inbox (USR-0002's) is read from. `auto`: MongoDB, or memory when there is no database. `nic`: a live, read-only IMAP view of `NIC_EMAIL`. That needs the app password, which has not been issued, and it brings in the [§3.5](#35-nicemail-imapsmtp-dormant) boot checks. Keep `auto` everywhere. The agent's NICeMail inbox is separate and always stored in MongoDB |
-| `FRONT_OFFICE_EMAIL` | production | no | `front-office-unconfigured@example.com` | The primary Front Office identity. It is USR-0002's inbox address and the sender on non-agent cases. The admin screens show it (`ipcQueryEmail` on `/emails/config`), and it is printed as `Query recipient` at start. **Production:** a real address (not empty, not `@example.com`) that **differs from `NIC_EMAIL`** and **never mails the NICeMail inbox**: it is on the triage loop list, so mail from it is junked. Locally, leave it unset |
+| `MAILBOX_SOURCE` | optional (keep `auto`) | no | `auto` | Where the **primary** Front Office inbox (the one `SUPER_ADMIN` sees) is read from. `auto`: MongoDB, or memory when there is no database. `nic`: a live, read-only IMAP view of `NIC_EMAIL`. That needs the app password, which has not been issued, and it brings in the [§3.5](#35-nicemail-imapsmtp-dormant) boot checks. Keep `auto` everywhere. The agent's NICeMail inbox is separate and always stored in MongoDB |
+| `FRONT_OFFICE_EMAIL` | production | no | `front-office-unconfigured@example.com` | The primary Front Office identity. It is the primary inbox address and the sender on non-agent cases. The admin screens show it (`ipcQueryEmail` on `/emails/config`), and it is printed as `Query recipient` at start. **Production:** a real address (not empty, not `@example.com`) that **differs from `NIC_EMAIL`** and **never mails the NICeMail inbox**: it is on the triage loop list, so mail from it is junked. Locally, leave it unset |
 | `FRONT_OFFICE_NAME` | production (display) | no | `Front Officer (unconfigured)` | The display name paired with it. It is never validated: left empty, it shows as "(unconfigured)" |
 | `OFFICER_IN_CHARGE_EMAIL` | production; local with `NIC_ALLOW_INTERNAL_FORWARD=true` | no | `officer-in-charge-unconfigured@example.com` | The recipient of the internal forward on **every** case, NICeMail cases included. It is also the one extra address that `NIC_ALLOW_INTERNAL_FORWARD` opens. It must be a real address in production. It is on the loop list too |
-| `OFFICER_IN_CHARGE_NAME` | production (display) | no | `Officer-in-Charge (unconfigured)` | Display only, in the participant directory |
+| `OFFICER_IN_CHARGE_NAME` | production (display) | no | `Officer-in-Charge (unconfigured)` | Display only, in the participant directory. The Officer-in-Charge is EduTR Zairza: set this name and that account's mailbox in `OFFICER_IN_CHARGE_EMAIL`, in the env file only |
 
 ### 3.4 NICeMail browser agent
 
@@ -458,7 +458,7 @@ This section lists the values.
 | `CLIENT_URL` | `https://<render-site>`, the Render site origin | no |
 | `DATABASE_URL` | `mongodb+srv://<prod-user>:<prod-password>@<prod-cluster>.mongodb.net/qms_production?retryWrites=true&w=majority`, on a **separate Atlas cluster** whose access list holds only the VM | **yes** |
 | `JWT_SECRET` | at least 32 random characters, never reused from development | **yes** |
-| `QMS_PASSWORDS_FILE` | an absolute path outside the checkout, for example `C:/qms-secrets/qms-passwords.json`, with entries USR-0002 through USR-0014 | path no; **contents yes** |
+| `QMS_PASSWORDS_FILE` | an absolute path outside the checkout, for example `C:/qms-secrets/qms-passwords.json`, with entries USR-0003 through USR-0014 | path no; **contents yes** |
 | `QMS_ALLOW_SHARED_PASSWORD` | `false` | no |
 | `EMAIL_TRANSPORT` | `nic` | no |
 | `MAILBOX_SOURCE` | `auto` | no |

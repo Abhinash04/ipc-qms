@@ -894,8 +894,8 @@ With `NIC_BROWSER_MAILBOX=true` a QMS account can read the live mailbox and make
 - **Dev login remains open for every other seeded account.** It answers whenever
   `NODE_ENV=development` — the default when `NODE_ENV` is unset — and the backend listens on all
   interfaces, so anyone who can reach the port can sign in without a password as any other seeded
-  user. That includes the primary Front Office, whose inbox is whatever `MAILBOX_SOURCE` selects —
-  a real mailbox, read over IMAP, under `MAILBOX_SOURCE=nic`. This development-mode exposure
+  user. That includes `SUPER_ADMIN`, which reads the primary mailbox, whatever `MAILBOX_SOURCE`
+  selects — a real mailbox, read over IMAP, under `MAILBOX_SOURCE=nic`. This development-mode exposure
   pre-dates the NICeMail mailbox and is not fixed: do not run a development-mode backend where
   untrusted hosts can reach it.
 - **Outbound mail is confined** to `NIC_BROWSER_TEST_RECIPIENT` until `NIC_ALLOW_OUTBOUND=true` —
@@ -1374,7 +1374,7 @@ acknowledgement with the *never been calibrated* error (§13); restart it.
    `NIC_ALLOW_INTERNAL_FORWARD=true`.
 5. Continue the workflow to final approval. The final response is sent from NICeMail and the case
    closes.
-6. The mail never appears in the primary Front Office's inbox.
+6. The mail never appears in the primary mailbox.
 
 If a toast, banner or notification says a send **may already have been sent**, the send is
 unconfirmed: check NICeMail's **Sent** folder before any retry (§13). A blind retry of a message that
@@ -1410,7 +1410,7 @@ None of these is fixed. Each is a way the NICeMail mailbox can go wrong in opera
 - **Mailbox isolation covers the mailbox routes, not accept or decisions.** The NICeMail Front
   Office's requests are pinned to its mailbox, and the primary mailbox's MongoDB store no longer
   lists, marks, deletes or clears NICeMail rows, whatever `?recipient=` says. But in any mode the
-  primary Front Office or `SUPER_ADMIN` can accept a NICeMail message by its id: the primary
+  `SUPER_ADMIN` can accept a NICeMail message by its id: the primary
   mailbox's accept takes the message from the request body and records a non-NICeMail
   `sourceMailbox`, so that case is answered through `EMAIL_TRANSPORT`.
   `POST /mailbox/messages/:id/decision` and `GET /mailbox/decisions` are not scoped to a mailbox at

@@ -119,15 +119,15 @@ There is a real login screen. Every account has its **own** password, from `QMS_
 `QMS_PASSWORD_<USER_ID>`; outside production one `QMS_SEED_PASSWORD` still opens all of them unless
 `QMS_ALLOW_SHARED_PASSWORD=false`.
 
-**[docs/auth.md](./auth.md) is the single source of truth** for the 12 seeded development accounts,
+**[docs/auth.md](./auth.md) is the single source of truth** for the 11 seeded development accounts,
 their roles, landing dashboards and section access. One per role:
 
 | Role | Email | Lands on |
 |---|---|---|
 | SUPER_ADMIN | `admin@ipc.example` | `/super-admin/dashboard` |
 | ADMIN | `suresh.gupta@ipc.example` | `/admin/dashboard` |
-| FRONT_OFFICE | `front.office@ipc.example` | `/front-officer/dashboard` |
-| OFFICER_IN_CHARGE | `jatin.rawat@ipc.example` | `/officer-in-charge/dashboard` |
+| FRONT_OFFICE | the value of `NIC_EMAIL` (only with `NIC_BROWSER_MAILBOX=true`) | `/front-officer/dashboard` |
+| OFFICER_IN_CHARGE | `edutr.zairza@ipc.example` | `/officer-in-charge/dashboard` |
 | ASSIGNED_OFFICIAL | `neha.singh@ipc.example` | `/assigned-official/dashboard` |
 | REVIEWER | `amit.mehta@ipc.example` | `/reviewer/dashboard` |
 
@@ -135,7 +135,7 @@ Development identities only — not real IPC employees. There is **no `INQUIRER`
 a member of the public who emails the Front Office mailbox, is read off the `From` header at intake,
 holds no account here and never signs in.
 
-With `NIC_BROWSER_MAILBOX=true` there is a 13th account: a second `FRONT_OFFICE` (`USR-0014`) whose
+With `NIC_BROWSER_MAILBOX=true` there is a 12th account: the only `FRONT_OFFICE` (`USR-0014`), whose
 sign-in address is the value of `NIC_EMAIL` and whose name is `NIC_FRONT_OFFICE_NAME`. It needs a
 credential of its own like every other account, but **dev login refuses it** — its inbox is the live
 NICeMail mailbox. See [auth.md](./auth.md).
@@ -281,8 +281,8 @@ docs/        This file, plus SRS, architecture, workflow, API — docs/README.md
       beyond that window after a long downtime is never ingested. A message that fails three times is
       quarantined until the backend restarts. A failed attachment download is stored as a null id,
       and the forward refuses it permanently for that message.
-    - **Mailbox isolation does not cover accept or decisions.** The primary Front Office or
-      `SUPER_ADMIN` can accept a NICeMail message by id through the primary mailbox, and the decision
+    - **Mailbox isolation does not cover accept or decisions.** `SUPER_ADMIN` can accept a
+      NICeMail message by id through the primary mailbox, and the decision
       routes (`/mailbox/messages/:id/decision`, `/mailbox/decisions`) are not scoped to a mailbox.
       (`?recipient=` no longer reaches NICeMail rows: the Mongo primary store excludes them.)
     - **Tombstones.** A NICeMail message's "already handled" memory is its MongoDB row;
@@ -309,8 +309,8 @@ docs/        This file, plus SRS, architecture, workflow, API — docs/README.md
       an official mailbox sends.
     - **Dev login** still signs every other seeded account in without a password whenever
       `NODE_ENV=development` (the default when unset), and the server listens on all interfaces —
-      including the primary Front Office, whose inbox may be a real NICeMail mailbox under
-      `MAILBOX_SOURCE=nic`. Pre-existing; only the NICeMail Front Office is refused.
+      including `SUPER_ADMIN`, which reads the primary mailbox, and that mailbox may be a real
+      NICeMail mailbox under `MAILBOX_SOURCE=nic`. Pre-existing; only the NICeMail Front Office is refused.
 
 ## What's Next
 

@@ -48,8 +48,8 @@ JSON file of `userId` -> password kept outside the repository), a `QMS_PASSWORD_
 
 ## Accounts
 
-Source of truth: `backend/src/constants/users.js` — 12 accounts, each with a credential of its own,
-and a 13th that exists only when `NIC_BROWSER_MAILBOX=true`
+Source of truth: `backend/src/constants/users.js` — 11 accounts, each with a credential of its own,
+and a 12th, the only Front Office account, that exists only when `NIC_BROWSER_MAILBOX=true`
 ([below](#the-nicemail-front-office)).
 
 ### One per role — the set to test with
@@ -58,8 +58,8 @@ and a 13th that exists only when `NIC_BROWSER_MAILBOX=true`
 |---|---|---|---|
 | `SUPER_ADMIN` | System Administrator | `admin@ipc.example` | `/super-admin/dashboard` |
 | `ADMIN` | Suresh Gupta | `suresh.gupta@ipc.example` | `/admin/dashboard` |
-| `FRONT_OFFICE` | Front Office (primary mailbox) | `front.office@ipc.example` | `/front-officer/dashboard` |
-| `OFFICER_IN_CHARGE` | Jatin Rawat | `jatin.rawat@ipc.example` | `/officer-in-charge/dashboard` |
+| `FRONT_OFFICE` | [The NICeMail Front Office](#the-nicemail-front-office) | the value of `NIC_EMAIL` | `/front-officer/dashboard` |
+| `OFFICER_IN_CHARGE` | EduTR Zairza | `edutr.zairza@ipc.example` | `/officer-in-charge/dashboard` |
 | `ASSIGNED_OFFICIAL` | Neha Singh | `neha.singh@ipc.example` | `/assigned-official/dashboard` |
 | `REVIEWER` | Amit Mehta | `amit.mehta@ipc.example` | `/reviewer/dashboard` |
 
@@ -201,9 +201,9 @@ These are development-mechanism properties, not bugs to be surprised by later.
    rate-limited per client address — 10 per 15 minutes, outside tests (`app.js`).
 5. **Dev login needs no password.** `POST /auth/dev-login` answers whenever `NODE_ENV=development` —
    the default when `NODE_ENV` is unset — and the server listens on all interfaces, so anyone who can
-   reach the port can sign in as any seeded account. That includes the primary Front Office, whose
-   inbox may be a real NICeMail mailbox under `MAILBOX_SOURCE=nic`. Only the NICeMail Front Office is
-   refused. Do not run a development-mode backend where untrusted hosts can reach it.
+   reach the port can sign in as any seeded account. That includes `SUPER_ADMIN`, which reads the
+   primary mailbox, and that mailbox may be a real NICeMail mailbox under `MAILBOX_SOURCE=nic`. Only
+   the NICeMail Front Office is refused. Do not run a development-mode backend where untrusted hosts can reach it.
 
 Because of (1)–(5), this is a development authentication mechanism. Production needs a real user
 directory, the shared-password mode off, workflow-state enforcement, token revocation and

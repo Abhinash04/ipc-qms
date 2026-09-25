@@ -29,12 +29,12 @@ year-scoped as `QRY-<year>-#####`.
    Had she clicked × instead, the rejection would have been recorded and nothing else would have
    happened.
 3. **Forwarded** — already done, by the same click. The enquiry reaches the Officer-in-Charge,
-   Jatin Rawat, as part of accepting it; there is no second action. **Forward to
+   EduTR Zairza, as part of accepting it; there is no second action. **Forward to
    Officer-in-Charge** still exists on the case page, but only as the recovery path: if the forward
    failed during accept the case stays at `FRONT_OFFICE_VERIFICATION`, and that button — or
    pressing ✓ again, which repeats nothing that already succeeded — completes it.
 4. **Assignment** — the AI Assignment Assistant recommends Neha Singh (92% match, based on
-   category/subject/history/workload). Jatin accepts the recommendation. `workflowState`
+   category/subject/history/workload). The Officer-in-Charge accepts the recommendation. `workflowState`
    moves to `ASSIGNED`, then `DRAFTING` once Neha starts.
 5. **Drafting** — Neha reviews the attachments, and the AI Draft Assistant generates an
    initial response (`response version v1`). Neha edits it (`v2`) and marks it ready for
@@ -42,13 +42,13 @@ year-scoped as `QRY-<year>-#####`.
 6. **Review Level 1** — Amit Mehta reviews `v2` and approves it.
 7. **Review Level 2** — Kavita Rao reviews next. In this walkthrough she requests changes;
    Neha revises (`v3`) and the query re-enters Review Level 2, which then approves.
-8. **Final approval, and the answer** — Jatin reviews the fully-approved draft and grants final
+8. **Final approval, and the answer** — the Officer-in-Charge reviews the fully-approved draft and grants final
    approval. That one click is a single server call (`POST /queries/:queryId/final-approval`) which
    locks the approved version, moves the case to `READY_FOR_DISPATCH`, emails the response to the
    address the enquiry came from, and closes the case. The audit trail reads
    `FINAL_APPROVAL_GRANTED → RESPONSE_DISPATCHED → QUERY_CLOSED`.
    The order is deliberate: the approval is recorded **before** any mail is attempted, so a decision
-   Jatin made survives a mail server being down; and the case becomes `CLOSED` **only after** a send
+   the Officer-in-Charge made survives a mail server being down; and the case becomes `CLOSED` **only after** a send
    that actually happened, so it can never read closed while the inquirer heard nothing.
 9. **Dispatch** — nothing for Bhumika to do. The Dispatch page shows the response that went out and
    who received it. It carries a **Retry sending response** button, and that is the only thing on

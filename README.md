@@ -157,8 +157,8 @@ listed in [docs/auth.md](docs/auth.md):
 |---|---|
 | SUPER_ADMIN | `admin@ipc.example` |
 | ADMIN | `suresh.gupta@ipc.example` |
-| FRONT_OFFICE | `front.office@ipc.example` |
-| OFFICER_IN_CHARGE | `jatin.rawat@ipc.example` |
+| FRONT_OFFICE | the value of `NIC_EMAIL` (only with `NIC_BROWSER_MAILBOX=true`; password sign-in only) |
+| OFFICER_IN_CHARGE | `edutr.zairza@ipc.example` |
 | ASSIGNED_OFFICIAL | `neha.singh@ipc.example` |
 | REVIEWER | `amit.mehta@ipc.example` |
 

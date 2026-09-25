@@ -937,7 +937,7 @@ These and the other agent variables, with their defaults, are described in
 The IMAP settings are not needed. MongoDB is: the mailbox is stored in `MailboxMessage` and answers
 503 without it.
 
-- **A second Front Office account.** `nicFrontOfficeUser()` in `constants/users.js` adds `USR-0014`,
+- **The Front Office account.** `nicFrontOfficeUser()` in `constants/users.js` adds `USR-0014`,
   role `FRONT_OFFICE`, email `NIC_EMAIL`, signing in with its own credential
   (`QMS_PASSWORD_USR_0014` or its `QMS_PASSWORDS_FILE` entry; outside production the shared
   `QMS_SEED_PASSWORD` also works unless `QMS_ALLOW_SHARED_PASSWORD=false`). Dev login refuses it.

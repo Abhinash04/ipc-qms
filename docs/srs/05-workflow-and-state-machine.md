@@ -82,7 +82,7 @@ flowchart TD
     end
 
     subgraph ASSIGN["Phase 2 — Assignment"]
-        G["Jatin Rawat<br/><b>Officer-in-Charge</b><br/><br/>
+        G["EduTR Zairza<br/><b>Officer-in-Charge</b><br/><br/>
         Receives Query"]
 
         H["AI Assignment Assistant<br/><br/>
@@ -161,7 +161,7 @@ flowchart TD
     end
 
     subgraph APPROVAL["Phase 5 — Final Approval"]
-        AE["Jatin Rawat<br/><b>Officer-in-Charge</b><br/><br/>
+        AE["EduTR Zairza<br/><b>Officer-in-Charge</b><br/><br/>
         Receives Reviewed Draft"]
 
         AF{"Final Approval Decision"}

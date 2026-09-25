@@ -70,12 +70,11 @@ Dispatch page is what exercises it — the recovery path for a send that did not
 real actor and is gated exactly as it always was. On the normal path the Front Officer presses
 nothing.
 
-**Two Front Office accounts, one set of grants.** With `NIC_BROWSER_MAILBOX=true` a second
-`FRONT_OFFICE` account exists (`USR-0014`, signing in as `NIC_EMAIL` — see
-[auth.md](../auth.md#the-nicemail-front-office)). It holds exactly the Front Office column above; no
-grant was added or split. What differs is its **mailbox**: the mailbox routes always act on the
-NICeMail mailbox read by the browser agent, and `?recipient=` cannot point them elsewhere, while the
-other Front Office keeps the `MAILBOX_SOURCE` mailbox. Cases are shared by both. Which mailbox
+**One Front Office account.** With `NIC_BROWSER_MAILBOX=true` the only `FRONT_OFFICE` account
+exists (`USR-0014`, signing in as `NIC_EMAIL` — see
+[auth.md](../auth.md#the-nicemail-front-office)). It holds exactly the Front Office column above. Its
+mailbox routes always act on the NICeMail mailbox read by the browser agent, and `?recipient=` cannot
+point them elsewhere, while `SUPER_ADMIN` reads the `MAILBOX_SOURCE` mailbox. Cases are shared. Which mailbox
 answers follows the **case**, not the person acting: a case accepted from NICeMail sends **all three**
 of its emails — acknowledgement, forward to the Officer-in-Charge, final response — and their retries
 through NICeMail, whether a Front Officer, Super Admin or the Officer-in-Charge's final approval
