@@ -125,3 +125,30 @@ describe('a transferred case belongs to the new assignee only', () => {
   });
 });
 
+describe('transfer is only possible before drafting starts', () => {
+  it.each([
+    ['the assignee', OFFICIAL_A],
+    ['the Super Admin', SUPER_ADMIN],
+  ])('refuses %s transferring a case in DRAFTING', async (_label, actor) => {
+    await seed({ workflowState: 'DRAFTING' });
+
+    const res = await persistAs(actor, {
+      query: caseRow({ workflowState: 'DRAFTING', currentAssigneeId: OFFICIAL_B.id }),
+      baseRevision: 1,
+    });
+
+    expect(res.status).toBe(403);
+    expect(res.body.fields).toEqual(['query.currentAssigneeId']);
+    expect((await QueryCase.findOne({ queryId: CASE }).lean()).currentAssigneeId).toBe(OFFICIAL_A.id);
+  });
+
+  it.each(['USR-0005', 'USR-0008', 'USR-9999'])('refuses a transfer to %s, who is not an Assigned Official', async (id) => {
+    await seed();
+
+    const res = await persistAs(OFFICIAL_A, { query: caseRow({ currentAssigneeId: id }), baseRevision: 1 });
+
+    expect(res.status).toBe(403);
+    expect(res.body.fields).toEqual(['query.currentAssigneeId']);
+  });
+});
+

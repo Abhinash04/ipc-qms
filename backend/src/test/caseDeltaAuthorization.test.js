@@ -100,11 +100,41 @@ describe('naming the assignee', () => {
   });
 
   it('permits the Officer-in-Charge, who assigns', () => {
-    expect(check(ROLES.OFFICER_IN_CHARGE, assignTo('USR-0004'))).toEqual([]);
+    const pending = storedCase({ workflowState: 'PENDING_ASSIGNMENT', currentAssigneeId: null });
+
+    expect(check(ROLES.OFFICER_IN_CHARGE, assignTo('USR-0004'), pending)).toEqual([]);
+  });
+
+  it('refuses the Officer-in-Charge re-pointing a case that is already assigned', () => {
+    expect(check(ROLES.OFFICER_IN_CHARGE, assignTo('USR-0004'))).toContain('query.currentAssigneeId');
+  });
+
+  it('refuses an Admin naming a new assignee', () => {
+    expect(check(ROLES.ADMIN, assignTo('USR-0004'))).toContain('query.currentAssigneeId');
   });
 
   it('permits an official transferring a case', () => {
     expect(check(ROLES.ASSIGNED_OFFICIAL, assignTo('USR-0009'))).toEqual([]);
+  });
+
+  it.each(['DRAFTING', 'UNDER_REVIEW', 'RETURNED_FOR_REVISION', 'PENDING_FINAL_APPROVAL'])(
+    'refuses a transfer once drafting has started (%s)',
+    (workflowState) => {
+      const stored = storedCase({ workflowState });
+
+      expect(check(ROLES.ASSIGNED_OFFICIAL, assignTo('USR-0009'), stored)).toContain('query.currentAssigneeId');
+      expect(check(ROLES.SUPER_ADMIN, assignTo('USR-0009'), stored)).toContain('query.currentAssigneeId');
+    },
+  );
+
+  it('refuses a transfer that also moves the case out of ASSIGNED', () => {
+    const body = { query: { queryId: CASE_ID, workflowState: 'DRAFTING', currentAssigneeId: 'USR-0009' } };
+
+    expect(check(ROLES.ASSIGNED_OFFICIAL, body)).toContain('query.currentAssigneeId');
+  });
+
+  it.each(['USR-0005', 'USR-0003', 'USR-0008', 'USR-9999'])('refuses a transfer to %s, who is not an Assigned Official', (id) => {
+    expect(check(ROLES.ASSIGNED_OFFICIAL, assignTo(id))).toContain('query.currentAssigneeId');
   });
 
   it('allows clearing it, which is what a pre-assignment pullback does', () => {

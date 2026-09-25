@@ -1176,6 +1176,9 @@ export const useWorkflowStore = create((set, get) => ({
 
     const prevAssignee = findUserById(query.currentAssigneeId);
     const newAssignee = findUserById(newAssigneeId);
+    if (newAssignee?.role !== ROLES.ASSIGNED_OFFICIAL) {
+      throw new Error('A query can only be transferred to an Assigned Official.');
+    }
     const prevName = prevAssignee?.name || query.currentAssigneeId || 'Unassigned';
     const newName = newAssignee?.name || newAssigneeId;
     const actorLabelStr = actorName(actor);

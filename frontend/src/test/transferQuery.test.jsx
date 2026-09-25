@@ -137,6 +137,22 @@ describe('Transfer Query Functionality Unit & Integration Tests', () => {
       );
     });
 
+    it('refuses a transfer once drafting has started', () => {
+      s().saveDraftVersion(queryId, 'First draft', OFFICIAL_A);
+      expect(s().getQuery(queryId).workflowState).toBe(WORKFLOW_STATE.DRAFTING);
+
+      expect(() => s().transferQuery(queryId, OFFICIAL_B.id, 'Too late', OFFICIAL_A)).toThrow(
+        /may not perform TRANSFER/,
+      );
+      expect(s().getQuery(queryId).currentAssigneeId).toBe(OFFICIAL_A.id);
+    });
+
+    it('refuses a transfer to someone who is not an Assigned Official', () => {
+      expect(() => s().transferQuery(queryId, OIC.id, 'Wrong person', OFFICIAL_A)).toThrow(
+        /only be transferred to an Assigned Official/,
+      );
+    });
+
     it('refuses transfer when no reason is provided', () => {
       expect(() => {
         s().transferQuery(queryId, OFFICIAL_B.id, '   ', OFFICIAL_A);
@@ -208,6 +224,15 @@ describe('Transfer Query Functionality Unit & Integration Tests', () => {
       renderAs(OFFICIAL_B, `/assigned-official/queries/${queryId}`);
       expect(screen.getByRole('button', { name: /Start drafting/ })).toBeInTheDocument();
       expect(screen.getByRole('button', { name: /Transfer Query/ })).toBeInTheDocument();
+    });
+
+    it('hides Transfer Query once the assignee has started drafting', () => {
+      s().saveDraftVersion(queryId, 'First draft', OFFICIAL_A);
+
+      renderAs(OFFICIAL_A, `/assigned-official/queries/${queryId}`);
+
+      expect(screen.queryByRole('button', { name: /Transfer Query/ })).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Start drafting/ })).toBeInTheDocument();
     });
 
     it('reflects updated assignee and transfer audit event on Query Detail page for OIC / Super Admin', () => {

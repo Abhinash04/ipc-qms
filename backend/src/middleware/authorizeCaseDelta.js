@@ -10,6 +10,7 @@ import { caseScopeFor, scopeKindForRole, SCOPE_KIND } from '../services/authz/ca
 import * as audit from '../services/audit/auditService.js';
 import { AUDIT_ACTIONS, AUDIT_RESULTS } from '../constants/auditActions.js';
 import { ACTOR_TYPES, ROLES } from '../constants/roles.js';
+import { allUsers } from '../constants/users.js';
 import {
   QueryCase,
   WorkflowStep,
@@ -24,6 +25,24 @@ import { isConnected } from '../config/db.js';
 const canPullBack = (role) => roleCanPerform(role, WORKFLOW_ACTION.PULLBACK);
 const permits = (role, actions) =>
   Array.isArray(actions) && actions.some((action) => roleCanPerform(role, action));
+
+function isAssignedOfficial(userId) {
+  return allUsers().some((user) => user.id === userId && user.role === ROLES.ASSIGNED_OFFICIAL);
+}
+
+function assigneeChangeAllowed(role, query, storedQuery) {
+  if (!storedQuery) return true;
+  if (storedQuery.workflowState === WORKFLOW_STATE.PENDING_ASSIGNMENT) {
+    return roleCanPerform(role, WORKFLOW_ACTION.ASSIGN);
+  }
+  return (
+    roleCanPerform(role, WORKFLOW_ACTION.TRANSFER) &&
+    storedQuery.workflowState === WORKFLOW_STATE.ASSIGNED &&
+    (query.workflowState ?? storedQuery.workflowState) === WORKFLOW_STATE.ASSIGNED &&
+    isAssignedOfficial(query.currentAssigneeId)
+  );
+}
+
 export function protectedValueViolations(user, body, stored = {}) {
   const role = user?.role;
   const everything = scopeKindForRole(role) === SCOPE_KIND.EVERYTHING;
@@ -53,7 +72,9 @@ export function protectedValueViolations(user, body, stored = {}) {
 
     const assignee = query.currentAssigneeId;
     if (typeof assignee === 'string' && assignee && assignee !== storedQuery?.currentAssigneeId) {
-      if (!permits(role, ASSIGNEE_REQUIRES_ACTION)) violations.push('query.currentAssigneeId');
+      if (!permits(role, ASSIGNEE_REQUIRES_ACTION) || !assigneeChangeAllowed(role, query, storedQuery)) {
+        violations.push('query.currentAssigneeId');
+      }
     }
   }
 

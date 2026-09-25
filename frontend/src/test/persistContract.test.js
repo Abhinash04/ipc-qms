@@ -201,6 +201,7 @@ describe('every transition names its audit event', () => {
     const queryId = await caseAwaitingReview();
     s().approveReview(queryId, 'Reads correctly against the monograph.', REVIEWER);
     s().rejectFinalApproval(queryId, 'Cites the superseded revision.', OIC);
+    s().pullBackQuery(queryId, WORKFLOW_STATE.ASSIGNED, 'Handing the case over.', '', ADMIN);
     s().transferQuery(queryId, 'USR-0010', 'Monograph expertise sits elsewhere.', OFFICIAL);
     s().pullBackQuery(queryId, WORKFLOW_STATE.PENDING_ASSIGNMENT, 'Reassigning the case.', '', ADMIN);
     await settled();
@@ -468,6 +469,7 @@ describe('the server would accept every delta the store emits', () => {
     const queryId = await caseAwaitingReview();
     s().approveReview(queryId, 'Reads correctly against the monograph.', REVIEWER);
     s().rejectFinalApproval(queryId, 'Cites the superseded revision.', OIC);
+    s().pullBackQuery(queryId, WORKFLOW_STATE.ASSIGNED, 'Handing the case over.', '', ADMIN);
     s().transferQuery(queryId, 'USR-0010', 'Expertise sits elsewhere.', OFFICIAL);
     s().pullBackQuery(queryId, WORKFLOW_STATE.PENDING_ASSIGNMENT, 'Reassigning.', '', ADMIN);
     await settled();
