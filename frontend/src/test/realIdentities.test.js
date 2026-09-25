@@ -20,7 +20,7 @@ const s = () => useWorkflowStore.getState();
 
 const ABHINASH = EXTERNAL_INQUIRER;
 const FRONT_OFFICE = findUserById('USR-0002');
-const JATIN = findUserById('USR-0003');
+const OIC = findUserById('USR-0003');
 const NEHA = findUserById('USR-0004');
 const RAWAT = findUserById('USR-0009');
 
@@ -54,7 +54,7 @@ const fakeMailLeg = ({ to, subject, body }) =>
   });
 
 const finalApproval = (send = fakeMailLeg) =>
-  fakeFinalApprovalEndpoint({ send, actor: JATIN.name });
+  fakeFinalApprovalEndpoint({ send, actor: OIC.name });
 
 async function acknowledge(queryId) {
   const result = await caseMail.sendAcknowledgement({ queryId });
@@ -74,7 +74,14 @@ describe('the seeded directory', () => {
       email: 'front.office@ipc.example',
     });
     expect(FRONT_OFFICE.name).not.toMatch(/makker/i);
-    expect(JATIN).toMatchObject({ role: ROLES.OFFICER_IN_CHARGE, email: 'jatin.rawat@ipc.example' });
+  });
+
+  it('names EduTR Zairza as the Officer-in-Charge', () => {
+    expect(OIC).toMatchObject({
+      role: ROLES.OFFICER_IN_CHARGE,
+      name: 'EduTR Zairza',
+      email: 'edutr.zairza@ipc.example',
+    });
   });
 
   it('holds no account for the inquirer — they email in and never sign in', () => {
@@ -96,11 +103,11 @@ describe('the seeded directory', () => {
     }
   });
 
-  it('keeps Rawat Jatin and Jatin Rawat as different people', () => {
+  it('keeps Rawat Jatin apart from the Officer-in-Charge', () => {
 
-    expect(RAWAT.id).not.toBe(JATIN.id);
-    expect(RAWAT.email).not.toBe(JATIN.email);
-    expect(RAWAT.role).not.toBe(JATIN.role);
+    expect(RAWAT.id).not.toBe(OIC.id);
+    expect(RAWAT.email).not.toBe(OIC.email);
+    expect(RAWAT.role).not.toBe(OIC.role);
 
     const addresses = MOCK_USERS.map((u) => u.email.toLowerCase());
     expect(new Set(addresses).size).toBe(addresses.length);
@@ -192,8 +199,8 @@ describe('4. the Front Office acknowledges Abhinash on the same thread', () => {
   });
 });
 
-describe('5–6. the Front Office forwards to Jatin, same case throughout', () => {
-  it('sends the forward from the Front Office to Jatin on the same thread', async () => {
+describe('5–6. the Front Office forwards to the Officer-in-Charge, same case throughout', () => {
+  it('sends the forward from the Front Office to the Officer-in-Charge on the same thread', async () => {
     const { queryId, threadId } = s().ingestEmail(incomingEnquiry());
     await acknowledge(queryId);
     s().verifyQuery(queryId, FRONT_OFFICE);
@@ -202,7 +209,7 @@ describe('5–6. the Front Office forwards to Jatin, same case throughout', () =
 
     const forward = s().emailMessages.find((m) => m.emailType === EMAIL_TYPE.FORWARD);
     expect(forward.from).toContain(FRONT_OFFICE.email);
-    expect(forward.to).toEqual([JATIN.email]);
+    expect(forward.to).toEqual([OIC.email]);
     expect(forward.threadId).toBe(threadId);
     expect(forward.subject).toContain(queryId);
     expect(forward.body).toContain('monograph');
@@ -224,7 +231,7 @@ describe('5–6. the Front Office forwards to Jatin, same case throughout', () =
     const forwarded = s().emailMessages.find(
       (m) => m.queryId === queryId && m.emailType === EMAIL_TYPE.FORWARD,
     );
-    expect(forwarded.to).toEqual([JATIN.email]);
+    expect(forwarded.to).toEqual([OIC.email]);
   });
 
   it('7. forwarding never creates a second Query Case', async () => {
@@ -283,13 +290,13 @@ describe('8. RBAC for the Front Office and the OIC', () => {
     expect(() => s().assignQuery(queryId, NEHA.id, FRONT_OFFICE)).toThrow(/may not perform ASSIGN/);
   });
 
-  it('lets Jatin assign, but not verify or forward', async () => {
+  it('lets the Officer-in-Charge assign, but not verify or forward', async () => {
     const { queryId } = s().ingestEmail(incomingEnquiry());
 
-    expect(() => s().verifyQuery(queryId, JATIN)).toThrow(/may not perform VERIFY/);
+    expect(() => s().verifyQuery(queryId, OIC)).toThrow(/may not perform VERIFY/);
 
     s().verifyQuery(queryId, FRONT_OFFICE);
-    await expect(s().forwardToOic(queryId, JATIN, fakeForward)).rejects.toThrow(
+    await expect(s().forwardToOic(queryId, OIC, fakeForward)).rejects.toThrow(
       /may not perform FORWARD/,
     );
   });
@@ -302,8 +309,8 @@ describe('8. RBAC for the Front Office and the OIC', () => {
   });
 });
 
-describe('9–10. Jatin assigns a mock official and the mocked tail completes', () => {
-  it('offers an advisory recommendation that Jatin is free to override', async () => {
+describe('9–10. the Officer-in-Charge assigns a mock official and the mocked tail completes', () => {
+  it('offers an advisory recommendation that the Officer-in-Charge is free to override', async () => {
     const { queryId } = s().ingestEmail(incomingEnquiry());
     s().verifyQuery(queryId, FRONT_OFFICE);
     await s().forwardToOic(queryId, FRONT_OFFICE, fakeForward);
@@ -315,7 +322,7 @@ describe('9–10. Jatin assigns a mock official and the mocked tail completes', 
     expect(s().getQuery(queryId).currentAssigneeId).toBeNull();
     expect(s().getQuery(queryId).workflowState).toBe(WORKFLOW_STATE.PENDING_ASSIGNMENT);
 
-    s().assignQuery(queryId, NEHA.id, JATIN);
+    s().assignQuery(queryId, NEHA.id, OIC);
     expect(s().getQuery(queryId).currentAssigneeId).toBe(NEHA.id);
   });
 
@@ -325,7 +332,7 @@ describe('9–10. Jatin assigns a mock official and the mocked tail completes', 
 
     s().verifyQuery(queryId, FRONT_OFFICE);
     await s().forwardToOic(queryId, FRONT_OFFICE, fakeForward);
-    s().assignQuery(queryId, NEHA.id, JATIN);
+    s().assignQuery(queryId, NEHA.id, OIC);
 
     await s().generateAiDraft(queryId, NEHA);
     s().addReviewLevel(queryId, 'USR-0005', NEHA);
@@ -334,14 +341,14 @@ describe('9–10. Jatin assigns a mock official and the mocked tail completes', 
     s().approveReview(queryId, 'Reviewer I approves', findUserById('USR-0005'));
     s().approveReview(queryId, 'Reviewer II approves', findUserById('USR-0006'));
 
-    await s().grantFinalApproval(queryId, JATIN, finalApproval());
+    await s().grantFinalApproval(queryId, OIC, finalApproval());
 
     expect(s().queries.map((q) => q.queryId)).toEqual([queryId]);
     expect(s().getQuery(queryId).workflowState).toBe(WORKFLOW_STATE.CLOSED);
 
     const actors = s().getAudit(queryId).map((a) => a.actor);
     expect(actors).toContain(FRONT_OFFICE.name);
-    expect(actors).toContain(JATIN.name);
+    expect(actors).toContain(OIC.name);
 
     const thread = s().emailMessages.filter((m) => m.queryId === queryId);
     expect(thread.map((m) => m.emailType)).toEqual([
@@ -470,7 +477,7 @@ describe('intake — mail waits for the Front Officer', () => {
 
     expect(thread[0].to).toEqual([FRONT_OFFICE.email]);
     expect(thread[1].to).toEqual([ABHINASH.email]);
-    expect(thread[2].to).toEqual([JATIN.email]);
+    expect(thread[2].to).toEqual([OIC.email]);
     expect(s().queries).toHaveLength(1);
   });
 
@@ -573,7 +580,7 @@ describe('final approval dispatches automatically', () => {
     await acknowledge(queryId);
     s().verifyQuery(queryId, FRONT_OFFICE);
     await s().forwardToOic(queryId, FRONT_OFFICE, fakeForward);
-    s().assignQuery(queryId, NEHA.id, JATIN);
+    s().assignQuery(queryId, NEHA.id, OIC);
     await s().generateAiDraft(queryId, NEHA);
     s().saveDraftVersion(queryId, 'The approved wording.', NEHA);
     s().addReviewLevel(queryId, 'USR-0005', NEHA);
@@ -589,7 +596,7 @@ describe('final approval dispatches automatically', () => {
   it('1–2. approval alone takes the case from READY_FOR_DISPATCH to CLOSED', async () => {
     const queryId = await readyForApproval();
 
-    await s().grantFinalApproval(queryId, JATIN, finalApproval());
+    await s().grantFinalApproval(queryId, OIC, finalApproval());
 
     expect(s().getQuery(queryId).workflowState).toBe(WORKFLOW_STATE.CLOSED);
   });
@@ -598,7 +605,7 @@ describe('final approval dispatches automatically', () => {
     const queryId = await readyForApproval();
     const threadId = s().getQuery(queryId).threadId;
 
-    await s().grantFinalApproval(queryId, JATIN, finalApproval());
+    await s().grantFinalApproval(queryId, OIC, finalApproval());
 
     const sent = s().emailMessages.find((m) => m.emailType === EMAIL_TYPE.OUTGOING_RESPONSE);
     expect(sent.from).toContain(FRONT_OFFICE.email);
@@ -612,7 +619,7 @@ describe('final approval dispatches automatically', () => {
   it('7. a failed send leaves the case approved but NOT closed', async () => {
     const queryId = await readyForApproval();
 
-    const outcome = await s().grantFinalApproval(queryId, JATIN, finalApproval(failing));
+    const outcome = await s().grantFinalApproval(queryId, OIC, finalApproval(failing));
 
     expect(outcome.approved).toBe(true);
     expect(outcome.dispatched).toBe(false);
@@ -630,7 +637,7 @@ describe('final approval dispatches automatically', () => {
 
   it('8. a retry after a failure dispatches successfully', async () => {
     const queryId = await readyForApproval();
-    await s().grantFinalApproval(queryId, JATIN, finalApproval(failing)).catch(() => {});
+    await s().grantFinalApproval(queryId, OIC, finalApproval(failing)).catch(() => {});
 
     const outcome = await s().dispatchResponse(queryId, FRONT_OFFICE, fakeResponse);
 
@@ -641,7 +648,7 @@ describe('final approval dispatches automatically', () => {
 
   it('9. repeated triggers never send a second response', async () => {
     const queryId = await readyForApproval();
-    await s().grantFinalApproval(queryId, JATIN, finalApproval());
+    await s().grantFinalApproval(queryId, OIC, finalApproval());
 
     const sendAgain = vi.fn(fakeResponse);
     const second = await s().dispatchResponse(queryId, null, sendAgain);
@@ -655,7 +662,7 @@ describe('final approval dispatches automatically', () => {
 
   it('9. survives a reload — the guard is persisted, not in memory', async () => {
     const queryId = await readyForApproval();
-    await s().grantFinalApproval(queryId, JATIN, finalApproval());
+    await s().grantFinalApproval(queryId, OIC, finalApproval());
     await new Promise((r) => setTimeout(r, 60));
 
     useWorkflowStore.setState({
@@ -674,7 +681,7 @@ describe('final approval dispatches automatically', () => {
 
   it('10. the response appears in the thread and the audit trail', async () => {
     const queryId = await readyForApproval();
-    await s().grantFinalApproval(queryId, JATIN, finalApproval());
+    await s().grantFinalApproval(queryId, OIC, finalApproval());
 
     const thread = s().emailMessages.filter((m) => m.queryId === queryId);
     expect(thread.map((m) => m.emailType)).toEqual([
@@ -709,7 +716,7 @@ describe('final approval dispatches automatically', () => {
       /may not perform FINAL_APPROVE/,
     );
 
-    await s().grantFinalApproval(queryId, JATIN, finalApproval(failing)).catch(() => {});
+    await s().grantFinalApproval(queryId, OIC, finalApproval(failing)).catch(() => {});
     await expect(s().dispatchResponse(queryId, NEHA, fakeResponse)).rejects.toThrow(
       /may not perform DISPATCH/,
     );
@@ -771,7 +778,7 @@ describe('assignment recommendation weighs expertise', () => {
     const other = MOCK_USERS.find(
       (u) => u.role === ROLES.ASSIGNED_OFFICIAL && u.id !== recommended,
     );
-    s().assignQuery(queryId, other.id, JATIN);
+    s().assignQuery(queryId, other.id, OIC);
 
     expect(s().getQuery(queryId).currentAssigneeId).toBe(other.id);
     expect(s().getQuery(queryId).assignmentDecision.acceptedAiRecommendation).toBe(false);

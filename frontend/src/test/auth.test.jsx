@@ -260,13 +260,13 @@ describe('role boundaries still hold after the auth change', () => {
     expect(await screen.findByText('Access restricted')).toBeInTheDocument();
   });
 
-  it('distinguishes Rawat Jatin from the Officer-in-Charge with the similar name', () => {
+  it('keeps Rawat Jatin an Assigned Official, apart from the Officer-in-Charge', () => {
     const assignedOfficial = findUserById('USR-0009');
     const officerInCharge = findUserById('USR-0003');
 
     expect(assignedOfficial.name).toBe('Rawat Jatin');
     expect(assignedOfficial.role).toBe('ASSIGNED_OFFICIAL');
-    expect(officerInCharge.name).toBe('Jatin Rawat');
+    expect(officerInCharge.name).toBe('EduTR Zairza');
     expect(officerInCharge.role).toBe('OFFICER_IN_CHARGE');
     expect(assignedOfficial.email).not.toBe(officerInCharge.email);
   });

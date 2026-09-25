@@ -10,9 +10,9 @@ export const MOCK_USERS = [
   },
   {
     id: 'USR-0003',
-    name: 'Jatin Rawat',
+    name: 'EduTR Zairza',
     role: ROLES.OFFICER_IN_CHARGE,
-    email: 'jatin.rawat@ipc.example',
+    email: 'edutr.zairza@ipc.example',
     divisionId: 'DIV-001',
   },
   {
