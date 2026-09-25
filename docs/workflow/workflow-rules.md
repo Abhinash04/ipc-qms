@@ -6,34 +6,25 @@
 versions, completed review steps, and the audit trail — and must create an audit event
 (`QUERY_TRANSFERRED`).
 
-**TO BE CONFIRMED WITH CLIENT**:
+**Decided**:
 
-- Who can initiate a transfer (assigned official only? OIC too?).
-- Who is eligible to receive a transferred query (any official, or only within the same
-  division/expertise area?).
-- Whether the workflow continues from its current step after transfer, or restarts a step.
-- Whether a transfer reason is mandatory.
+- only the **current assignee** (or the Super Admin) may initiate;
+- **any other** Assigned Official may receive it — there is no division or expertise restriction;
+- transfer is valid only while the case is `ASSIGNED`, before drafting starts, and the state stays
+  `ASSIGNED`. Once drafting has started the control is hidden and the server refuses it; reassigning a
+  case after that is an Admin pullback;
+- a reason **is** mandatory;
+- only the new assignee is notified.
 
-**Status: LIVE, with the questions above still open.** Corrected 2026-09-23 — this section said
-"built, deliberately disabled" and that is no longer true.
-
-`transferQuery` is in `frontend/src/store/useWorkflowStore.js`, emits `QUERY_TRANSFERRED` (see
-[srs/09-audit-and-compliance.md](../srs/09-audit-and-compliance.md)), and is **no longer gated**:
-`CLARIFICATION_REQUIRED_ACTIONS` now contains only `DELETE_REVIEW_LEVEL`
-(`frontend/src/constants/workflowRules.js`). `ROLE_ACTIONS` grants TRANSFER to the
-`ASSIGNED_OFFICIAL` and `SUPER_ADMIN`, `ACTION_VALID_STATES` allows it from the working states, and
-`WorkflowActionsCard` renders the control. `transferQuery.test.jsx` exercises the whole flow.
-
-So the mechanics answered themselves in code while the **policy** questions above were left open. The
-rules the implementation currently assumes, which the client has not confirmed:
-
-- only the **currently assigned official** may initiate (the store refuses anyone else);
-- **any** Assigned Official may receive it — there is no division or expertise restriction;
-- the workflow **continues** from its current step; the state stays `ASSIGNED`;
-- a reason **is** mandatory (the store refuses a blank one).
-
-Those four are defaults chosen to make the feature work, not decisions. They still need sign-off, and
-if an answer differs the change is to the store rules rather than to whether the action exists.
+**Status: LIVE.** `transferQuery` is in `frontend/src/store/useWorkflowStore.js` and emits
+`QUERY_TRANSFERRED` (see [srs/09-audit-and-compliance.md](../srs/09-audit-and-compliance.md)), whose
+details name the previous assignee, the new one, who transferred it and why. `ROLE_ACTIONS` grants
+TRANSFER to the `ASSIGNED_OFFICIAL` and `SUPER_ADMIN`, and `ACTION_VALID_STATES` allows it only from
+`ASSIGNED`. After the transfer the previous assignee loses every assignee action: the UI hides Start
+drafting, Transfer and the drafting controls, the store refuses them, and `authorizeCaseDelta` refuses
+any write from an Assigned Official who is not the stored assignee. The same middleware refuses a
+transfer outside `ASSIGNED` or to anyone who is not an Assigned Official. `transferQuery.test.jsx` and
+`backend/src/test/assigneeAuthorization.test.js` exercise it.
 
 ## Pullback
 
@@ -91,5 +82,5 @@ were at first gated behind `CLARIFICATION_REQUIRED_ACTIONS` so the *policy* ques
 **That gate is gone, and the questions are not.** Both actions now ship with defaults chosen by
 whoever implemented them, which is the situation the gate existed to prevent. The defaults are listed
 under each status above so they can be confirmed or corrected as written rather than discovered in
-use. `CLARIFICATION_REQUIRED_ACTIONS` still exists and still holds `DELETE_REVIEW_LEVEL`, so the
-mechanism is available if either action should be closed again pending an answer.
+use. `CLARIFICATION_REQUIRED_ACTIONS` still exists and is now empty, so the mechanism is available if
+either action should be closed again pending an answer.

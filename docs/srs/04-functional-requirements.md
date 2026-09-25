@@ -27,13 +27,13 @@ Requirements are grouped by module. Each has a stable identifier (`FR-NNN`) for 
 
 - **FR-013** — The system shall support a dynamic number of review levels per query, modeled as an ordered `WorkflowStep` collection, not fixed `review1`/`review2`/`review3` fields.
 - **FR-014** — Authorized users shall be able to add a review level to a query's workflow.
-- **FR-015** — Authorized users shall be able to delete a review level where permitted (exact permission: see open questions).
+- **FR-015** — The current assignee (or the Super Admin) shall be able to delete a review level that is still PENDING, while the query is in DRAFTING, UNDER_REVIEW or RETURNED_FOR_REVISION. The server refuses any other delete, and each one creates a `REVIEW_REMOVED` audit event.
 - **FR-016** — A reviewer shall be able to approve a review step or return it with revision comments.
 - **FR-017** — Returning a review step for revision shall route the query back to the assigned official and create a `REVISION_REQUESTED` audit event.
 
 ## 4.5 Transfer & Pullback
 
-- **FR-018** — Authorized users shall be able to transfer a query to another eligible colleague, preserving query history, existing draft, response versions, completed review steps, and audit trail.
+- **FR-018** — The current assignee (or the Super Admin) shall be able to transfer a query to another Assigned Official, with a reason, only while it is in ASSIGNED, before drafting starts. The query history and audit trail are preserved, and the previous assignee loses every assignee action on the query; the server enforces both.
 - **FR-019** — Authorized users shall be able to pull back a query according to workflow rules (exact rules: see open questions).
 - **FR-020** — Both transfer and pullback shall create an audit event (`QUERY_TRANSFERRED`, `QUERY_PULLED_BACK`).
 

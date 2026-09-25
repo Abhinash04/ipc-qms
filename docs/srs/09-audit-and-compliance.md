@@ -18,6 +18,7 @@ end-to-end after the fact.
 | `DRAFT_GENERATED` | AI produced an initial draft. |
 | `DRAFT_UPDATED` | A human edited the draft, creating a new response version. |
 | `REVIEW_ADDED` | A review level was added to the workflow. |
+| `REVIEW_REMOVED` | A pending review level was removed from the workflow. |
 | `REVIEW_COMPLETED` | A reviewer approved their review level. |
 | `REVISION_REQUESTED` | A reviewer or the OIC returned the draft for revision. |
 | `QUERY_TRANSFERRED` | The query was transferred to another official. |

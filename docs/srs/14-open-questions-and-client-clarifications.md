@@ -233,8 +233,8 @@ paragraphs had not caught up.
 ## Review
 
 - Reviews are a dynamic, ordered collection of steps, not fixed fields. — *Confirmed Requirement*
-- Who can add a review level? — *Client Clarification Required*
-- Who can delete a review level, and under what conditions? — *Client Clarification Required*
+- Who can add a review level? — **Decided:** the current assignee or the Super Admin, in DRAFTING, UNDER_REVIEW or RETURNED_FOR_REVISION.
+- Who can delete a review level, and under what conditions? — **Decided:** the current assignee or the Super Admin, only a level that is still PENDING, in the same three states; reviewers never. The server enforces it.
 - Who can reorder review levels? — *Client Clarification Required*
 - Who assigns which reviewer to which level — the OIC, the assigned official, or auto-assignment? — *Client Clarification Required*
 - Can a reviewer directly edit the draft, or only comment/approve/return? — *Client Clarification Required*
@@ -247,10 +247,10 @@ paragraphs had not caught up.
 ## Transfer
 
 - Transfer must preserve query history, draft, response versions, completed review steps, and audit trail, and must create an audit event. — *Confirmed Requirement*
-- Who can initiate a transfer? — *Client Clarification Required* (marked "TO BE CONFIRMED WITH CLIENT" in the workflow rules)
-- Who is eligible to receive a transferred query? — *Client Clarification Required*
-- Does the workflow continue from its current step after transfer, or restart? — *Client Clarification Required*
-- Is a transfer reason mandatory? — *Client Clarification Required*
+- Who can initiate a transfer? — **Decided:** the current assignee, or the Super Admin.
+- Who is eligible to receive a transferred query? — **Decided:** any other Assigned Official.
+- Does the workflow continue from its current step after transfer, or restart? — **Decided:** transfer is allowed only in ASSIGNED, before drafting starts, and the case stays in ASSIGNED. Once drafting has started, reassignment is an Admin pullback.
+- Is a transfer reason mandatory? — **Decided:** yes.
 
 ## Pullback
 

@@ -23,14 +23,14 @@ removed along with the Raise Enquiry portal — see
 | Forward to Officer-in-Charge (recovery only) | ✅ | — | — | — | — | ✅ |
 | Assign query (accept AI or override) | — | ✅ | — | — | — | ✅ |
 | Generate AI draft / edit response | — | — | ✅ | — | — | ✅ |
-| Add a review level | — | — | ✅ | — | — | ✅ |
-| Delete a review level | ⛔ gated | ⛔ gated | ⛔ gated | ⛔ gated | ⛔ gated | ⛔ gated |
+| Add a review level (current assignee only) | — | — | ✅ | — | — | ✅ |
+| Delete a review level (current assignee only, PENDING levels only) | — | — | ✅ | — | — | ✅ |
 | Submit for review | — | — | ✅ | — | — | ✅ |
 | Approve / request changes at a review level | — | — | — | ✅ | — | ✅ |
 | Grant/reject final approval (granting also sends the response) | — | ✅ | — | — | — | ✅ |
 | Return a draft for revision from final approval | — | ✅ | — | — | — | ✅ |
 | Dispatch response (retry only) | ✅ | — | — | — | — | ✅ |
-| Transfer query (assignee only, reason required) | — | — | ✅ | — | — | ✅ |
+| Transfer query (assignee only, ASSIGNED state only, reason required) | — | — | ✅ | — | — | ✅ |
 | Pull back query (any stage) | — | — | — | — | ✅ | ✅ |
 | Read the audit trail | — | — | — | — | ✅ | ✅ |
 | View admin console (users/divisions/categories/workflows) | — | — | — | — | ✅ | ✅ |
@@ -43,11 +43,10 @@ read "⛔ gated" for every role, which stopped being true when the two actions w
 now enforce; who *should* hold them, and from which stages, is still open with the client. See
 [workflow-rules.md](./workflow-rules.md), which lists the defaults the implementation chose.
 
-**⛔ gated** — an action implemented in the store but listed in `CLARIFICATION_REQUIRED_ACTIONS`, which
-`canPerform` refuses *before* checking the role table, so no role can perform it. One action is in
-that list today: `DELETE_REVIEW_LEVEL`, the *Delete a review level* row above, on both the frontend and
-the backend. It appears in no role's `ROLE_ACTIONS` entry either, which is why every column reads
-gated rather than showing it as an Assigned Official grant.
+**Assignee-only actions.** Drafting, submitting, adding or deleting a review level and transferring
+are open to an Assigned Official only while they are the case's current assignee. The UI hides them
+from anyone else, and `authorizeCaseDelta` refuses a write from an Assigned Official who is not the
+stored assignee. `CLARIFICATION_REQUIRED_ACTIONS` is empty on both the frontend and the backend.
 
 **Accept and forward are one grant, not two.** Accepting a mailbox message registers the case *and*
 forwards it to the Officer-in-Charge in a single server call, so the two rows above are exercised
@@ -88,8 +87,8 @@ Reset button is rendered only for `SUPER_ADMIN`, matching `verifyRole(SUPER_ADMI
 `POST /queries/reset`; it used to be shown to every role, and the 403 arrived after local state had
 already been cleared. Local state is now cleared only once the server has accepted the reset.
 
-**Review-level management** is held by the Assigned Official who owns the draft; who *else* may add
-or remove levels is still open with the client.
+**Review-level management** is held by the current assignee (or the Super Admin). Only a level that
+is still PENDING can be removed; reviewers never see the control, and the server refuses it.
 
 **Reviewer ownership**: holding the Reviewer role is not sufficient — `assertOwnsStep` restricts
 approve/request-changes to the reviewer assigned to the *current* level, so a second reviewer sees a

@@ -63,16 +63,17 @@ next step means completing the current one and marking the next `IN_PROGRESS`.
   `sequence`, shifting subsequent sequence numbers. **Implemented** — `addReviewLevel` in
   `useWorkflowStore`, driven from the drafting screen; levels are named "Reviewer I / II / III" in
   sequence order.
-- **Delete a review level**: only permitted while `status = PENDING` (a completed review's
-  decision is part of the audit trail and should not disappear); removing it shifts later
-  sequence numbers down. **Implemented** — `deleteReviewLevel`.
+- **Delete a review level**: only permitted for a `REVIEW` step whose `status = PENDING` (a
+  completed review's decision is part of the audit trail and should not disappear), by the current
+  assignee or the Super Admin, while the case is in DRAFTING, UNDER_REVIEW or RETURNED_FOR_REVISION.
+  **Implemented** — `deleteReviewLevel` logs `REVIEW_REMOVED`, and `authorizeCaseDelta` refuses any
+  other delete server-side.
 - **Reorder**: renumber `sequence` for the affected steps. **Not implemented** — levels can be
   added and removed but not moved.
 
-Who is authorized to perform each of these operations remains an open question — see
+The current assignee (or the Super Admin) manages the chain — see
 [srs/14-open-questions-and-client-clarifications.md](../srs/14-open-questions-and-client-clarifications.md#review).
-Today the Assigned Official building the draft manages the chain, and submission for review is
-blocked until at least one reviewer exists.
+Submission for review is blocked until at least one reviewer exists.
 
 There is no `mockQuery.js`; the store seeds entirely empty and every step is created by real
 workflow activity.
