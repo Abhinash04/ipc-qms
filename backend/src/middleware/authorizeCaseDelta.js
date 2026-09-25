@@ -9,7 +9,7 @@ import { WORKFLOW_STATE } from '../constants/workflowStates.js';
 import { caseScopeFor, scopeKindForRole, SCOPE_KIND } from '../services/authz/caseAccess.js';
 import * as audit from '../services/audit/auditService.js';
 import { AUDIT_ACTIONS, AUDIT_RESULTS } from '../constants/auditActions.js';
-import { ACTOR_TYPES } from '../constants/roles.js';
+import { ACTOR_TYPES, ROLES } from '../constants/roles.js';
 import {
   QueryCase,
   WorkflowStep,
@@ -210,6 +210,18 @@ async function authorizeCaseDelta(req, res, next) {
       return deny(req, res, 'You are not permitted to modify that case', {
         queryIds: outOfScope.sort(),
       });
+    }
+
+    if (req.user.role === ROLES.ASSIGNED_OFFICIAL && mustBeParty.length) {
+      const held = new Set(
+        await QueryCase.distinct('queryId', { queryId: { $in: mustBeParty }, currentAssigneeId: req.user.id }),
+      );
+      const notHeld = mustBeParty.filter((id) => !held.has(id));
+      if (notHeld.length) {
+        return deny(req, res, 'Only the current assignee may change that case', {
+          queryIds: notHeld.sort(),
+        });
+      }
     }
 
     const creating = [...named].filter((id) => !existing.has(id));
