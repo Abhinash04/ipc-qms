@@ -6,7 +6,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AppRoutes } from '@/routes/AppRoutes';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useWorkflowStore } from '@/store/useWorkflowStore';
-import { findUserById } from '@/constants/mockUsers';
+import { FRONT_OFFICE_USER as FRONT_OFFICE } from '@/test/frontOfficeUser';
 
 vi.mock('@/services/api/mailboxService', () => ({
   rescueMailboxMessage: vi.fn().mockResolvedValue({ rescued: true }),
@@ -27,7 +27,6 @@ vi.mock('@/services/api/attachmentService', () => ({
 
 import * as attachmentService from '@/services/api/attachmentService';
 import { EXTERNAL_INQUIRER as INQUIRER } from '@/test/externalInquirer';
-const FRONT_OFFICE = findUserById('USR-0002');
 
 const s = () => useWorkflowStore.getState();
 

@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
 import { useWorkflowStore } from '@/store/useWorkflowStore';
-import { findUserById } from '@/constants/mockUsers';
+import { FRONT_OFFICE_USER as FRONT_OFFICE } from '@/test/frontOfficeUser';
 import { AUDIT_EVENT, PRIORITY, WORKFLOW_STATE } from '@/constants/statusEnums';
 import { notify } from '@/services/notify';
 import * as queryCaseService from '@/services/api/queryCaseService';
@@ -16,7 +16,6 @@ vi.mock('@/services/api/queryCaseService', async () => {
 });
 
 const s = () => useWorkflowStore.getState();
-const FRONT_OFFICE = findUserById('USR-0002');
 
 const settled = () => new Promise((resolve) => setTimeout(resolve, 0));
 

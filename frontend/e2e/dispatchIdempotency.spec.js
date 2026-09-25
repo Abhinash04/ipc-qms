@@ -2,8 +2,8 @@ import { test, expect } from '@playwright/test';
 
 import {
   API_BASE,
-  FRONT_OFFICE_USER,
   OFFICER_IN_CHARGE_USER,
+  SUPER_ADMIN_USER,
   devSignIn,
   signInAs,
 } from './helpers/api.js';
@@ -144,7 +144,7 @@ test('a retry after a failed send delivers exactly one response', async ({ page,
 
   await unblockMailboxDelivery(blocker);
 
-  await signInAs(page, FRONT_OFFICE_USER.email);
+  await signInAs(page, SUPER_ADMIN_USER.email);
   await page.goto(dispatchPath(queryId));
 
   const retry = page.getByRole('button', { name: 'Retry sending response', exact: true });

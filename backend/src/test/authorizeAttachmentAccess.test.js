@@ -61,7 +61,7 @@ describe('fail-closed basics', () => {
 });
 
 describe('reading an attachment that belongs to a case', () => {
-  const meta = { attachmentId: 'att_x', queryId: 'QRY-2026-00001', uploadedBy: 'USR-0002' };
+  const meta = { attachmentId: 'att_x', queryId: 'QRY-2026-00001', uploadedBy: 'USR-0014' };
 
   it('admits a principal party to that case', async () => {
     store.getMetadata.mockResolvedValue(meta);
@@ -120,7 +120,7 @@ describe('an attachment with no case yet', () => {
   });
 
   it('refuses anyone else', async () => {
-    store.getMetadata.mockResolvedValue({ queryId: null, uploadedBy: 'USR-0002' });
+    store.getMetadata.mockResolvedValue({ queryId: null, uploadedBy: 'USR-0014' });
 
     const [error] = (await run({ user: OUTSIDER, params: { id: 'att_x' } })).mock.calls[0];
     expect(error?.status).toBe(403);

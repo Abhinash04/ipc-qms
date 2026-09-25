@@ -8,8 +8,8 @@ import { useWorkflowStore } from '@/store/useWorkflowStore';
 import { useAuthStore } from '@/store/useAuthStore';
 import { AUDIT_EVENT } from '@/constants/statusEnums';
 import { EMAIL_DIRECTION, EMAIL_TYPE } from '@/constants/emailModel';
-import { findUserById, MOCK_USERS } from '@/constants/mockUsers';
-import { ROLES } from '@/constants/roles';
+import { findUserById } from '@/constants/mockUsers';
+import { FRONT_OFFICE_USER } from '@/test/frontOfficeUser';
 import * as mailboxService from '@/services/api/mailboxService';
 import { fakeAcceptEndpoint } from '@/test/fakeAcceptEndpoint';
 import { installFakeCaseMail } from '@/test/fakeCaseMail';
@@ -33,7 +33,7 @@ const MESSAGE = {
 
 const INQUIRER_EMAIL = 'abhinash.pritiraj@pharma.example';
 
-const FRONT_OFFICE = MOCK_USERS.find((u) => u.role === ROLES.FRONT_OFFICE).email;
+const FRONT_OFFICE = FRONT_OFFICE_USER.email;
 
 let caseMail;
 

@@ -5,9 +5,8 @@ import { Link, MemoryRouter, Route, Routes } from 'react-router-dom';
 import { WorkflowRevalidation } from '@/components/workflow/WorkflowRevalidation';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useWorkflowStore } from '@/store/useWorkflowStore';
-import { findUserById } from '@/constants/mockUsers';
+import { FRONT_OFFICE_USER as FRONT_OFFICE } from '@/test/frontOfficeUser';
 
-const FRONT_OFFICE = findUserById('USR-0002');
 
 let reload;
 

@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 import { useWorkflowStore } from '@/store/useWorkflowStore';
 import { findUserById } from '@/constants/mockUsers';
+import { FRONT_OFFICE_USER as FRONT_OFFICE } from '@/test/frontOfficeUser';
 import { WORKFLOW_STATE } from '@/constants/statusEnums';
 import { buildLifecycle, STAGE, STAGE_STATUS } from '@/constants/queryLifecycle';
 import { fakeFinalApprovalEndpoint } from '@/test/fakeFinalApprovalEndpoint';
@@ -12,7 +13,6 @@ vi.mock('@/services/api/mailboxService');
 
 const s = () => useWorkflowStore.getState();
 
-const FRONT_OFFICE = findUserById('USR-0002');
 const OIC = findUserById('USR-0003');
 const OFFICIAL = findUserById('USR-0004');
 const REVIEWER_A = findUserById('USR-0005');

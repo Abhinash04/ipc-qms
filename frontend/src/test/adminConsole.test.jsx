@@ -7,6 +7,7 @@ import { AppRoutes } from '@/routes/AppRoutes';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useWorkflowStore } from '@/store/useWorkflowStore';
 import { findUserById } from '@/constants/mockUsers';
+import { FRONT_OFFICE_USER as FRONT_OFFICE } from '@/test/frontOfficeUser';
 import { ROLES } from '@/constants/roles';
 import { sectionsForRole } from '@/constants/permissions';
 import { SECTION } from '@/constants/routeSections';
@@ -31,13 +32,12 @@ import * as adminService from '@/services/api/adminService';
 
 const ADMIN = findUserById('USR-0007');
 const SUPER_ADMIN = findUserById('USR-0008');
-const FRONT_OFFICE = findUserById('USR-0002');
 
 const EVENTS = [
   {
     timestamp: '2026-09-10T09:42:00.000Z',
     actorType: 'human',
-    actorId: 'USR-0002',
+    actorId: 'USR-0014',
     actorRole: 'FRONT_OFFICE',
     action: 'EMAIL_FORWARDED',
     result: 'success',

@@ -2,9 +2,9 @@ import { test, expect } from '@playwright/test';
 
 import {
   ASSIGNED_OFFICIAL_USER,
-  FRONT_OFFICE_USER,
   OFFICER_IN_CHARGE_USER,
   REVIEWER_USER,
+  SUPER_ADMIN_USER,
   signInAs,
 } from './helpers/api.js';
 import {
@@ -208,7 +208,7 @@ test('a final response that cannot be sent leaves the case open, and the retry c
   expect(trail).not.toContain('RESPONSE_DISPATCHED');
   expect(trail).not.toContain('QUERY_CLOSED');
   await unblockMailboxDelivery(blocker);
-  await signInAs(page, FRONT_OFFICE_USER.email);
+  await signInAs(page, SUPER_ADMIN_USER.email);
   await page.goto(dispatchPath(queryId));
   await page.getByRole('button', { name: 'Retry sending response', exact: true }).click();
   await expect

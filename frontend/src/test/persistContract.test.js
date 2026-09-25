@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 import { useWorkflowStore } from '@/store/useWorkflowStore';
 import { findUserById } from '@/constants/mockUsers';
+import { FRONT_OFFICE_USER as FRONT_OFFICE } from '@/test/frontOfficeUser';
 import { AUDIT_EVENT, RESPONSE_STATUS, WORKFLOW_STATE } from '@/constants/statusEnums';
 import * as queryCaseService from '@/services/api/queryCaseService';
 import { notify } from '@/services/notify';
@@ -10,7 +11,6 @@ import { persistTransitionSchema } from '../../../backend/src/validators/querySt
 vi.mock('@/services/api/mailboxService');
 
 const s = () => useWorkflowStore.getState();
-const FRONT_OFFICE = findUserById('USR-0002');
 const OIC = findUserById('USR-0003');
 const OFFICIAL = findUserById('USR-0004');
 const REVIEWER = findUserById('USR-0005');

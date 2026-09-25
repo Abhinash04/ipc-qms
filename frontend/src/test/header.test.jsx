@@ -6,9 +6,10 @@ import { Header } from '@/components/layout/Header';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useWorkflowStore } from '@/store/useWorkflowStore';
 import { MOCK_USERS } from '@/constants/mockUsers';
+import { FRONT_OFFICE_USER } from '@/test/frontOfficeUser';
 import { ROLES, ROLE_LABELS } from '@/constants/roles';
 
-const userFor = (role) => MOCK_USERS.find((user) => user.role === role);
+const userFor = (role) => [...MOCK_USERS, FRONT_OFFICE_USER].find((user) => user.role === role);
 
 function renderHeader() {
   return render(

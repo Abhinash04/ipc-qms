@@ -8,6 +8,7 @@ import { axiosClient } from '@/services/api/axiosClient';
 import { notify, beginBatch, endBatch } from '@/services/notify';
 import { notifyMailboxCheck } from '@/hooks/useMailboxIngestion';
 import { findUserById } from '@/constants/mockUsers';
+import { FRONT_OFFICE_USER as FRONT_OFFICE } from '@/test/frontOfficeUser';
 import { AUDIT_EVENT } from '@/constants/statusEnums';
 import * as mailboxService from '@/services/api/mailboxService';
 import { installFakeCaseMail } from '@/test/fakeCaseMail';
@@ -16,7 +17,6 @@ import { EXTERNAL_INQUIRER as INQUIRER } from '@/test/externalInquirer';
 
 vi.mock('@/services/api/mailboxService');
 
-const FRONT_OFFICE = findUserById('USR-0002');
 const OIC = findUserById('USR-0003');
 const OFFICIAL = findUserById('USR-0004');
 

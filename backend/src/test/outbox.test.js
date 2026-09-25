@@ -280,12 +280,12 @@ describe('a person settles what the server could not', () => {
       queryId: QUERY_ID,
       emailType: 'OUTGOING_RESPONSE',
       outcome: 'SENT',
-      actor: { id: 'USR-0002', role: 'FRONT_OFFICE' },
+      actor: { id: 'USR-0014', role: 'FRONT_OFFICE' },
       finalize,
     });
 
     expect(settled.status).toBe('SENT');
-    expect(settled.resolvedBy).toMatchObject({ id: 'USR-0002', outcome: 'SENT' });
+    expect(settled.resolvedBy).toMatchObject({ id: 'USR-0014', outcome: 'SENT' });
     expect(finalize).toHaveBeenCalledTimes(1);
 
     const send = slowSuccess();
@@ -298,7 +298,7 @@ describe('a person settles what the server could not', () => {
       queryId: QUERY_ID,
       emailType: 'OUTGOING_RESPONSE',
       outcome: 'NOT_SENT',
-      actor: { id: 'USR-0002', role: 'FRONT_OFFICE' },
+      actor: { id: 'USR-0014', role: 'FRONT_OFFICE' },
     });
 
     expect((await row()).status).toBe('FAILED');

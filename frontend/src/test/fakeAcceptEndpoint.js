@@ -4,6 +4,7 @@ import { buildSeedState } from '@/constants/mockDomain';
 import { createEmailMessage, EMAIL_DIRECTION, EMAIL_TYPE } from '@/constants/emailModel';
 import { AUDIT_EVENT, BUSINESS_STATUS, PRIORITY, WORKFLOW_STATE } from '@/constants/statusEnums';
 import { MOCK_USERS } from '@/constants/mockUsers';
+import { FRONT_OFFICE_USER } from '@/test/frontOfficeUser';
 import { ROLES } from '@/constants/roles';
 
 const pad = (n) => String(n).padStart(5, '0');
@@ -16,7 +17,7 @@ const nameOf = (header) => {
   return (raw.includes('<') ? raw.split('<')[0].trim().replace(/^"|"$/g, '') : '') || addressOf(raw);
 };
 
-const addressFor = (role) => MOCK_USERS.find((u) => u.role === role)?.email;
+const addressFor = (role) => [...MOCK_USERS, FRONT_OFFICE_USER].find((u) => u.role === role)?.email;
 
 const plus = (timestamp, minutes) =>
   new Date(new Date(timestamp).getTime() + minutes * 60000).toISOString();
@@ -131,7 +132,7 @@ async function writeCase({ queryId, sequence, mailboxMessageId, message, acknowl
         auditId: `AUD-${queryId}-${index + 1}`,
         queryId,
         event,
-        actor: MOCK_USERS.find((u) => u.role === ROLES.FRONT_OFFICE)?.name || 'Front Office',
+        actor: FRONT_OFFICE_USER.name,
         at: plus(receivedAt, index),
         details: null,
       },

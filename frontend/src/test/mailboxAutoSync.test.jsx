@@ -4,12 +4,12 @@ import { act, render } from '@testing-library/react';
 import { MailboxAutoSync } from '@/components/workflow/MailboxAutoSync';
 import { useAuthStore } from '@/store/useAuthStore';
 import { findUserById } from '@/constants/mockUsers';
+import { FRONT_OFFICE_USER as FRONT_OFFICE } from '@/test/frontOfficeUser';
 import { notify } from '@/services/notify';
 import * as mailboxService from '@/services/api/mailboxService';
 
 vi.mock('@/services/api/mailboxService');
 
-const FRONT_OFFICE = findUserById('USR-0002');
 const OIC = findUserById('USR-0003');
 
 const POLL_MS = 30000;

@@ -6,7 +6,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AppRoutes } from '@/routes/AppRoutes';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useWorkflowStore } from '@/store/useWorkflowStore';
-import { findUserById } from '@/constants/mockUsers';
+import { FRONT_OFFICE_USER as FRONT_OFFICE } from '@/test/frontOfficeUser';
 import { WORKFLOW_STATE } from '@/constants/statusEnums';
 import { EMAIL_TYPE } from '@/constants/emailModel';
 import * as mailboxService from '@/services/api/mailboxService';
@@ -15,7 +15,6 @@ import { EXTERNAL_INQUIRER as INQUIRER } from '@/test/externalInquirer';
 
 vi.mock('@/services/api/mailboxService');
 
-const FRONT_OFFICE = findUserById('USR-0002');
 
 const s = () => useWorkflowStore.getState();
 

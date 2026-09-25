@@ -7,6 +7,7 @@ import { AppRoutes } from '@/routes/AppRoutes';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useWorkflowStore } from '@/store/useWorkflowStore';
 import { findUserById } from '@/constants/mockUsers';
+import { FRONT_OFFICE_USER as FRONT_OFFICE } from '@/test/frontOfficeUser';
 import { fakeCaseMail } from '@/test/fakeCaseMail';
 
 vi.mock('@/services/api/healthService', () => ({
@@ -28,7 +29,6 @@ vi.mock('@/services/api/mailboxService', () => ({
 
 const s = () => useWorkflowStore.getState();
 
-const FRONT_OFFICE = findUserById('USR-0002');
 const OIC = findUserById('USR-0003');
 const OFFICIAL = findUserById('USR-0004');
 const REVIEWER_A = findUserById('USR-0005');

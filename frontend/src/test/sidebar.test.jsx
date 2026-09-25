@@ -11,11 +11,12 @@ import {
 import { useAuthStore } from '@/store/useAuthStore';
 import { navItemsForRole } from '@/constants/navigation';
 import { MOCK_USERS } from '@/constants/mockUsers';
+import { FRONT_OFFICE_USER } from '@/test/frontOfficeUser';
 import { ROLES } from '@/constants/roles';
 
 const STORAGE_KEY = 'qms.sidebar.collapsed';
 const EVERY_ROLE = Object.values(ROLES);
-const userFor = (role) => MOCK_USERS.find((u) => u.role === role);
+const userFor = (role) => [...MOCK_USERS, FRONT_OFFICE_USER].find((u) => u.role === role);
 
 function renderSidebar({ collapsed = false } = {}) {
   localStorage.setItem(STORAGE_KEY, String(collapsed));

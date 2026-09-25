@@ -4,9 +4,9 @@ import { buildCaseOfficials } from '@/constants/caseOfficials';
 import { STAGE_STATUS } from '@/constants/queryLifecycle';
 import { AUDIT_EVENT, WORKFLOW_STATE } from '@/constants/statusEnums';
 import { findUserById } from '@/constants/mockUsers';
+import { FRONT_OFFICE_USER as FRONT_OFFICE } from '@/test/frontOfficeUser';
 import { EXTERNAL_INQUIRER as INQUIRER } from '@/test/externalInquirer';
 
-const FRONT_OFFICE = findUserById('USR-0002');
 const OIC = findUserById('USR-0003');
 const OFFICIAL = findUserById('USR-0004');
 const REVIEWER_A = findUserById('USR-0005');

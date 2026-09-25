@@ -7,7 +7,7 @@ import { MailboxInboxPage } from '@/pages/frontOffice/MailboxInboxPage';
 import { notify } from '@/services/notify';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useWorkflowStore } from '@/store/useWorkflowStore';
-import { findUserById } from '@/constants/mockUsers';
+import { FRONT_OFFICE_USER as FRONT_OFFICE } from '@/test/frontOfficeUser';
 import {
   fetchMailboxMessages,
   fetchMailboxDecisions,
@@ -39,7 +39,6 @@ vi.mock('@/services/api/mailboxService', () => ({
   forwardQuery: vi.fn().mockResolvedValue({}),
 }));
 
-const FRONT_OFFICE = findUserById('USR-0002');
 
 const ACK_RESULT = {
   from: 'Front Office <front-office@test.invalid>',

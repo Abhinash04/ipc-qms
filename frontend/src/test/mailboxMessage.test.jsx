@@ -5,7 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 import { MailboxMessagePage } from '@/pages/frontOffice/MailboxMessagePage';
 import { useAuthStore } from '@/store/useAuthStore';
-import { findUserById } from '@/constants/mockUsers';
+import { FRONT_OFFICE_USER as FRONT_OFFICE } from '@/test/frontOfficeUser';
 import { fetchMailboxMessage, markMailboxMessageRead } from '@/services/api/mailboxService';
 
 vi.mock('@/services/api/mailboxService', async (importOriginal) => ({
@@ -14,7 +14,6 @@ vi.mock('@/services/api/mailboxService', async (importOriginal) => ({
   markMailboxMessageRead: vi.fn(),
 }));
 
-const FRONT_OFFICE = findUserById('USR-0002');
 
 const CSP =
   "default-src 'none'; img-src data:; style-src 'unsafe-inline'; font-src data:; form-action 'none'; base-uri 'none'";

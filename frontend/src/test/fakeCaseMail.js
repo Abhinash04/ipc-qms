@@ -9,9 +9,10 @@ import {
 import { createEmailMessage, EMAIL_DIRECTION, EMAIL_TYPE } from '@/constants/emailModel';
 import { AUDIT_EVENT, BUSINESS_STATUS, WORKFLOW_STATE } from '@/constants/statusEnums';
 import { MOCK_USERS } from '@/constants/mockUsers';
+import { FRONT_OFFICE_USER } from '@/test/frontOfficeUser';
 import { ROLES } from '@/constants/roles';
 
-const userWithRole = (role) => MOCK_USERS.find((user) => user.role === role);
+const userWithRole = (role) => [...MOCK_USERS, FRONT_OFFICE_USER].find((user) => user.role === role);
 const frontOffice = () => userWithRole(ROLES.FRONT_OFFICE)?.email;
 
 const STATUS = {

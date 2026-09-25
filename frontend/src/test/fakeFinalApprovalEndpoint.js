@@ -8,6 +8,7 @@ import {
   WORKFLOW_STATE,
 } from '@/constants/statusEnums';
 import { MOCK_USERS } from '@/constants/mockUsers';
+import { FRONT_OFFICE_USER } from '@/test/frontOfficeUser';
 import { ROLES } from '@/constants/roles';
 
 const pad = (n) => String(n).padStart(5, '0');
@@ -19,7 +20,7 @@ const ALREADY_APPROVED = [
   WORKFLOW_STATE.CLOSED,
 ];
 
-const userWithRole = (role) => MOCK_USERS.find((user) => user.role === role);
+const userWithRole = (role) => [...MOCK_USERS, FRONT_OFFICE_USER].find((user) => user.role === role);
 
 const defaultSend = async ({ to, subject, body }) => ({
   from: userWithRole(ROLES.FRONT_OFFICE)?.email,

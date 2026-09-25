@@ -1,7 +1,6 @@
 import { test, expect } from '@playwright/test';
 
 import {
-  FRONT_OFFICE_USER,
   SUPER_ADMIN_USER,
   acceptViaApi,
   devSignIn,
@@ -20,7 +19,7 @@ import {
 
 const SENDER = 'Ravi Kumar <ravi@pharma.example>';
 const SENDER_EMAIL = 'ravi@pharma.example';
-const INBOX_PATH = '/front-officer/inbox';
+const INBOX_PATH = '/super-admin/inbox';
 const currentYear = () => new Date().getUTCFullYear();
 async function decideInUi(page, mailboxMessageId, action) {
   const verb = action === 'accept' ? 'Accept' : 'Reject';
@@ -61,7 +60,7 @@ async function arrive(page, request, subject) {
     body: 'Please confirm the applicable impurity limit for the current monograph.',
   });
 
-  await signInThroughUi(page, FRONT_OFFICE_USER.email);
+  await signInThroughUi(page, SUPER_ADMIN_USER.email);
   await page.goto(INBOX_PATH);
 
   return message;

@@ -18,6 +18,7 @@ import {
 import { navItemsForRole } from '@/constants/navigation';
 import { pathsForRole, roleHome, sectionPath } from '@/constants/routePaths';
 import { findUserById } from '@/constants/mockUsers';
+import { FRONT_OFFICE_USER } from '@/test/frontOfficeUser';
 
 vi.mock('@/services/api/healthService', () => ({
   fetchHealth: vi.fn().mockResolvedValue({ status: 'healthy' }),
@@ -42,8 +43,7 @@ vi.mock('@/services/api/mailboxService', () => ({
 }));
 
 const USER_FOR_ROLE = Object.fromEntries(
-  ['USR-0002', 'USR-0003', 'USR-0004', 'USR-0005', 'USR-0007', 'USR-0008']
-    .map(findUserById)
+  [...['USR-0003', 'USR-0004', 'USR-0005', 'USR-0007', 'USR-0008'].map(findUserById), FRONT_OFFICE_USER]
     .map((user) => [user.role, user]),
 );
 

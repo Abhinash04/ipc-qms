@@ -7,6 +7,7 @@ import { AppRoutes } from '@/routes/AppRoutes';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useWorkflowStore } from '@/store/useWorkflowStore';
 import { MOCK_USERS, findUserById } from '@/constants/mockUsers';
+import { FRONT_OFFICE_USER } from '@/test/frontOfficeUser';
 import { roleHome } from '@/constants/routePaths';
 
 vi.mock('@/services/api/authService', () => ({
@@ -117,7 +118,7 @@ describe('the login form talks to the server', () => {
 });
 
 describe('every user can sign in and lands on their own dashboard', () => {
-  it.each(MOCK_USERS.map((user) => [`${user.name} (${user.role})`, user]))(
+  it.each([...MOCK_USERS, FRONT_OFFICE_USER].map((user) => [`${user.name} (${user.role})`, user]))(
     '%s',
     async (_label, user) => {
       vi.mocked(authService.login).mockResolvedValue(user);
@@ -135,7 +136,7 @@ describe('every user can sign in and lands on their own dashboard', () => {
 
 describe('the session is the cookie, not local storage', () => {
   it('restores the signed-in user from GET /auth/me on boot', async () => {
-    const user = findUserById('USR-0002');
+    const user = FRONT_OFFICE_USER;
     vi.mocked(authService.fetchMe).mockResolvedValue(user);
 
     useAuthStore.setState({ currentUser: null, authReady: false });

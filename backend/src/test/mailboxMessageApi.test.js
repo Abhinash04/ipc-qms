@@ -77,6 +77,7 @@ import authConfig from '../config/authConfig.js';
 import { signToken } from '../services/auth/tokenService.js';
 import { ROLES } from '../constants/roles.js';
 import { USERS, nicFrontOfficeUser } from '../constants/users.js';
+import { TEST_FRONT_OFFICE } from './helpers/auth.js';
 import * as nicMailbox from '../services/email/mailbox/nicBrowserMailbox.js';
 import * as attachmentStore from '../services/attachments/attachmentStore.js';
 
@@ -86,7 +87,7 @@ const ATT_B = 'att_66666666-7777-8888-9999-000000000000';
 
 const cookieFor = (user) => ({ Cookie: `${authConfig.COOKIE_NAME}=${signToken(user)}` });
 const nicUser = () => nicFrontOfficeUser();
-const primaryUser = () => USERS.find((user) => user.role === ROLES.FRONT_OFFICE);
+const primaryUser = () => TEST_FRONT_OFFICE;
 const superAdmin = () => USERS.find((user) => user.role === ROLES.SUPER_ADMIN);
 
 const read = (providerMessageId, overrides = {}) => ({

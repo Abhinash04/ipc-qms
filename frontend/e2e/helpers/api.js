@@ -10,7 +10,6 @@ function userForRole(role) {
   if (!user) throw new Error(`No seeded user holds the role ${role}`);
   return user;
 }
-export const FRONT_OFFICE_USER = userForRole(ROLES.FRONT_OFFICE);
 export const SUPER_ADMIN_USER = userForRole(ROLES.SUPER_ADMIN);
 export const OFFICER_IN_CHARGE_USER = userForRole(ROLES.OFFICER_IN_CHARGE);
 export const ASSIGNED_OFFICIAL_USER = userForRole(ROLES.ASSIGNED_OFFICIAL);

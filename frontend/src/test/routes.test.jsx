@@ -9,6 +9,7 @@ import { useWorkflowStore } from '@/store/useWorkflowStore';
 import { useAuthStore } from '@/store/useAuthStore';
 import { buildPath } from '@/constants/routePaths';
 import { findUserById } from '@/constants/mockUsers';
+import { FRONT_OFFICE_USER } from '@/test/frontOfficeUser';
 
 vi.mock('@/services/api/mailboxService', () => ({
   rescueMailboxMessage: vi.fn().mockResolvedValue({ rescued: true }),
@@ -32,8 +33,7 @@ let WALKTHROUGH_ID;
 let ADVANCED_ID;
 
 const USER_FOR_ROLE = Object.fromEntries(
-  ['USR-0002', 'USR-0003', 'USR-0004', 'USR-0005', 'USR-0007', 'USR-0008']
-    .map(findUserById)
+  [...['USR-0003', 'USR-0004', 'USR-0005', 'USR-0007', 'USR-0008'].map(findUserById), FRONT_OFFICE_USER]
     .map((user) => [user.role, user]),
 );
 

@@ -2,7 +2,6 @@ import { expect } from '@playwright/test';
 
 import {
   ASSIGNED_OFFICIAL_USER,
-  FRONT_OFFICE_USER,
   OFFICER_IN_CHARGE_USER,
   REVIEWER_USER,
   SUPER_ADMIN_USER,
@@ -17,13 +16,13 @@ import {
   readWorkflowSteps,
 } from './db.js';
 
-export const INBOX_PATH = '/front-officer/inbox';
+export const INBOX_PATH = '/super-admin/inbox';
 export const assignmentPath = (queryId) => `/officer-in-charge/assignments/${queryId}`;
 export const draftingPath = (queryId) => `/assigned-official/drafting/${queryId}`;
 export const reviewPath = (queryId) => `/reviewer/reviews/${queryId}`;
 export const approvalPath = (queryId) => `/officer-in-charge/approvals/${queryId}`;
-export const dispatchPath = (queryId) => `/front-officer/dispatch/${queryId}`;
-export const casePath = (queryId) => `/front-officer/queries/${queryId}`;
+export const dispatchPath = (queryId) => `/super-admin/dispatch/${queryId}`;
+export const casePath = (queryId) => `/super-admin/queries/${queryId}`;
 export const currentYear = () => new Date().getUTCFullYear();
 export const POLL = { timeout: 60_000 };
 export const REVIEW_COMMENT = 'Checked against the monograph; the cited limits are correct.';
@@ -44,7 +43,7 @@ export async function arrive(request, { from, subject, body }) {
   return injectInboundMessage(request, { from, subject, body });
 }
 export async function accept(page, message) {
-  await signInAs(page, FRONT_OFFICE_USER.email);
+  await signInAs(page, SUPER_ADMIN_USER.email);
   await page.goto(INBOX_PATH);
 
   await page

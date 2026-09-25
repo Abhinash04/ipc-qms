@@ -7,6 +7,7 @@ import { DashboardPage } from '@/pages/dashboard/DashboardPage';
 import { useWorkflowStore } from '@/store/useWorkflowStore';
 import { useAuthStore } from '@/store/useAuthStore';
 import { findUserById, MOCK_USERS } from '@/constants/mockUsers';
+import { FRONT_OFFICE_USER as FRONT_OFFICE } from '@/test/frontOfficeUser';
 import { WORKFLOW_STATE } from '@/constants/statusEnums';
 import { deriveBusinessStatus } from '@/constants/workflowRules';
 import { bucketsForRole } from '@/constants/queryBuckets';
@@ -23,7 +24,6 @@ vi.mock('@/services/api/mailboxService', () => ({
 }));
 
 import { EXTERNAL_INQUIRER } from '@/test/externalInquirer';
-const FRONT_OFFICE = findUserById('USR-0002');
 const OIC = findUserById('USR-0003');
 const OFFICIAL = findUserById('USR-0004');
 const OTHER_OFFICIAL = MOCK_USERS.find(

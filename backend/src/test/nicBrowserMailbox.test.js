@@ -74,6 +74,7 @@ import authConfig from '../config/authConfig.js';
 import { signToken } from '../services/auth/tokenService.js';
 import { ROLES } from '../constants/roles.js';
 import { USERS, nicFrontOfficeUser } from '../constants/users.js';
+import { TEST_FRONT_OFFICE } from './helpers/auth.js';
 import { findByEmail } from '../services/auth/userDirectory.js';
 import env, { validateEmailConfig } from '../config/env.js';
 import * as mailbox from '../services/email/mailbox/index.js';
@@ -89,7 +90,7 @@ const NIC_PASSWORD = 'test-pw-nic-frontoffice-0014';
 const INQUIRER = 'Ravi Kumar <ravi@pharma.example>';
 
 const cookieFor = (user) => ({ Cookie: `${authConfig.COOKIE_NAME}=${signToken(user)}` });
-const primaryFrontOffice = () => USERS.find((user) => user.role === ROLES.FRONT_OFFICE);
+const primaryFrontOffice = () => TEST_FRONT_OFFICE;
 
 const read = (providerMessageId, overrides = {}) => ({
   providerMessageId,
@@ -173,7 +174,8 @@ describe('signing in as the NICeMail Front Office', () => {
   });
 
   it('still lets a seeded demo account use dev login', async () => {
-    const res = await request(app).post('/api/v1/auth/dev-login').send({ email: primaryFrontOffice().email });
+    const officer = USERS.find((user) => user.role === ROLES.OFFICER_IN_CHARGE);
+    const res = await request(app).post('/api/v1/auth/dev-login').send({ email: officer.email });
 
     expect(res.status).toBe(200);
   });

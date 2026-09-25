@@ -9,6 +9,7 @@ import { fakeAcceptEndpoint } from '@/test/fakeAcceptEndpoint';
 import { fakeFinalApprovalEndpoint } from '@/test/fakeFinalApprovalEndpoint';
 import { EXTERNAL_INQUIRER } from '@/test/externalInquirer';
 import { findUserById, MOCK_USERS } from '@/constants/mockUsers';
+import { FRONT_OFFICE_USER as FRONT_OFFICE } from '@/test/frontOfficeUser';
 import { ROLES } from '@/constants/roles';
 import { WORKFLOW_STATE, AUDIT_EVENT } from '@/constants/statusEnums';
 import { EMAIL_DIRECTION, EMAIL_TYPE } from '@/constants/emailModel';
@@ -19,7 +20,6 @@ vi.mock('@/services/api/mailboxService');
 const s = () => useWorkflowStore.getState();
 
 const ABHINASH = EXTERNAL_INQUIRER;
-const FRONT_OFFICE = findUserById('USR-0002');
 const OIC = findUserById('USR-0003');
 const NEHA = findUserById('USR-0004');
 const RAWAT = findUserById('USR-0009');
@@ -68,12 +68,8 @@ beforeEach(async () => {
 });
 
 describe('the seeded directory', () => {
-  it('names the Front Office by its post, not by a person', () => {
-    expect(FRONT_OFFICE).toMatchObject({
-      role: ROLES.FRONT_OFFICE,
-      email: 'front.office@ipc.example',
-    });
-    expect(FRONT_OFFICE.name).not.toMatch(/makker/i);
+  it('holds no Front Office account — the NICeMail Front Office comes from the environment', () => {
+    expect(MOCK_USERS.some((u) => u.role === ROLES.FRONT_OFFICE)).toBe(false);
   });
 
   it('names EduTR Zairza as the Officer-in-Charge', () => {
