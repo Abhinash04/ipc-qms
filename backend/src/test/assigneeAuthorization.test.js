@@ -39,7 +39,7 @@ import app from '../app.js';
 import authConfig from '../config/authConfig.js';
 import { signToken } from '../services/auth/tokenService.js';
 import { USERS } from '../constants/users.js';
-import { QueryCase } from '../models/index.js';
+import { QueryCase, WorkflowStep } from '../models/index.js';
 
 const CASE = 'QRY-2026-00001';
 const byId = (id) => USERS.find((user) => user.id === id);
@@ -80,6 +80,8 @@ async function seed(query = {}, extra = {}) {
   const res = await persistAs(SUPER_ADMIN, { query: caseRow(query), ...extra });
   expect(res.status).toBe(200);
 }
+
+const storedStep = (stepId) => WorkflowStep.findOne({ stepId }).lean();
 
 beforeEach(() => {
   memoryDb.reset();
@@ -152,3 +154,71 @@ describe('transfer is only possible before drafting starts', () => {
   });
 });
 
+describe('deleting a review level', () => {
+  const underReview = () =>
+    seed(
+      { workflowState: 'UNDER_REVIEW' },
+      {
+        upsertSteps: [
+          step('STEP-00001', { sequence: 2, status: 'IN_PROGRESS' }),
+          step('STEP-00002', { sequence: 3, assignedUserId: 'USR-0006' }),
+          step('STEP-00003', { stepType: 'FINAL_APPROVAL', sequence: 4, assignedUserId: 'USR-0003' }),
+        ],
+      },
+    );
+  const deleting = (stepIds, query = {}) => ({
+    query: caseRow({ workflowState: 'UNDER_REVIEW', ...query }),
+    baseRevision: 1,
+    deleteStepIds: stepIds,
+  });
+
+  it('lets the assignee remove a level that has not started', async () => {
+    await underReview();
+
+    const res = await persistAs(OFFICIAL_A, deleting(['STEP-00002']));
+
+    expect(res.status).toBe(200);
+    expect(await storedStep('STEP-00002')).toBeNull();
+  });
+
+  it.each([
+    ['a reviewer on the case', REVIEWER],
+    ['an official who is not the assignee', OFFICIAL_B],
+  ])('refuses %s, and keeps the level', async (_label, actor) => {
+    await underReview();
+
+    const res = await persistAs(actor, deleting(['STEP-00002']));
+
+    expect(res.status).toBe(403);
+    expect(await storedStep('STEP-00002')).not.toBeNull();
+  });
+
+  it('refuses a reviewer with the delete named as the reason', async () => {
+    await underReview();
+
+    const res = await persistAs(REVIEWER, deleting(['STEP-00002']));
+
+    expect(res.body.fields).toEqual(['deleteStepIds']);
+  });
+
+  it.each([
+    ['the level under review', 'STEP-00001'],
+    ['the final approval step', 'STEP-00003'],
+  ])('refuses to remove %s', async (_label, stepId) => {
+    await underReview();
+
+    const res = await persistAs(OFFICIAL_A, deleting([stepId]));
+
+    expect(res.status).toBe(403);
+    expect(await storedStep(stepId)).not.toBeNull();
+  });
+
+  it('refuses a delete before drafting has started', async () => {
+    await seed({}, { upsertSteps: [step('STEP-00002')] });
+
+    const res = await persistAs(OFFICIAL_A, deleting(['STEP-00002'], { workflowState: 'ASSIGNED' }));
+
+    expect(res.status).toBe(403);
+    expect(await storedStep('STEP-00002')).not.toBeNull();
+  });
+});

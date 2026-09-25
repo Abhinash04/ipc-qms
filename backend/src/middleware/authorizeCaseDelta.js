@@ -25,6 +25,11 @@ import { isConnected } from '../config/db.js';
 const canPullBack = (role) => roleCanPerform(role, WORKFLOW_ACTION.PULLBACK);
 const permits = (role, actions) =>
   Array.isArray(actions) && actions.some((action) => roleCanPerform(role, action));
+const REVIEW_LEVEL_STATES = [
+  WORKFLOW_STATE.DRAFTING,
+  WORKFLOW_STATE.UNDER_REVIEW,
+  WORKFLOW_STATE.RETURNED_FOR_REVISION,
+];
 
 function isAssignedOfficial(userId) {
   return allUsers().some((user) => user.id === userId && user.role === ROLES.ASSIGNED_OFFICIAL);
@@ -157,6 +162,17 @@ async function storedParentIds(body) {
   return new Set(found.flat().filter(Boolean));
 }
 
+async function reviewLevelDeletionRefused(user, body, storedQuery) {
+  const stepIds = (body?.deleteStepIds || []).filter(Boolean);
+  if (!stepIds.length) return false;
+  if (!roleCanPerform(user.role, WORKFLOW_ACTION.DELETE_REVIEW_LEVEL)) return true;
+  if (!storedQuery || !REVIEW_LEVEL_STATES.includes(storedQuery.workflowState)) return true;
+  if (user.role !== ROLES.SUPER_ADMIN && storedQuery.currentAssigneeId !== user.id) return true;
+
+  const steps = await WorkflowStep.find({ stepId: { $in: stepIds } }).select('stepType status').lean();
+  return steps.some((step) => step.stepType !== 'REVIEW' || step.status !== 'PENDING');
+}
+
 function deny(req, res, message, { fields = [], queryIds = [] } = {}) {
   void audit.record({
     action: AUDIT_ACTIONS.AUTHORIZATION_DENIED,
@@ -211,6 +227,13 @@ async function authorizeCaseDelta(req, res, next) {
         code: 'ID_COLLISION',
         error: 'A record in this change already belongs to another case',
         queryId: body.query?.queryId ?? null,
+      });
+    }
+
+    if (await reviewLevelDeletionRefused(req.user, body, stored.query)) {
+      return deny(req, res, `${req.user.role} is not permitted to delete that review level`, {
+        fields: ['deleteStepIds'],
+        queryIds: [...named].sort(),
       });
     }
 

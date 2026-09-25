@@ -913,9 +913,10 @@ export const useWorkflowStore = create((set, get) => ({
   },
 
   deleteReviewLevel: (queryId, stepId, actor) => {
+    assertCan(get(), WORKFLOW_ACTION.DELETE_REVIEW_LEVEL, queryId, actor);
     const state = get();
-    const step = state.workflowSteps.find((s) => s.stepId === stepId);
-    if (!step || step.status !== 'PENDING') {
+    const step = state.workflowSteps.find((s) => s.stepId === stepId && s.queryId === queryId);
+    if (!step || step.stepType !== 'REVIEW' || step.status !== 'PENDING') {
       return { ok: false, reason: 'Only a PENDING review level can be deleted.' };
     }
     const reviewer = findUserById(step.assignedUserId);
@@ -923,7 +924,7 @@ export const useWorkflowStore = create((set, get) => ({
     state.applyTransition({
       queryId,
       actor,
-      event: AUDIT_EVENT.REVIEW_ADDED,
+      event: AUDIT_EVENT.REVIEW_REMOVED,
       details: `Review level for ${reviewer?.name || step.assignedUserId} removed (was pending).`,
       mutate: (base) => ({
         workflowSteps: base.workflowSteps.filter((s) => s.stepId !== stepId),

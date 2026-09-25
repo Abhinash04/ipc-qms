@@ -288,6 +288,8 @@ async function persistTransition(req, res, next) {
         WorkflowStep.findOneAndDelete({
           stepId,
           queryId: query?.queryId ?? null,
+          stepType: "REVIEW",
+          status: "PENDING",
         }),
       );
     }

@@ -163,7 +163,7 @@ function ReviewChainRow({ step, index, onDelete }) {
       </div>
       <div className="flex items-center gap-1.5">
         <Badge variant={reviewStatusVariant(step.status)}>{step.status}</Badge>
-        {step.status === 'PENDING' && (
+        {onDelete && step.status === 'PENDING' && (
           <Button
             variant="ghost"
             size="icon-sm"
@@ -202,7 +202,12 @@ function ReviewChainCard({
           </p>
         ) : (
           reviewSteps.map((step, index) => (
-            <ReviewChainRow key={step.stepId} step={step} index={index} onDelete={onDelete} />
+            <ReviewChainRow
+              key={step.stepId}
+              step={step}
+              index={index}
+              onDelete={can(WORKFLOW_ACTION.DELETE_REVIEW_LEVEL) ? onDelete : null}
+            />
           ))
         )}
 

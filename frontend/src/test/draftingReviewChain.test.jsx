@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
@@ -9,6 +9,7 @@ import { useWorkflowStore } from '@/store/useWorkflowStore';
 import { findUserById } from '@/constants/mockUsers';
 import { FRONT_OFFICE_USER as FRONT_OFFICE } from '@/test/frontOfficeUser';
 import { fakeCaseMail } from '@/test/fakeCaseMail';
+import { AUDIT_EVENT } from '@/constants/statusEnums';
 
 vi.mock('@/services/api/healthService', () => ({
   fetchHealth: vi.fn().mockResolvedValue({ status: 'healthy' }),
@@ -103,5 +104,36 @@ describe('the drafting page gates submission on a review chain', () => {
     expect(screen.getByText('Reviewer II')).toBeInTheDocument();
     expect(screen.getByText(REVIEWER_B.name)).toBeInTheDocument();
     expect(screen.getByText('Add Reviewer III')).toBeInTheDocument();
+  });
+});
+
+describe('removing a review level', () => {
+  it('lets the assigned official remove a level that has not started, and records it', () => {
+    s().addReviewLevel(queryId, REVIEWER_A.id, OFFICIAL);
+    renderAt(`/assigned-official/drafting/${queryId}`);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Remove Reviewer I' }));
+
+    expect(s().getSteps(queryId).filter((step) => step.stepType === 'REVIEW')).toHaveLength(0);
+    expect(s().getAudit(queryId).at(-1).event).toBe(AUDIT_EVENT.REVIEW_REMOVED);
+  });
+
+  it('offers another official neither the remove control nor drafting', () => {
+    s().addReviewLevel(queryId, REVIEWER_A.id, OFFICIAL);
+    useAuthStore.setState({ currentUser: findUserById('USR-0009') });
+    renderAt(`/assigned-official/drafting/${queryId}`);
+
+    expect(screen.queryByRole('button', { name: 'Remove Reviewer I' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Generate AI draft/ })).not.toBeInTheDocument();
+  });
+
+  it('refuses a reviewer who calls the store directly', () => {
+    s().addReviewLevel(queryId, REVIEWER_A.id, OFFICIAL);
+    const [level] = s().getSteps(queryId).filter((step) => step.stepType === 'REVIEW');
+
+    expect(() => s().deleteReviewLevel(queryId, level.stepId, REVIEWER_A)).toThrow(
+      /may not perform DELETE_REVIEW_LEVEL/,
+    );
+    expect(s().getSteps(queryId).some((step) => step.stepId === level.stepId)).toBe(true);
   });
 });

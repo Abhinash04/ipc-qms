@@ -86,9 +86,11 @@ describe('workflow-action authorization mirrors the frontend table', () => {
     expect(roleCanPerform(ROLES.ADMIN, WORKFLOW_ACTION.VERIFY)).toBe(false);
   });
 
-  it('hard-disables the actions still awaiting client clarification', () => {
+  it('permits DELETE_REVIEW_LEVEL for the Assigned Official and Super Admin only', () => {
     for (const role of Object.values(ROLES)) {
-      expect(roleCanPerform(role, WORKFLOW_ACTION.DELETE_REVIEW_LEVEL)).toBe(false);
+      expect(roleCanPerform(role, WORKFLOW_ACTION.DELETE_REVIEW_LEVEL)).toBe(
+        [ROLES.ASSIGNED_OFFICIAL, ROLES.SUPER_ADMIN].includes(role),
+      );
     }
   });
 

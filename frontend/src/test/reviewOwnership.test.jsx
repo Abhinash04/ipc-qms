@@ -106,6 +106,12 @@ describe('the review detail page only offers a decision to the assigned reviewer
     expect(ret).toBeInTheDocument();
   });
 
+  it('never offers a reviewer the control to delete a review level', () => {
+    renderAs(REVIEWER_B, `/reviewer/reviews/${queryId}`);
+
+    expect(screen.queryByRole('button', { name: /Delete review level/ })).not.toBeInTheDocument();
+  });
+
   it('takes the controls away from Reviewer I once they have approved', () => {
     s().approveReview(queryId, 'Level 1 fine', REVIEWER_A);
 

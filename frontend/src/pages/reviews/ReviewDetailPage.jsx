@@ -151,7 +151,7 @@ export function ReviewDetailPage() {
                       >
                         {step.status}
                       </Badge>
-                      {step.status === 'PENDING' && (
+                      {step.status === 'PENDING' && can(WORKFLOW_ACTION.DELETE_REVIEW_LEVEL) && (
                         <Button
                           variant="ghost"
                           size="icon-sm"
@@ -181,7 +181,7 @@ export function ReviewDetailPage() {
               )}
 
               <p className="text-xs text-muted-foreground">
-                Only a PENDING level can be deleted — a completed review's decision is part of the audit trail. Who may add or delete levels is a client clarification item.
+                Only a PENDING level can be deleted — a completed review's decision is part of the audit trail. Only the assigned official can add or delete levels.
               </p>
             </CardBody>
           </Card>
