@@ -93,7 +93,8 @@ failure too.
 cases, steps, reviews, versions, notifications, email records, the id counters and the audit trail —
 and deliberately **keeps `users`**, which is re-seeded from `src/constants/users.js` on every
 connect. It is a maintenance tool, not a seed: it inserts nothing, and the next accepted enquiry is
-case `00001`. `--dry-run` reports what would go and changes nothing; `--force` is required under
+case `00001`. `--dry-run` reports what would go and deletes nothing (connecting still creates any
+missing collection, index or seeded account); `--force` is required under
 `NODE_ENV=production`, and to delete from a shared database, where it otherwise refuses. The header
 **Reset** button does the same through `POST /queries/reset` and is Super-Admin-only on both sides;
 it answers 409 under `NODE_ENV=production` or on a shared database. **Neither is for the team's

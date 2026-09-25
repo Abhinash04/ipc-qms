@@ -200,7 +200,8 @@ DATABASE_URL=mongodb+srv://<user>:<password>@<cluster>.mongodb.net/query_managem
   startup; otherwise every collection would land in `test`. URL-encode special characters in the
   password.
 - The first connect waits up to 15 s (DNS SRV lookup and TLS). A wrong password, or a machine not on
-  the Atlas IP access list, stops the backend with a redacted error.
+  the Atlas IP access list, stops the backend with a redacted error. `cd backend && npm run db:check`
+  names the failing step; see **Cannot connect?** below.
 - A `mongodb+srv://` URI or any host other than `localhost`/`127.0.0.1`/`::1` counts as **shared**.
   On a shared database, startup only adds missing indexes (`createIndexes`) and never drops one.
 
@@ -208,11 +209,11 @@ DATABASE_URL=mongodb+srv://<user>:<password>@<cluster>.mongodb.net/query_managem
 
 ```bash
 cd backend
-npm run db:provision -- --dry-run   # what it would create; writes nothing
+npm run db:provision -- --dry-run   # what it would create; inserts no documents
 npm run db:provision                # the DATABASE_URL in backend/.env.local (or --uri "...")
 ```
 
-It is idempotent: it creates the collections and indexes and inserts the 12 `@ipc.example`
+It is idempotent: it creates the collections and indexes and inserts the 11 `@ipc.example`
 development identities from `src/constants/users.js` (`$setOnInsert`, so an existing account is left
 alone), and it writes **no cases**. A second run reports `0 newly inserted`. It syncs indexes to the
 models of the branch it runs from, so run it from this branch.
@@ -228,12 +229,17 @@ backend, even one that never opens the NICeMail inbox: it is what refuses NICeMa
 `NIC_BROWSER_MAILBOX=true` without it turns that backend into a second mailbox host. To see the
 NICeMail inbox a teammate also needs `NIC_BROWSER_MAILBOX=true` and exactly the host's `NIC_EMAIL`, and
 signs in as the NICeMail Front Office; every other Front Office inbox shows no NICeMail mail.
+**Never copy the host's `backend/.env.local` as it is:** it is the host profile. Start from
+`.env.example` or the teammate column in docs/ENVIRONMENT.md, with your own Atlas user and
+`NIC_BROWSER_VIEWER=true`.
 
 **How teammates see each other's changes.** Every backend reads the shared database on each request,
 and nothing is cached per backend. There is no server push: a browser tab reloads the shared data when
 it gains focus, becomes visible or changes route, and after each of its own writes, and the mailbox
 list polls every 15 s. A tab left idle in front of someone does not refresh until they click into it or
-change page. No extra synchronisation, polling or cache invalidation is needed for correctness.
+change page. No extra synchronisation, polling or cache invalidation is needed for correctness: a
+save built on an older copy of a case is refused with 409 `STALE_CASE`, and the page reloads the case
+with the toast "changed by someone else".
 
 The NICeMail Front Office (`USR-0014`) needs a credential like every other account — in auto mode
 the shared `QMS_SEED_PASSWORD` covers it; dev login refuses it. On a shared database the retention sweep starts only on the mailbox host.
@@ -254,6 +260,37 @@ NICeMail accept on the host.**
 and `GET /api/v1/health` answers `database: { connected: true }`. A teammate's backend also prints
 `NICeMail agent:  viewer — …`. Check the database name in that line: a URI with no name is refused,
 but a misspelled name silently opens a separate, empty database.
+
+To prove two developers share one database, both run `cd backend && npm run db:check` at the same
+moment and compare its last line, the fingerprint: cluster, replica set, database, collection count,
+document counts and the newest case. The check only reads; it writes nothing to the database.
+
+**Cannot connect?** Run `npm run db:check` in `backend/`. It prints no password, and stops at the
+first failing step with the cause:
+
+- **`querySrv ECONNREFUSED` / `ETIMEOUT` `_mongodb._tcp.<cluster>`** — the DNS lookup of the Atlas
+  SRV record failed on this machine, so Atlas never saw a connection. Node resolves it through its own
+  list of DNS servers, which a VPN, a DNS filter, a router or a placeholder IPv6 DNS entry can break
+  even while browsers work. Either point the Wi-Fi/Ethernet adapter at DNS `1.1.1.1` and `8.8.8.8`,
+  run `ipconfig /flushdns` and turn off the VPN or DNS filter; or put the standard `mongodb://`
+  connection string that the check prints into your own `backend/.env.local`. It names the same
+  cluster and database and needs no SRV lookup.
+- **TCP or TLS to port 27017 fails, or the connect times out** — this machine's public IP is not on
+  the Atlas access list, or the network blocks outbound port 27017. `npm run db:check -- --show-ip`
+  prints the IP to add under Atlas → Network Access.
+- **`bad auth` / authentication failed** — wrong user or password: use your own Atlas database
+  user, or get the current password over a secure channel.
+
+The `[qms] MongoDB connection lost — retrying` line printed just before
+`MongoDB is unreachable at DATABASE_URL` is not a retry: a failed first connect stops the backend.
+
+**Atlas setup for the team** (project owner, in the Atlas UI):
+
+- **Network Access → Add IP Address:** one `/32` entry per developer, commented with their name.
+  Use a temporary entry for a home or mobile IP that changes. Never add `0.0.0.0/0`.
+- **Database Access:** one user per developer, `readWrite` on `query_management_system` only.
+- Optionally invite developers to the Atlas project as *Project Network Access Manager*, so they can
+  add their own current IP when it changes.
 
 **Rules:**
 

@@ -1141,7 +1141,8 @@ Also required:
 |---|---|---|
 | `ERR_MODULE_NOT_FOUND: Cannot find package '…'` at startup | `node_modules` is older than `package.json` | `npm install` (or `npm ci`) in `backend/` |
 | `DATABASE_URL is required when NODE_ENV=production` | no database configured | set `DATABASE_URL`; the server will not start without it in production |
-| `MongoDB is unreachable at DATABASE_URL` | server down, wrong host or password, firewall; on Atlas, this machine's IP missing from the access list | `mongosh "$DATABASE_URL" --eval 'db.runCommand({ping:1})'`; on Atlas, check your database user and add your IP |
+| `MongoDB is unreachable at DATABASE_URL` | server down, wrong host or password, firewall; on Atlas, this machine's IP missing from the access list. The `MongoDB connection lost — retrying` line before it is not a retry: startup stops | `npm run db:check` names the failing step; on Atlas, check your database user and add your IP |
+| `MongoDB is unreachable at DATABASE_URL: querySrv ECONNREFUSED _mongodb._tcp.…` (or `ETIMEOUT`) | the DNS SRV lookup failed on this machine: Node's DNS servers (VPN, DNS filter, router, placeholder IPv6 DNS) refuse it. Atlas never saw a connection | set the adapter DNS to `1.1.1.1`/`8.8.8.8` and `ipconfig /flushdns`, or use the standard `mongodb://` string `npm run db:check` prints |
 | `DATABASE_URL must be a mongodb:// or mongodb+srv:// URI that names its database` | the URI has no `/<database>` path | add `/query_management_system` before the `?` |
 | `/queries/*` returns 503 | MongoDB not connected: `DATABASE_URL` unset in development, or the connection lost mid-run | set it and restart. A loss mid-run (an Atlas primary election) recovers by itself |
 | Reset or `DELETE /mailbox` answers 409 `… refused when DATABASE_URL points at a shared database` | intended: destructive routes are refused on a shared database | use a local MongoDB to start clean |
