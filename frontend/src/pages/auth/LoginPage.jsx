@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Navigate, useNavigate } from "react-router-dom";
+import { Navigate, useNavigate, Link } from "react-router-dom";
 import {
   Mail,
   Lock,
@@ -235,6 +235,19 @@ export function LoginPage() {
               )}
             </button>
           </form>
+
+          {/* Below Button Link */}
+          <div className="text-center mt-4">
+            <p className="text-xs sm:text-sm font-bold text-slate-500">
+              {"Don't have an account? "}
+              <Link
+                to={ROUTE_PATHS.SIGNUP}
+                className="font-extrabold text-indigo-600 hover:text-indigo-800 hover:underline transition-colors"
+              >
+                Sign Up
+              </Link>
+            </p>
+          </div>
 
           {import.meta.env.DEV && (
             <div className="mt-6 pt-5 border-t border-dashed border-slate-200">

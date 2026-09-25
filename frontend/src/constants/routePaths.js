@@ -4,6 +4,7 @@ import { ROLE_SLUG, sectionsForRole } from './permissions';
 
 export const ROUTE_PATHS = {
   LOGIN: '/login',
+  SIGNUP: '/signup',
 };
 
 export { ROLE_SLUG };

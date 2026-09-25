@@ -6,6 +6,7 @@ const lazyPage = (loader, name) =>
 
 export const MainLayout = lazyPage(() => import('@/layouts/MainLayout'), 'MainLayout');
 export const LoginPage = lazyPage(() => import('@/pages/auth/LoginPage'), 'LoginPage');
+export const SignUpPage = lazyPage(() => import('@/pages/auth/SignUpPage'), 'SignUpPage');
 
 const DashboardPage = lazyPage(() => import('@/pages/dashboard/DashboardPage'), 'DashboardPage');
 const MailboxInboxPage = lazyPage(() => import('@/pages/frontOffice/MailboxInboxPage'), 'MailboxInboxPage');

@@ -5,11 +5,20 @@ export async function login(email, password) {
   return data.user;
 }
 
+export async function register(userData) {
+  const { data } = await axiosClient.post('/auth/register', userData);
+  return data;
+}
+
+export async function googleAuth(credential, department) {
+  const { data } = await axiosClient.post('/auth/google', { credential, department });
+  return data;
+}
+
 export async function devLogin(email) {
   const { data } = await axiosClient.post('/auth/dev-login', { email });
   return data.user;
 }
-
 export async function logout() {
   await axiosClient.post('/auth/logout');
 }

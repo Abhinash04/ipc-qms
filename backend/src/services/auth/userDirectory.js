@@ -5,7 +5,16 @@ import { hashFor, reset as resetCredentials, BCRYPT_ROUNDS } from './credentials
 
 const DUMMY_HASH = bcrypt.hashSync(randomUUID(), BCRYPT_ROUNDS);
 const normalise = (email) => String(email || '').trim().toLowerCase();
-const toPublicUser = ({ id, name, email, role, divisionId }) => ({ id, name, email, role, divisionId });
+const toPublicUser = ({ id, name, email, role, divisionId, department, profilePicture, authProvider }) => ({
+  id,
+  name,
+  email,
+  role,
+  divisionId: divisionId || null,
+  ...(department ? { department } : {}),
+  ...(profilePicture ? { profilePicture } : {}),
+  ...(authProvider ? { authProvider } : {}),
+});
 
 export function findByEmail(email) {
   const wanted = normalise(email);

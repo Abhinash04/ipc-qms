@@ -7,7 +7,6 @@ import { notify } from '@/services/notify';
 export const useAuthStore = create((set) => ({
   currentUser: null,
   authReady: false,
-
   hydrate: async () => {
     try {
       const user = await authService.fetchMe();
@@ -29,11 +28,18 @@ export const useAuthStore = create((set) => ({
     return user;
   },
 
+  googleAuth: async (credential, department) => {
+    const res = await authService.googleAuth(credential, department);
+    if (res?.user) {
+      set({ currentUser: res.user, authReady: true });
+    }
+    return res;
+  },
+
   logout: async () => {
     try {
       await authService.logout();
     } catch { /* noop */ }
-
     set({ currentUser: null, authReady: true });
     useWorkflowStore.getState().resetHydration();
     notify.info('Signed out');
