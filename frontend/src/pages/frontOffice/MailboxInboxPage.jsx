@@ -25,8 +25,8 @@ import {
 
 import { Breadcrumb } from "@/components/common/Breadcrumb";
 import { PageHeader } from "@/components/common/PageHeader";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Label } from "@/components/ui/label";
+// import { Checkbox } from "@/components/ui/checkbox";
+// import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Tooltip,
@@ -206,8 +206,8 @@ function MailboxViewerNotice() {
 }
 
 function InboxActions({
-  autoRefresh,
-  onAutoRefreshChange,
+  // autoRefresh,
+  // onAutoRefreshChange,
   running,
   onCheck,
   canSync,
@@ -216,7 +216,7 @@ function InboxActions({
 }) {
   return (
     <div className="flex items-center gap-3">
-      <div className="flex items-center gap-2 bg-[#f1f5fa] border border-white px-3.5 py-2 rounded-2xl shadow-[inset_2px_2px_4px_#d0d7e5,inset_-2px_-2px_4px_#ffffff]">
+      {/* <div className="flex items-center gap-2 bg-[#f1f5fa] border border-white px-3.5 py-2 rounded-2xl shadow-[inset_2px_2px_4px_#d0d7e5,inset_-2px_-2px_4px_#ffffff]">
         <Checkbox
           id="auto-refresh"
           checked={autoRefresh}
@@ -228,7 +228,7 @@ function InboxActions({
         >
           Auto-refresh (15s)
         </Label>
-      </div>
+      </div> */}
 
       <button
         type="button"
