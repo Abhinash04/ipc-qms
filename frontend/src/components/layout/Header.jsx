@@ -134,7 +134,7 @@ export function Header() {
           <button
             type="button"
             onClick={resetDemo}
-            className="hidden h-9 shrink-0 cursor-pointer items-center gap-1.5 rounded-full border border-line px-3 text-[12.5px] font-semibold text-ink-soft transition-colors hover:border-danger hover:text-danger sm:flex"
+            className="flex h-9 shrink-0 cursor-pointer items-center gap-1.5 rounded-full border border-line px-3 text-[12.5px] font-semibold text-ink-soft transition-colors hover:border-danger hover:text-danger"
             title="Reset database to initial state"
           >
             <RotateCcwIcon className="h-4 w-4" />
