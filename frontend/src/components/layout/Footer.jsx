@@ -1,4 +1,3 @@
-import { Heart } from "lucide-react";
 import { useT } from "@/i18n/useT";
 
 export function Footer() {
@@ -14,8 +13,6 @@ export function Footer() {
         </nav>
         <p className="flex items-center gap-1.5 text-center">
           © {year} IPC-QMS
-          <Heart className="h-3.5 w-3.5 fill-danger text-danger" aria-hidden="true" />
-          {t("footer.made")}
         </p>
       </div>
     </footer>
