@@ -25,6 +25,10 @@ vi.mock('@/components/charts/apexRuntime', async () => {
   };
 });
 
+vi.mock('@/components/workflow/NicemailLoginReminder', () => ({
+  NicemailLoginReminder: () => null,
+}));
+
 let consoleError;
 let consoleWarn;
 const captured = [];

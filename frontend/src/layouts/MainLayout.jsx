@@ -5,6 +5,7 @@ import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import { ScrollingMarquee } from "@/components/common/ScrollingMarquee";
 import { MailboxAutoSync } from "@/components/workflow/MailboxAutoSync";
+import { NicemailLoginReminder } from "@/components/workflow/NicemailLoginReminder";
 import { WorkflowRevalidation } from "@/components/workflow/WorkflowRevalidation";
 import { MobileNav } from "@/components/layout/MobileNav";
 import { PageBackdrop } from "@/components/common/PageBackdrop";
@@ -16,6 +17,7 @@ export function MainLayout() {
         <div className="relative isolate flex h-screen overflow-hidden bg-surface-muted text-ink">
           <PageBackdrop />
           <MailboxAutoSync />
+          <NicemailLoginReminder />
           <WorkflowRevalidation />
           <Sidebar />
           <div
