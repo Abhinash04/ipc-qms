@@ -261,7 +261,8 @@ A viewer never reads NICeMail. The sync never runs under `NODE_ENV=test`.
 
 ### 3.8 Retention
 
-**42 hours for junk and rejected mail, 14 days (336 hours) for anything still unregistered.** Purging
+**42 hours for confident junk and rejected mail; nothing else is purged by age.** Mail that is still
+unregistered and not confidently junk stays until a person accepts or rejects it. Purging
 strips the body, the HTML and the attachments, and deletes the attachment bytes from `ATTACHMENT_DIR`.
 It keeps a stub and writes an `EMAIL_PURGED` audit row; nothing else is deleted. Registered and rescued
 mail are exempt. The full rules are in
@@ -282,10 +283,9 @@ values.
 |---|---|---|---|---|
 | `MAILBOX_RETENTION_ENABLED` | optional | no | `true` | Only `false` turns the sweep off. Teammates set `false` |
 | `MAILBOX_RETENTION_HOURS` | optional | no | `42` | Junk whose verdict reaches the confidence floor, and rejected mail, are purged this long after the verdict or decision. The value must be positive. **An empty value reads as 0 and stops boot** |
-| `MAILBOX_UNREGISTERED_RETENTION_HOURS` | optional | no | `336` (14 days) | Anything still unregistered, whatever its verdict, is purged after this long. It must be positive and not shorter than `MAILBOX_RETENTION_HOURS` |
 | `MAILBOX_JUNK_CONFIDENCE` | optional | no | `0.9` | The minimum model confidence for the junk tier. It must be 0 or more. **An empty value reads as 0, passes validation, and makes every junk verdict purgeable**, so never blank it |
 | `MAILBOX_TRIAGE_BATCH` | optional | no | `25` | The number of messages the model classifies per sweep |
-| `MAILBOX_PURGE_BATCH` | optional | no | `50` | The most purge candidates taken from each tier in one sweep |
+| `MAILBOX_PURGE_BATCH` | optional | no | `50` | The most purge candidates taken from each source (junk verdicts, rejections) in one sweep |
 
 ### 3.9 Attachments
 
@@ -404,7 +404,7 @@ The mailbox-host column below is the full key list of the host's `backend/.env.l
 | `MAILBOX_SYNC_ENABLED` | `true` | `false` |
 | `MAILBOX_SYNC_INTERVAL_MS` | `15000` | not needed |
 | `MAILBOX_RETENTION_ENABLED` | `true` | `false` |
-| `MAILBOX_RETENTION_HOURS`, `MAILBOX_UNREGISTERED_RETENTION_HOURS` | `42`, `336` | not needed |
+| `MAILBOX_RETENTION_HOURS` | `42` | not needed |
 | `MAILBOX_JUNK_CONFIDENCE`, `MAILBOX_TRIAGE_BATCH`, `MAILBOX_PURGE_BATCH` | `0.9`, `25`, `50` | not needed |
 
 **Left unset in both profiles:**
@@ -484,7 +484,7 @@ This section lists the values.
 | `NIC_BROWSER_TEST_RECIPIENT` | the agreed controlled-testing inbox | no |
 | `GEMMA_API_URL`, `GEMMA_TIMEOUT_MS` | the Pravah URL, `12000` | no |
 | `MAILBOX_SYNC_ENABLED`, `MAILBOX_SYNC_INTERVAL_MS` | `true`, `15000` | no |
-| `MAILBOX_RETENTION_ENABLED`, `MAILBOX_RETENTION_HOURS`, `MAILBOX_UNREGISTERED_RETENTION_HOURS` | `true`, `42`, `336` | no |
+| `MAILBOX_RETENTION_ENABLED`, `MAILBOX_RETENTION_HOURS` | `true`, `42` | no |
 | `MAILBOX_JUNK_CONFIDENCE`, `MAILBOX_TRIAGE_BATCH`, `MAILBOX_PURGE_BATCH` | `0.9`, `25`, `50` | no |
 | `ATTACHMENT_DIR` | an absolute path on a backed-up data disk, for example `D:/qms-data/attachments` | no |
 
@@ -567,7 +567,6 @@ exits with code 1. The mail checks report first, so fix them and run again; the
 | `NIC_BROWSER_TEST_RECIPIENT` | empty, and `NIC_TEST_RECIPIENT` is empty too | when `NIC_BROWSER_MAILBOX=true` and `NIC_ALLOW_OUTBOUND` is not `true` |
 | `NIC_ALLOW_INTERNAL_FORWARD=true` | `OFFICER_IN_CHARGE_EMAIL` is empty or ends in `@example.com` | always |
 | `MAILBOX_RETENTION_HOURS` | not a positive number; an empty value reads as 0 | always |
-| `MAILBOX_UNREGISTERED_RETENTION_HOURS` | not a positive number, or shorter than `MAILBOX_RETENTION_HOURS` | always |
 | `MAILBOX_SYNC_INTERVAL_MS` | not a whole number of at least 1000 | always |
 | `MAILBOX_JUNK_CONFIDENCE` | negative, or not a number | always |
 | `FRONT_OFFICE_EMAIL`, `OFFICER_IN_CHARGE_EMAIL` | empty, or ending in `@example.com` | production |

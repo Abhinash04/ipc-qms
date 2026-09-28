@@ -14,17 +14,17 @@ const FILTER_TABS = [
   {
     key: "ALL",
     label: "All Emails",
-    activeClass: "bg-white text-slate-800 shadow-sm",
+    activeClass: "bg-card text-slate-800 shadow-sm",
   },
   {
     key: EMAIL_DIRECTION.INBOUND,
     label: "Received Only",
-    activeClass: "bg-white text-slate-800 shadow-sm",
+    activeClass: "bg-card text-slate-800 shadow-sm",
   },
   {
     key: EMAIL_DIRECTION.OUTBOUND,
     label: "Sent Only",
-    activeClass: "bg-white text-blue-600 shadow-sm",
+    activeClass: "bg-card text-primary shadow-sm",
   },
 ];
 
@@ -54,7 +54,7 @@ function ThreadHeader({ count, filter, onFilterChange }) {
   return (
     <div className="border-b border-slate-100 pb-3 mb-4 flex flex-wrap items-start justify-between gap-3">
       <div>
-        <h2 className="font-heading text-[19px] font-black text-slate-900 m-0">
+        <h2 className="font-heading text-[19px] font-bold text-slate-900 m-0">
           Email thread
         </h2>
         <p className="mt-0.5 text-[13px] font-medium text-slate-400">
@@ -140,7 +140,7 @@ export function EmailThread({ messages = [] }) {
     });
 
   return (
-    <div className="bg-white rounded-3xl border border-slate-200/80 p-5 shadow-sm">
+    <div  data-slot="panel"className="bg-card rounded-2xl border border-transparent p-5 shadow-card dark:border-line/60">
       <ThreadHeader
         count={filteredMessages.length}
         filter={filter}
@@ -197,7 +197,7 @@ function CollapsedMessage({ message, onExpand }) {
       type="button"
       onClick={onExpand}
       aria-expanded={false}
-      className="w-full flex items-center gap-3 rounded-2xl border border-slate-200/70 bg-white hover:bg-slate-50 hover:border-slate-300 px-4 py-2.5 text-left transition-colors cursor-pointer"
+      className="w-full flex items-center gap-3 rounded-2xl border border-slate-200/70 bg-card hover:bg-slate-50 hover:border-slate-300 px-4 py-2.5 text-left transition-colors cursor-pointer"
     >
       <span
         className={cn(
@@ -205,7 +205,7 @@ function CollapsedMessage({ message, onExpand }) {
           inbound ? "bg-slate-300" : "bg-blue-400",
         )}
       />
-      <span className="text-[13px] font-extrabold text-slate-700 shrink-0 max-w-40 truncate">
+      <span className="text-[13px] font-semibold text-slate-700 shrink-0 max-w-40 truncate">
         {message.from}
       </span>
       <span className="text-[13px] font-medium text-slate-400 truncate flex-1 min-w-0">
@@ -232,10 +232,10 @@ function ThreadMessage({ message, isFilteredView, onCollapse }) {
     >
       <article
         className={cn(
-          "w-full sm:w-[92%] rounded-3xl p-4 shadow-sm border",
+          "w-full sm:w-[92%] rounded-2xl p-4 shadow-sm border",
           inbound
-            ? "bg-white border-slate-200 rounded-tl-sm shadow-[4px_4px_10px_rgba(0,0,0,0.02)]"
-            : "bg-blue-50 border-blue-100 shadow-[4px_4px_10px_rgba(59,130,246,0.05)]",
+            ? "bg-card border-slate-200 rounded-tl-sm shadow-[4px_4px_10px_rgba(0,0,0,0.02)]"
+            : "bg-primary-50 border-primary-100 shadow-[4px_4px_10px_rgba(59,130,246,0.05)]",
           !inbound && alignLeft
             ? "rounded-tl-sm"
             : !inbound
@@ -256,7 +256,7 @@ function ThreadMessage({ message, isFilteredView, onCollapse }) {
               "text-[13px] px-3 py-1",
               inbound
                 ? "border-slate-200 bg-slate-50"
-                : "border-blue-200 text-blue-700 bg-white/50",
+                : "border-primary-200 text-primary-700 bg-card/50",
             )}
           >
             {EMAIL_TYPE_LABELS[message.emailType] || message.emailType}
@@ -284,7 +284,7 @@ function ThreadMessage({ message, isFilteredView, onCollapse }) {
 
         <div className="text-[13px] space-y-0.5 mb-3">
           <div className="flex gap-2 items-start">
-            <span className="font-extrabold shrink-0 w-8 text-slate-400">
+            <span className="font-semibold shrink-0 w-8 text-slate-400">
               From
             </span>
             <span className="break-all font-semibold text-slate-600">
@@ -292,7 +292,7 @@ function ThreadMessage({ message, isFilteredView, onCollapse }) {
             </span>
           </div>
           <div className="flex gap-2 items-start">
-            <span className="font-extrabold shrink-0 w-8 text-slate-400">
+            <span className="font-semibold shrink-0 w-8 text-slate-400">
               To
             </span>
             <span className="break-all font-semibold text-slate-600">
@@ -301,7 +301,7 @@ function ThreadMessage({ message, isFilteredView, onCollapse }) {
           </div>
         </div>
 
-        <h3 className="text-[16px] font-black text-slate-900 mb-1.5 leading-snug">
+        <h3 className="text-[16px] font-bold text-slate-900 mb-1.5 leading-snug">
           {message.subject}
         </h3>
         <p className="text-[15px] leading-relaxed whitespace-pre-wrap text-slate-600 font-medium m-0">

@@ -61,23 +61,23 @@ export function AiRecommendationCard({ query, onAssign, currentAssigneeId, varia
 
   const outerClass = variant === 'embedded'
     ? "select-none"
-    : "bg-linear-to-br from-indigo-50/80 via-purple-50/30 to-white rounded-3xl border border-indigo-200/80 p-6 shadow-sm select-none";
+    : "bg-linear-to-br from-primary-50/80 via-purple-50/30 to-card rounded-2xl border border-primary-200/80 p-6 shadow-sm select-none";
 
   return (
     <div className={outerClass}>
-      <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-indigo-100">
+      <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-primary-100">
         <div className="flex items-center gap-2.5">
           <div className="w-8 h-8 rounded-xl bg-purple-600 text-white flex items-center justify-center shadow-2xs">
             <Sparkles className="h-4 w-4" strokeWidth={2.2} />
           </div>
-          <h2 className="font-heading text-[20px] font-black text-slate-900 m-0">
+          <h2 className="font-heading text-[20px] font-bold text-slate-900 m-0">
             AI Official Recommendations
           </h2>
         </div>
 
         <button
           type="button"
-          className="inline-flex items-center gap-1.5 text-[12px] font-bold text-slate-500 hover:text-purple-700 bg-white hover:bg-purple-50 px-3 py-1.5 rounded-xl border border-slate-200/80 transition-colors cursor-pointer disabled:opacity-50"
+          className="inline-flex items-center gap-1.5 text-[12px] font-bold text-slate-500 hover:text-purple-700 bg-card hover:bg-purple-50 px-3 py-1.5 rounded-xl border border-slate-200/80 transition-colors cursor-pointer disabled:opacity-50"
           onClick={reanalyse}
           disabled={loading}
         >
@@ -108,18 +108,18 @@ export function AiRecommendationCard({ query, onAssign, currentAssigneeId, varia
                     isAssigned
                       ? 'border-emerald-300 bg-emerald-50/60'
                       : isRank1
-                      ? 'border-indigo-200 bg-indigo-50/50'
-                      : 'border-slate-200/80 bg-white'
+                      ? 'border-primary-200 bg-primary-50/50'
+                      : 'border-slate-200/80 bg-card'
                   }`}
                 >
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <div className="flex flex-wrap items-center gap-2">
                       {isRank1 && <Award className="h-4 w-4 text-amber-500" />}
-                      <span className="text-[14px] font-black text-slate-400 uppercase tracking-wider">
+                      <span className="text-[14px] font-bold text-slate-400 uppercase tracking-wider">
                         #{rec.rank} Match
                       </span>
-                      <h3 className="font-heading text-[18px] font-black text-slate-900 m-0">{rec.name}</h3>
-                      <span className="text-[13px] font-black text-purple-700 bg-purple-100/90 px-2.5 py-0.5 rounded-full border border-purple-200">
+                      <h3 className="font-heading text-[18px] font-bold text-slate-900 m-0">{rec.name}</h3>
+                      <span className="text-[13px] font-bold text-purple-700 bg-purple-100/90 px-2.5 py-0.5 rounded-full border border-purple-200">
                         {rec.matchPercent}% Match
                       </span>
                     </div>
@@ -133,8 +133,8 @@ export function AiRecommendationCard({ query, onAssign, currentAssigneeId, varia
                           isAssigned
                             ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
                             : isRank1
-                            ? 'bg-purple-600 hover:bg-purple-700 text-white shadow-xs'
-                            : 'bg-white hover:bg-slate-100 text-slate-700 border border-slate-200'
+                            ? 'bg-purple-600 hover:bg-purple-600/90 text-white shadow-xs'
+                            : 'bg-card hover:bg-slate-100 text-slate-700 border border-slate-200'
                         }`}
                       >
                         {isAssigned ? (
@@ -153,7 +153,7 @@ export function AiRecommendationCard({ query, onAssign, currentAssigneeId, varia
                   </div>
 
                   <div className="mt-1 text-[14px] font-semibold text-slate-400 flex items-center gap-2">
-                    <span className="font-extrabold text-slate-700">{rec.divisionName}</span>
+                    <span className="font-semibold text-slate-700">{rec.divisionName}</span>
                     <span>•</span>
                     <span>{rec.email}</span>
                   </div>

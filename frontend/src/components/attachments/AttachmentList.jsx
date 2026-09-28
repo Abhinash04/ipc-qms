@@ -51,7 +51,7 @@ export function AttachmentList({ attachments = [], urlFor }) {
                   <button
                     type="button"
                     onClick={() => setPreviewing(att)}
-                    className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-bold text-slate-600 hover:bg-slate-100 flex items-center gap-1 cursor-pointer"
+                    className="rounded-lg border border-slate-200 bg-card px-2.5 py-1 text-xs font-bold text-slate-600 hover:bg-slate-100 flex items-center gap-1 cursor-pointer"
                   >
                     <EyeIcon className="h-3.5 w-3.5" aria-hidden="true" /> Preview
                   </button>
@@ -61,7 +61,7 @@ export function AttachmentList({ attachments = [], urlFor }) {
                         ? urlFor(att.attachmentId)
                         : attachmentUrl(att.attachmentId, { download: true })
                     }
-                    className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-bold text-slate-600 hover:bg-slate-100 flex items-center gap-1"
+                    className="rounded-lg border border-slate-200 bg-card px-2.5 py-1 text-xs font-bold text-slate-600 hover:bg-slate-100 flex items-center gap-1"
                   >
                     <DownloadIcon className="h-3.5 w-3.5" aria-hidden="true" /> Download
                   </a>

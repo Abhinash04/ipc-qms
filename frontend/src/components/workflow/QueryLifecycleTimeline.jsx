@@ -4,7 +4,7 @@ import { cn } from '@/utils/cn';
 
 const NODE_STYLES = {
   [STAGE_STATUS.COMPLETE]: 'bg-emerald-500 text-white border-emerald-600 shadow-2xs',
-  [STAGE_STATUS.CURRENT]: 'bg-blue-600 text-white border-blue-700 shadow-2xs',
+  [STAGE_STATUS.CURRENT]: 'bg-primary text-white border-primary shadow-2xs',
   [STAGE_STATUS.PENDING]: 'bg-slate-100 text-slate-400 border-slate-300',
 };
 
@@ -119,7 +119,7 @@ export function QueryLifecycleTimeline({ stages = [] }) {
             <div className="min-w-0 flex-1 pb-3">
               <p
                 className={cn(
-                  'text-[15px] font-black',
+                  'text-[15px] font-bold',
                   stage.status === STAGE_STATUS.PENDING ? 'text-slate-400' : 'text-slate-800',
                 )}
               >

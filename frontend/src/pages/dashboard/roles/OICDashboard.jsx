@@ -19,14 +19,7 @@ export function OICDashboard({
       workflowSteps={workflowSteps}
       reviews={reviews}
       title={isOic ? "Officer-in-Charge Dashboard" : "System Dashboard"}
-      purpose={
-        <>
-          Overview ·{" "}
-          <span className="font-medium text-slate-500">
-            {currentUser?.name} ({ROLE_LABELS[currentUser?.role]})
-          </span>
-        </>
-      }
+      purpose={`Overview for ${currentUser?.name} · ${ROLE_LABELS[currentUser?.role]}`}
       sidePanel={<DashboardActivity auditEvents={auditEvents} />}
     />
   );

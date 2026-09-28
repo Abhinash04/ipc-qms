@@ -59,12 +59,14 @@ export const SECTIONS = {
     label: "Dashboard",
     icon: LayoutDashboard,
     nav: true,
+    group: "home",
   },
   [SECTION.INBOX]: {
     segment: "inbox",
     label: "IPC Mailbox",
     icon: Mail,
     nav: true,
+    group: "workflow",
   },
   [SECTION.INBOX_DETAIL]: { segment: "inbox/:messageId" },
   [SECTION.QUERIES]: {
@@ -72,6 +74,7 @@ export const SECTIONS = {
     label: "Queries",
     icon: Inbox,
     nav: true,
+    group: "workflow",
   },
   [SECTION.QUERY_DETAIL]: { segment: "queries/:queryId" },
   [SECTION.MY_WORK]: {
@@ -79,12 +82,14 @@ export const SECTIONS = {
     label: "My Work",
     icon: ListChecks,
     nav: true,
+    group: "workflow",
   },
   [SECTION.ASSIGNMENTS]: {
     segment: "assignments",
     label: "Assignments",
     icon: UserCheck,
     nav: true,
+    group: "workflow",
   },
   [SECTION.ASSIGNMENT_DETAIL]: { segment: "assignments/:queryId" },
   [SECTION.DRAFTING]: {
@@ -92,6 +97,7 @@ export const SECTIONS = {
     label: "Drafting",
     icon: PenLine,
     nav: true,
+    group: "workflow",
   },
   [SECTION.DRAFTING_DETAIL]: { segment: "drafting/:queryId" },
   [SECTION.REVIEWS]: {
@@ -99,6 +105,7 @@ export const SECTIONS = {
     label: "Reviews",
     icon: ClipboardCheck,
     nav: true,
+    group: "workflow",
   },
   [SECTION.REVIEW_DETAIL]: { segment: "reviews/:queryId" },
   [SECTION.APPROVALS]: {
@@ -106,6 +113,7 @@ export const SECTIONS = {
     label: "Approvals",
     icon: Stamp,
     nav: true,
+    group: "workflow",
   },
   [SECTION.APPROVAL_DETAIL]: { segment: "approvals/:queryId" },
   [SECTION.DISPATCH]: {
@@ -113,23 +121,27 @@ export const SECTIONS = {
     label: "Dispatch",
     icon: Send,
     nav: true,
+    group: "workflow",
   },
   [SECTION.DISPATCH_DETAIL]: { segment: "dispatch/:queryId" },
   [SECTION.NOTIFICATIONS]: {
     segment: "notifications",
     label: "Notifications",
     icon: Bell,
+    group: "insights",
   },
   [SECTION.REPORTS]: {
     segment: "reports",
     label: "Reports",
     icon: BarChart3,
+    group: "insights",
   },
   [SECTION.ADMINISTRATION]: {
     segment: "administration",
     label: "Administration",
     icon: Settings,
     nav: true,
+    group: "admin",
   },
   [SECTION.USERS]: {
     segment: "users",

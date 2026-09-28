@@ -4,6 +4,7 @@ import { AppRoutes } from '@/routes/AppRoutes';
 import { NotificationHost } from '@/components/notifications/NotificationHost';
 import { useWorkflowStore } from '@/store/useWorkflowStore';
 import { useAuthStore } from '@/store/useAuthStore';
+import { ThemeApplier } from '@/components/theme/ThemeApplier';
 
 function HydrationGate({ children }) {
   const hydrated = useWorkflowStore((state) => state.hydrated);
@@ -36,12 +37,15 @@ function HydrationGate({ children }) {
 
 function App() {
   return (
-    <HydrationGate>
-      <NotificationHost />
-      <BrowserRouter>
-        <AppRoutes />
-      </BrowserRouter>
-    </HydrationGate>
+    <>
+      <ThemeApplier />
+      <HydrationGate>
+        <NotificationHost />
+        <BrowserRouter>
+          <AppRoutes />
+        </BrowserRouter>
+      </HydrationGate>
+    </>
   );
 }
 

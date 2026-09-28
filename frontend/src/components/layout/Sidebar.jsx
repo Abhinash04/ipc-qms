@@ -1,13 +1,15 @@
 import { useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import { m } from "framer-motion";
-import { ChevronLeft, ChevronRight, LogOut } from "lucide-react";
+import { ChevronLeft, LogOut } from "lucide-react";
 
-import { navItemsForRole } from "@/constants/navigation";
+import { navGroupsForRole } from "@/constants/navigation";
 import { SECTION } from "@/constants/routeSections";
 import { ROUTE_PATHS } from "@/constants/routePaths";
 import { useAuthStore } from "@/store/useAuthStore";
-import { useWorkflowStore } from "@/store/useWorkflowStore";
+import { useThemeStore } from "@/store/useThemeStore";
+import { useSidebarCollapsed } from "@/components/layout/sidebarState";
+import { useT } from "@/i18n/useT";
 import { cn } from "@/utils/cn";
 import {
   Tooltip,
@@ -16,23 +18,14 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 
-const STORAGE_KEY = "qms.sidebar.collapsed";
-const WIDTH_OPEN = 255;
+const WIDTH_OPEN = 260;
 
 export const RAIL_ITEM = 44;
 export const RAIL_PADDING = 16;
 export const WIDTH_CLOSED = RAIL_ITEM + RAIL_PADDING * 2;
 
 const FOCUS_RING =
-  "outline-none focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-0";
-
-function readCollapsed() {
-  try {
-    return localStorage.getItem(STORAGE_KEY) === "true";
-  } catch {
-    return false;
-  }
-}
+  "outline-none focus-visible:ring-2 focus-visible:ring-primary/60 focus-visible:ring-offset-0";
 
 function RailTooltip({ open, label, children }) {
   if (open) return children;
@@ -42,7 +35,7 @@ function RailTooltip({ open, label, children }) {
       <TooltipContent
         side="right"
         sideOffset={14}
-        className="bg-slate-900 text-white border border-slate-700 font-extrabold text-xs shadow-2xl backdrop-blur-md"
+        className="bg-ink text-surface border-0 font-semibold text-xs shadow-card"
       >
         {label}
       </TooltipContent>
@@ -50,196 +43,195 @@ function RailTooltip({ open, label, children }) {
   );
 }
 
-export function Sidebar() {
+export function SidebarContent({ open, onNavigate, onToggle }) {
   const currentUser = useAuthStore((state) => state.currentUser);
   const logout = useAuthStore((state) => state.logout);
-  const notifications = useWorkflowStore((state) => state.notifications);
   const navigate = useNavigate();
+  const t = useT();
 
-  const [collapsed, setCollapsed] = useState(readCollapsed);
-  const open = !collapsed;
-
-  const notifCount = notifications.filter(
-    (n) =>
-      n.recipientUserId
-        ? n.recipientUserId === currentUser?.id
-        : n.recipientRole === currentUser?.role,
-  ).length;
-
-  const toggle = () => {
-    const next = !collapsed;
-    setCollapsed(next);
-    try {
-      localStorage.setItem(STORAGE_KEY, String(next));
-    } catch { /* noop */ }
-  };
+  const groups = navGroupsForRole(currentUser?.role);
 
   const handleLogout = () => {
     logout();
     navigate(ROUTE_PATHS.LOGIN);
   };
 
-  const items = navItemsForRole(currentUser?.role);
-
   return (
-    <TooltipProvider delayDuration={150}>
-      <m.aside
-        initial={false}
-        animate={{ width: open ? WIDTH_OPEN : WIDTH_CLOSED }}
-        transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
-        className="hidden lg:flex relative z-20 h-screen shrink-0 flex-col overflow-hidden p-3 select-none"
+    <div className="relative flex h-full w-full flex-col">
+      <div
+        className={cn(
+          "relative flex h-18 shrink-0 items-center border-b border-side-border",
+          open ? "ps-5 pe-4" : "justify-center px-2",
+        )}
       >
-        <div className="relative flex h-full w-full flex-col overflow-hidden rounded-[28px] border border-white/80 engraved-panel text-slate-900 shadow-[0_16px_40px_rgba(172,203,238,0.3)] backdrop-blur-2xl">
-          <div className="pointer-events-none absolute inset-0 z-0 opacity-40">
-            <div className="absolute -left-12 -top-12 h-52 w-52 rounded-full bg-white/30 blur-3xl" />
-            <div className="absolute -right-12 top-1/2 h-56 w-56 rounded-full bg-rose-300/30 blur-3xl" />
-          </div>
+        {open ? (
+          <span className="brand-plate">
+            <img
+              src="/anuvadini_new_logo 2.png"
+              alt="Anuvadini Logo"
+              width="512"
+              height="288"
+              className="h-13 w-auto max-w-44 object-contain"
+            />
+          </span>
+        ) : (
+          <img
+            src="/anuvadini-icon.png"
+            alt="Anuvadini Icon"
+            width="128"
+            height="128"
+            className="h-10 w-10 object-contain"
+          />
+        )}
 
-          <div
+        {onToggle && (
+          <button
+            type="button"
+            onClick={onToggle}
+            title={open ? "Collapse sidebar" : "Expand sidebar"}
+            aria-label={open ? "Collapse sidebar" : "Expand sidebar"}
             className={cn(
-              "relative z-10 flex shrink-0 items-center py-3.5 transition-[padding] border-b border-white/30",
-              open
-                ? "px-4 justify-between"
-                : "flex-col justify-center gap-2.5 px-2 pb-3",
+              "absolute top-1/2 -end-3.5 z-10 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full bg-primary text-white shadow-md ring-4 ring-surface-muted transition-transform hover:scale-105 cursor-pointer",
+              FOCUS_RING,
             )}
           >
-            <div className="flex items-center min-w-0 flex-1 justify-center">
+            <ChevronLeft
+              className={cn(
+                "h-4 w-4 transition-transform duration-200 rtl:rotate-180",
+                !open && "rotate-180 rtl:rotate-0",
+              )}
+            />
+          </button>
+        )}
+      </div>
+
+      <div className="relative flex-1 overflow-y-auto overflow-x-hidden py-4">
+        <nav
+          aria-label="Primary"
+          className={cn(
+            "flex flex-col",
+            open ? "side-rail-open px-4" : "items-center px-4",
+          )}
+        >
+          {groups.map(({ group, items }, index) => (
+            <div key={group} className={cn("flex flex-col gap-1", index > 0 && "mt-4")}>
               {open ? (
-                <img
-                  src="/anuvadini_new_logo 2.png"
-                  alt="Anuvadini Logo"
-                  width="512"
-                  height="288"
-                  className="object-contain mix-blend-multiply filter drop-shadow-xs w-48 sm:w-52 h-16 sm:h-18 pr-2"
-                />
+                <p className="mb-1 px-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-side-muted">
+                  {t(`nav.group.${group}`)}
+                </p>
               ) : (
-                <img
-                  src="/anuvadini-icon.png"
-                  alt="Anuvadini Icon"
-                  width="128"
-                  height="128"
-                  className="object-contain mix-blend-multiply filter drop-shadow-xs h-10 w-10 p-0.5"
-                />
+                index > 0 && (
+                  <span
+                    aria-hidden="true"
+                    className="mx-auto mb-2 block h-px w-6 bg-side-border"
+                  />
+                )
               )}
-            </div>
-
-            <button
-              type="button"
-              onClick={toggle}
-              title={open ? "Collapse sidebar" : "Expand sidebar"}
-              aria-label={open ? "Collapse sidebar" : "Expand sidebar"}
-              className={cn(
-                "flex items-center justify-center text-slate-900 shadow-2xs border border-white/50 transition-colors cursor-pointer shrink-0 hover:bg-white/50",
-                open
-                  ? "h-7.5 w-7.5 rounded-xl bg-white/35"
-                  : "h-8.5 w-8.5 rounded-full bg-white/35",
-              )}
-            >
-              <ChevronLeft
-                className={cn(
-                  "h-4 w-4 transition-transform duration-200",
-                  !open && "rotate-180",
-                )}
-              />
-            </button>
-          </div>
-
-          <div className="relative z-10 flex-1 overflow-y-auto overflow-x-hidden py-3">
-            <nav
-              aria-label="Primary"
-              className={cn(
-                "flex flex-col gap-2",
-                open ? "px-3" : "items-center px-2",
-              )}
-            >
               {items.map((item) => (
                 <NavItem
                   key={item.path}
                   item={item}
                   open={open}
-                  notifCount={notifCount}
+                  label={t(`nav.${item.section}`, item.label)}
+                  onNavigate={onNavigate}
                 />
               ))}
-            </nav>
-          </div>
+            </div>
+          ))}
+        </nav>
+      </div>
 
-          <div className="relative z-10 p-3 border-t border-white/30 bg-white/20 backdrop-blur-md flex flex-col gap-2.5 justify-center items-center">
-            <RailTooltip
-              open={open}
-              label="IPC-QMS — Quality Management System"
-            >
-              <div
-                className={cn(
-                  "flex items-center gap-2.5 rounded-2xl bg-white/50 border border-white/70 shadow-2xs transition-[padding,background-color,border-color]",
-                  open
-                    ? "w-full px-3 py-2"
-                    : "h-10 w-10 justify-center p-0 rounded-full",
-                )}
-              >
-                <div className="flex h-7.5 w-7.5 shrink-0 items-center justify-center rounded-xl bg-[linear-gradient(135deg,#2563eb_0%,#6366f1_50%,#8b5cf6_100%)] text-white shadow-xs">
-                  <svg
-                    className="w-4.5 h-4.5 text-white"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                  >
-                    <path
-                      d="M12 2L20.66 7V17L12 22L3.34 17V7L12 2Z"
-                      stroke="white"
-                      strokeWidth="2.2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                    <path
-                      d="M12 7.5L16.33 10V15L12 17.5L7.67 15V10L12 7.5Z"
-                      stroke="white"
-                      strokeWidth="1.8"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                  </svg>
-                </div>
-
-                {open && (
-                  <div className="flex min-w-0 flex-col justify-center">
-                    <div className="font-heading text-[13px] font-black leading-none text-slate-900 truncate">
-                      IPC-QMS
-                    </div>
-                    <div className="mt-0.5 text-[9.5px] font-bold text-slate-700 truncate">
-                      Quality Management System
-                    </div>
-                  </div>
-                )}
+      <div
+        className={cn(
+          "shrink-0 border-t border-side-border p-4",
+          !open && "flex flex-col items-center",
+        )}
+      >
+        {open && (
+          <div className="mb-3 flex items-center gap-3 rounded-xl bg-side-hover px-3 py-2.5">
+            <img
+              src="/imageFile1.png"
+              alt=""
+              width="103"
+              height="199"
+              className="h-9 w-auto shrink-0 object-contain"
+            />
+            <div className="min-w-0">
+              <div className="truncate font-heading text-[13px] font-bold text-side-fg">
+                IPC-QMS
               </div>
-            </RailTooltip>
-
-            <RailTooltip open={open} label="Sign out session">
-              <button
-                type="button"
-                onClick={handleLogout}
-                aria-label="Sign out session"
-                className={cn(
-                  "flex items-center justify-center font-black transition-colors duration-200 cursor-pointer border",
-                  "bg-white/40 hover:bg-rose-600 text-slate-900 hover:text-white border-white/60 hover:border-rose-600 active:scale-[0.98]",
-                  open
-                    ? "w-full py-2.5 px-3 rounded-2xl gap-2 text-xs shadow-2xs"
-                    : "h-10 w-10 rounded-full text-sm",
-                )}
-              >
-                <LogOut className="h-4 w-4 shrink-0" strokeWidth={2.4} />
-                {open && <span>Sign out session</span>}
-              </button>
-            </RailTooltip>
+              <div className="truncate text-[11px] text-side-muted">
+                Query Management System
+              </div>
+            </div>
           </div>
-        </div>
+        )}
+        <RailTooltip open={open} label="Sign out session">
+          <button
+            type="button"
+            onClick={handleLogout}
+            aria-label="Sign out session"
+            className={cn(
+              "side-link flex items-center justify-center gap-2 text-[13px] font-semibold transition-colors cursor-pointer hover:bg-danger/10 hover:text-danger",
+              FOCUS_RING,
+              open ? "w-full px-3 py-2.5" : "h-11 w-11",
+            )}
+          >
+            <LogOut className="h-4.5 w-4.5 shrink-0 rtl:rotate-180" strokeWidth={2.2} />
+            {open && <span>Sign out session</span>}
+          </button>
+        </RailTooltip>
+      </div>
+    </div>
+  );
+}
+
+export function Sidebar() {
+  const [collapsed, setCollapsed] = useSidebarCollapsed();
+  const hoverMode = useThemeStore((state) => state.sidebarHover);
+  const boxed = useThemeStore((state) => state.sidebarBoxed);
+  const [hovering, setHovering] = useState(false);
+
+  const expanded = !collapsed || (hoverMode && hovering);
+
+  return (
+    <TooltipProvider delayDuration={150}>
+      <m.aside
+        initial={false}
+        animate={{ width: collapsed ? WIDTH_CLOSED : WIDTH_OPEN }}
+        transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
+        className={cn(
+          "hidden lg:block relative z-40 h-screen shrink-0 select-none",
+          boxed && "py-4 ps-4",
+        )}
+        style={boxed ? { boxSizing: "content-box" } : undefined}
+      >
+        <m.div
+          initial={false}
+          animate={{ width: expanded ? WIDTH_OPEN : WIDTH_CLOSED }}
+          transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
+          onMouseEnter={() => setHovering(true)}
+          onMouseLeave={() => setHovering(false)}
+          className={cn(
+            "absolute inset-y-0 start-0 bg-side-bg text-side-fg",
+            boxed
+              ? "inset-y-4 start-4 rounded-2xl shadow-card"
+              : "border-e border-side-border shadow-[0_0_30px_rgba(17,38,146,0.05)]",
+            hoverMode && collapsed && hovering && "shadow-2xl",
+          )}
+        >
+          <SidebarContent
+            open={expanded}
+            onToggle={() => setCollapsed(!collapsed)}
+          />
+        </m.div>
       </m.aside>
     </TooltipProvider>
   );
 }
 
-function NavItem({ item, open, notifCount }) {
-  const { label, path, icon: Icon, section } = item;
-  const isNotifications = section === SECTION.NOTIFICATIONS;
+function NavItem({ item, open, label, onNavigate }) {
+  const { path, icon: Icon, section } = item;
 
   return (
     <RailTooltip open={open} label={label}>
@@ -247,55 +239,21 @@ function NavItem({ item, open, notifCount }) {
         to={path}
         end={section === SECTION.DASHBOARD}
         aria-label={label}
-        className={({ isActive }) =>
-          cn(
-            "group relative flex items-center transition-[padding,background-color,border-color] duration-200",
-            FOCUS_RING,
-            open
-              ? "gap-3 px-3.5 py-3 rounded-2xl text-xs"
-              : "h-10 w-10 rounded-full justify-center text-xs border border-white/40",
-            isActive
-              ? "bg-[linear-gradient(135deg,#2563eb_0%,#6366f1_50%,#8b5cf6_100%)] text-white font-black shadow-lg shadow-indigo-500/25 border border-white/30"
-              : "font-black text-slate-800/90 hover:bg-white/40 hover:text-slate-950 border-white/40",
-          )
-        }
-      >
-        {({ isActive }) => (
-          <>
-            <Icon
-              className={cn(
-                "h-4.5 w-4.5 shrink-0 transition-transform duration-200 group-hover:scale-105",
-                isActive
-                  ? "text-white drop-shadow-xs"
-                  : "text-slate-800 group-hover:text-slate-950",
-              )}
-              strokeWidth={2.4}
-              aria-hidden="true"
-            />
-
-            {open && (
-              <span className="flex-1 truncate leading-none tracking-tight text-[13px]">
-                {label}
-              </span>
-            )}
-
-            {open && isNotifications && notifCount > 0 && (
-              <span className="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-rose-600 px-1.5 text-[11px] font-black text-white shadow-xs">
-                {notifCount}
-              </span>
-            )}
-
-            {!open && isNotifications && notifCount > 0 && (
-              <span className="absolute -top-1 -right-1 flex h-4.5 min-w-4.5 items-center justify-center rounded-full bg-rose-600 px-1 text-[10px] font-black text-white shadow-xs border border-white">
-                {notifCount}
-              </span>
-            )}
-
-            {open && !isActive && (
-              <ChevronRight className="h-3.5 w-3.5 text-slate-700/60 opacity-0 group-hover:opacity-100 transition-opacity shrink-0 ml-auto" />
-            )}
-          </>
+        onClick={onNavigate}
+        className={cn(
+          "side-link group relative flex items-center transition-colors duration-150",
+          FOCUS_RING,
+          open
+            ? "gap-3 px-3 py-2.5 text-[14px] font-medium"
+            : "h-11 w-11 justify-center",
         )}
+      >
+        <Icon
+          className="h-5 w-5 shrink-0"
+          strokeWidth={2}
+          aria-hidden="true"
+        />
+        {open && <span className="flex-1 truncate leading-none">{label}</span>}
       </NavLink>
     </RailTooltip>
   );

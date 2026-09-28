@@ -585,14 +585,13 @@ Five things make a wrong verdict survivable:
   GENUINE at confidence 0, and the junk tier's candidate query requires `confidence >= 0.9`. A Gemma
   outage can only reduce purging on that tier; it cannot cause a wrong one. No code enforces that —
   the filter shape does.
-- **A second, much longer tier is what actually bounds the collection.**
-  `MAILBOX_UNREGISTERED_RETENTION_HOURS` (336, two weeks) takes anything still unregistered
-  whatever its verdict, because the tier above can never reach a genuine enquiry — GENUINE is pinned
-  at confidence 0 by construction, so without this a message nobody ever Ticks would be kept whole
-  forever. The trade is explicit: this tier offers no outage protection, and the long window is the
-  margin instead. It refuses to be configured shorter than the junk window, since the age rule would
-  then fire first and the confidence floor would never be consulted. Registered and rescued mail are
-  exempt from both tiers.
+- **Unregistered mail is never purged by age.** There was a second, 14-day tier
+  (`MAILBOX_UNREGISTERED_RETENTION_HOURS`) that took anything still unregistered whatever its
+  verdict; it has been removed. The consequence is deliberate: a genuine enquiry is pinned at
+  confidence 0, so the junk tier can never reach it, and a message nobody accepts or rejects is now
+  kept whole indefinitely. The collection is bounded only by people acting on the inbox — accepting
+  registers it, rejecting purges it 42 hours later. Registered and rescued mail are exempt from
+  purging entirely. If the setting is still present in an environment file it is ignored.
 - **Absolute vetoes**, re-checked immediately before each update: an `ACCEPTED` decision, or a
   `QueryCase` linked to the message. The re-check closes a race against `acceptMessage`, which
   copies the body onto the case.

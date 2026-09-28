@@ -226,7 +226,7 @@ function EmailRetryNotice({
   urgent = false,
 }) {
   const action =
-    "rounded-xl px-3.5 py-1.5 text-[12.5px] font-extrabold transition-colors cursor-pointer disabled:opacity-60";
+    "rounded-xl px-3.5 py-1.5 text-[12.5px] font-semibold transition-colors cursor-pointer disabled:opacity-60";
 
   return (
     <div
@@ -244,7 +244,7 @@ function EmailRetryNotice({
             type="button"
             onClick={() => onResolve("SENT")}
             disabled={retrying}
-            className={`${action} bg-amber-600 hover:bg-amber-700 text-white`}
+            className={`${action} bg-amber-600 hover:bg-amber-600/90 text-white`}
           >
             It was sent
           </button>
@@ -252,7 +252,7 @@ function EmailRetryNotice({
             type="button"
             onClick={() => onResolve("NOT_SENT")}
             disabled={retrying}
-            className={`${action} border border-amber-300 bg-white hover:bg-amber-100 text-amber-900`}
+            className={`${action} border border-amber-300 bg-card hover:bg-amber-100 text-amber-900`}
           >
             {retrying ? busyLabel : "It was not sent — send it"}
           </button>
@@ -262,7 +262,7 @@ function EmailRetryNotice({
           type="button"
           onClick={onRetry}
           disabled={retrying}
-          className={`mt-2 ${action} bg-amber-600 hover:bg-amber-700 text-white`}
+          className={`mt-2 ${action} bg-amber-600 hover:bg-amber-600/90 text-white`}
         >
           {retrying ? busyLabel : idleLabel}
         </button>
@@ -282,7 +282,7 @@ function PrimaryActionButton({
     <button
       type="button"
       onClick={onClick}
-      className={`w-full py-3 px-4 rounded-2xl font-extrabold text-[16px] transition-colors cursor-pointer flex items-center justify-center gap-2 ${className}`}
+      className={`w-full py-3 px-4 rounded-2xl font-semibold text-[16px] transition-colors cursor-pointer flex items-center justify-center gap-2 ${className}`}
     >
       <Icon className={iconClassName || "h-4 w-4"} />
       <span>{children}</span>
@@ -304,7 +304,7 @@ function PrimaryActions({
         <PrimaryActionButton
           onClick={onForward}
           icon={ArrowRight}
-          className="bg-indigo-600 hover:bg-indigo-700 text-white shadow-md shadow-indigo-500/20"
+          className="bg-primary hover:bg-primary-hover text-white shadow-md shadow-indigo-500/20"
         >
           Forward to Officer-in-Charge
         </PrimaryActionButton>
@@ -314,7 +314,7 @@ function PrimaryActions({
         <PrimaryActionButton
           onClick={onTransfer}
           icon={ArrowRightLeft}
-          className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200/80 shadow-2xs"
+          className="bg-primary-50 hover:bg-primary-100 text-primary-700 border border-primary-200/80 shadow-2xs"
         >
           Transfer Query
         </PrimaryActionButton>
@@ -343,7 +343,7 @@ function ActionLinks({ links, queryId }) {
     >
       <button
         type="button"
-        className="w-full py-3 px-4 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-extrabold text-[16px] transition-colors cursor-pointer flex items-center justify-center gap-2"
+        className="w-full py-3 px-4 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-semibold text-[16px] transition-colors cursor-pointer flex items-center justify-center gap-2"
       >
         <span>{link.label}</span>
         <ArrowRight className="h-4 w-4 text-slate-400" />
@@ -415,9 +415,9 @@ export function WorkflowActionsCard() {
   const clarificationActions = Object.keys(CLARIFICATION_REQUIRED_ACTIONS);
 
   return (
-    <div className="bg-white rounded-3xl border border-slate-200/80 p-5 shadow-sm select-none flex flex-col space-y-4">
+    <div  data-slot="panel"className="bg-card rounded-2xl border border-transparent p-5 shadow-card select-none flex flex-col space-y-4 dark:border-line/60">
       <div>
-        <h2 className="font-heading text-[22px] font-black text-slate-900 m-0">
+        <h2 className="font-heading text-[22px] font-bold text-slate-900 m-0">
           Available actions
         </h2>
       </div>

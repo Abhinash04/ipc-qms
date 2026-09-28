@@ -8,15 +8,19 @@ Design rationale. For the concrete file map, scripts, dependency list and dead-c
 ```
 frontend/src/
   main.jsx           React root: QueryClientProvider, font CSS, auth hydration only
-  App.jsx            HydrationGate -> NotificationHost + BrowserRouter -> AppRoutes
-  index.css          Tailwind v4 @theme tokens + custom utility layers (no tailwind.config.js)
+  App.jsx            ThemeApplier + HydrationGate -> NotificationHost + BrowserRouter -> AppRoutes
+  index.css          Tailwind v4 @theme semantic tokens, .dark and [data-preset] overrides,
+                     sidebar variants (no tailwind.config.js)
   components/
-    ui/              shadcn/ui primitives (33 files; roughly half dormant scaffold)
-    layout/          Sidebar, Header, MobileNav (app shell chrome)
+    ui/              shadcn/ui primitives (33 files; 13 dormant scaffold)
+    layout/          Sidebar, Header (Hope navbar), NotificationBell, ProfileMenu, CommandPalette,
+                     Footer, MobileNav, sidebarState (app shell chrome)
+    theme/           ThemeApplier, ThemeCustomizer, themeRuntime
+    charts/          ApexChart (lazy ApexCharts wrapper), Charts, RadialRing, chartTheme
     common/          PageHeader, Breadcrumb, EmptyState, StatTile, StatusBadge, RoleGate, IpcLogo
     workflow/        WorkflowActionsCard, QueryTable, QueryLifecycleTimeline, ReviewDecisionCard,
                      CaseOfficialsCard, MailboxIngestButton, MailboxAutoSync
-    admin/           AuditTable, KpiTile, Panel, charts (hand-written SVG), adminStats
+    admin/           AuditTable, KpiTile, Panel, charts (on components/charts), adminStats
     attachments/     AttachmentList, AttachmentViewerDialog
     ai/              AiSummaryCard, AiRecommendationCard
     dashboard/       BucketDashboard and its widgets
@@ -31,12 +35,13 @@ frontend/src/
     persistence/     queryState.js — server-backed Query Case sync via /api/v1/queries
     ai/              mockAiService (deterministic fallback), draftComposer — local, no network
     notify.js        the only module importing sonner
-  store/             useAuthStore, useWorkflowStore
+  store/             useAuthStore, useWorkflowStore, useThemeStore
+  i18n/              strings (en/hi interface labels), useT
   routes/            AppRoutes, roleRoutes, ProtectedRoute
   constants/         roles, permissions, routeSections, routePaths, navigation, status enums,
-                     workflowRules, queryBuckets, policies, directory data
+                     workflowRules, queryBuckets, policies, directory data, announcements
   utils/             cn, greeting, queryOwnership
-  test/              42 test files + setup.js and five in-process fakes
+  test/              47 test files + setup.js and five in-process fakes
 ```
 
 `src/assets/` and `src/features/` exist but are empty.
@@ -45,8 +50,12 @@ frontend/src/
 
 State is deliberately split by concern:
 
-- **Global client state (Zustand)** — two stores. `useAuthStore` (session) and `useWorkflowStore`
-  (the domain). One store per concern; never a single catch-all.
+- **Global client state (Zustand)** — three stores. `useAuthStore` (session), `useWorkflowStore`
+  (the domain) and `useThemeStore` (this viewer's appearance: scheme, preset, sidebar/navbar
+  style, direction, interface language). One store per concern; never a single catch-all. The
+  theme store is the only one persisted in the browser (`localStorage`, `qms.theme`). It is a
+  per-viewer convenience, never domain data, and `ThemeApplier` projects it onto `<html>` as a
+  class and data attributes that the CSS tokens key off.
 - **Domain persistence (`/api/v1/queries`)** — the workflow store hydrates once from
   `GET /queries` after sign-in and posts a per-case delta on every transition, through
   `services/persistence/queryState.js`. That module mirrors the state in tab-local memory so the

@@ -39,22 +39,22 @@ function Cell({ granted }) {
 
 function Matrix({ caption, rows, label }) {
   return (
-    <section className="rounded-3xl border border-slate-200/80 bg-white p-5 shadow-sm">
-      <h2 className="font-heading text-[17px] font-black text-slate-900">{caption}</h2>
+    <section  data-slot="panel"className="rounded-2xl border border-transparent bg-card p-5 shadow-card dark:border-line/60">
+      <h2 className="font-heading text-[17px] font-bold text-slate-900">{caption}</h2>
       <p className="m-0 mb-3 mt-0.5 text-[12.5px] text-slate-500">{label}</p>
 
       <div className="overflow-x-auto">
         <table className="w-full min-w-180 border-collapse">
           <thead>
             <tr className="border-b border-slate-200">
-              <th scope="col" className="px-3 py-2 text-left text-[11px] font-extrabold uppercase tracking-wider text-slate-400">
+              <th scope="col" className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">
                 Capability
               </th>
               {ROLE_ORDER.map((role) => (
                 <th
                   scope="col"
                   key={role}
-                  className="px-3 py-2 text-center text-[11px] font-extrabold uppercase tracking-wider text-slate-500"
+                  className="px-3 py-2 text-center text-[11px] font-semibold uppercase tracking-wider text-slate-500"
                 >
                   {ROLE_LABELS[role] || role}
                 </th>
@@ -109,9 +109,9 @@ export function AdminRolesPage() {
         purpose="Generated from the permission tables the application enforces, so it cannot fall out of step."
       />
 
-      <div className="rounded-2xl border border-blue-200/70 bg-blue-50/60 px-4 py-3 text-[12.5px] text-blue-900">
+      <div className="rounded-2xl border border-primary-200/70 bg-primary-50/60 px-4 py-3 text-[12.5px] text-primary-700">
         <p className="m-0">
-          <span className="font-black">Administration is one interface.</span> Admin and Super Admin share
+          <span className="font-bold">Administration is one interface.</span> Admin and Super Admin share
           the same console; Super Admin additionally holds the operational sections and every workflow
           action, and is alone in reaching System Settings.
         </p>

@@ -19,8 +19,8 @@ import {
 import { parseSender, formatFullDate } from "@/utils/mailboxFormat";
 import { cn } from "@/utils/cn";
 
-const CARD = "bg-white rounded-3xl border border-slate-200/80 p-5 shadow-sm";
-const CARD_TITLE = "font-heading text-[17px] font-black text-slate-900 m-0";
+const CARD = "bg-card rounded-2xl border border-transparent p-5 shadow-card dark:border-line/60";
+const CARD_TITLE = "font-heading text-[17px] font-bold text-slate-900 m-0";
 
 const BODY_FORMATS = [
   { formatted: false, label: "Plain text" },
@@ -37,7 +37,7 @@ function BackToInbox({ paths }) {
   return (
     <Link
       to={paths.INBOX}
-      className="inline-flex items-center gap-1.5 text-[13px] font-bold text-blue-700 hover:underline"
+      className="inline-flex items-center gap-1.5 text-[13px] font-bold text-primary-700 hover:underline"
     >
       <ArrowLeft className="h-4 w-4" aria-hidden="true" />
       Back to IPC Mailbox
@@ -48,8 +48,8 @@ function BackToInbox({ paths }) {
 function MessageSkeleton() {
   return (
     <div role="status" aria-label="Loading message" className="space-y-4">
-      <Skeleton className="h-32 w-full rounded-3xl" />
-      <Skeleton className="h-64 w-full rounded-3xl" />
+      <Skeleton className="h-32 w-full rounded-2xl" />
+      <Skeleton className="h-64 w-full rounded-2xl" />
     </div>
   );
 }
@@ -80,7 +80,7 @@ function MessageHeader({ message }) {
       <h1
         ref={heading}
         tabIndex={-1}
-        className="text-[24px] font-black text-slate-900 leading-tight wrap-break-word focus:outline-none"
+        className="text-[24px] font-bold text-slate-900 leading-tight wrap-break-word focus:outline-none"
       >
         {message.subject || "(No Subject)"}
       </h1>
@@ -130,7 +130,7 @@ function MessageBody({ message }) {
                 className={cn(
                   "px-3 py-1.5 text-[12px] font-bold rounded-lg transition-colors cursor-pointer",
                   formatted === option.formatted
-                    ? "bg-white text-slate-800 shadow-sm"
+                    ? "bg-card text-slate-800 shadow-sm"
                     : "text-slate-500 hover:text-slate-700",
                 )}
               >
@@ -168,7 +168,7 @@ function MessageCaseCard({ message, paths }) {
         <div className="space-y-3">
           <Link
             to={buildPath(paths.QUERY_DETAIL, { queryId: linked.queryId })}
-            className="inline-flex items-center gap-1.5 rounded-xl bg-linear-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white px-4 py-2 text-[12px] font-black shadow-sm"
+            className="inline-flex items-center gap-1.5 rounded-xl bg-linear-to-r from-primary to-primary-700 hover:from-primary-600 hover:to-primary-700 text-white px-4 py-2 text-[12px] font-bold shadow-sm"
           >
             <span>{linked.queryId}</span>
             <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
@@ -180,7 +180,7 @@ function MessageCaseCard({ message, paths }) {
         </div>
       ) : (
         <>
-          <p className="m-0 text-[13.5px] font-extrabold text-slate-800">{state}</p>
+          <p className="m-0 text-[13.5px] font-semibold text-slate-800">{state}</p>
           {hint && <p className="mt-1 mb-0 text-[12.5px] font-medium text-slate-500">{hint}</p>}
         </>
       )}

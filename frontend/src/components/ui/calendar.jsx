@@ -6,7 +6,7 @@ function Calendar({ className, classNames, showOutsideDays = true, ...props }) {
   return (
     <DayPicker
       showOutsideDays={showOutsideDays}
-      className={cn('p-3 neo-border rounded-md bg-card neo-shadow', className)}
+      className={cn('p-3 border border-border rounded-md bg-card shadow-sm', className)}
       classNames={{
         months: 'relative',
         month: 'space-y-3',
@@ -14,9 +14,9 @@ function Calendar({ className, classNames, showOutsideDays = true, ...props }) {
         caption_label: 'text-sm font-semibold',
         nav: 'absolute inset-x-0 top-0 flex items-center justify-between h-9 px-0.5',
         button_previous:
-          'h-7 w-7 grid place-content-center neo-border rounded-md bg-card neo-interactive disabled:opacity-40 disabled:pointer-events-none',
+          'h-7 w-7 grid place-content-center border border-border rounded-md bg-card disabled:opacity-40 disabled:pointer-events-none',
         button_next:
-          'h-7 w-7 grid place-content-center neo-border rounded-md bg-card neo-interactive disabled:opacity-40 disabled:pointer-events-none',
+          'h-7 w-7 grid place-content-center border border-border rounded-md bg-card disabled:opacity-40 disabled:pointer-events-none',
         chevron: 'h-4 w-4',
         month_grid: 'w-full border-collapse',
         weekdays: 'flex',

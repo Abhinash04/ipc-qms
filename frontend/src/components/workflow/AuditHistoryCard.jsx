@@ -18,7 +18,7 @@ function auditBadgeColor(rawEvent) {
   if (rawEvent.includes('FORWARD') || rawEvent.includes('ASSIGN')) {
     return 'bg-amber-50 text-amber-800 border-amber-200';
   }
-  return 'bg-blue-50 text-blue-700 border-blue-200';
+  return 'bg-primary-50 text-primary-700 border-primary-200';
 }
 
 function describeActor(actor) {
@@ -38,7 +38,7 @@ function describeActor(actor) {
   }
   return {
     icon: '👤 ',
-    className: 'bg-indigo-50 text-indigo-800 border-indigo-200',
+    className: 'bg-primary-50 text-primary-700 border-primary-200',
   };
 }
 
@@ -64,7 +64,7 @@ function AuditRow({ entry }) {
     <tr className="hover:bg-slate-50/60 transition-colors">
       <td className="py-2 px-4 align-top whitespace-nowrap">
         <span
-          className={`inline-flex items-center text-[13px] font-black px-3 py-1 rounded-full border shadow-2xs ${auditBadgeColor(rawEvent)}`}
+          className={`inline-flex items-center text-[13px] font-bold px-3 py-1 rounded-full border shadow-2xs ${auditBadgeColor(rawEvent)}`}
         >
           {eventText}
         </span>
@@ -107,14 +107,14 @@ export function AuditHistoryCard({ audit }) {
   const visible = showAll ? newestFirst : newestFirst.slice(0, AUDIT_PREVIEW);
 
   return (
-    <div className="bg-white rounded-3xl border border-slate-200/80 p-5 shadow-sm overflow-hidden select-none">
+    <div  data-slot="panel"className="bg-card rounded-2xl border border-transparent p-5 shadow-card overflow-hidden select-none dark:border-line/60">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-3 mb-3">
         <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-xl bg-indigo-50 text-indigo-600 border border-indigo-100/80 flex items-center justify-center shadow-2xs">
+          <div className="w-8 h-8 rounded-xl bg-primary-50 text-primary border border-primary-100/80 flex items-center justify-center shadow-2xs">
             <ShieldCheck className="h-4 w-4" strokeWidth={2.2} />
           </div>
           <div>
-            <h2 className="font-heading text-[19px] font-black text-slate-900 m-0 leading-tight">
+            <h2 className="font-heading text-[19px] font-bold text-slate-900 m-0 leading-tight">
               Audit history
             </h2>
             <p className="text-[12.5px] font-medium text-slate-400 m-0">
@@ -128,12 +128,12 @@ export function AuditHistoryCard({ audit }) {
             <button
               type="button"
               onClick={() => setShowAll((shown) => !shown)}
-              className="text-[12px] font-bold text-slate-500 hover:text-indigo-700 bg-white hover:bg-indigo-50 px-3 py-1.5 rounded-xl border border-slate-200/80 transition-colors cursor-pointer"
+              className="text-[12px] font-bold text-slate-500 hover:text-primary-700 bg-card hover:bg-primary-50 px-3 py-1.5 rounded-xl border border-slate-200/80 transition-colors cursor-pointer"
             >
               {showAll ? 'Show recent only' : `Show all ${audit.length} events`}
             </button>
           )}
-          <span className="text-[12.5px] font-black text-indigo-700 bg-indigo-50 px-3 py-1 rounded-full border border-indigo-200/80 shadow-2xs">
+          <span className="text-[12.5px] font-bold text-primary-700 bg-primary-50 px-3 py-1 rounded-full border border-primary-200/80 shadow-2xs">
             {audit.length} Total Events
           </span>
         </div>
@@ -142,7 +142,7 @@ export function AuditHistoryCard({ audit }) {
       <div className="overflow-x-auto rounded-2xl border border-slate-200/70">
         <table className="w-full text-left border-collapse">
           <thead>
-            <tr className="bg-slate-50/90 border-b border-slate-200/80 text-[13.5px] font-black text-slate-400 uppercase tracking-wider">
+            <tr className="bg-slate-50/90 border-b border-slate-200/80 text-[13.5px] font-bold text-slate-400 uppercase tracking-wider">
               <th scope="col" className="py-2.5 px-4">
                 Event
               </th>

@@ -17,8 +17,8 @@ import {
   HelpCircle,
 } from 'lucide-react';
 
-import { Breadcrumb } from '@/components/common/Breadcrumb';
-import { PageHeader } from '@/components/common/PageHeader';
+import { DashboardHero } from '@/components/dashboard/DashboardHero';
+import { useAuthStore } from '@/store/useAuthStore';
 import { EmptyState } from '@/components/common/EmptyState';
 import { Skeleton } from '@/components/ui/skeleton';
 import { StatusDonut, TrendLine, ProcessingFunnel } from '@/components/admin/charts';
@@ -68,45 +68,45 @@ const AREA_SECTIONS = [
 ];
 
 const AREA_TINTS = {
-  [SECTION.ADMIN_ACTIVITY]: 'bg-blue-100 text-blue-700',
-  [SECTION.ADMIN_EMAIL]: 'bg-emerald-100 text-emerald-700',
-  [SECTION.ADMIN_AI]: 'bg-violet-100 text-violet-700',
-  [SECTION.USERS]: 'bg-sky-100 text-sky-700',
-  [SECTION.ROLES_DIRECTORY]: 'bg-indigo-100 text-indigo-700',
-  [SECTION.DIVISIONS]: 'bg-amber-100 text-amber-700',
-  [SECTION.ADMIN_SETTINGS]: 'bg-slate-200 text-slate-700',
+  [SECTION.ADMIN_ACTIVITY]: 'bg-primary-50 text-primary',
+  [SECTION.ADMIN_EMAIL]: 'bg-emerald-50 text-emerald-600',
+  [SECTION.ADMIN_AI]: 'bg-violet-50 text-violet-600',
+  [SECTION.USERS]: 'bg-sky-50 text-sky-600',
+  [SECTION.ROLES_DIRECTORY]: 'bg-primary-50 text-primary',
+  [SECTION.DIVISIONS]: 'bg-amber-50 text-amber-600',
+  [SECTION.ADMIN_SETTINGS]: 'bg-slate-100 text-slate-600',
 };
 
 function SourceNote({ children }) {
-  return <p className="m-0 mt-2 text-[11px] font-semibold text-slate-400">{children}</p>;
+  return <p className="m-0 mt-3 text-[11.5px] text-ink-muted">{children}</p>;
 }
 
-function MiniStat({ icon: Icon, value, label, tone = 'text-slate-400' }) {
+function MiniStat({ icon: Icon, value, label, tone = 'text-ink-muted' }) {
   return (
     <div className="flex items-center gap-2.5">
-      <span className={cn('flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-slate-50', tone)}>
-        <Icon className="h-4 w-4" aria-hidden="true" />
+      <span className={cn('flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-surface-muted', tone)}>
+        <Icon className="h-4.5 w-4.5" aria-hidden="true" />
       </span>
       <span className="min-w-0">
-        <span className="block font-heading text-[19px] font-black leading-none tabular-nums text-slate-900">
+        <span className="block font-heading text-[20px] font-bold leading-none tabular-nums text-ink">
           {value}
         </span>
-        <span className="mt-0.5 block truncate text-[11px] font-semibold text-slate-400">{label}</span>
+        <span className="mt-1 block truncate text-[11.5px] text-ink-muted">{label}</span>
       </span>
     </div>
   );
 }
 
 function resultBadgeClass(result) {
-  if (result === 'success') return 'border-emerald-200 bg-emerald-50 text-emerald-700';
-  if (result === 'denied') return 'border-amber-200 bg-amber-50 text-amber-800';
-  return 'border-rose-200 bg-rose-50 text-rose-700';
+  if (result === 'success') return 'bg-emerald-50 text-emerald-700';
+  if (result === 'denied') return 'bg-amber-50 text-amber-800';
+  return 'bg-rose-50 text-rose-700';
 }
 
 function trendTone(direction) {
   if (direction === 'up') return 'text-emerald-600';
   if (direction === 'down') return 'text-rose-600';
-  return 'text-slate-400';
+  return 'text-ink-muted';
 }
 
 function useAdminActivity(range) {
@@ -162,9 +162,8 @@ function buildKpiTiles({ today, yesterday, hasComparison, paths }) {
       icon: Activity,
       to: paths[SECTION.ADMIN_ACTIVITY],
       delta: deltaFor(today?.total ?? 0, yesterday?.total ?? 0),
-      tint: 'bg-tone-blue-tint text-tone-blue-figure',
-      surface: 'bg-blue-50/50',
-      border: 'border-tone-blue-line',
+      tint: 'bg-primary-50 text-primary',
+      accent: 'text-primary',
     },
     {
       label: 'Email actions today',
@@ -175,9 +174,8 @@ function buildKpiTiles({ today, yesterday, hasComparison, paths }) {
         sumBy(today?.byAction, isEmailAction),
         sumBy(yesterday?.byAction, isEmailAction),
       ),
-      tint: 'bg-tone-emerald-tint text-tone-emerald-figure',
-      surface: 'bg-emerald-50/50',
-      border: 'border-tone-emerald-line',
+      tint: 'bg-emerald-50 text-emerald-600',
+      accent: 'text-emerald-500',
     },
     {
       label: 'AI generations today',
@@ -188,9 +186,8 @@ function buildKpiTiles({ today, yesterday, hasComparison, paths }) {
         sumBy(today?.byAction, isAiAction),
         sumBy(yesterday?.byAction, isAiAction),
       ),
-      tint: 'bg-tone-purple-tint text-tone-purple-figure',
-      surface: 'bg-violet-50/50',
-      border: 'border-tone-purple-line',
+      tint: 'bg-violet-50 text-violet-600',
+      accent: 'text-violet-500',
     },
     {
       label: 'Failures & denials today',
@@ -200,9 +197,8 @@ function buildKpiTiles({ today, yesterday, hasComparison, paths }) {
         paths[SECTION.ADMIN_ACTIVITY] &&
         `${paths[SECTION.ADMIN_ACTIVITY]}?result=failure`,
       delta: deltaFor(failuresOf(today), failuresOf(yesterday)),
-      tint: 'bg-tone-rose-tint text-tone-rose-figure',
-      surface: 'bg-rose-50/50',
-      border: 'border-tone-rose-line',
+      tint: 'bg-rose-50 text-rose-600',
+      accent: 'text-rose-500',
       higherIsWorse: true,
     },
   ];
@@ -210,29 +206,26 @@ function buildKpiTiles({ today, yesterday, hasComparison, paths }) {
 
 function SystemActivitySection({ summary, overall, tiles }) {
   return (
-    <section aria-labelledby="server-activity">
-      <div className="mb-2.5 flex flex-wrap items-baseline justify-between gap-2">
-        <h2 id="server-activity" className="font-heading text-[17px] font-black text-slate-900">
-          System activity
-        </h2>
-        <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-slate-400">
-          <Database className="h-3.5 w-3.5" aria-hidden="true" />
-          Recorded server-side · {overall?.total ?? 0} in total
-          {overall && !overall.durable && (
-            <span className="ml-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-amber-800">
-              in-memory — not durable
-            </span>
-          )}
-        </span>
-      </div>
-
+    <section aria-labelledby="server-activity" className="relative z-10 -mt-24">
+      <h2 id="server-activity" className="sr-only">
+        System activity
+      </h2>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {summary.isLoading
           ? Array.from({ length: 4 }).map((_, i) => (
-              <Skeleton key={i} className="h-32 w-full rounded-3xl" />
+              <Skeleton key={i} className="h-36 w-full rounded-2xl" />
             ))
           : tiles.map((tile) => <KpiTile key={tile.label} {...tile} />)}
       </div>
+      <p className="m-0 mt-3 inline-flex flex-wrap items-center gap-1.5 text-[12px] text-ink-muted">
+        <Database className="h-3.5 w-3.5" aria-hidden="true" />
+        System activity recorded server-side · {overall?.total ?? 0} in total
+        {overall && !overall.durable && (
+          <span className="ms-1 rounded-full bg-amber-50 px-2 py-0.5 font-semibold text-amber-800">
+            in-memory — not durable
+          </span>
+        )}
+      </p>
     </section>
   );
 }
@@ -246,26 +239,26 @@ function ActivityRow({ event }) {
       <time
         dateTime={event.timestamp}
         title={formatTime(event.timestamp)}
-        className="w-16 shrink-0 text-[11px] font-bold tabular-nums text-slate-400"
+        className="w-16 shrink-0 text-[11.5px] tabular-nums text-ink-muted"
       >
         {relativeTime(event.timestamp)}
       </time>
 
       <span
         className={cn(
-          'flex h-7 w-7 shrink-0 items-center justify-center rounded-full',
+          'flex h-8 w-8 shrink-0 items-center justify-center rounded-full',
           tint,
         )}
       >
         <EventIcon className="h-3.5 w-3.5" aria-hidden="true" />
       </span>
 
-      <span className="min-w-0 flex-1 truncate text-[13px] font-bold text-slate-800">
+      <span className="min-w-0 flex-1 truncate text-[13.5px] font-medium text-ink">
         {humaniseAction(event.action)}
       </span>
 
       <span
-        className="hidden min-w-0 max-w-40 shrink truncate text-[11.5px] font-semibold text-slate-400 sm:block"
+        className="hidden min-w-0 max-w-40 shrink truncate text-[12px] text-ink-muted sm:block"
         title={target || undefined}
       >
         {target}
@@ -273,7 +266,7 @@ function ActivityRow({ event }) {
 
       <span
         className={cn(
-          'shrink-0 rounded-full border px-2 py-0.5 text-[10.5px] font-bold capitalize',
+          'shrink-0 rounded-md px-2 py-0.5 text-[11px] font-semibold capitalize',
           resultBadgeClass(event.result),
         )}
       >
@@ -287,7 +280,7 @@ function RecentActivityBody({ recent }) {
   if (recent.isLoading) return <Skeleton className="h-64 w-full rounded-2xl" />;
 
   if (recent.isError) {
-    return <p className="text-[13px] text-slate-500">The audit API could not be reached.</p>;
+    return <p className="text-[13px] text-ink-muted">The audit API could not be reached.</p>;
   }
 
   if (!recent.data) return null;
@@ -303,7 +296,7 @@ function RecentActivityBody({ recent }) {
   }
 
   return (
-    <ol className="m-0 list-none divide-y divide-slate-100 p-0">
+    <ol className="m-0 list-none divide-y divide-line p-0">
       {recent.data.events.map((event) => (
         <ActivityRow key={event._id || stableKey(event)} event={event} />
       ))}
@@ -321,7 +314,7 @@ function RecentActivityPanel({ recent, paths }) {
           paths[SECTION.ADMIN_ACTIVITY] && (
             <Link
               to={paths[SECTION.ADMIN_ACTIVITY]}
-              className="inline-flex shrink-0 items-center gap-1 rounded-lg text-[12.5px] font-bold text-blue-700 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+              className="inline-flex shrink-0 items-center gap-1 rounded-lg text-[12.5px] font-semibold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
             >
               View all <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
             </Link>
@@ -338,7 +331,7 @@ function ActorBreakdownBody({ actors, selectedRange }) {
   if (actors.isLoading) return <Skeleton className="h-44 w-full rounded-2xl" />;
 
   if (actors.isError) {
-    return <p className="text-[13px] text-slate-500">The audit API could not be reached.</p>;
+    return <p className="text-[13px] text-ink-muted">The audit API could not be reached.</p>;
   }
 
   const actorCounts = actors.data?.overall?.byActorType;
@@ -370,7 +363,7 @@ function ActorBreakdownPanel({ actors, selectedRange, range, onRangeChange }) {
               id="actor-range"
               value={range}
               onChange={(event) => onRangeChange(event.target.value)}
-              className="rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-[12px] font-bold text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+              className="rounded-lg border border-line bg-surface px-2.5 py-1.5 text-[12px] font-medium text-ink-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
             >
               {RANGES.map((option) => (
                 <option key={option.value} value={option.value}>
@@ -393,16 +386,16 @@ function CaseOverviewSection({ byStatus, caseVolume, trend, funnel }) {
 
   return (
     <section aria-labelledby="case-activity">
-      <div className="mb-2.5 flex flex-wrap items-baseline justify-between gap-2">
-        <h2 id="case-activity" className="font-heading text-[17px] font-black text-slate-900">
+      <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
+        <h2 id="case-activity" className="font-heading text-[18px] font-semibold text-ink">
           Query cases overview
         </h2>
-        <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-[11px] font-bold text-slate-500">
+        <span className="rounded-full bg-surface px-2.5 py-0.5 text-[11.5px] font-medium text-ink-muted shadow-card">
           System-wide — cases are stored server-side
         </span>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <Panel>
           <StatusDonut
             title="Status distribution"
@@ -417,7 +410,7 @@ function CaseOverviewSection({ byStatus, caseVolume, trend, funnel }) {
             data={caseVolume}
             emptyText="No cases created in the last 7 days"
           />
-          <div className="mt-4 grid grid-cols-2 gap-3 border-t border-slate-100 pt-4">
+          <div className="mt-4 grid grid-cols-2 gap-3 border-t border-line pt-4">
             <MiniStat icon={CalendarDays} value={trend.current} label="Total created" />
             <MiniStat
               icon={TrendIcon}
@@ -447,15 +440,15 @@ function AreaLink({ section, to }) {
     <Link
       to={to}
       className={cn(
-        'group flex items-center gap-3 rounded-2xl border border-slate-200/80 bg-white px-4 py-3.5',
+        'group flex items-center gap-3 rounded-xl border border-line bg-surface px-4 py-3.5',
         'motion-safe:transition-all motion-reduce:transition-none',
-        'hover:border-blue-300 hover:shadow-md',
-        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2',
+        'hover:border-primary-300 hover:shadow-card',
+        'outline-none focus-visible:ring-2 focus-visible:ring-primary/50',
       )}
     >
       <span
         className={cn(
-          'flex h-10 w-10 shrink-0 items-center justify-center rounded-xl',
+          'flex h-11 w-11 shrink-0 items-center justify-center rounded-xl',
           AREA_TINTS[section] || 'bg-slate-100 text-slate-600',
         )}
       >
@@ -463,23 +456,23 @@ function AreaLink({ section, to }) {
       </span>
 
       <span className="min-w-0 flex-1">
-        <span className="block truncate text-[13.5px] font-black text-slate-800">{label}</span>
+        <span className="block truncate text-[14px] font-semibold text-ink">{label}</span>
         {description && (
-          <span className="mt-0.5 block truncate text-[11.5px] font-semibold text-slate-400">
+          <span className="mt-0.5 block truncate text-[12px] text-ink-muted">
             {description}
           </span>
         )}
       </span>
 
       {section === SECTION.ADMIN_SETTINGS && (
-        <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-violet-200 bg-violet-50 px-2 py-0.5 text-[10px] font-black text-violet-700">
+        <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-violet-50 px-2 py-0.5 text-[10.5px] font-semibold text-violet-700">
           <ShieldCheck className="h-3 w-3" aria-hidden="true" />
           Elevated
         </span>
       )}
 
       <ChevronRight
-        className="h-4 w-4 shrink-0 text-slate-300 transition-colors group-hover:text-blue-500"
+        className="h-4 w-4 shrink-0 text-ink-muted transition-colors group-hover:text-primary rtl:rotate-180"
         aria-hidden="true"
       />
     </Link>
@@ -491,15 +484,15 @@ function SupportCard({ supportAddress }) {
     <div
       className={cn(
         PANEL_CLASS,
-        'flex items-center gap-3 border-slate-200/80 px-4 py-3.5 shadow-none',
+        'flex items-center gap-3 border-line px-4 py-3.5 shadow-none',
       )}
     >
-      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-500">
+      <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-surface-muted text-ink-muted">
         <HelpCircle className="h-4.5 w-4.5" aria-hidden="true" />
       </span>
       <span className="min-w-0 flex-1">
-        <span className="block text-[13.5px] font-black text-slate-800">Need help?</span>
-        <span className="mt-0.5 block truncate text-[11.5px] font-semibold text-slate-400">
+        <span className="block text-[14px] font-semibold text-ink">Need help?</span>
+        <span className="mt-0.5 block truncate text-[12px] text-ink-muted">
           {supportAddress
             ? `Contact the QMS team at ${supportAddress}`
             : 'Contact the QMS team'}
@@ -508,7 +501,7 @@ function SupportCard({ supportAddress }) {
       {supportAddress && (
         <a
           href={`mailto:${supportAddress}`}
-          className="inline-flex shrink-0 items-center gap-1 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-[12px] font-bold text-slate-700 hover:border-blue-300 hover:text-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+          className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-primary px-3 py-1.5 text-[12px] font-semibold text-white hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
         >
           Email us <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
         </a>
@@ -541,6 +534,7 @@ function AdminAreasSection({ paths, supportAddress }) {
 
 export function AdminOverviewPage() {
   const paths = useRoutePaths();
+  const currentUser = useAuthStore((state) => state.currentUser);
   const queries = useWorkflowStore((state) => state.queries);
   const auditEvents = useWorkflowStore((state) => state.auditEvents);
   const [range, setRange] = useState('7');
@@ -557,19 +551,19 @@ export function AdminOverviewPage() {
   });
 
   return (
-    <div className="space-y-5">
-      <Breadcrumb
-        items={[{ label: 'Dashboard', path: paths.DASHBOARD }, { label: 'Administration' }]}
-      />
-      <PageHeader
+    <div className="space-y-6 pb-2">
+      <DashboardHero
+        userName={currentUser?.name}
         title="Administration"
         purpose="What is happening in the QMS right now, and what has happened so far."
       />
 
+      <SystemActivitySection summary={summary} overall={overall} tiles={tiles} />
+
       {summary.isError && (
         <div
           role="alert"
-          className="rounded-2xl border border-amber-200 bg-amber-50/90 p-4 text-sm text-amber-900"
+          className="rounded-2xl bg-amber-50 p-4 text-sm text-amber-900 shadow-card"
         >
           <p className="m-0 font-bold">System activity unavailable</p>
           <p className="m-0 mt-0.5 text-[13px]">
@@ -579,9 +573,7 @@ export function AdminOverviewPage() {
         </div>
       )}
 
-      <SystemActivitySection summary={summary} overall={overall} tiles={tiles} />
-
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_400px]">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_400px]">
         <RecentActivityPanel recent={recent} paths={paths} />
         <ActorBreakdownPanel
           actors={actors}

@@ -43,41 +43,29 @@ export function AdminEmailActivityPage() {
       label: 'In the mailbox',
       value: messages.length,
       icon: Inbox,
-      cardBg: 'bg-blue-50/70',
-      cardBorder: 'border-blue-200/70',
-      numColor: 'text-blue-700',
-      iconBg: 'bg-blue-100 text-blue-700',
+      tone: 'blue',
     },
     {
       label: 'Sent',
       value: (byAction.EMAIL_SENT ?? 0) + (byAction.EMAIL_REPLIED ?? 0),
       icon: Send,
-      cardBg: 'bg-emerald-50/70',
-      cardBorder: 'border-emerald-200/70',
-      numColor: 'text-emerald-700',
-      iconBg: 'bg-emerald-100 text-emerald-700',
+      tone: 'emerald',
     },
     {
       label: 'Forwarded',
       value: byAction.EMAIL_FORWARDED ?? 0,
       icon: Mail,
-      cardBg: 'bg-violet-50/70',
-      cardBorder: 'border-violet-200/70',
-      numColor: 'text-violet-700',
-      iconBg: 'bg-violet-100 text-violet-700',
+      tone: 'violet',
     },
     {
       label: 'Send failures',
       value: byAction.EMAIL_SEND_FAILED ?? 0,
       icon: AlertTriangle,
-      cardBg: 'bg-rose-50/70',
-      cardBorder: 'border-rose-200/70',
-      numColor: 'text-rose-700',
-      iconBg: 'bg-rose-100 text-rose-700',
+      tone: 'rose',
     },
   ];
 
-  const panel = 'rounded-3xl border border-slate-200/80 bg-white p-5 shadow-sm';
+  const panel = 'rounded-2xl border border-transparent bg-card p-5 shadow-card dark:border-line/60';
 
   return (
     <div className="space-y-5">
@@ -93,7 +81,7 @@ export function AdminEmailActivityPage() {
       {summary.isLoading ? (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {Array.from({ length: 4 }).map((_, i) => (
-            <Skeleton key={i} className="h-28 w-full rounded-3xl" />
+            <Skeleton key={i} className="h-28 w-full rounded-2xl" />
           ))}
         </div>
       ) : (
@@ -105,7 +93,7 @@ export function AdminEmailActivityPage() {
       )}
 
       <section className={panel} aria-labelledby="inbound">
-        <h2 id="inbound" className="mb-3 font-heading text-[17px] font-black text-slate-900">
+        <h2 id="inbound" className="mb-3 font-heading text-[17px] font-bold text-slate-900">
           Inbound mailbox
         </h2>
 
@@ -120,7 +108,7 @@ export function AdminEmailActivityPage() {
           <div className="overflow-x-auto">
             <table className="w-full min-w-160 border-collapse">
               <thead>
-                <tr className="border-b border-slate-200 text-left text-[11px] font-extrabold uppercase tracking-wider text-slate-400">
+                <tr className="border-b border-slate-200 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">
                   <th scope="col" className="px-3 py-2">Received</th>
                   <th scope="col" className="px-3 py-2">From</th>
                   <th scope="col" className="px-3 py-2">Subject</th>
@@ -151,7 +139,7 @@ export function AdminEmailActivityPage() {
                           <button
                             type="button"
                             onClick={() => paths.QUERY_DETAIL && navigate(buildPath(paths.QUERY_DETAIL, { queryId }))}
-                            className="rounded font-mono text-[11.5px] font-bold text-blue-700 underline-offset-2 hover:underline"
+                            className="rounded font-mono text-[11.5px] font-bold text-primary-700 underline-offset-2 hover:underline"
                           >
                             {queryId}
                           </button>
@@ -169,7 +157,7 @@ export function AdminEmailActivityPage() {
       </section>
 
       <section className={panel} aria-labelledby="outbound">
-        <h2 id="outbound" className="mb-3 font-heading text-[17px] font-black text-slate-900">
+        <h2 id="outbound" className="mb-3 font-heading text-[17px] font-bold text-slate-900">
           Outbound and delivery events
         </h2>
         <AuditTable

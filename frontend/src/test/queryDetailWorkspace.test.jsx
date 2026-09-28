@@ -70,7 +70,7 @@ const grid = () =>
   document.querySelector('[class*="lg:grid-cols-[minmax(0,1fr)_340px]"]');
 
 const threadPanel = () =>
-  screen.getByRole('heading', { name: 'Email thread' }).closest('div.rounded-3xl');
+  screen.getByRole('heading', { name: 'Email thread' }).closest('[data-slot="panel"]');
 
 const collapsedRows = () =>
   within(threadPanel()).queryAllByRole('button', { expanded: false });
@@ -78,7 +78,7 @@ const collapsedRows = () =>
 const expandedMessages = () => threadPanel().querySelectorAll('article').length;
 
 const officialsPanel = () =>
-  screen.getByRole('heading', { name: 'Officials' }).closest('div.rounded-3xl');
+  screen.getByRole('heading', { name: 'Officials' }).closest('[data-slot="panel"]');
 
 let queryId;
 
@@ -242,7 +242,7 @@ describe('audit history is bounded but complete', () => {
 
     const auditCard = screen
       .getByRole('heading', { name: 'Audit history' })
-      .closest('div.rounded-3xl');
+      .closest('[data-slot="panel"]');
     expect(within(auditCard).getAllByRole('row')).toHaveLength(8 + 1);
 
     fireEvent.click(screen.getByRole('button', { name: new RegExp(`Show all ${total} events`) }));

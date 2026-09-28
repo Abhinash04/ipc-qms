@@ -55,7 +55,7 @@ const detailGrid = () =>
   document.querySelector('[class*="lg:grid-cols-[minmax(0,1fr)_340px]"]');
 
 const actionsCard = () =>
-  screen.getByRole('heading', { name: 'Available actions' }).closest('div.rounded-3xl');
+  screen.getByRole('heading', { name: 'Available actions' }).closest('[data-slot="panel"]');
 
 let queryId;
 

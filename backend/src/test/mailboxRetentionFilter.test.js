@@ -4,7 +4,6 @@ import {
   purgeCandidateFilter,
   purgeMessageFilter,
   rejectedCandidateFilter,
-  unregisteredCandidateFilter,
   classifyCandidateFilter,
   PURGEABLE_SOURCES,
 } from '../services/email/mailbox/retention.js';
@@ -13,18 +12,15 @@ const NOW = Date.parse('2026-09-23T12:00:00.000Z');
 
 const ORIGINAL = {
   hours: env.MAILBOX_RETENTION_HOURS,
-  unregistered: env.MAILBOX_UNREGISTERED_RETENTION_HOURS,
   floor: env.MAILBOX_JUNK_CONFIDENCE,
 };
 
 beforeEach(() => {
   env.MAILBOX_RETENTION_HOURS = 46;
-  env.MAILBOX_UNREGISTERED_RETENTION_HOURS = 336;
   env.MAILBOX_JUNK_CONFIDENCE = 0.9;
 });
 afterEach(() => {
   env.MAILBOX_RETENTION_HOURS = ORIGINAL.hours;
-  env.MAILBOX_UNREGISTERED_RETENTION_HOURS = ORIGINAL.unregistered;
   env.MAILBOX_JUNK_CONFIDENCE = ORIGINAL.floor;
 });
 
@@ -74,48 +70,6 @@ describe('the rejected candidate filter', () => {
   });
 });
 
-describe('the unregistered candidate filter', () => {
-  it('selects anything unpurged and unrescued past the long cutoff', () => {
-    expect(unregisteredCandidateFilter({ now: NOW })).toEqual({
-      purgedAt: null,
-      rescuedAt: null,
-      classifiedAt: { $lt: '2026-09-09T12:00:00.000Z' },
-    });
-  });
-
-  it('reaches what the junk tier cannot: no verdict clause and no confidence floor', () => {
-    const filter = unregisteredCandidateFilter({ now: NOW });
-    expect(filter).not.toHaveProperty('verdict');
-    expect(filter).not.toHaveProperty('confidence');
-  });
-
-  it('still honours a rescue, which is the one way a person makes a message permanent', () => {
-    expect(unregisteredCandidateFilter({ now: NOW }).rescuedAt).toBeNull();
-  });
-
-  it('is idempotent through purgedAt, like the junk tier', () => {
-    expect(unregisteredCandidateFilter({ now: NOW }).purgedAt).toBeNull();
-  });
-
-  it('honours an overridden window', () => {
-    expect(unregisteredCandidateFilter({ now: NOW, unregisteredHours: 24 }).classifiedAt).toEqual({
-      $lt: '2026-09-22T12:00:00.000Z',
-    });
-  });
-
-  it('measures first sight, not the message date — the field is classifiedAt', () => {
-    const filter = unregisteredCandidateFilter({ now: NOW });
-    expect(Object.keys(filter)).toContain('classifiedAt');
-    expect(filter).not.toHaveProperty('receivedAt');
-  });
-
-  it('opens a strictly later window than the junk tier, so junk always goes first', () => {
-    const junk = Date.parse(purgeCandidateFilter({ now: NOW }).classifiedAt.$lt);
-    const unregistered = Date.parse(unregisteredCandidateFilter({ now: NOW }).classifiedAt.$lt);
-    expect(unregistered).toBeLessThan(junk);
-  });
-});
-
 describe('the message filter', () => {
   const filter = () => purgeMessageFilter(['NICB-1', 'NICB-2']);
 
@@ -160,28 +114,6 @@ describe('the retention settings refuse a nonsensical deployment at boot', () =>
 
   it('accepts the shipped defaults', () => {
     expect(validateEmailConfig(env).filter((line) => line.includes('MAILBOX_'))).toEqual([]);
-  });
-
-  it.each([
-    ['not a number', Number('abc')],
-    ['zero', 0],
-    ['negative', -1],
-  ])('refuses an unregistered window that is %s', (_label, value) => {
-    expect(errorsFor({ MAILBOX_UNREGISTERED_RETENTION_HOURS: value })).toMatch(
-      /MAILBOX_UNREGISTERED_RETENTION_HOURS must be a positive number of hours/,
-    );
-  });
-
-  it('refuses a second tier shorter than the first', () => {
-    expect(errorsFor({ MAILBOX_RETENTION_HOURS: 42, MAILBOX_UNREGISTERED_RETENTION_HOURS: 24 })).toMatch(
-      /must not be shorter than MAILBOX_RETENTION_HOURS/,
-    );
-  });
-
-  it('allows the two windows to be equal', () => {
-    expect(errorsFor({ MAILBOX_RETENTION_HOURS: 42, MAILBOX_UNREGISTERED_RETENTION_HOURS: 42 })).not.toMatch(
-      /MAILBOX_UNREGISTERED_RETENTION_HOURS/,
-    );
   });
 
   it('still refuses a nonsensical junk window', () => {

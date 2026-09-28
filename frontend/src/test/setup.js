@@ -18,6 +18,13 @@ vi.mock('@/services/api/aiService', () => ({
 
 vi.mock('@/services/api/queryCaseService', () => import('@/test/fakeQueryApi'));
 
+vi.mock('@/components/charts/apexRuntime', async () => {
+  const { createElement } = await import('react');
+  return {
+    default: ({ type }) => createElement('div', { 'data-testid': 'apex-chart', 'data-type': type }),
+  };
+});
+
 let consoleError;
 let consoleWarn;
 const captured = [];

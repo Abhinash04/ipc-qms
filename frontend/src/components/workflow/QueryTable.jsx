@@ -4,13 +4,6 @@ import {
   Search,
   Filter,
   ChevronDown,
-  FileText,
-  Mail,
-  Clock,
-  Calendar,
-  Copy,
-  MoreVertical,
-  ChevronsUpDown,
   ChevronLeft,
   ChevronRight,
   Inbox,
@@ -23,8 +16,13 @@ import { buildPath } from "@/constants/routePaths";
 import { ROLE_LABELS } from "@/constants/roles";
 import { ROLE_SLUG } from "@/constants/permissions";
 import { useAuthStore } from "@/store/useAuthStore";
+import { lifecycleProgress } from "@/components/dashboard/lifecycleProgress";
+import { cn } from "@/utils/cn";
 
-const GRID = "grid-cols-[170px_1fr_150px_220px_180px_150px_32px]";
+const GRID =
+  "grid-cols-[minmax(220px,2fr)_110px_minmax(150px,1fr)_minmax(170px,1fr)_130px]";
+
+const PAGE_SIZES = [10, 25, 50];
 
 const PRIORITY_OPTIONS = [
   { value: "ALL", label: "All priorities" },
@@ -34,31 +32,16 @@ const PRIORITY_OPTIONS = [
   { value: "LOW", label: "Low" },
 ];
 
-const COLUMNS = [
-  { label: "Query ID" },
-  { label: "Subject" },
-  { label: "Priority", center: true },
-  { label: "Status", center: true },
-  { label: "Assignee" },
-  { label: "Received On" },
-];
+const COLUMNS = ["Query", "Priority", "Status", "Assignee", "Received"];
 
-const formatStatus = (statusStr) => {
-  if (!statusStr) return "PENDING APPROVAL";
-  return statusStr.replace(/_/g, " ").toUpperCase();
+const PRIORITY_STYLE = {
+  URGENT: "bg-rose-50 text-rose-700",
+  HIGH: "bg-rose-50 text-rose-700",
+  LOW: "bg-slate-100 text-slate-600",
 };
 
-const getPriorityStyle = (priority) => {
-  switch (priority?.toUpperCase()) {
-    case "URGENT":
-    case "HIGH":
-      return "bg-rose-100/80 text-rose-700 border-rose-200/80";
-    case "LOW":
-      return "bg-slate-100/80 text-slate-600 border-slate-200/80";
-    default:
-      return "bg-blue-100/70 text-blue-700 border-blue-200/80";
-  }
-};
+const formatStatus = (statusStr) =>
+  (statusStr || "PENDING APPROVAL").replace(/_/g, " ").toLowerCase();
 
 const matchesSearch = (query, term) => {
   if (!term) return true;
@@ -70,64 +53,69 @@ const matchesSearch = (query, term) => {
   );
 };
 
+const CONTROL =
+  "rounded-lg border border-line bg-surface text-[13px] text-ink outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary/20";
+
 function QueryTableToolbar({
   searchQuery,
   onSearchChange,
   priorityFilter,
   onPriorityChange,
+  pageSize,
+  onPageSizeChange,
 }) {
   return (
-    <div className="flex flex-col sm:flex-row items-center justify-between gap-3 mb-6">
-      <div className="relative flex-1 w-full">
-        <label htmlFor="query-table-search" className="sr-only">
-          Search queries
-        </label>
-        <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4.5 w-4.5 text-slate-400" />
-        <input
-          id="query-table-search"
-          type="text"
-          value={searchQuery}
-          onChange={(e) => onSearchChange(e.target.value)}
-          placeholder="Search queries by ID, subject, or inquirer..."
-          className="w-full rounded-2xl bg-slate-50/70 border border-slate-200/70 pl-11 pr-4 py-3 text-[13.5px] font-medium text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors"
-        />
-      </div>
-
-      <div className="relative w-full sm:w-56 shrink-0">
+    <div className="flex flex-col gap-3 px-5 pb-4 sm:flex-row sm:items-center sm:justify-between">
+      <label className="flex items-center gap-2 text-[13px] text-ink-muted">
+        Show
         <select
-          aria-label="Filter by priority"
-          value={priorityFilter}
-          onChange={(e) => onPriorityChange(e.target.value)}
-          className="w-full appearance-none rounded-2xl bg-slate-50/70 border border-slate-200/70 pl-10 pr-10 py-3 text-[13.5px] font-bold text-slate-700 cursor-pointer hover:bg-slate-100/60 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors"
+          aria-label="Rows per page"
+          value={pageSize}
+          onChange={(e) => onPageSizeChange(Number(e.target.value))}
+          className={cn(CONTROL, "cursor-pointer px-2 py-1.5")}
         >
-          {PRIORITY_OPTIONS.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
+          {PAGE_SIZES.map((size) => (
+            <option key={size} value={size}>
+              {size}
             </option>
           ))}
         </select>
-        <Filter className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
-        <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
-      </div>
-    </div>
-  );
-}
+        entries
+      </label>
 
-function QueryTableHeaderRow() {
-  return (
-    <div
-      className={`grid ${GRID} gap-3 px-6 py-3.5 bg-[#f9f9fe] border-b border-slate-100/80 rounded-2xl text-[12px] font-extrabold text-slate-700 tracking-wider`}
-    >
-      {COLUMNS.map(({ label, center }) => (
-        <div
-          key={label}
-          className={`flex items-center gap-1.5${center ? " justify-center" : ""}`}
-        >
-          <span>{label}</span>
-          <ChevronsUpDown className="h-3.5 w-3.5 text-slate-400" />
+      <div className="flex flex-1 flex-col gap-3 sm:max-w-xl sm:flex-row sm:justify-end">
+        <div className="relative flex-1">
+          <label htmlFor="query-table-search" className="sr-only">
+            Search queries
+          </label>
+          <Search className="pointer-events-none absolute start-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-muted" />
+          <input
+            id="query-table-search"
+            type="text"
+            value={searchQuery}
+            onChange={(e) => onSearchChange(e.target.value)}
+            placeholder="Search by ID, subject or inquirer…"
+            className={cn(CONTROL, "w-full py-2 ps-9 pe-3 placeholder:text-ink-muted")}
+          />
         </div>
-      ))}
-      <span></span>
+
+        <div className="relative sm:w-48">
+          <select
+            aria-label="Filter by priority"
+            value={priorityFilter}
+            onChange={(e) => onPriorityChange(e.target.value)}
+            className={cn(CONTROL, "w-full cursor-pointer appearance-none py-2 ps-9 pe-8 font-medium")}
+          >
+            {PRIORITY_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+          <Filter className="pointer-events-none absolute start-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-muted" />
+          <ChevronDown className="pointer-events-none absolute end-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-muted" />
+        </div>
+      </div>
     </div>
   );
 }
@@ -173,134 +161,139 @@ function formatReceived(createdAt) {
 function QueryRow({ query, to }) {
   const assignee = describeAssignee(query);
   const received = formatReceived(query.createdAt);
+  const progress = lifecycleProgress(query.workflowState);
+  const priority = (query.priority || "NORMAL").toUpperCase();
 
   return (
-    <Link
-      to={to}
-      className={`group relative grid ${GRID} items-center gap-3 bg-white rounded-2xl border border-slate-200/80 p-4 shadow-2xs hover:shadow-md hover:border-purple-200 transition-[border-color,box-shadow] overflow-hidden cursor-pointer`}
-    >
-      <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-purple-600 rounded-l-2xl" />
-
-      <div className="flex items-center gap-3 shrink-0 pl-2">
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-purple-50 text-purple-600">
-          <FileText className="h-5 w-5" strokeWidth={1.8} />
-        </div>
-        <div>
-          <div className="font-heading text-[13.5px] font-extrabold text-purple-700 group-hover:underline">
-            {query.queryId}
-          </div>
-          <div className="flex items-center gap-1 text-[11px] font-medium text-slate-400 mt-0.5">
-            <Copy className="h-3 w-3 text-purple-500" />
-          </div>
-        </div>
-      </div>
-
-      <div className="min-w-0 px-2">
-        <div className="text-[14px] font-bold text-slate-900 truncate group-hover:text-purple-700">
-          {query.subject || "(No Subject)"}
-        </div>
-        <div className="flex items-center gap-1.5 text-[11.5px] font-medium text-slate-400 mt-0.5">
-          <Mail className="h-3.5 w-3.5 text-purple-500" />
-          <span>Mail received</span>
-        </div>
-      </div>
-
-      <div className="flex justify-center">
-        <span
-          className={`inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-[11.5px] font-extrabold border shadow-2xs ${getPriorityStyle(query.priority)}`}
-        >
-          <span className="h-2 w-2 rounded-full bg-current" />
-          {query.priority || "NORMAL"}
-        </span>
-      </div>
-
-      <div className="flex justify-center">
-        <span className="inline-flex items-center gap-2 rounded-full bg-purple-100/70 px-4 py-1.5 text-[11.5px] font-extrabold text-purple-700 border border-purple-200/80 shadow-2xs">
-          <Clock className="h-3.5 w-3.5 text-purple-600" />
-          {formatStatus(query.businessStatus || query.workflowState)}
-        </span>
-      </div>
-
-      <div className="flex items-center gap-2.5">
-        <div className="flex h-8.5 w-8.5 shrink-0 items-center justify-center rounded-full bg-purple-100 text-purple-700 font-extrabold text-[12px]">
-          {assignee.initials}
-        </div>
+    <li>
+      <Link
+        to={to}
+        className={cn(
+          "group grid items-center gap-4 px-5 py-3.5 outline-none transition-colors hover:bg-surface-muted focus-visible:bg-surface-muted",
+          GRID,
+        )}
+      >
         <div className="min-w-0">
-          <div className="text-[13px] font-bold text-slate-800 truncate">
-            {assignee.name}
+          <div className="truncate text-[14px] font-semibold text-ink group-hover:text-primary">
+            {query.subject || "(No Subject)"}
           </div>
-          <div className="text-[11px] font-medium text-slate-400 truncate">
-            {assignee.role}
+          <div className="mt-0.5 truncate font-mono text-[12px] text-ink-muted">{query.queryId}</div>
+        </div>
+
+        <div>
+          <span
+            className={cn(
+              "inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[11px] font-semibold",
+              PRIORITY_STYLE[priority] || "bg-primary-50 text-primary",
+            )}
+          >
+            <span className="h-1.5 w-1.5 rounded-full bg-current" aria-hidden="true" />
+            {priority}
+          </span>
+        </div>
+
+        <div className="min-w-0">
+          <span className="block truncate text-[12.5px] font-medium capitalize text-ink-soft">
+            {formatStatus(query.businessStatus || query.workflowState)}
+          </span>
+          <div className="mt-1.5 h-1.5 w-full max-w-36 overflow-hidden rounded-full bg-line" aria-hidden="true">
+            <div
+              className={cn("h-full rounded-full", progress.tone)}
+              style={{ width: `${progress.fraction * 100}%` }}
+            />
           </div>
         </div>
-      </div>
 
-      <div>
-        <div className="flex items-center gap-1.5 text-[13px] font-bold text-slate-800">
-          <Calendar className="h-3.5 w-3.5 text-slate-400" />
-          <span>{received.date}</span>
+        <div className="flex min-w-0 items-center gap-2.5">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary-50 text-[12px] font-semibold text-primary">
+            {assignee.initials}
+          </span>
+          <div className="min-w-0">
+            <div className="truncate text-[13px] font-medium text-ink">{assignee.name}</div>
+            <div className="truncate text-[11.5px] text-ink-muted">{assignee.role}</div>
+          </div>
         </div>
-        <div className="text-[11px] font-medium text-slate-400 pl-5 mt-0.5">
-          {received.time}
-        </div>
-      </div>
 
-      <div className="flex justify-end">
-        <div className="p-1 rounded-lg text-slate-400 group-hover:text-slate-600 transition-colors">
-          <MoreVertical className="h-4.5 w-4.5" />
+        <div>
+          <div className="text-[13px] font-medium text-ink">{received.date}</div>
+          <div className="mt-0.5 text-[11.5px] text-ink-muted">{received.time}</div>
         </div>
-      </div>
-    </Link>
+      </Link>
+    </li>
   );
 }
 
 function QueryTableEmpty({ emptyMessage }) {
   return (
-    <div className="p-12 text-center rounded-2xl border border-dashed border-slate-200 bg-slate-50/50">
-      <Inbox className="mx-auto h-10 w-10 text-slate-300 mb-2" />
-      <p className="font-bold text-[14px] text-slate-700">
-        No matching queries found
-      </p>
-      <p className="text-[12.5px] text-slate-400 mt-1">
+    <div className="mx-5 my-4 rounded-xl border border-dashed border-line p-12 text-center">
+      <Inbox className="mx-auto mb-2 h-10 w-10 text-ink-muted/60" />
+      <p className="text-[14px] font-semibold text-ink">No matching queries found</p>
+      <p className="mt-1 text-[12.5px] text-ink-muted">
         {emptyMessage || "Try adjusting your search or priority filter."}
       </p>
     </div>
   );
 }
 
-function QueryTablePagination({ shown, total }) {
+function pageWindow(current, count) {
+  const pages = new Set([1, count, current - 1, current, current + 1]);
+  return [...pages].filter((p) => p >= 1 && p <= count).sort((a, b) => a - b);
+}
+
+function QueryTablePagination({ page, pageCount, from, to, total, onPage }) {
+  const PAGE_BUTTON =
+    "flex h-8.5 min-w-8.5 cursor-pointer items-center justify-center rounded-lg px-2 text-[13px] font-medium transition-colors outline-none focus-visible:ring-2 focus-visible:ring-primary/50 disabled:cursor-not-allowed disabled:opacity-40";
+  const pages = pageWindow(page, pageCount);
+
   return (
-    <div className="px-6 py-4 border-t border-slate-100/80 flex items-center justify-between bg-white">
-      <span className="text-[13px] font-medium text-slate-500">
-        Showing {shown} of {total} result{total === 1 ? "" : "s"}
+    <div className="flex flex-col items-center justify-between gap-3 border-t border-line px-5 py-4 sm:flex-row">
+      <span className="text-[13px] text-ink-muted">
+        {total === 0 ? "No results" : `Showing ${from} to ${to} of ${total} result${total === 1 ? "" : "s"}`}
       </span>
 
-      <div className="flex items-center gap-2">
+      <nav aria-label="Pagination" className="flex items-center gap-1.5">
         <button
           type="button"
-          disabled
+          disabled={page <= 1}
+          onClick={() => onPage(page - 1)}
           aria-label="Previous page"
-          className="flex h-8.5 w-8.5 items-center justify-center rounded-xl bg-slate-100/70 text-slate-400 opacity-50 cursor-not-allowed"
+          className={cn(PAGE_BUTTON, "border border-line text-ink-soft hover:bg-surface-muted")}
         >
-          <ChevronLeft className="h-4 w-4" />
+          <ChevronLeft className="h-4 w-4 rtl:rotate-180" />
         </button>
+        {pages.map((p, i) => (
+          <span key={p} className="flex items-center gap-1.5">
+            {i > 0 && p - pages[i - 1] > 1 && (
+              <span className="px-1 text-ink-muted" aria-hidden="true">
+                …
+              </span>
+            )}
+            <button
+              type="button"
+              aria-label={`Go to page ${p}`}
+              aria-current={p === page ? "page" : undefined}
+              onClick={() => onPage(p)}
+              className={cn(
+                PAGE_BUTTON,
+                p === page
+                  ? "bg-primary text-white shadow-sm"
+                  : "border border-line text-ink-soft hover:bg-surface-muted",
+              )}
+            >
+              {p}
+            </button>
+          </span>
+        ))}
         <button
           type="button"
-          aria-label="Go to page 1"
-          aria-current="page"
-          className="flex h-8.5 w-8.5 items-center justify-center rounded-xl bg-blue-600 text-white font-extrabold text-[13px] shadow-md shadow-blue-500/20"
-        >
-          1
-        </button>
-        <button
-          type="button"
-          disabled
+          disabled={page >= pageCount}
+          onClick={() => onPage(page + 1)}
           aria-label="Next page"
-          className="flex h-8.5 w-8.5 items-center justify-center rounded-xl bg-slate-100/70 text-slate-400 opacity-50 cursor-not-allowed"
+          className={cn(PAGE_BUTTON, "border border-line text-ink-soft hover:bg-surface-muted")}
         >
-          <ChevronRight className="h-4 w-4" />
+          <ChevronRight className="h-4 w-4 rtl:rotate-180" />
         </button>
-      </div>
+      </nav>
     </div>
   );
 }
@@ -323,12 +316,19 @@ export function QueryTable({
 
   const [searchQuery, setSearchQuery] = useState("");
   const [priorityFilter, setPriorityFilter] = useState("ALL");
+  const [pageSize, setPageSize] = useState(PAGE_SIZES[0]);
+  const [page, setPage] = useState(1);
 
   const filteredQueries = queries.filter(
     (q) =>
       matchesSearch(q, searchQuery) &&
       (priorityFilter === "ALL" || q.priority === priorityFilter),
   );
+
+  const pageCount = Math.max(1, Math.ceil(filteredQueries.length / pageSize));
+  const current = Math.min(page, pageCount);
+  const start = (current - 1) * pageSize;
+  const pageRows = filteredQueries.slice(start, start + pageSize);
 
   const getQueryDetailPath = (queryId) => {
     if (detailPath) {
@@ -351,26 +351,58 @@ export function QueryTable({
         iconClassName={iconClassName}
       />
 
-      <div className="bg-white rounded-3xl border border-slate-200/70 overflow-hidden shadow-sm flex flex-col justify-between">
-        <div className="p-6">
-          <QueryTableToolbar
-            searchQuery={searchQuery}
-            onSearchChange={setSearchQuery}
-            priorityFilter={priorityFilter}
-            onPriorityChange={setPriorityFilter}
-          />
+      <section
+        aria-label={`${title || "Queries"} list`}
+        className="overflow-hidden rounded-2xl border border-transparent bg-surface shadow-card dark:border-line/60"
+      >
+        <div className="flex items-center justify-between gap-3 px-5 pt-5 pb-4">
+          <h2 className="font-heading text-[17px] font-semibold text-ink">Records</h2>
+          <span className="rounded-full bg-primary-50 px-3 py-1 text-[12px] font-semibold text-primary">
+            {queries.length} total
+          </span>
+        </div>
 
-          <QueryTableHeaderRow />
+        <QueryTableToolbar
+          searchQuery={searchQuery}
+          onSearchChange={(value) => {
+            setSearchQuery(value);
+            setPage(1);
+          }}
+          priorityFilter={priorityFilter}
+          onPriorityChange={(value) => {
+            setPriorityFilter(value);
+            setPage(1);
+          }}
+          pageSize={pageSize}
+          onPageSizeChange={(size) => {
+            setPageSize(size);
+            setPage(1);
+          }}
+        />
 
-          <div className="space-y-3.5 mt-3.5">
-            {filteredQueries.length > 0 ? (
-              filteredQueries.map((query) => (
-                <QueryRow
-                  key={query.queryId}
-                  query={query}
-                  to={getQueryDetailPath(query.queryId)}
-                />
-              ))
+        <div className="overflow-x-auto">
+          <div className="min-w-[860px]">
+            <div
+              className={cn(
+                "grid gap-4 border-y border-line bg-surface-muted px-5 py-3 text-[11.5px] font-semibold uppercase tracking-wider text-ink-muted",
+                GRID,
+              )}
+            >
+              {COLUMNS.map((label) => (
+                <span key={label}>{label}</span>
+              ))}
+            </div>
+
+            {pageRows.length > 0 ? (
+              <ul className="divide-y divide-line">
+                {pageRows.map((query) => (
+                  <QueryRow
+                    key={query.queryId}
+                    query={query}
+                    to={getQueryDetailPath(query.queryId)}
+                  />
+                ))}
+              </ul>
             ) : (
               <QueryTableEmpty emptyMessage={emptyMessage} />
             )}
@@ -378,10 +410,14 @@ export function QueryTable({
         </div>
 
         <QueryTablePagination
-          shown={filteredQueries.length}
-          total={queries.length}
+          page={current}
+          pageCount={pageCount}
+          from={filteredQueries.length ? start + 1 : 0}
+          to={start + pageRows.length}
+          total={filteredQueries.length}
+          onPage={setPage}
         />
-      </div>
+      </section>
     </div>
   );
 }

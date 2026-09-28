@@ -23,7 +23,7 @@ function AccordionItem({
   return (
     <AccordionPrimitive.Item
       data-slot="accordion-item"
-      className={cn("neo-border neo-shadow-sm rounded-md bg-card overflow-hidden", className)}
+      className={cn("border border-border shadow-xs rounded-md bg-card overflow-hidden", className)}
       {...props} />
   );
 }

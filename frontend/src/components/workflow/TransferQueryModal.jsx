@@ -108,8 +108,8 @@ function CurrentAssigneeRow({ name }) {
       <span className="font-bold text-slate-500 uppercase tracking-wider text-xs">
         Current Assignee
       </span>
-      <span className="font-black text-slate-800 flex items-center gap-1.5 text-sm">
-        <UserCheck className="h-4 w-4 text-indigo-600" />
+      <span className="font-bold text-slate-800 flex items-center gap-1.5 text-sm">
+        <UserCheck className="h-4 w-4 text-primary" />
         {name}
       </span>
     </div>
@@ -119,13 +119,13 @@ function CurrentAssigneeRow({ name }) {
 function OfficialCardBadge({ rec, isSelected }) {
   if (rec.matchPercent) {
     return (
-      <span className="text-xs font-black text-indigo-700 bg-indigo-100/80 px-2.5 py-1 rounded-full border border-indigo-200/80 shrink-0">
+      <span className="text-xs font-bold text-primary-700 bg-primary-100/80 px-2.5 py-1 rounded-full border border-primary-200/80 shrink-0">
         {rec.matchPercent}% Match
       </span>
     );
   }
   if (isSelected) {
-    return <CheckCircle2 className="h-5 w-5 text-indigo-600 shrink-0 ml-1" />;
+    return <CheckCircle2 className="h-5 w-5 text-primary shrink-0 ml-1" />;
   }
   return null;
 }
@@ -140,17 +140,17 @@ function OfficialCard({ rec, isSelected, onSelect }) {
       onKeyDown={activateOnKey(onSelect)}
       className={`w-full p-3.5 text-left rounded-2xl border transition-[background-color,border-color,box-shadow] cursor-pointer flex flex-col justify-between space-y-2 select-none ${
         isSelected
-          ? 'bg-indigo-50/90 border-indigo-500 ring-2 ring-indigo-500/20 shadow-xs'
-          : 'bg-white hover:bg-slate-50/90 border-slate-200/80 shadow-2xs'
+          ? 'bg-primary-50/90 border-primary ring-2 ring-primary/20 shadow-xs'
+          : 'bg-card hover:bg-slate-50/90 border-slate-200/80 shadow-2xs'
       }`}
     >
       <div>
         <div className="flex items-start justify-between gap-1">
           <div className="space-y-0.5">
             <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-sm font-black text-slate-900 leading-tight">{rec.name}</span>
+              <span className="text-sm font-bold text-slate-900 leading-tight">{rec.name}</span>
               {rec.divisionId && (
-                <span className="text-xs font-black text-slate-600 bg-slate-100 px-2 py-0.5 rounded border border-slate-200/60">
+                <span className="text-xs font-bold text-slate-600 bg-slate-100 px-2 py-0.5 rounded border border-slate-200/60">
                   {rec.divisionId}
                 </span>
               )}
@@ -181,8 +181,8 @@ function OfficialCard({ rec, isSelected, onSelect }) {
 function OfficialResults({ isLoading, error, officials, searchQuery, selectedId, onSelect }) {
   if (isLoading) {
     return (
-      <div className="p-4 rounded-2xl border border-indigo-100 bg-indigo-50/50 flex items-center justify-center gap-2 text-sm font-bold text-indigo-700 animate-pulse">
-        <Sparkles className="h-4 w-4 text-indigo-500 animate-spin" />
+      <div className="p-4 rounded-2xl border border-primary-100 bg-primary-50/50 flex items-center justify-center gap-2 text-sm font-bold text-primary-700 animate-pulse">
+        <Sparkles className="h-4 w-4 text-primary animate-spin" />
         <span>Analyzing query and finding suitable officials...</span>
       </div>
     );
@@ -237,7 +237,7 @@ function SelectColleagueSection({
     <div className="space-y-3 pt-1.5">
       <label
         htmlFor="transfer-colleague-search"
-        className="text-sm font-black uppercase tracking-wider text-slate-700 block m-0"
+        className="text-sm font-bold uppercase tracking-wider text-slate-700 block m-0"
       >
         1. Select Colleague / Official <span className="text-rose-500">*</span>
       </label>
@@ -250,13 +250,13 @@ function SelectColleagueSection({
           placeholder="Search colleague by name, email, or expertise..."
           value={searchQuery}
           onChange={(e) => onSearchChange(e.target.value)}
-          className="w-full pl-10 pr-4 py-2.5 text-sm font-medium bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-colors"
+          className="w-full pl-10 pr-4 py-2.5 text-sm font-medium bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors"
         />
       </div>
 
       <div className="space-y-2 pt-1">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-1.5 text-sm font-black text-indigo-700">
+          <div className="flex items-center gap-1.5 text-sm font-bold text-primary-700">
             <Sparkles className="h-4 w-4 text-amber-500 fill-amber-400" />
             <span>{searchQuery.trim() ? 'SEARCH RESULTS' : 'AI RECOMMENDED OFFICIALS'}</span>
           </div>
@@ -285,7 +285,7 @@ function TransferReasonSection({ category, onCategoryChange, details, onDetailsC
     <div className="space-y-2 pt-1">
       <label
         htmlFor="transfer-reason-category"
-        className="text-sm font-black uppercase tracking-wider text-slate-700 block"
+        className="text-sm font-bold uppercase tracking-wider text-slate-700 block"
       >
         2. Reason for Transfer <span className="text-rose-500">*</span>
       </label>
@@ -294,7 +294,7 @@ function TransferReasonSection({ category, onCategoryChange, details, onDetailsC
         id="transfer-reason-category"
         value={category}
         onChange={(e) => onCategoryChange(e.target.value)}
-        className="w-full py-2.5 px-3.5 text-sm font-bold text-slate-800 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-colors cursor-pointer"
+        className="w-full py-2.5 px-3.5 text-sm font-bold text-slate-800 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors cursor-pointer"
       >
         {PREDEFINED_REASONS.map((r) => (
           <option key={r} value={r}>
@@ -308,7 +308,7 @@ function TransferReasonSection({ category, onCategoryChange, details, onDetailsC
         value={details}
         onChange={(e) => onDetailsChange(e.target.value)}
         rows={2}
-        className="w-full p-3.5 text-sm font-medium bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-colors resize-none"
+        className="w-full p-3.5 text-sm font-medium bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors resize-none"
       />
     </div>
   );
@@ -326,26 +326,26 @@ function SummaryRow({ label, children, valueClassName = 'font-bold text-slate-80
 function TransferConfirmation({ query, fromName, toName, byName, reason }) {
   return (
     <div className="py-4 space-y-4 select-none">
-      <div className="rounded-2xl border border-indigo-200 bg-indigo-50/70 p-4 space-y-3">
-        <div className="flex items-center gap-2 text-indigo-900">
-          <HelpCircle className="h-5 w-5 text-indigo-600 shrink-0" />
-          <h4 className="font-heading font-black text-base text-indigo-950 m-0">
+      <div className="rounded-2xl border border-primary-200 bg-primary-50/70 p-4 space-y-3">
+        <div className="flex items-center gap-2 text-primary-700">
+          <HelpCircle className="h-5 w-5 text-primary shrink-0" />
+          <h4 className="font-heading font-bold text-base text-primary-700 m-0">
             Confirm Query Transfer
           </h4>
         </div>
 
         <p className="text-sm font-bold text-slate-700 leading-relaxed">
           Are you sure you want to transfer query{' '}
-          <span className="font-extrabold text-indigo-800">{query.queryId}</span> to{' '}
-          <span className="font-black text-indigo-900 bg-white px-2 py-0.5 rounded border border-indigo-200">
+          <span className="font-semibold text-primary-700">{query.queryId}</span> to{' '}
+          <span className="font-bold text-primary-700 bg-card px-2 py-0.5 rounded border border-primary-200">
             {toName}
           </span>
           ?
         </p>
 
-        <div className="bg-white rounded-xl border border-indigo-100 p-3.5 space-y-2 text-sm divide-y divide-slate-100">
+        <div className="bg-card rounded-xl border border-primary-100 p-3.5 space-y-2 text-sm divide-y divide-slate-100">
           <SummaryRow label="Transferred From:">{fromName}</SummaryRow>
-          <SummaryRow label="Transferred To:" valueClassName="font-extrabold text-indigo-700">
+          <SummaryRow label="Transferred To:" valueClassName="font-semibold text-primary-700">
             {toName}
           </SummaryRow>
           <SummaryRow label="Transferred By:">{byName}</SummaryRow>
@@ -381,7 +381,7 @@ function TransferFooter({ isConfirmStep, isSubmitting, canContinue, onBack, onCa
           type="button"
           onClick={onAdvance}
           disabled={!canContinue}
-          className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-black text-sm shadow-md shadow-indigo-500/20 transition-colors cursor-pointer disabled:opacity-50"
+          className="px-5 py-2.5 rounded-xl bg-primary hover:bg-primary-hover text-white font-bold text-sm shadow-md shadow-indigo-500/20 transition-colors cursor-pointer disabled:opacity-50"
         >
           Continue to Transfer
         </button>
@@ -403,7 +403,7 @@ function TransferFooter({ isConfirmStep, isSubmitting, canContinue, onBack, onCa
         type="button"
         onClick={onAdvance}
         disabled={isSubmitting}
-        className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-black text-sm shadow-md shadow-indigo-500/20 transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+        className="px-5 py-2.5 rounded-xl bg-primary hover:bg-primary-hover text-white font-bold text-sm shadow-md shadow-indigo-500/20 transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
       >
         {isSubmitting ? (
           <>
@@ -493,18 +493,18 @@ export function TransferQueryModal({ query, isOpen, onClose, currentUser }) {
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && handleClose()}>
-      <DialogContent className="sm:max-w-155 max-h-[90vh] overflow-y-auto rounded-3xl p-6 bg-white border border-slate-200/90 shadow-2xl">
+      <DialogContent className="sm:max-w-155 max-h-[90vh] overflow-y-auto rounded-2xl p-6 bg-card border border-line shadow-2xl">
         <DialogHeader className="border-b border-slate-100 pb-2.5">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-indigo-50 text-indigo-700 border border-indigo-100 flex items-center justify-center shrink-0">
+            <div className="w-10 h-10 rounded-2xl bg-primary-50 text-primary-700 border border-primary-100 flex items-center justify-center shrink-0">
               <ArrowRightLeft className="h-5 w-5" />
             </div>
             <div>
-              <DialogTitle className="font-heading text-xl font-black text-slate-900 m-0">
+              <DialogTitle className="font-heading text-xl font-bold text-slate-900 m-0">
                 Transfer Query
               </DialogTitle>
               <DialogDescription className="text-sm font-semibold text-slate-500 mt-0.5">
-                Case ID: <span className="font-extrabold text-indigo-700">{query.queryId}</span> •{' '}
+                Case ID: <span className="font-semibold text-primary-700">{query.queryId}</span> •{' '}
                 {query.subject}
               </DialogDescription>
             </div>

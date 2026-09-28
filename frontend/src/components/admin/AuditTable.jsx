@@ -110,7 +110,7 @@ function Row({ event, onOpenQuery }) {
             <button
               type="button"
               onClick={() => onOpenQuery?.(event.queryId)}
-              className="rounded font-mono text-[11.5px] font-bold text-blue-700 underline-offset-2 hover:underline"
+              className="rounded font-mono text-[11.5px] font-bold text-primary-700 underline-offset-2 hover:underline"
             >
               {event.queryId}
             </button>
@@ -157,7 +157,7 @@ export function AuditTable({ events, loading, error, onOpenQuery, emptyTitle = '
     <div className="overflow-x-auto">
       <table className="w-full min-w-160 border-collapse">
         <thead>
-          <tr className="border-b border-slate-200 text-left text-[11px] font-extrabold uppercase tracking-wider text-slate-400">
+          <tr className="border-b border-slate-200 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">
             <th scope="col" className="w-10 px-3 py-2">
               <span className="sr-only">Expand row</span>
             </th>

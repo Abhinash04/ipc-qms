@@ -10,6 +10,23 @@
     />
     <meta name="robots" content="noindex, nofollow" />
     <title>Query Management System</title>
+    <script>
+      (function () {
+        try {
+          var saved = JSON.parse(localStorage.getItem("qms.theme") || "{}").state || {};
+          var mode = saved.mode || "light";
+          var dark =
+            mode === "dark" ||
+            (mode === "auto" && window.matchMedia("(prefers-color-scheme: dark)").matches);
+          var root = document.documentElement;
+          if (dark) root.classList.add("dark");
+          if (saved.preset) root.dataset.preset = saved.preset;
+          if (saved.sidebarColor) root.dataset.sidebarColor = saved.sidebarColor;
+          if (saved.sidebarActive) root.dataset.sidebarActive = saved.sidebarActive;
+          if (saved.dir === "rtl") root.dir = "rtl";
+        } catch (e) {}
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

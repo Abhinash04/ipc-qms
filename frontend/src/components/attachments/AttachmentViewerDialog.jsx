@@ -51,7 +51,7 @@ function AttachmentPreview({ kind, url, attachment, textContent, onUnavailable }
       Preview not available for this file type.{' '}
       <a
         href={attachmentUrl(attachment.attachmentId, { download: true })}
-        className="font-bold text-blue-700 underline"
+        className="font-bold text-primary-700 underline"
       >
         Download instead
       </a>

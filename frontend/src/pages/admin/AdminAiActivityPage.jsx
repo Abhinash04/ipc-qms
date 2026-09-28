@@ -43,41 +43,29 @@ export function AdminAiActivityPage() {
       label: 'Summaries generated',
       value: byAction.AI_SUMMARY_GENERATED ?? 0,
       icon: Sparkles,
-      cardBg: 'bg-blue-50/70',
-      cardBorder: 'border-blue-200/70',
-      numColor: 'text-blue-700',
-      iconBg: 'bg-blue-100 text-blue-700',
+      tone: 'blue',
     },
     {
       label: 'Drafts generated',
       value: byAction.AI_DRAFT_GENERATED ?? 0,
       icon: PenLine,
-      cardBg: 'bg-violet-50/70',
-      cardBorder: 'border-violet-200/70',
-      numColor: 'text-violet-700',
-      iconBg: 'bg-violet-100 text-violet-700',
+      tone: 'violet',
     },
     {
       label: 'Recommendations',
       value: byAction.AI_RECOMMENDATION_GENERATED ?? 0,
       icon: Bot,
-      cardBg: 'bg-emerald-50/70',
-      cardBorder: 'border-emerald-200/70',
-      numColor: 'text-emerald-700',
-      iconBg: 'bg-emerald-100 text-emerald-700',
+      tone: 'emerald',
     },
     {
       label: 'Failed calls',
       value: failed,
       icon: AlertTriangle,
-      cardBg: 'bg-rose-50/70',
-      cardBorder: 'border-rose-200/70',
-      numColor: 'text-rose-700',
-      iconBg: 'bg-rose-100 text-rose-700',
+      tone: 'rose',
     },
   ];
 
-  const panel = 'rounded-3xl border border-slate-200/80 bg-white p-5 shadow-sm';
+  const panel = 'rounded-2xl border border-transparent bg-card p-5 shadow-card dark:border-line/60';
 
   return (
     <div className="space-y-5">
@@ -96,7 +84,7 @@ export function AdminAiActivityPage() {
       {summary.isLoading ? (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {Array.from({ length: 4 }).map((_, i) => (
-            <Skeleton key={i} className="h-28 w-full rounded-3xl" />
+            <Skeleton key={i} className="h-28 w-full rounded-2xl" />
           ))}
         </div>
       ) : (
@@ -109,7 +97,7 @@ export function AdminAiActivityPage() {
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[380px_minmax(0,1fr)]">
         <section className={panel} aria-labelledby="model-health">
-          <h2 id="model-health" className="mb-3 font-heading text-[17px] font-black text-slate-900">
+          <h2 id="model-health" className="mb-3 font-heading text-[17px] font-bold text-slate-900">
             Model health
           </h2>
           <StatusDonut
@@ -123,7 +111,7 @@ export function AdminAiActivityPage() {
           {medianLatency !== null && (
             <p className="m-0 mt-3 border-t border-slate-100 pt-3 text-[12.5px] text-slate-600">
               Median response time{' '}
-              <span className="font-black tabular-nums text-slate-900">{medianLatency} ms</span>
+              <span className="font-bold tabular-nums text-slate-900">{medianLatency} ms</span>
             </p>
           )}
           {fellBack > 0 && (
@@ -135,7 +123,7 @@ export function AdminAiActivityPage() {
         </section>
 
         <section className={panel} aria-labelledby="ai-events">
-          <h2 id="ai-events" className="mb-3 font-heading text-[17px] font-black text-slate-900">
+          <h2 id="ai-events" className="mb-3 font-heading text-[17px] font-bold text-slate-900">
             Agent activity
           </h2>
           <AuditTable

@@ -913,20 +913,21 @@ describe('the Junk view', () => {
 
   it('counts a long window in days rather than a three-figure number of hours', async () => {
     fetchMailboxMessages.mockResolvedValue({
-      messages: [junkMessage(9, 'Unactioned enquiry', { verdict: 'GENUINE', confidence: 0, purgesAt: hoursFromNow(336) })],
+      messages: [junkMessage(9, 'Half price reagents', { purgesAt: hoursFromNow(336) })],
     });
     renderInbox();
 
     expect(await screen.findByText('purges in 14d')).toBeInTheDocument();
   });
 
-  it('warns on a genuine message too, because the second tier will take it', async () => {
+  it('shows no countdown on a genuine message, which is never purged by age', async () => {
     fetchMailboxMessages.mockResolvedValue({
-      messages: [junkMessage(9, 'Unactioned enquiry', { verdict: 'GENUINE', confidence: 0, purgesAt: hoursFromNow(20) })],
+      messages: [junkMessage(9, 'Unactioned enquiry', { verdict: 'GENUINE', confidence: 0, purgesAt: null })],
     });
     renderInbox();
+    await screen.findByText('Unactioned enquiry');
 
-    expect(await screen.findByText('purges in 20h')).toBeInTheDocument();
+    expect(screen.queryByText(/purges in/)).not.toBeInTheDocument();
   });
 
   it('says nothing about purging for a message with no verdict at all', async () => {

@@ -1,3 +1,10 @@
+export function greetingPeriod(date = new Date()) {
+  const hour = date.getHours();
+  if (hour >= 4 && hour < 12) return "morning";
+  if (hour >= 12 && hour < 17) return "afternoon";
+  return "evening";
+}
+
 export function getTimeBasedGreeting(name) {
   const firstName = name ? name.split(" ")[0] : "User";
   const hour = new Date().getHours();

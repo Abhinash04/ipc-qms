@@ -1,17 +1,20 @@
 import { useMemo, useState } from "react";
 import { FileText } from "lucide-react";
-import { PageHeader } from "@/components/common/PageHeader";
 import { StatTile } from "@/components/common/StatTile";
 import { DashboardQueryList } from "@/components/dashboard/DashboardQueryList";
-import { HeroBannerCard } from "@/components/dashboard/HeroBannerCard";
+import { DashboardHero } from "@/components/dashboard/DashboardHero";
+import {
+  BucketBarsCard,
+  StatusMixCard,
+  VolumeChartCard,
+} from "@/components/dashboard/DashboardCharts";
 import {
   bucketsForRole,
   defaultBucketKey,
   visibleQueries,
 } from "@/constants/queryBuckets";
-import { getTimeBasedGreeting } from "@/utils/greeting";
 import { styleFor } from "@/components/dashboard/dashboardTones";
-import { caseTrend, volumeByDay } from "@/components/admin/adminStats";
+import { caseTrend } from "@/components/admin/adminStats";
 import { cn } from "@/utils/cn";
 
 const NO_WORKFLOW_STEPS = [];
@@ -19,6 +22,12 @@ const NO_REVIEWS = [];
 const NO_RECORDS = [];
 
 const TREND_LABEL = "arrivals, 7d vs prior 7d";
+const KPI_COLUMNS = {
+  3: "lg:grid-cols-3",
+  4: "xl:grid-cols-4",
+  5: "lg:grid-cols-3 2xl:grid-cols-5",
+  6: "lg:grid-cols-3 2xl:grid-cols-6",
+};
 
 export function BucketDashboard({
   role,
@@ -58,12 +67,12 @@ export function BucketDashboard({
     const out = {};
     for (const bucket of buckets) {
       const records = recordsByKey[bucket.key] || NO_RECORDS;
-      const series = volumeByDay(records);
       const { current, previous, delta } = caseTrend(records);
+      let share = null;
+      if (total > 0) share = bucket.aggregate ? 1 : records.length / total;
       out[bucket.key] = {
-        share: bucket.aggregate || total === 0 ? null : records.length / total,
+        share,
         shareTotal: total,
-        series: series.some((d) => d.value > 0) ? series : null,
         delta: current || previous ? delta : null,
       };
     }
@@ -72,37 +81,27 @@ export function BucketDashboard({
 
   const selected =
     buckets.find((b) => b.key === selectedKey) || buckets[0] || null;
-  const rows = selected ? recordsByKey[selected.key] || [] : [];
-
-  const gridColsClass = useMemo(() => {
-    const len = buckets.length;
-    if (len >= 6) return "xl:grid-cols-6";
-    if (len === 5) return "xl:grid-cols-5";
-    if (len === 4) return "xl:grid-cols-4";
-    if (len === 3) return "xl:grid-cols-3";
-    return "xl:grid-cols-4";
-  }, [buckets.length]);
+  const rows = selected ? recordsByKey[selected.key] || NO_RECORDS : NO_RECORDS;
 
   return (
-    <div className="space-y-5">
-      <PageHeader
-        greeting={getTimeBasedGreeting(currentUser?.name)}
+    <div className="pb-2">
+      <DashboardHero
+        userName={currentUser?.name}
         title={title}
         purpose={purpose}
         actions={actions}
       />
 
-      <HeroBannerCard role={role} userName={currentUser?.name} />
-
       <div
+        role="group"
+        aria-label="Queue summary"
         className={cn(
-          "grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 lg:gap-3.5 items-stretch",
-          gridColsClass,
+          "relative z-10 -mt-24 grid grid-cols-1 gap-4 sm:grid-cols-2",
+          KPI_COLUMNS[buckets.length] || KPI_COLUMNS[4],
         )}
       >
         {buckets.map((bucket) => {
           const count = recordsByKey[bucket.key]?.length ?? 0;
-          const tone = styleFor(bucket.key);
           const metrics = tileMetrics[bucket.key];
 
           return (
@@ -120,35 +119,33 @@ export function BucketDashboard({
               comparisonLabel={TREND_LABEL}
               share={metrics?.share}
               shareTotal={metrics?.shareTotal}
-              series={metrics?.series}
-              {...tone}
+              {...styleFor(bucket.key)}
             />
           );
         })}
       </div>
 
-      <div
-        className={
-          sidePanel
-            ? "grid grid-cols-1 lg:grid-cols-[1fr_450px] gap-4"
-            : "grid grid-cols-1 gap-4"
-        }
-      >
-        <DashboardQueryList
-          title={selected?.label || "Queries"}
-          subtitle={selected?.caption}
-          icon={selected?.icon || FileText}
-          items={rows}
-          totalCount={visible.length}
-          emptyText={
-            emptyTextFor?.(selected) ||
-            `Nothing in ${selected?.label || "this list"} right now.`
-          }
-        />
+      <div className="mt-6 grid grid-cols-1 gap-6 xl:grid-cols-12">
+        <div className="min-w-0 space-y-6 xl:col-span-8">
+          <VolumeChartCard visible={visible} selected={selected} selectedRecords={rows} />
+          <DashboardQueryList
+            title={selected?.label || "Queries"}
+            subtitle={selected?.caption}
+            icon={selected?.icon || FileText}
+            items={rows}
+            totalCount={visible.length}
+            emptyText={
+              emptyTextFor?.(selected) ||
+              `Nothing in ${selected?.label || "this list"} right now.`
+            }
+          />
+        </div>
 
-        {sidePanel && (
-          <div className="sticky top-6 self-start">{sidePanel}</div>
-        )}
+        <div className="min-w-0 space-y-6 xl:col-span-4">
+          <StatusMixCard visible={visible} />
+          <BucketBarsCard buckets={buckets} recordsByKey={recordsByKey} />
+          {sidePanel}
+        </div>
       </div>
     </div>
   );

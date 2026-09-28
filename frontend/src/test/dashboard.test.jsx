@@ -20,7 +20,8 @@ vi.mock('@/services/api/mailboxService', () => ({
   fetchMailboxDecisions: vi.fn().mockResolvedValue({ decisions: [] }),
   recordMailboxDecision: vi.fn().mockResolvedValue({ alreadyDecided: false }),
   markMessageIngested: vi.fn().mockResolvedValue({ ingested: true }),
-  deleteMailboxMessage: vi.fn().mockResolvedValue({ deleted: true }),  sendAcknowledgement: vi.fn().mockResolvedValue({}),
+  deleteMailboxMessage: vi.fn().mockResolvedValue({ deleted: true }),
+  sendAcknowledgement: vi.fn().mockResolvedValue({}),
 }));
 
 import { EXTERNAL_INQUIRER } from '@/test/externalInquirer';
@@ -53,8 +54,7 @@ function tile(label) {
 }
 
 function listPanel() {
-  const heading = screen.getAllByRole('heading', { level: 2 })[0];
-  return heading.closest('.bento-card');
+  return document.querySelector('[data-slot="dashboard-query-list"]');
 }
 
 function visibleQueryIds() {

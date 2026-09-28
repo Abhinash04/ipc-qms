@@ -40,7 +40,7 @@ export function IpcLogo({ className = '', variant = 'light', showText = true }) 
           <div className={`font-bold tracking-tight text-[10px] sm:text-[12px] lg:text-[14px] ${isDark ? 'text-slate-100' : 'text-slate-900'} break-words whitespace-normal`}>
             भारतीय भेषज संहिता आयोग
           </div>
-          <div className={`font-black tracking-tight uppercase text-[10px] sm:text-[12px] lg:text-[14px] ${isDark ? 'text-amber-500' : 'text-slate-900'} break-words whitespace-normal`}>
+          <div className={`font-bold tracking-tight uppercase text-[10px] sm:text-[12px] lg:text-[14px] ${isDark ? 'text-amber-500' : 'text-slate-900'} break-words whitespace-normal`}>
             INDIAN PHARMACOPOEIA COMMISSION
           </div>
           <div className={`font-medium text-[8px] sm:text-[9px] lg:text-[10.5px] ${isDark ? 'text-slate-300' : 'text-slate-700'} break-words whitespace-normal`}>

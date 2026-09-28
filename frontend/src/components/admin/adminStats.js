@@ -91,6 +91,36 @@ export function volumeByDay(queries = []) {
   return days;
 }
 
+export const VOLUME_RANGES = {
+  week: { days: 7, stepDays: 1 },
+  month: { days: 30, stepDays: 1 },
+  quarter: { days: 84, stepDays: 7 },
+};
+
+export function volumeSeries(queries = [], range = 'week') {
+  const { days, stepDays } = VOLUME_RANGES[range] || VOLUME_RANGES.week;
+  const buckets = [];
+  for (let offset = days - stepDays; offset >= 0; offset -= stepDays) {
+    const from = startOfDay(-offset - stepDays + 1);
+    buckets.push({
+      from: from.getTime(),
+      to: startOfDay(-offset + 1).getTime(),
+      label:
+        stepDays === 1
+          ? from.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })
+          : `w/c ${from.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}`,
+      value: 0,
+    });
+  }
+  for (const query of queries) {
+    const at = new Date(query.createdAt).getTime();
+    if (Number.isNaN(at)) continue;
+    const bucket = buckets.find((b) => at >= b.from && at < b.to);
+    if (bucket) bucket.value += 1;
+  }
+  return buckets.map(({ label, value }) => ({ label, value }));
+}
+
 export function caseTrend(queries = []) {
   const currentFrom = startOfDay(-6).getTime();
   const previousFrom = startOfDay(-13).getTime();

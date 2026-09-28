@@ -7,7 +7,7 @@ const STRIPPED =
   "script, meta, base, link, iframe, frame, frameset, object, embed, form, template";
 
 const FRAME_STYLE =
-  "body{margin:0;padding:16px;font:14px/1.6 system-ui,sans-serif;color:#334155;overflow-wrap:anywhere}img{max-width:100%;height:auto}";
+  ":root{color-scheme:light}body{margin:0;padding:16px;background:#ffffff;font:14px/1.6 system-ui,sans-serif;color:#334155;overflow-wrap:anywhere}img{max-width:100%;height:auto}";
 
 function inertMarkup(html) {
   const doc = new DOMParser().parseFromString(html, "text/html");
@@ -40,7 +40,7 @@ export function MailHtmlFrame({ html }) {
       sandbox=""
       referrerPolicy="no-referrer"
       srcDoc={srcDoc}
-      className="h-[60vh] min-h-72 w-full rounded-2xl border border-slate-200 bg-white"
+      className="h-[60vh] min-h-72 w-full rounded-2xl border border-line bg-white"
     />
   );
 }

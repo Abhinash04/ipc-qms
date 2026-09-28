@@ -49,17 +49,6 @@ export function rejectedCandidateFilter({ now = Date.now(), retentionHours = env
   };
 }
 
-export function unregisteredCandidateFilter({
-  now = Date.now(),
-  unregisteredHours = env.MAILBOX_UNREGISTERED_RETENTION_HOURS,
-} = {}) {
-  return {
-    purgedAt: null,
-    rescuedAt: null,
-    classifiedAt: { $lt: new Date(now - hoursToMs(unregisteredHours)).toISOString() },
-  };
-}
-
 export function purgeMessageFilter(ids) {
   return {
     mailboxMessageId: { $in: ids },
@@ -180,9 +169,8 @@ export async function findPurgeable({
   now = Date.now(),
   limit = env.MAILBOX_PURGE_BATCH,
   retentionHours,
-  unregisteredHours,
 } = {}) {
-  const [junk, rejected, unregistered] = await Promise.all([
+  const [junk, rejected] = await Promise.all([
     MailboxTriage.find(purgeCandidateFilter({ now, retentionHours }))
       .select('mailboxMessageId verdict confidence classifier rule classifiedAt')
       .sort({ classifiedAt: 1 })
@@ -191,11 +179,6 @@ export async function findPurgeable({
     MailboxDecision.find(rejectedCandidateFilter({ now, retentionHours }))
       .select('mailboxMessageId decidedAt')
       .sort({ decidedAt: 1 })
-      .limit(limit)
-      .lean(),
-    MailboxTriage.find(unregisteredCandidateFilter({ now, unregisteredHours }))
-      .select('mailboxMessageId verdict confidence classifier rule classifiedAt')
-      .sort({ classifiedAt: 1 })
       .limit(limit)
       .lean(),
   ]);
@@ -222,18 +205,6 @@ export async function findPurgeable({
       classifier: null,
       rule: null,
       since: row.decidedAt,
-    });
-  }
-  for (const row of unregistered) {
-    if (candidates.has(row.mailboxMessageId)) continue;
-    candidates.set(row.mailboxMessageId, {
-      mailboxMessageId: row.mailboxMessageId,
-      why: 'unregistered-expired',
-      verdict: row.verdict,
-      confidence: row.confidence,
-      classifier: row.classifier,
-      rule: row.rule,
-      since: row.classifiedAt,
     });
   }
 
@@ -294,7 +265,6 @@ export async function sweepOnce({
   now = Date.now(),
   dryRun = false,
   retentionHours,
-  unregisteredHours,
   limit = env.MAILBOX_PURGE_BATCH,
   classify = true,
   purge = true,
@@ -326,7 +296,7 @@ export async function sweepOnce({
       return { ...result, grace: true, durationMs: Date.now() - started };
     }
 
-    const candidates = await findPurgeable({ now, limit, retentionHours, unregisteredHours });
+    const candidates = await findPurgeable({ now, limit, retentionHours });
     result.scanned = candidates.length;
     if (!candidates.length) return { ...result, durationMs: Date.now() - started };
 
@@ -389,7 +359,6 @@ export async function sweepOnce({
           attachmentsRemoved: result.attachmentsRemoved,
           skipped: result.skipped,
           retentionHours: retentionHours ?? env.MAILBOX_RETENTION_HOURS,
-          unregisteredHours: unregisteredHours ?? env.MAILBOX_UNREGISTERED_RETENTION_HOURS,
         },
       });
     }

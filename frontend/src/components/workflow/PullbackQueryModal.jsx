@@ -85,18 +85,18 @@ export function PullbackQueryModal({ query, isOpen, onClose, currentUser }) {
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && handleClose()}>
-      <DialogContent className="sm:max-w-155 max-h-[90vh] overflow-y-auto rounded-3xl p-6 bg-white border border-slate-200/90 shadow-2xl">
+      <DialogContent className="sm:max-w-155 max-h-[90vh] overflow-y-auto rounded-2xl p-6 bg-card border border-line shadow-2xl">
         <DialogHeader className="border-b border-slate-100 pb-3">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-2xl bg-amber-50 text-amber-700 border border-amber-200/80 flex items-center justify-center shrink-0">
               <RotateCcw className="h-5 w-5" />
             </div>
             <div>
-              <DialogTitle className="font-heading text-xl font-black text-slate-900 m-0">
+              <DialogTitle className="font-heading text-xl font-bold text-slate-900 m-0">
                 Pullback Query
               </DialogTitle>
               <DialogDescription className="text-sm font-semibold text-slate-500 mt-0.5">
-                Case ID: <span className="font-extrabold text-amber-700">{query.queryId}</span> •{' '}
+                Case ID: <span className="font-semibold text-amber-700">{query.queryId}</span> •{' '}
                 {query.subject}
               </DialogDescription>
             </div>
@@ -116,7 +116,7 @@ export function PullbackQueryModal({ query, isOpen, onClose, currentUser }) {
               <span className="font-bold text-amber-800 uppercase tracking-wider text-xs">
                 Current Stage
               </span>
-              <span className="font-black text-amber-950 bg-white px-3 py-1 rounded-xl border border-amber-200 shadow-2xs">
+              <span className="font-bold text-amber-950 bg-card px-3 py-1 rounded-xl border border-amber-200 shadow-2xs">
                 {currentStageLabel}
               </span>
             </div>
@@ -124,7 +124,7 @@ export function PullbackQueryModal({ query, isOpen, onClose, currentUser }) {
             <div className="space-y-2">
               <label
                 htmlFor="pullback-target-stage"
-                className="text-sm font-black uppercase tracking-wider text-slate-700 block m-0"
+                className="text-sm font-bold uppercase tracking-wider text-slate-700 block m-0"
               >
                 Pull Back To <span className="text-rose-500">*</span>
               </label>
@@ -152,7 +152,7 @@ export function PullbackQueryModal({ query, isOpen, onClose, currentUser }) {
             <div className="space-y-2">
               <label
                 htmlFor="pullback-reason"
-                className="text-sm font-black uppercase tracking-wider text-slate-700 block"
+                className="text-sm font-bold uppercase tracking-wider text-slate-700 block"
               >
                 Reason for Pullback <span className="text-rose-500">*</span>
               </label>
@@ -188,17 +188,17 @@ export function PullbackQueryModal({ query, isOpen, onClose, currentUser }) {
             <div className="rounded-2xl border border-amber-300 bg-amber-50/80 p-4 space-y-3">
               <div className="flex items-center gap-2 text-amber-950">
                 <HelpCircle className="h-5 w-5 text-amber-600 shrink-0" />
-                <h4 className="font-heading font-black text-base text-amber-950 m-0">
+                <h4 className="font-heading font-bold text-base text-amber-950 m-0">
                   Confirm Query Pullback
                 </h4>
               </div>
 
               <p className="text-sm font-bold text-slate-700 leading-relaxed">
                 Are you sure you want to pull back query{' '}
-                <span className="font-extrabold text-amber-800">{query.queryId}</span>?
+                <span className="font-semibold text-amber-800">{query.queryId}</span>?
               </p>
 
-              <div className="bg-white rounded-xl border border-amber-200/80 p-3.5 space-y-2 text-sm divide-y divide-slate-100">
+              <div className="bg-card rounded-xl border border-amber-200/80 p-3.5 space-y-2 text-sm divide-y divide-slate-100">
                 <div className="flex justify-between py-1">
                   <span className="text-slate-400 font-bold uppercase tracking-wider text-xs">
                     Current Stage:
@@ -209,7 +209,7 @@ export function PullbackQueryModal({ query, isOpen, onClose, currentUser }) {
                   <span className="text-slate-400 font-bold uppercase tracking-wider text-xs">
                     Pull Back To:
                   </span>
-                  <span className="font-extrabold text-amber-700">
+                  <span className="font-semibold text-amber-700">
                     {STAGE_LABELS[stage] || stage}
                   </span>
                 </div>
@@ -258,7 +258,7 @@ export function PullbackQueryModal({ query, isOpen, onClose, currentUser }) {
                 type="button"
                 onClick={handleNextOrConfirm}
                 disabled={isSubmitting}
-                className="px-5 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-black text-sm shadow-md shadow-amber-500/20 transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+                className="px-5 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-600/90 text-white font-bold text-sm shadow-md shadow-amber-500/20 transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
               >
                 {isSubmitting ? (
                   <>
@@ -283,7 +283,7 @@ export function PullbackQueryModal({ query, isOpen, onClose, currentUser }) {
                 type="button"
                 onClick={handleNextOrConfirm}
                 disabled={!stage || validStages.length === 0}
-                className="px-5 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-black text-sm shadow-md shadow-amber-500/20 transition-colors cursor-pointer disabled:opacity-50"
+                className="px-5 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-600/90 text-white font-bold text-sm shadow-md shadow-amber-500/20 transition-colors cursor-pointer disabled:opacity-50"
               >
                 Continue to Pullback
               </button>

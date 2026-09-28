@@ -30,13 +30,10 @@ export function matchesSearch(message, q) {
 
 export function purgesAtFor(row) {
   if (!row || row.rescuedAt || !row.classifiedAt) return null;
+  if (row.verdict !== 'JUNK' || !(row.confidence >= env.MAILBOX_JUNK_CONFIDENCE)) return null;
   const from = Date.parse(row.classifiedAt);
   if (Number.isNaN(from)) return null;
-  const hours =
-    row.verdict === 'JUNK' && row.confidence >= env.MAILBOX_JUNK_CONFIDENCE
-      ? env.MAILBOX_RETENTION_HOURS
-      : env.MAILBOX_UNREGISTERED_RETENTION_HOURS;
-  return new Date(from + hours * 3600000).toISOString();
+  return new Date(from + env.MAILBOX_RETENTION_HOURS * 3600000).toISOString();
 }
 
 export function deriveStatus({ isRead, decision, linkedCase, triage }) {

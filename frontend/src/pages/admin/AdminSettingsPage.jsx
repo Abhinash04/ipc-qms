@@ -22,7 +22,7 @@ function Row({ label, value, tone = 'neutral', hint }) {
         <p className="m-0 text-[13px] font-bold text-slate-700">{label}</p>
         {hint && <p className="m-0 mt-0.5 text-[11.5px] text-slate-400">{hint}</p>}
       </div>
-      <p className={`m-0 shrink-0 text-right text-[13px] font-black ${toneClassFor(tone)}`}>
+      <p className={`m-0 shrink-0 text-right text-[13px] font-bold ${toneClassFor(tone)}`}>
         {value}
       </p>
     </div>
@@ -31,8 +31,8 @@ function Row({ label, value, tone = 'neutral', hint }) {
 
 function Panel({ title, icon: Icon, children }) {
   return (
-    <section className="rounded-3xl border border-slate-200/80 bg-white p-5 shadow-sm">
-      <h2 className="mb-3 flex items-center gap-2 font-heading text-[16px] font-black text-slate-900">
+    <section  data-slot="panel"className="rounded-2xl border border-transparent bg-card p-5 shadow-card dark:border-line/60">
+      <h2 className="mb-3 flex items-center gap-2 font-heading text-[16px] font-bold text-slate-900">
         <Icon className="h-4 w-4 text-slate-400" aria-hidden="true" />
         {title}
       </h2>
@@ -170,7 +170,7 @@ function SettingsSkeleton() {
   return (
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
       {Array.from({ length: 4 }).map((_, i) => (
-        <Skeleton key={i} className="h-44 w-full rounded-3xl" />
+        <Skeleton key={i} className="h-44 w-full rounded-2xl" />
       ))}
     </div>
   );
@@ -202,7 +202,7 @@ export function AdminSettingsPage() {
         title="System Settings"
         purpose="Configuration reported by the server. Read-only."
         actions={
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-violet-200 bg-violet-50 px-3 py-1 text-[11.5px] font-black text-violet-700">
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-violet-200 bg-violet-50 px-3 py-1 text-[11.5px] font-bold text-violet-700">
             <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />
             Super Admin
           </span>

@@ -61,7 +61,7 @@ development accounts.
 
 ```
 main.jsx → QueryClientProvider → App
-App      → HydrationGate → NotificationHost + BrowserRouter → AppRoutes
+App      → ThemeApplier + HydrationGate → NotificationHost + BrowserRouter → AppRoutes
                                               ↓
                           ProtectedRoute → MainLayout → page
 ```
@@ -365,20 +365,58 @@ metadata-only records, without controls.
 
 ## Design system
 
-Tailwind **v4**, configured entirely in CSS — there is **no `tailwind.config.js`**. `src/index.css`
-holds an `@theme` block with the colour tokens, an 8-colour sidebar ramp, and 8 status triples
-consumed via `constants/statusStyles.js`. Fonts: Outfit (headings), Inter/DM Sans (body), DM Serif
-Display. Custom utility layers provide the neumorphic, glassmorphic and aurora surfaces.
+The look follows the **Hope UI** admin template, rebuilt in Tailwind **v4** rather than imported
+(Hope ships Bootstrap 5 + jQuery, which would fight Tailwind and the bundle budget). Tailwind is
+configured entirely in CSS — there is **no `tailwind.config.js`**. Fonts: Outfit (headings),
+Inter (body).
 
-Charts are **hand-written SVG** in `components/admin/charts.jsx` (`StatusDonut`, `VolumeBars`,
-`TrendLine`, `ProcessingFunnel`) — no charting library is installed. Colours come from
-`constants/chartPalette.js`, a validated colour-blind-safe series; identity is never carried by hue
-alone.
+**Tokens.** `src/index.css` declares semantic colours in `@theme` — `surface`, `surface-muted`,
+`ink`, `ink-soft`, `ink-muted`, `line`, the `primary-50…700` scale, Hope's `success`/`warning`/
+`danger`/`info`, the `side-*` sidebar colours and the 8 status triples used by
+`constants/statusStyles.js`. Write new UI against these tokens, not literal `slate-*`/`white`, so it
+follows the scheme and the preset. `shadow-card` / `shadow-card-hover` are the Hope card shadows.
 
-`components/ui/` holds 33 shadcn/ui files, of which **17 are actually reachable** from app code
-(button, card, badge, label, skeleton, textarea, select, tooltip, dialog, tabs, table, checkbox,
-scroll-area, sonner and their variant helpers). The other 16 are dormant scaffold — safe to adopt
-or delete, currently imported by nothing. (`breadcrumb.jsx` was one of them and has been removed: it
+**Theme runtime.** `store/useThemeStore.js` holds the viewer's appearance settings — scheme
+(`light`/`dark`/`auto`), colour preset, sidebar colour and active-item style, hover/boxed sidebar,
+navbar style, direction and interface language — persisted to `localStorage` under `qms.theme`.
+`components/theme/ThemeApplier.jsx` mirrors them onto `<html>`: the `dark` class, `data-preset`,
+`data-sidebar-*`, `data-navbar`, `dir` and `lang`. CSS does the rest:
+
+- `.dark { … }` overrides every token. It also remaps the `slate` scale and the 50–200 / 700–900
+  shades of the accent hues, so legacy `bg-emerald-50 text-emerald-700` chips stay legible on dark
+  cards. Because of that remap, don't use `-700`+ shades as solid **backgrounds** (a dark-mode hover
+  would turn pale) — use `-600` and an opacity for hover.
+- `[data-preset="…"]` swaps `primary-500/600/700`; tints are derived with `color-mix`.
+- An inline script in `index.html` applies the saved scheme before first paint.
+- The sidebar's mini (collapsed) state stays in `qms.sidebar.collapsed`, shared between the rail's
+  toggle and the customizer through `components/layout/sidebarState.js`.
+
+The customizer (`components/theme/ThemeCustomizer.jsx`, the navbar's gear) is Hope's settings
+offcanvas. **RTL** mirrors the layout only: all content is English or Hindi, so text runs keep
+their own direction (`unicode-bidi: plaintext`).
+
+**Interface language.** `i18n/strings.js` + `useT()` translate the chrome — navigation, navbar,
+footer, customizer and dashboard headings — into Hindi. Case data, workflow pages and every
+accessible name the e2e suite matches stay English by design.
+
+**Charts** use **ApexCharts**, loaded lazily: `components/charts/ApexChart.jsx` wraps a
+`React.lazy` import of `apexRuntime.jsx`, which registers only the area, bar, donut and radialBar
+modules. The ~640 kB chunk never blocks first paint and has its own ceiling in
+`scripts/check-bundle-budget.mjs`. `chartTheme.js` reads the live CSS tokens (keyed on the classes
+actually applied to `<html>`), so charts follow scheme and preset. `components/charts/Charts.jsx`
+has `AreaTrendChart`, `BarVolumeChart`, `DonutChart` and `RadialBarsChart`; `RadialRing.jsx` is
+a plain-SVG ring for KPI cards. `components/admin/charts.jsx` keeps its old exports
+(`StatusDonut`, `VolumeBars`, `TrendLine`, `ProcessingFunnel`) on top of these. Every chart has a
+text summary for screen readers. Vitest replaces `apexRuntime` with an inert stand-in
+(`test/setup.js`), because jsdom cannot lay out SVG. Multi-series colours start from the primary,
+then `constants/chartPalette.js`.
+
+`components/ui/` holds 33 shadcn/ui files, of which **20 are actually reachable** from app code
+(button, card, badge, label, skeleton, textarea, select, tooltip, dialog, sheet, dropdown-menu,
+radio-group, tabs, table, checkbox, scroll-area, sonner and their variant helpers). The other 13
+are dormant scaffold — safe to adopt or delete, currently imported by nothing. `command.jsx` among
+them imports `cmdk`, which is not installed; the Ctrl+K palette
+(`components/layout/CommandPalette.jsx`) is built on the Radix dialog instead. (`breadcrumb.jsx` was one of them and has been removed: it
 duplicated the live `components/common/Breadcrumb.jsx`.)
 
 ## Layout
@@ -386,15 +424,17 @@ duplicated the live `components/common/Breadcrumb.jsx`.)
 ```
 src/
   main.jsx, App.jsx, index.css
-  layouts/       MainLayout (sidebar + header + marquee + mobile nav), AuthLayout
+  layouts/       MainLayout (sidebar | navbar + bulletin strip + page + footer, mobile nav), AuthLayout
   routes/        AppRoutes, roleRoutes, ProtectedRoute
-  constants/     enums, RBAC tables, policies, mock directory data
-  store/         useAuthStore, useWorkflowStore
+  constants/     enums, RBAC tables, policies, mock directory data, announcements
+  store/         useAuthStore, useWorkflowStore, useThemeStore
   services/      api/, persistence/ (queryState.js), ai/ (local), notify.js
   hooks/         useQueryCase, useWorkflowAction, useMailboxIngestion, useBucketFilter, useRoutePaths
-  components/    admin/ ai/ attachments/ common/ dashboard/ email/ layout/ notifications/ ui/ workflow/
+  components/    admin/ ai/ attachments/ charts/ common/ dashboard/ email/ layout/ notifications/
+                 theme/ ui/ workflow/
+  i18n/          strings.js (en/hi interface labels), useT
   pages/         33 page components across 13 folders
-  test/          42 test files + setup.js and five in-process fakes (fakeQueryApi.js,
+  test/          47 test files + setup.js and five in-process fakes (fakeQueryApi.js,
                  fakeAcceptEndpoint.js, fakeFinalApprovalEndpoint.js)
   utils/         cn, greeting, queryOwnership
 ```
@@ -404,7 +444,7 @@ configured by `playwright.config.js` at the package root.
 
 ## Tests
 
-42 files (760 tests), `npm test` (Vitest 4 + Testing Library, jsdom).
+47 files (827 tests), `npm test` (Vitest 4 + Testing Library, jsdom).
 
 The harness is deliberately strict:
 

@@ -45,18 +45,15 @@ describe('a message with no verdict at all', () => {
 describe('the purge countdown the inbox shows', () => {
   const ORIGINAL = {
     hours: env.MAILBOX_RETENTION_HOURS,
-    unregistered: env.MAILBOX_UNREGISTERED_RETENTION_HOURS,
     floor: env.MAILBOX_JUNK_CONFIDENCE,
   };
 
   beforeEach(() => {
     env.MAILBOX_RETENTION_HOURS = 42;
-    env.MAILBOX_UNREGISTERED_RETENTION_HOURS = 336;
     env.MAILBOX_JUNK_CONFIDENCE = 0.9;
   });
   afterEach(() => {
     env.MAILBOX_RETENTION_HOURS = ORIGINAL.hours;
-    env.MAILBOX_UNREGISTERED_RETENTION_HOURS = ORIGINAL.unregistered;
     env.MAILBOX_JUNK_CONFIDENCE = ORIGINAL.floor;
   });
 
@@ -68,16 +65,13 @@ describe('the purge countdown the inbox shows', () => {
     );
   });
 
-  it('puts a genuine message on the long one, because that is the tier that will take it', () => {
-    expect(purgesAtFor({ verdict: 'GENUINE', confidence: 0, classifiedAt: at, rescuedAt: null })).toBe(
-      '2026-09-15T00:00:00.000Z',
-    );
+  it('shows no countdown on a genuine message, because nothing will purge it', () => {
+    expect(purgesAtFor({ verdict: 'GENUINE', confidence: 0, classifiedAt: at, rescuedAt: null })).toBeNull();
   });
 
-  it('puts unconfident junk on the long window too, since the junk tier cannot reach it', () => {
-    expect(purgesAtFor({ verdict: 'JUNK', confidence: 0, classifiedAt: at, rescuedAt: null })).toBe(
-      '2026-09-15T00:00:00.000Z',
-    );
+  it('shows no countdown on junk below the confidence floor, which the sweep cannot reach', () => {
+    expect(purgesAtFor({ verdict: 'JUNK', confidence: 0, classifiedAt: at, rescuedAt: null })).toBeNull();
+    expect(purgesAtFor({ verdict: 'JUNK', confidence: 0.89, classifiedAt: at, rescuedAt: null })).toBeNull();
   });
 
   it('shows nothing once a person has rescued the message', () => {

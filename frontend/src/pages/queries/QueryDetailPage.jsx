@@ -34,8 +34,8 @@ function CaseDetailsPanel({ query }) {
   ];
 
   return (
-    <div className="bg-white rounded-3xl border border-slate-200/80 p-5 shadow-sm select-none">
-      <h2 className="font-heading text-[17px] font-black text-slate-900 m-0 border-b border-slate-100 pb-2.5 mb-2.5">
+    <div  data-slot="panel"className="bg-card rounded-2xl border border-transparent p-5 shadow-card select-none dark:border-line/60">
+      <h2 className="font-heading text-[17px] font-bold text-slate-900 m-0 border-b border-slate-100 pb-2.5 mb-2.5">
         Case details
       </h2>
       <dl className="m-0 divide-y divide-slate-100">
@@ -44,7 +44,7 @@ function CaseDetailsPanel({ query }) {
             <dt className="text-[11.5px] font-bold uppercase tracking-wider text-slate-400 shrink-0">
               {label}
             </dt>
-            <dd className="m-0 text-[13px] font-extrabold text-slate-800 text-right truncate">
+            <dd className="m-0 text-[13px] font-semibold text-slate-800 text-right truncate">
               {value}
             </dd>
           </div>
@@ -89,7 +89,7 @@ function DraftTabContent({ versions, latestVersion }) {
 
 function CaseWorkspaceTabs({ query, versions, latestVersion }) {
   return (
-    <div className="bg-white rounded-3xl border border-slate-200/80 overflow-hidden shadow-sm p-5">
+    <div  data-slot="panel"className="bg-card rounded-2xl border border-transparent overflow-hidden shadow-card p-5 dark:border-line/60">
       <Tabs defaultValue="draft">
         <div className="border-b border-slate-100 pb-3">
           <TabsList variant="line">
@@ -122,7 +122,7 @@ function CaseWorkspaceTabs({ query, versions, latestVersion }) {
 function CaseInsightPanels({ query, steps, audit, canAssign, currentUser, assignQuery }) {
   return (
     <>
-      <div className="bg-white rounded-3xl border border-slate-200/80 p-5 shadow-sm">
+      <div  data-slot="panel"className="bg-card rounded-2xl border border-transparent p-5 shadow-card dark:border-line/60">
         <AiSummaryCard
           variant="embedded"
           summary={query.aiSummary}
@@ -143,7 +143,7 @@ function CaseInsightPanels({ query, steps, audit, canAssign, currentUser, assign
       <CaseOfficialsCard query={query} steps={steps} audit={audit} />
 
       {canAssign && (
-        <div className="bg-white rounded-3xl border border-slate-200/80 p-5 shadow-sm">
+        <div  data-slot="panel"className="bg-card rounded-2xl border border-transparent p-5 shadow-card dark:border-line/60">
           <AiRecommendationCard
             variant="embedded"
             query={query}
@@ -221,8 +221,8 @@ export function QueryDetailPage() {
 
       <CaseSummaryBar query={query} />
 
-      <div className="bg-white rounded-3xl border border-slate-200/80 p-5 shadow-sm mb-5">
-        <h2 className="font-heading text-[19px] font-black text-slate-900 mb-3 border-b border-slate-100 pb-2.5">
+      <div  data-slot="panel"className="bg-card rounded-2xl border border-transparent p-5 shadow-card mb-5 dark:border-line/60">
+        <h2 className="font-heading text-[19px] font-bold text-slate-900 mb-3 border-b border-slate-100 pb-2.5">
           Workflow progress
         </h2>
         <QueryLifecycleTimeline stages={stages} />
@@ -244,7 +244,7 @@ export function QueryDetailPage() {
           <CaseWorkspaceTabs query={query} versions={versions} latestVersion={latestVersion} />
         </div>
 
-        <div className="lg:sticky lg:top-6 self-start space-y-4 lg:max-h-[calc(100vh-3rem)] lg:overflow-y-auto">
+        <div className="lg:sticky lg:top-24 self-start space-y-4 lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto">
           <WorkflowActionsCard />
           {can(WORKFLOW_ACTION.APPROVE_REVIEW) && <ReviewDecisionCard />}
           <CaseDetailsPanel query={query} />

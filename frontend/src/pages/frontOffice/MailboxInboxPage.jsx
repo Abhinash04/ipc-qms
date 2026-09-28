@@ -189,7 +189,7 @@ function MailboxOfflineNotice({ reason }) {
 
 function MailboxCheckSummary({ result }) {
   return (
-    <div className="rounded-2xl bg-[#f1f5fa] border border-white p-3.5 shadow-[4px_4px_8px_#d0d7e5,-4px_-4px_8px_#ffffff] text-[13px] font-bold text-slate-700 flex items-center gap-2">
+    <div className="rounded-xl bg-surface-muted border border-line p-3.5 text-[13px] font-semibold text-ink-soft flex items-center gap-2">
       <CheckCircle2 className="h-4.5 w-4.5 text-emerald-600 shrink-0" />
       <span>{describeMailboxCheck(result)}</span>
     </div>
@@ -198,7 +198,7 @@ function MailboxCheckSummary({ result }) {
 
 function MailboxViewerNotice() {
   return (
-    <div role="status" className="rounded-2xl bg-[#f1f5fa] border border-white p-3.5 shadow-[4px_4px_8px_#d0d7e5,-4px_-4px_8px_#ffffff] text-[13px] font-bold text-slate-700 flex items-center gap-2">
+    <div role="status" className="rounded-xl bg-surface-muted border border-line p-3.5 text-[13px] font-semibold text-ink-soft flex items-center gap-2">
       <CloudDownload className="h-4.5 w-4.5 text-slate-500 shrink-0" aria-hidden="true" />
       <span>NICeMail is read by the mailbox host, not by this backend. New mail appears here once the host has synced it.</span>
     </div>
@@ -234,7 +234,7 @@ function InboxActions({
         type="button"
         onClick={onCheck}
         disabled={running}
-        className="flex items-center gap-2 rounded-2xl bg-linear-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white px-5 py-2.5 text-[13.5px] font-bold shadow-md shadow-blue-500/20 active:scale-95 transition-transform cursor-pointer disabled:opacity-60"
+        className="flex items-center gap-2 rounded-2xl bg-linear-to-r from-primary to-primary-700 hover:from-primary-600 hover:to-primary-700 text-white px-5 py-2.5 text-[13.5px] font-bold shadow-sm active:scale-95 transition-transform cursor-pointer disabled:opacity-60"
       >
         <RefreshCwIcon className={`h-4 w-4 ${running ? "animate-spin" : ""}`} />
         <span>{running ? "Checking Mailbox…" : "Check IPC Mailbox"}</span>
@@ -245,7 +245,7 @@ function InboxActions({
           type="button"
           onClick={onSync}
           disabled={syncing}
-          className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 px-4 py-2.5 text-[13.5px] font-bold shadow-sm active:scale-95 transition-transform cursor-pointer disabled:opacity-60"
+          className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-card hover:bg-slate-50 text-slate-700 px-4 py-2.5 text-[13.5px] font-bold shadow-sm active:scale-95 transition-transform cursor-pointer disabled:opacity-60"
         >
           <CloudDownload
             className={`h-4 w-4 ${syncing ? "animate-pulse" : ""}`}
@@ -276,7 +276,7 @@ function InboxToolbar({ search, onSearchChange, view, onViewChange }) {
           value={search}
           onChange={(e) => onSearchChange(e.target.value)}
           placeholder="Search sender, subject or message text…"
-          className="w-full rounded-2xl bg-slate-50/70 border border-slate-200/70 pl-11 pr-4 py-3 text-[13.5px] font-medium text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors"
+          className="w-full rounded-2xl bg-slate-50/70 border border-slate-200/70 pl-11 pr-4 py-3 text-[13.5px] font-medium text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors"
         />
       </div>
 
@@ -294,7 +294,7 @@ function InboxToolbar({ search, onSearchChange, view, onViewChange }) {
             className={cn(
               "px-3 py-1.5 text-[12px] font-bold rounded-lg transition-colors cursor-pointer",
               view === entry.value
-                ? "bg-white text-slate-800 shadow-sm"
+                ? "bg-card text-slate-800 shadow-sm"
                 : "text-slate-500 hover:text-slate-700",
             )}
           >
@@ -319,7 +319,7 @@ function InboxSkeleton() {
 function NoMatchingMail() {
   return (
     <div className="py-12 px-4 text-center rounded-2xl border border-dashed border-slate-200/90 bg-slate-50/50">
-      <h3 className="font-heading text-[16px] font-extrabold text-slate-800 m-0">
+      <h3 className="font-heading text-[16px] font-semibold text-slate-800 m-0">
         No messages match
       </h3>
       <p className="text-[13px] font-medium text-slate-400 m-0 mt-1">
@@ -367,10 +367,10 @@ function InboxPager({ offset, shown, total, onPage }) {
 function EmptyInbox() {
   return (
     <div className="py-12 px-4 text-center rounded-2xl border border-dashed border-slate-200/90 bg-slate-50/50 flex flex-col items-center justify-center">
-      <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-50 text-blue-600 border border-blue-100/60 shadow-2xs mb-3">
+      <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-primary-50 text-primary border border-primary-100/60 shadow-2xs mb-3">
         <MailIcon className="h-7 w-7" strokeWidth={1.8} />
       </div>
-      <h3 className="font-heading text-[16px] font-extrabold text-slate-800 m-0">
+      <h3 className="font-heading text-[16px] font-semibold text-slate-800 m-0">
         No Mail in the IPC Mailbox
       </h3>
       <p className="text-[13px] font-medium text-slate-400 m-0 mt-1 max-w-sm">
@@ -393,7 +393,7 @@ const COLUMN_HEADERS = [
 function MailboxColumnHeader() {
   return (
     <div
-      className={`hidden xl:grid ${ROW_GRID} gap-4 px-5 py-3.5 bg-slate-50/80 border border-slate-100 rounded-2xl text-[11px] font-extrabold text-slate-400 tracking-wider uppercase mb-3`}
+      className={`hidden xl:grid ${ROW_GRID} gap-4 px-5 py-3.5 bg-slate-50/80 border border-slate-100 rounded-2xl text-[11px] font-semibold text-slate-400 tracking-wider uppercase mb-3`}
     >
       {COLUMN_HEADERS.map(({ label, center }) => (
         <span key={label} className={center ? "text-center" : undefined}>
@@ -409,7 +409,7 @@ function QueryCaseCell({ known, queryId, detailPath, rejected }) {
     return (
       <Link
         to={detailPath}
-        className="inline-flex items-center gap-1.5 rounded-xl bg-linear-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white px-3.5 py-1.5 xl:px-4 xl:py-2 text-[11.5px] xl:text-[12px] font-black shadow-sm transition-transform hover:scale-105"
+        className="inline-flex items-center gap-1.5 rounded-xl bg-linear-to-r from-primary to-primary-700 hover:from-primary-600 hover:to-primary-700 text-white px-3.5 py-1.5 xl:px-4 xl:py-2 text-[11.5px] xl:text-[12px] font-bold shadow-sm transition-transform hover:scale-105"
       >
         <span>{queryId}</span>
         <ArrowRight className="h-3.5 w-3.5" />
@@ -419,7 +419,7 @@ function QueryCaseCell({ known, queryId, detailPath, rejected }) {
 
   if (rejected) {
     return (
-      <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200 px-3 py-1 xl:px-3.5 xl:py-1.5 text-[10.5px] xl:text-[11.5px] font-extrabold shadow-2xs">
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200 px-3 py-1 xl:px-3.5 xl:py-1.5 text-[10.5px] xl:text-[11.5px] font-semibold shadow-2xs">
         <Ban className="h-3 w-3 shrink-0" aria-hidden="true" />
         Rejected
       </span>
@@ -427,7 +427,7 @@ function QueryCaseCell({ known, queryId, detailPath, rejected }) {
   }
 
   return (
-    <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200/80 px-3 py-1 xl:px-3.5 xl:py-1.5 text-[10.5px] xl:text-[11.5px] font-extrabold shadow-2xs">
+    <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200/80 px-3 py-1 xl:px-3.5 xl:py-1.5 text-[10.5px] xl:text-[11.5px] font-semibold shadow-2xs">
       <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse shrink-0" />
       Awaiting validation
     </span>
@@ -441,7 +441,7 @@ function RowValidationControls({ message, decision, junk, pending, confirming, o
     const accepting = confirming === "accept";
     return (
       <div className="flex flex-col items-center gap-1.5">
-        <span className="hidden xl:block text-[11px] font-extrabold text-slate-500 uppercase tracking-wider">
+        <span className="hidden xl:block text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
           {accepting ? "Register & forward?" : "Reject?"}
         </span>
         <div className="flex items-center gap-1.5">
@@ -449,10 +449,10 @@ function RowValidationControls({ message, decision, junk, pending, confirming, o
             type="button"
             onClick={onConfirm}
             disabled={pending}
-            className={`rounded-xl px-3 py-1.5 text-[11.5px] font-extrabold text-white shadow-sm transition-[background-color,transform] active:scale-95 cursor-pointer disabled:opacity-60 ${
+            className={`rounded-xl px-3 py-1.5 text-[11.5px] font-semibold text-white shadow-sm transition-[background-color,transform] active:scale-95 cursor-pointer disabled:opacity-60 ${
               accepting
-                ? "bg-emerald-600 hover:bg-emerald-700"
-                : "bg-slate-600 hover:bg-slate-700"
+                ? "bg-emerald-600 hover:bg-emerald-600/90"
+                : "bg-danger hover:bg-danger/90"
             }`}
           >
             {pending ? "Working…" : "Yes"}
@@ -551,7 +551,7 @@ function RowDeleteControls({
   if (confirming) {
     return (
       <div className="flex flex-col items-center gap-1.5">
-        <span className="hidden xl:block text-[11px] font-extrabold text-slate-500 uppercase tracking-wider">
+        <span className="hidden xl:block text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
           Delete?
         </span>
         <div className="flex items-center gap-1.5">
@@ -559,7 +559,7 @@ function RowDeleteControls({
             type="button"
             onClick={onDelete}
             disabled={deleting}
-            className="rounded-xl bg-rose-600 hover:bg-rose-700 text-white px-3 py-1.5 text-[11.5px] font-extrabold shadow-sm transition-[background-color,transform] active:scale-95 cursor-pointer disabled:opacity-60"
+            className="rounded-xl bg-rose-600 hover:bg-rose-600/90 text-white px-3 py-1.5 text-[11.5px] font-semibold shadow-sm transition-[background-color,transform] active:scale-95 cursor-pointer disabled:opacity-60"
           >
             {deleting ? "Deleting…" : "Yes"}
           </button>
@@ -654,31 +654,31 @@ function MailboxRow({
   return (
     <div
       onClick={openFromRow}
-      className={`group relative flex flex-col xl:grid ${ROW_GRID} items-start xl:items-center gap-3 xl:gap-4 ${unread ? "bg-blue-50/40" : "bg-white"} rounded-2xl border border-slate-200/70 p-4 shadow-2xs hover:shadow-md hover:border-purple-300 transition-[border-color,box-shadow] duration-200 cursor-pointer`}
+      className={`group relative flex flex-col xl:grid ${ROW_GRID} items-start xl:items-center gap-3 xl:gap-4 ${unread ? "bg-primary-50/40" : "bg-card"} rounded-2xl border border-slate-200/70 p-4 shadow-2xs hover:shadow-md hover:border-purple-300 transition-[border-color,box-shadow] duration-200 cursor-pointer`}
     >
       <div
         className={`absolute left-0 top-0 bottom-0 w-1.5 rounded-l-2xl ${railColour(known, rejected)}`}
       />
 
       <div className="hidden xl:flex justify-center pl-2">
-        <span className="flex h-7 w-7 items-center justify-center rounded-full bg-slate-100 font-extrabold text-[12px] text-slate-700">
+        <span className="flex h-7 w-7 items-center justify-center rounded-full bg-slate-100 font-semibold text-[12px] text-slate-700">
           {index + 1}
         </span>
       </div>
 
       <div className="flex items-center justify-between xl:justify-start w-full xl:w-auto gap-3 min-w-0">
         <div className="flex items-center gap-3 min-w-0">
-          <div className="relative flex h-9.5 w-9.5 shrink-0 items-center justify-center rounded-xl bg-purple-50 text-purple-700 font-extrabold text-[12px] border border-purple-100">
+          <div className="relative flex h-9.5 w-9.5 shrink-0 items-center justify-center rounded-xl bg-purple-50 text-purple-700 font-semibold text-[12px] border border-purple-100">
             {sender.initials}
             {unread && (
               <span
-                className="absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full bg-blue-600 ring-2 ring-white"
+                className="absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full bg-primary ring-2 ring-white"
                 aria-hidden="true"
               />
             )}
           </div>
           <div className="min-w-0">
-            <div className="text-[13.5px] font-extrabold text-slate-900 truncate">
+            <div className="text-[13.5px] font-semibold text-slate-900 truncate">
               {unread && <span className="sr-only">Unread </span>}
               {sender.name}
             </div>
@@ -706,7 +706,7 @@ function MailboxRow({
             <TooltipTrigger asChild>
               <Link
                 to={openPath}
-                className="block text-[14px] font-extrabold text-slate-900 truncate group-hover:text-purple-700 transition-colors"
+                className="block text-[14px] font-semibold text-slate-900 truncate group-hover:text-purple-700 transition-colors"
               >
                 {message.subject || "(No Subject)"}
               </Link>
@@ -800,14 +800,14 @@ const FEED_SUBTITLE = {
 
 function MailboxFeedCard({ count, backend, deleteMessage, children }) {
   return (
-    <div className="glass-panel aurora-panel bento-card rounded-[30px] border border-white/80 p-6 sm:p-7 shadow-lg bg-white/95 backdrop-blur-xl">
+    <div className="rounded-2xl border border-transparent bg-surface p-6 shadow-card sm:p-7 dark:border-line/60">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 mb-5 border-b border-slate-100/80">
         <div className="flex items-center gap-4">
-          <div className="flex h-13 w-13 shrink-0 items-center justify-center rounded-2xl bg-linear-to-br from-blue-500/10 via-indigo-500/10 to-purple-500/10 text-blue-600 border border-blue-200/50 shadow-2xs">
+          <div className="flex h-13 w-13 shrink-0 items-center justify-center rounded-xl bg-primary-50 text-primary">
             <MailIcon className="h-6.5 w-6.5" strokeWidth={2} />
           </div>
           <div>
-            <h2 className="font-heading text-[22px] sm:text-[26px] font-black text-slate-900 m-0 leading-tight tracking-tight">
+            <h2 className="font-heading text-[22px] sm:text-[26px] font-bold text-slate-900 m-0 leading-tight tracking-tight">
               Incoming Mailbox Feed 📬
             </h2>
             <p className="m-0 text-[13.5px] font-medium text-slate-500 mt-1">
@@ -818,8 +818,8 @@ function MailboxFeedCard({ count, backend, deleteMessage, children }) {
         </div>
 
         <div className="flex items-center gap-2 self-start sm:self-center shrink-0">
-          <span className="inline-flex items-center gap-2 rounded-full bg-blue-50 px-4 py-1.5 text-[12.5px] font-extrabold text-blue-700 border border-blue-200/60 shadow-2xs">
-            <span className="h-2 w-2 rounded-full bg-blue-600 animate-pulse" />
+          <span className="inline-flex items-center gap-2 rounded-full bg-primary-50 px-4 py-1.5 text-[12.5px] font-semibold text-primary-700 border border-primary-200/60 shadow-2xs">
+            <span className="h-2 w-2 rounded-full bg-primary animate-pulse" />
             {count} Message{count === 1 ? "" : "s"} Total
           </span>
         </div>
