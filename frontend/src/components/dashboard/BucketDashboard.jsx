@@ -82,7 +82,6 @@ export function BucketDashboard({
   const selected =
     buckets.find((b) => b.key === selectedKey) || buckets[0] || null;
   const rows = selected ? recordsByKey[selected.key] || NO_RECORDS : NO_RECORDS;
-  // The charts follow the KPI card selection, like the query table does.
   const selectedLabel = selected?.label || "Queries";
 
   return (

@@ -19,7 +19,6 @@
   --radius-md: 0.5rem;
   --radius-card: 1rem;
 
-  /* Primary scale — presets override 500/600/700, tints are derived. */
   --color-primary-500: #3a57e8;
   --color-primary-600: #2f47c4;
   --color-primary-700: #243a9e;
@@ -33,7 +32,6 @@
   --color-primary-foreground: #ffffff;
   --color-primary-hover: var(--color-primary-600);
 
-  /* Semantic surfaces and ink */
   --color-surface: #ffffff;
   --color-surface-muted: #f5f6fa;
   --color-surface-raised: #ffffff;
@@ -42,13 +40,11 @@
   --color-ink-muted: #8a92a6;
   --color-line: #e9ecef;
 
-  /* Hope accent colours */
   --color-success: #1aa053;
   --color-warning: #f16a1b;
   --color-danger: #c03221;
   --color-info: #08b1ba;
 
-  /* Sidebar (varied by [data-sidebar-color]) */
   --color-side-bg: #ffffff;
   --color-side-fg: #4b556b;
   --color-side-muted: #adb5bd;
@@ -132,7 +128,6 @@ body {
   min-height: 100vh;
 }
 
-/* ---------- Colour presets (primary scale only) ---------- */
 [data-preset="indigo"] {
   --color-primary-500: #4f46e5;
   --color-primary-600: #4338ca;
@@ -154,7 +149,6 @@ body {
   --color-primary-700: #92400e;
 }
 
-/* ---------- Dark scheme ---------- */
 .dark {
   color-scheme: dark;
   --color-bg: #151824;
@@ -199,7 +193,6 @@ body {
   --color-side-muted: #6b7390;
   --color-side-border: #2b3146;
 
-  /* Slate is the app's neutral: invert it so literal slate utilities follow the scheme. */
   --color-slate-50: #252b3e;
   --color-slate-100: #2b3246;
   --color-slate-200: #343c52;
@@ -239,11 +232,6 @@ body {
 
 }
 
-/*
- * Accent hues: tints (50-200) become dark washes of the hue and inks
- * (700-900) become light, so `bg-x-50 text-x-700` chips read on dark cards.
- * 300-600 keep their light-mode values, so solid buttons are unchanged.
- */
 .dark {
   --hue-base: #1f2436;
 }
@@ -328,7 +316,6 @@ body {
   --color-sky-900: color-mix(in oklab, var(--color-sky-300) 45%, white);
 }
 
-/* ---------- Sidebar colour variants ---------- */
 [data-sidebar-color="dark"] {
   --color-side-bg: #151824;
   --color-side-fg: #c3c8d6;
@@ -382,7 +369,6 @@ body {
   }
 }
 
-/* ---------- Hero backdrop motion (components/common/HeroBackdrop.jsx) ---------- */
 @keyframes hero-band-drift {
   from {
     transform: translateX(-60px);
@@ -416,7 +402,6 @@ body {
   transform-origin: center;
   animation: hero-glow-drift 16s ease-in-out infinite;
 }
-/* ---------- Page backdrop (components/common/PageBackdrop.jsx) ---------- */
 @utility bg-dot-grid {
   background-image: radial-gradient(
     color-mix(in oklab, var(--color-ink-muted) 34%, transparent) 1.1px,
@@ -452,7 +437,6 @@ body {
   }
 }
 
-/* ---------- Overlay entrance animations (Radix sets data-state) ---------- */
 @keyframes qms-fade-in {
   from {
     opacity: 0;
@@ -495,7 +479,6 @@ body {
   }
 }
 
-/* ---------- Sidebar nav links: [data-sidebar-active] picks the shape ---------- */
 @layer components {
 
   .brand-plate {
@@ -533,7 +516,6 @@ body {
     border-radius: 9999px;
   }
 }
-/* "One side" styles run the active item into the sidebar's leading edge. */
 [data-sidebar-active="rounded-one"] .side-rail-open .side-link,
 [data-sidebar-active="pill-one"] .side-rail-open .side-link {
   margin-inline-start: -0.75rem;

@@ -55,7 +55,6 @@ function Option({ value, label, children }) {
   );
 }
 
-/** Tiny layout sketch used as an option thumbnail. */
 function Sketch({ side = "bg-slate-200", nav = "bg-slate-100", active, pill, oneSide, boxed }) {
   return (
     <span className="flex h-12 w-full overflow-hidden rounded-md border border-line bg-surface-muted" aria-hidden="true">

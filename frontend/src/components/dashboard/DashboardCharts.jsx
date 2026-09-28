@@ -39,7 +39,6 @@ function EmptyChart({ label }) {
   );
 }
 
-/** Arrivals over time for the list selected by the KPI cards. */
 export function VolumeChartCard({ label, records }) {
   const t = useT();
   const [range, setRange] = useState("week");
@@ -80,7 +79,6 @@ export function VolumeChartCard({ label, records }) {
   );
 }
 
-/** Open / in progress / closed within the selected list. */
 export function StatusMixCard({ label, records }) {
   const t = useT();
   const slices = useMemo(() => statusDistribution(records), [records]);
@@ -100,7 +98,6 @@ export function StatusMixCard({ label, records }) {
   );
 }
 
-/** The selected list split by workflow stage. */
 export function StageBreakdownCard({ label, records }) {
   const points = useMemo(() => stageBreakdown(records), [records]);
 

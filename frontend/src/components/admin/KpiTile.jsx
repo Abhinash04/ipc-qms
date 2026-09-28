@@ -7,7 +7,6 @@ import { CardDecor } from '@/components/common/CardDecor';
 
 const nf = new Intl.NumberFormat();
 
-/** Hope KPI card for server-side counts; links to the page behind the figure. */
 export function KpiTile({
   label,
   value,

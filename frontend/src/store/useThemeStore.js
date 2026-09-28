@@ -32,19 +32,15 @@ function valid(key, value) {
   return typeof value === typeof THEME_DEFAULTS[key];
 }
 
-/** Saved settings, keeping only known keys with valid values. */
 export function readSavedTheme() {
   const out = { ...THEME_DEFAULTS };
   try {
     const saved = JSON.parse(localStorage.getItem(THEME_STORAGE_KEY) || "{}");
-    // Accept the zustand-persist envelope ({ state }) as well as a flat object.
     const state = saved && typeof saved === "object" && saved.state ? saved.state : saved;
     for (const key of KEYS) {
       if (state && key in state && valid(key, state[key])) out[key] = state[key];
     }
-  } catch {
-    /* unreadable or blocked storage: defaults */
-  }
+  } catch {}
   return out;
 }
 
@@ -52,9 +48,7 @@ function writeSavedTheme(state) {
   try {
     const picked = Object.fromEntries(KEYS.map((k) => [k, state[k]]));
     localStorage.setItem(THEME_STORAGE_KEY, JSON.stringify({ state: picked, version: 1 }));
-  } catch {
-    /* storage blocked: the theme still applies for this session */
-  }
+  } catch {}
 }
 
 export const useThemeStore = create((set) => ({

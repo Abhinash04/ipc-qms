@@ -48,11 +48,6 @@ export function lifecycleProgress(state) {
   return { step, steps, fraction, label: readable(state), tone };
 }
 
-/**
- * How many of `queries` sit at each workflow state, in lifecycle order
- * (off-path states follow the stage they return to). Empty stages are left
- * out.
- */
 export function stageBreakdown(queries = []) {
   const counts = new Map();
   for (const query of queries) {

@@ -19,7 +19,6 @@ export function navItemsForRole(role) {
 
 export const NAV_GROUP_ORDER = ['home', 'workflow', 'insights', 'admin'];
 
-/** Nav items bucketed by their sidebar group heading, in display order. */
 export function navGroupsForRole(role) {
   const items = navItemsForRole(role);
   return NAV_GROUP_ORDER.map((group) => ({
