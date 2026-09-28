@@ -47,8 +47,12 @@ export function CommandPalette({ open, onOpenChange }) {
 
   useEffect(() => {
     const onKey = (event) => {
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
+      if ((event.ctrlKey || event.metaKey) && event.key?.toLowerCase() === "k") {
         event.preventDefault();
+        if (open) {
+          setTerm("");
+          setActive(0);
+        }
         onOpenChange(!open);
       }
     };
