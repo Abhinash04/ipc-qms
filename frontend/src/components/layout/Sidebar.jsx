@@ -43,7 +43,7 @@ function RailTooltip({ open, label, children }) {
   );
 }
 
-export function SidebarContent({ open, onNavigate, onToggle }) {
+export function SidebarContent({ open, collapsed = !open, onNavigate, onToggle }) {
   const currentUser = useAuthStore((state) => state.currentUser);
   const logout = useAuthStore((state) => state.logout);
   const navigate = useNavigate();
@@ -88,8 +88,8 @@ export function SidebarContent({ open, onNavigate, onToggle }) {
           <button
             type="button"
             onClick={onToggle}
-            title={open ? "Collapse sidebar" : "Expand sidebar"}
-            aria-label={open ? "Collapse sidebar" : "Expand sidebar"}
+            title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
             className={cn(
               "absolute top-1/2 -inset-e-3.5 z-10 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full bg-primary text-white shadow-md ring-4 ring-surface-muted transition-transform hover:scale-105 cursor-pointer",
               FOCUS_RING,
@@ -98,7 +98,7 @@ export function SidebarContent({ open, onNavigate, onToggle }) {
             <ChevronLeft
               className={cn(
                 "h-4 w-4 transition-transform duration-200 rtl:rotate-180",
-                !open && "rotate-180 rtl:rotate-0",
+                collapsed && "rotate-180 rtl:rotate-0",
               )}
             />
           </button>
@@ -222,6 +222,7 @@ export function Sidebar() {
         >
           <SidebarContent
             open={expanded}
+            collapsed={collapsed}
             onToggle={() => setCollapsed(!collapsed)}
           />
         </m.div>
