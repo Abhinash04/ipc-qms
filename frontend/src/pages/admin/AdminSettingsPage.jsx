@@ -31,7 +31,7 @@ function Row({ label, value, tone = 'neutral', hint }) {
 
 function Panel({ title, icon: Icon, children }) {
   return (
-    <section  data-slot="panel"className="rounded-2xl border border-transparent bg-card p-5 shadow-card dark:border-line/60">
+    <section  data-slot="panel" className="rounded-2xl border border-transparent bg-card p-5 shadow-card dark:border-line/60">
       <h2 className="mb-3 flex items-center gap-2 font-heading text-[16px] font-bold text-slate-900">
         <Icon className="h-4 w-4 text-slate-400" aria-hidden="true" />
         {title}

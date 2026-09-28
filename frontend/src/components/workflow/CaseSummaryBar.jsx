@@ -7,7 +7,7 @@ export function CaseSummaryBar({ query }) {
   const assignee = query.currentAssigneeId ? findUserById(query.currentAssigneeId) : null;
 
   return (
-    <div  data-slot="panel"className="bg-card rounded-2xl border border-transparent p-6 shadow-card mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between select-none dark:border-line/60">
+    <div  data-slot="panel" className="bg-card rounded-2xl border border-transparent p-6 shadow-card mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between select-none dark:border-line/60">
       <div>
         <span className="text-[12px] font-bold tracking-widest text-purple-600 uppercase bg-purple-50 px-2.5 py-1 rounded-lg border border-purple-100">
           {query.queryId}

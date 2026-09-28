@@ -29,7 +29,7 @@ export function CaseOfficialsCard({ query, steps, audit }) {
   if (officials.length === 0) return null;
 
   return (
-    <div  data-slot="panel"className="bg-card rounded-2xl border border-transparent p-5 shadow-card select-none dark:border-line/60">
+    <div  data-slot="panel" className="bg-card rounded-2xl border border-transparent p-5 shadow-card select-none dark:border-line/60">
       <div className="flex items-center gap-2.5 border-b border-slate-100 pb-3 mb-3">
         <Users className="h-4.5 w-4.5 text-slate-400" strokeWidth={2.2} />
         <h2 className="font-heading text-[17px] font-bold text-slate-900 m-0">

@@ -100,7 +100,7 @@ export function NotificationsPage() {
         purpose="Workflow events raised for the cases you are involved in"
       />
 
-      <div  data-slot="panel"className="bg-card rounded-2xl border border-transparent p-6 shadow-card dark:border-line/60">
+      <div  data-slot="panel" className="bg-card rounded-2xl border border-transparent p-6 shadow-card dark:border-line/60">
         <div className="relative pl-3 space-y-6 my-2">
           {displayList.map((item, index) => {
             const config = getNodeConfig(item);

@@ -107,7 +107,7 @@ export function AuditHistoryCard({ audit }) {
   const visible = showAll ? newestFirst : newestFirst.slice(0, AUDIT_PREVIEW);
 
   return (
-    <div  data-slot="panel"className="bg-card rounded-2xl border border-transparent p-5 shadow-card overflow-hidden select-none dark:border-line/60">
+    <div  data-slot="panel" className="bg-card rounded-2xl border border-transparent p-5 shadow-card overflow-hidden select-none dark:border-line/60">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-3 mb-3">
         <div className="flex items-center gap-2.5">
           <div className="w-8 h-8 rounded-xl bg-primary-50 text-primary border border-primary-100/80 flex items-center justify-center shadow-2xs">
