@@ -118,6 +118,36 @@ describe('the inbox lists real mailbox messages', () => {
   });
 });
 
+describe('mail discarded on the server', () => {
+  it('drops from the inbox at the next auto-refresh, without a reload', async () => {
+    vi.useFakeTimers();
+    try {
+      renderInbox();
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(screen.getByText('Doomed enquiry')).toBeInTheDocument();
+
+      fetchMailboxMessages.mockResolvedValue({ messages: [message(1, 'Keep this one')] });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(15000);
+      });
+      expect(fetchMailboxMessages).toHaveBeenCalledTimes(2);
+      for (let step = 0; step < 10; step += 1) {
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(100);
+        });
+      }
+
+      expect(screen.queryByText('Doomed enquiry')).toBeNull();
+      expect(screen.getByText('Keep this one')).toBeInTheDocument();
+    } finally {
+      vi.clearAllTimers();
+      vi.useRealTimers();
+    }
+  });
+});
+
 describe('Scenario A — the Front Officer accepts a genuine enquiry', () => {
   it('hands the message to the accept endpoint and shows the case it answered with', async () => {
     fetchMailboxMessages.mockResolvedValue({
