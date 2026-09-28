@@ -100,7 +100,7 @@ export function LoginPage() {
           onClick={() => setOption("mode", isDark ? "light" : "dark")}
           aria-label="Toggle dark mode"
           aria-pressed={isDark}
-          className="absolute end-5 top-5 flex h-10 w-10 cursor-pointer items-center justify-center rounded-full bg-surface text-ink-muted shadow-card transition-colors hover:text-primary"
+          className="absolute inset-e-5 top-5 flex h-10 w-10 cursor-pointer items-center justify-center rounded-full bg-surface text-ink-muted shadow-card transition-colors hover:text-primary"
         >
           {isDark ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
         </button>
@@ -146,7 +146,7 @@ export function LoginPage() {
                 </label>
                 <div className="relative">
                   <Mail
-                    className="pointer-events-none absolute start-3.5 top-1/2 h-5 w-5 -translate-y-1/2 text-ink-muted"
+                    className="pointer-events-none absolute inset-s-3.5 top-1/2 h-5 w-5 -translate-y-1/2 text-ink-muted"
                     strokeWidth={2}
                   />
                   <input
@@ -167,7 +167,7 @@ export function LoginPage() {
                 </label>
                 <div className="relative">
                   <Lock
-                    className="pointer-events-none absolute start-3.5 top-1/2 h-5 w-5 -translate-y-1/2 text-ink-muted"
+                    className="pointer-events-none absolute inset-s-3.5 top-1/2 h-5 w-5 -translate-y-1/2 text-ink-muted"
                     strokeWidth={2}
                   />
                   <input
@@ -183,7 +183,7 @@ export function LoginPage() {
                     type="button"
                     aria-label={showPassword ? "Hide password" : "Show password"}
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute end-2 top-1/2 -translate-y-1/2 cursor-pointer p-2 text-ink-muted transition-colors hover:text-ink"
+                    className="absolute inset-e-2 top-1/2 -translate-y-1/2 cursor-pointer p-2 text-ink-muted transition-colors hover:text-ink"
                   >
                     {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                   </button>

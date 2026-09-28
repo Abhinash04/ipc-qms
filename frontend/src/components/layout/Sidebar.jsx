@@ -91,7 +91,7 @@ export function SidebarContent({ open, onNavigate, onToggle }) {
             title={open ? "Collapse sidebar" : "Expand sidebar"}
             aria-label={open ? "Collapse sidebar" : "Expand sidebar"}
             className={cn(
-              "absolute top-1/2 -end-3.5 z-10 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full bg-primary text-white shadow-md ring-4 ring-surface-muted transition-transform hover:scale-105 cursor-pointer",
+              "absolute top-1/2 -inset-e-3.5 z-10 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full bg-primary text-white shadow-md ring-4 ring-surface-muted transition-transform hover:scale-105 cursor-pointer",
               FOCUS_RING,
             )}
           >
@@ -213,9 +213,9 @@ export function Sidebar() {
           onMouseEnter={() => setHovering(true)}
           onMouseLeave={() => setHovering(false)}
           className={cn(
-            "absolute inset-y-0 start-0 bg-side-bg text-side-fg",
+            "absolute inset-y-0 inset-s-0 bg-side-bg text-side-fg",
             boxed
-              ? "inset-y-4 start-4 rounded-2xl shadow-card"
+              ? "inset-y-4 inset-s-4 rounded-2xl shadow-card"
               : "border-e border-side-border shadow-[0_0_30px_rgba(17,38,146,0.05)]",
             hoverMode && collapsed && hovering && "shadow-2xl",
           )}

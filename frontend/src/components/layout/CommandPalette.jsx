@@ -172,7 +172,7 @@ export function CommandPalette({ open, onOpenChange }) {
         <DialogPrimitive.Content
           data-slot="dialog-content"
           aria-describedby={undefined}
-          className="fixed start-1/2 top-[12vh] z-50 w-[calc(100%-2rem)] max-w-xl -translate-x-1/2 rtl:translate-x-1/2 overflow-hidden rounded-2xl border border-line bg-surface shadow-2xl outline-none"
+          className="fixed inset-s-1/2 top-[12vh] z-50 w-[calc(100%-2rem)] max-w-xl -translate-x-1/2 rtl:translate-x-1/2 overflow-hidden rounded-2xl border border-line bg-surface shadow-2xl outline-none"
         >
           <DialogPrimitive.Title className="sr-only">Search</DialogPrimitive.Title>
           <div className="flex items-center gap-3 border-b border-line px-4">
