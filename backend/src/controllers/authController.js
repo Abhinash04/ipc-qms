@@ -13,6 +13,7 @@ import * as audit from '../services/audit/auditService.js';
 import { AUDIT_ACTIONS, AUDIT_RESULTS } from '../constants/auditActions.js';
 import { ACTOR_TYPES } from '../constants/roles.js';
 import { nicFrontOfficeUser } from '../constants/users.js';
+import { verifyGoogleToken } from '../services/auth/googleAuthService.js';
 
 async function login(req, res, next) {
   try {
@@ -119,4 +120,55 @@ async function devLogin(req, res, next) {
   }
 }
 
-export { login, logout, me, users, devLogin };
+async function googleLogin(req, res, next) {
+  try {
+    const { credential } = req.body || {};
+
+    if (!credential) {
+      return res
+        .status(HTTP_STATUS.BAD_REQUEST)
+        .json({ code: 'MISSING_CREDENTIAL', error: 'Google credential is required' });
+    }
+
+    let google;
+    try {
+      google = await verifyGoogleToken(credential);
+    } catch (error) {
+      if (!error.statusCode) throw error;
+      return res.status(error.statusCode).json({ code: error.code, error: error.message });
+    }
+
+    const email = String(google.email).trim().toLowerCase();
+    const user = findByEmail(email);
+
+    if (!user) {
+      await audit.record({
+        action: AUDIT_ACTIONS.LOGIN_FAILED,
+        result: AUDIT_RESULTS.DENIED,
+        actorType: ACTOR_TYPES.HUMAN,
+        details: { email, authProvider: 'google', reason: 'no staff account uses this email' },
+      });
+      return res.status(HTTP_STATUS.FORBIDDEN).json({
+        code: 'NO_ACCOUNT',
+        error: 'No IPC-QMS account uses this Google email. Sign in with your IPC-QMS email and password.',
+      });
+    }
+
+    const publicUser = toPublicUser(user);
+
+    await audit.record({
+      action: AUDIT_ACTIONS.LOGIN_SUCCEEDED,
+      actorType: ACTOR_TYPES.HUMAN,
+      actorId: publicUser.id,
+      actorRole: publicUser.role,
+      details: { authProvider: 'google' },
+    });
+
+    res.cookie(authConfig.COOKIE_NAME, signToken(publicUser), cookieOptions());
+    return res.status(HTTP_STATUS.OK).json({ user: publicUser });
+  } catch (error) {
+    return next(error);
+  }
+}
+
+export { login, logout, me, users, devLogin, googleLogin };

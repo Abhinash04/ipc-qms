@@ -27,7 +27,7 @@ app.use(cookieParser());
 
 if (env.NODE_ENV !== 'test') {
   app.use(
-    '/api/v1/auth/login',
+    ['/api/v1/auth/login', '/api/v1/auth/google'],
     rateLimit({
       windowMs: 15 * 60 * 1000,
       limit: 10,
