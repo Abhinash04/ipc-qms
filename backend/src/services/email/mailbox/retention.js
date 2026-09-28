@@ -10,6 +10,7 @@ import * as audit from '../../audit/auditService.js';
 import { AUDIT_ACTIONS, AUDIT_RESULTS } from '../../../constants/auditActions.js';
 import { ACTOR_TYPES } from '../../../constants/roles.js';
 import { classifyMail } from '../../ai/gemmaService.js';
+import { MAIL_STATUS, toMessageViews } from './messageView.js';
 
 export const PURGEABLE_SOURCES = ['nic-browser'];
 
@@ -365,6 +366,111 @@ export async function sweepOnce({
   } catch (error) {
     result.errors.push(error.message);
     console.warn(`[qms] retention sweep failed: ${error.message}`);
+  }
+
+  return { ...result, durationMs: Date.now() - started };
+}
+
+const AWAITING_STATUSES = [MAIL_STATUS.NEW, MAIL_STATUS.READ];
+
+export const AWAITING_DISCARD_REASON = 'awaiting-discarded';
+
+export async function findAwaiting({ limit } = {}) {
+  const rows = await MailboxMessage.find({ source: { $in: PURGEABLE_SOURCES }, removedAt: null, purgedAt: null })
+    .select('mailboxMessageId source from subject receivedAt attachments removedAt readAt')
+    .sort({ receivedAt: 1, mailboxMessageId: 1 })
+    .lean();
+  const views = await toMessageViews(rows, { keepsReadState: true });
+  const awaiting = rows.filter((_row, index) => AWAITING_STATUSES.includes(views[index].status));
+  return limit ? awaiting.slice(0, limit) : awaiting;
+}
+
+async function awaitingVetoFor(mailboxMessageId) {
+  const decided = await MailboxDecision.findOne({ mailboxMessageId }).select('_id').lean();
+  if (decided) return 'decided';
+
+  const linked = await QueryCase.findOne({ sourceMailboxMessageId: mailboxMessageId }).select('_id').lean();
+  if (linked) return 'linkedCase';
+
+  return null;
+}
+
+export async function discardAwaiting({ now = Date.now(), dryRun = false, limit } = {}) {
+  const started = Date.now();
+  const result = {
+    scanned: 0,
+    discarded: 0,
+    attachmentsRemoved: 0,
+    skipped: { decided: 0, linkedCase: 0 },
+    candidates: [],
+    errors: [],
+    durationMs: 0,
+  };
+
+  if (!isConnected()) {
+    result.errors.push('The database is not connected.');
+    return { ...result, durationMs: Date.now() - started };
+  }
+
+  try {
+    const rows = await findAwaiting({ limit });
+    result.scanned = rows.length;
+    result.candidates = rows.map(({ mailboxMessageId, from, subject, receivedAt }) => ({
+      mailboxMessageId,
+      from,
+      subject,
+      receivedAt,
+    }));
+
+    for (const row of rows) {
+      try {
+        const veto = await awaitingVetoFor(row.mailboxMessageId);
+        if (veto) {
+          result.skipped[veto] += 1;
+          continue;
+        }
+
+        const { attachmentsRemoved } = await purgeOne(row, { now, dryRun });
+        result.discarded += 1;
+        result.attachmentsRemoved += attachmentsRemoved;
+
+        if (!dryRun) {
+          await audit.record({
+            action: AUDIT_ACTIONS.EMAIL_PURGED,
+            actorType: ACTOR_TYPES.SYSTEM,
+            result: AUDIT_RESULTS.SUCCESS,
+            messageId: row.mailboxMessageId,
+            details: {
+              source: row.source,
+              reason: AWAITING_DISCARD_REASON,
+              attachmentsRemoved,
+              from: row.from,
+              subject: row.subject,
+              receivedAt: row.receivedAt,
+            },
+          });
+        }
+      } catch (error) {
+        result.errors.push(`${row.mailboxMessageId}: ${error.message}`);
+      }
+    }
+
+    if (!dryRun && result.discarded > 0) {
+      await audit.record({
+        action: AUDIT_ACTIONS.EMAIL_PURGED,
+        actorType: ACTOR_TYPES.SYSTEM,
+        result: result.errors.length ? AUDIT_RESULTS.FAILURE : AUDIT_RESULTS.SUCCESS,
+        details: {
+          summary: true,
+          reason: AWAITING_DISCARD_REASON,
+          purged: result.discarded,
+          attachmentsRemoved: result.attachmentsRemoved,
+          skipped: result.skipped,
+        },
+      });
+    }
+  } catch (error) {
+    result.errors.push(error.message);
   }
 
   return { ...result, durationMs: Date.now() - started };

@@ -18,6 +18,7 @@
     "db:provision": "node scripts/provisionAtlas.mjs",
     "db:check": "node scripts/checkAtlas.mjs",
     "mailbox:purge": "node scripts/purgeMailboxJunk.mjs",
+    "cleanup:awaiting": "node scripts/discardAwaitingMail.mjs",
     "draft:trace": "node src/scripts/testDraftLive.js",
     "draft:eval": "node src/scripts/evalDraft.js",
     "triage:eval": "node src/scripts/evalTriage.js"
