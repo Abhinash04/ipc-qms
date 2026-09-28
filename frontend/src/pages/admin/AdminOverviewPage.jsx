@@ -567,7 +567,7 @@ export function AdminOverviewPage() {
         >
           <p className="m-0 font-bold">System activity unavailable</p>
           <p className="m-0 mt-0.5 text-[13px]">
-            The audit API could not be reached, so the server-recorded figures below are not shown.
+            The audit API could not be reached, so the server-recorded figures above are not shown.
             Case counts come from this browser and are unaffected.
           </p>
         </div>
