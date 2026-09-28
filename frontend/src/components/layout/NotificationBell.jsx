@@ -12,6 +12,26 @@ import { stableKey } from "@/utils/stableKey";
 import { activateOnKey } from "@/utils/a11y";
 import { NAV_ICON_BUTTON } from "@/components/layout/navbarStyles";
 
+function formatNotificationTime(notif) {
+  if (!notif) return "Just now";
+  if (notif.time) return notif.time;
+  const iso = notif.at || notif.createdAt || notif.timestamp;
+  if (!iso) return "Just now";
+  const then = new Date(iso);
+  if (Number.isNaN(then.getTime())) return "Just now";
+  const diffMs = Date.now() - then.getTime();
+  if (diffMs < 0) return "Just now";
+  const seconds = Math.floor(diffMs / 1000);
+  if (seconds < 60) return "Just now";
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days}d ago`;
+  return then.toLocaleDateString("en-GB", { day: "2-digit", month: "short" });
+}
+
 export function NotificationBell() {
   const currentUser = useAuthStore((state) => state.currentUser);
   const notifications = useWorkflowStore((state) => state.notifications);
@@ -167,7 +187,7 @@ export function NotificationBell() {
                         </span>
                         <span className="flex shrink-0 items-center gap-1 text-[10.5px] text-ink-muted">
                           <Clock className="h-3 w-3" />
-                          {notif.time || "Just now"}
+                          {formatNotificationTime(notif)}
                         </span>
                       </div>
                       <p className="mt-0.5 line-clamp-2 text-[12px] leading-snug text-ink-muted">
@@ -213,7 +233,7 @@ export function NotificationBell() {
                       Notification Details
                     </h2>
                     <p className="text-xs text-ink-muted">
-                      {activeModalNotif.time || "Recent Alert"}
+                      {formatNotificationTime(activeModalNotif)}
                     </p>
                   </div>
                 </div>
