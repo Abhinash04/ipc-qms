@@ -40,6 +40,8 @@ const env = {
   CLIENT_URL: process.env.CLIENT_URL || 'http://localhost:5173',
   DATABASE_URL: process.env.DATABASE_URL || '',
 
+  GOOGLE_CLIENT_ID: (process.env.GOOGLE_CLIENT_ID || '').trim(),
+
   EMAIL_TRANSPORT: (process.env.EMAIL_TRANSPORT || EMAIL_TRANSPORTS.MOCK).toLowerCase(),
 
   MAILBOX_SOURCE: (process.env.MAILBOX_SOURCE || MAILBOX_SOURCES.AUTO).toLowerCase(),
