@@ -47,3 +47,26 @@ export function lifecycleProgress(state) {
 
   return { step, steps, fraction, label: readable(state), tone };
 }
+
+/**
+ * How many of `queries` sit at each workflow state, in lifecycle order
+ * (off-path states follow the stage they return to). Empty stages are left
+ * out.
+ */
+export function stageBreakdown(queries = []) {
+  const counts = new Map();
+  for (const query of queries) {
+    const state = query.workflowState || "UNKNOWN";
+    counts.set(state, (counts.get(state) || 0) + 1);
+  }
+
+  const rank = (state) => {
+    const anchor = state in OFF_PATH ? OFF_PATH[state] : state;
+    const index = LIFECYCLE.indexOf(anchor);
+    return index < 0 ? LIFECYCLE.length + 1 : index + (anchor === state ? 0 : 0.5);
+  };
+
+  return [...counts.entries()]
+    .sort(([a], [b]) => rank(a) - rank(b))
+    .map(([state, value]) => ({ label: readable(state), value }));
+}

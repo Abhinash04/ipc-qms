@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { AreaTrendChart, BarVolumeChart, DonutChart } from "@/components/charts/Charts";
 import { statusDistribution, volumeSeries } from "@/components/admin/adminStats";
+import { stageBreakdown } from "@/components/dashboard/lifecycleProgress";
 import { useT } from "@/i18n/useT";
 import { cn } from "@/utils/cn";
 
@@ -30,15 +31,23 @@ function ChartCard({ id, title, description, actions, children }) {
   );
 }
 
-export function VolumeChartCard({ visible, selected, selectedRecords }) {
+function EmptyChart({ label }) {
+  return (
+    <p className="mx-2 my-3 rounded-xl border border-dashed border-line px-4 py-12 text-center text-[13px] text-ink-muted">
+      Nothing in {label} to chart yet.
+    </p>
+  );
+}
+
+/** Arrivals over time for the list selected by the KPI cards. */
+export function VolumeChartCard({ label, records }) {
   const t = useT();
   const [range, setRange] = useState("week");
 
-  const series = useMemo(() => {
-    const all = { name: "All in view", points: volumeSeries(visible, range) };
-    if (!selected || selected.aggregate) return [all];
-    return [all, { name: selected.label, points: volumeSeries(selectedRecords, range) }];
-  }, [visible, selected, selectedRecords, range]);
+  const series = useMemo(
+    () => [{ name: label, points: volumeSeries(records, range) }],
+    [label, records, range],
+  );
 
   const total = series[0].points.reduce((sum, p) => sum + p.value, 0);
 
@@ -46,7 +55,7 @@ export function VolumeChartCard({ visible, selected, selectedRecords }) {
     <ChartCard
       id="dashboard-volume-title"
       title={t("dashboard.volume")}
-      description={`${total} ${total === 1 ? "query" : "queries"} received in this period`}
+      description={`${label} · ${total} ${total === 1 ? "query" : "queries"} received in this period`}
       actions={
         <div role="group" aria-label="Chart range" className="flex rounded-lg bg-surface-muted p-1">
           {RANGES.map((r) => (
@@ -66,36 +75,47 @@ export function VolumeChartCard({ visible, selected, selectedRecords }) {
         </div>
       }
     >
-      <AreaTrendChart series={series} height={270} label="Queries received over time" />
+      <AreaTrendChart series={series} height={270} label={`${label}: queries received over time`} />
     </ChartCard>
   );
 }
 
-export function StatusMixCard({ visible }) {
+/** Open / in progress / closed within the selected list. */
+export function StatusMixCard({ label, records }) {
   const t = useT();
-  const slices = useMemo(() => statusDistribution(visible), [visible]);
+  const slices = useMemo(() => statusDistribution(records), [records]);
 
   return (
     <ChartCard
       id="dashboard-status-title"
       title={t("dashboard.statusMix")}
-      description="Business status of every query in view"
+      description={`Business status of queries in ${label}`}
     >
-      <DonutChart slices={slices} height={260} label="Queries by business status" totalLabel="Queries" />
+      {records.length === 0 ? (
+        <EmptyChart label={label} />
+      ) : (
+        <DonutChart slices={slices} height={260} label={`${label} by business status`} totalLabel="Queries" />
+      )}
     </ChartCard>
   );
 }
 
-export function BucketBarsCard({ buckets, recordsByKey }) {
-  const points = buckets
-    .filter((b) => !b.aggregate)
-    .map((b) => ({ label: b.label, value: recordsByKey[b.key]?.length ?? 0 }));
-
-  if (points.length === 0) return null;
+/** The selected list split by workflow stage. */
+export function StageBreakdownCard({ label, records }) {
+  const points = useMemo(() => stageBreakdown(records), [records]);
 
   return (
-    <ChartCard id="dashboard-buckets-title" title="Queue breakdown" description="Queries in each of your lists">
-      <BarVolumeChart points={points} horizontal height={Math.max(180, points.length * 44)} label="Queries per list" />
+    <ChartCard id="dashboard-buckets-title" title="Queue breakdown" description={`${label} by workflow stage`}>
+      {points.length === 0 ? (
+        <EmptyChart label={label} />
+      ) : (
+        <BarVolumeChart
+          points={points}
+          horizontal
+          height={Math.max(180, points.length * 44)}
+          label={`${label} by workflow stage`}
+        />
+      )}
     </ChartCard>
   );
 }

@@ -412,6 +412,47 @@ describe('the query list is vertically contained', () => {
   });
 });
 
+describe('the charts follow the selected KPI card', () => {
+  const MIXED = [
+    { queryId: 'QRY-1', subject: 'New', workflowState: WORKFLOW_STATE.RECEIVED },
+    { queryId: 'QRY-2', subject: 'Drafting', workflowState: WORKFLOW_STATE.DRAFTING },
+    { queryId: 'QRY-3', subject: 'Under review', workflowState: WORKFLOW_STATE.UNDER_REVIEW },
+    { queryId: 'QRY-4', subject: 'Closed', workflowState: WORKFLOW_STATE.CLOSED },
+  ];
+
+  const statusCount = (label) => {
+    const region = screen.getByRole('region', { name: 'Status mix' });
+    return within(region).getByText(label).nextSibling.textContent;
+  };
+
+  it('re-scopes status mix, case volume and queue breakdown to the chosen list', () => {
+    seed(MIXED);
+    useAuthStore.setState({ currentUser: FRONT_OFFICE });
+    renderDashboard();
+
+    expect(statusCount('Open')).toBe('1');
+    expect(statusCount('In progress')).toBe('0');
+    expect(screen.getByText('New / Incoming by workflow stage')).toBeInTheDocument();
+
+    fireEvent.click(tile('Total Queries'));
+
+    expect(statusCount('Open')).toBe('1');
+    expect(statusCount('In progress')).toBe('2');
+    expect(statusCount('Closed')).toBe('1');
+    expect(screen.getByText('Total Queries by workflow stage')).toBeInTheDocument();
+    expect(screen.getByText(/^Total Queries · \d+ quer/)).toBeInTheDocument();
+  });
+
+  it('says so instead of drawing an empty chart when the list is empty', () => {
+    seed([{ queryId: 'QRY-9', subject: 'Closed', workflowState: WORKFLOW_STATE.CLOSED }]);
+    useAuthStore.setState({ currentUser: FRONT_OFFICE });
+    renderDashboard();
+
+    const region = screen.getByRole('region', { name: 'Status mix' });
+    expect(within(region).getByText('Nothing in New / Incoming to chart yet.')).toBeInTheDocument();
+  });
+});
+
 describe('the dashboard invents nothing', () => {
   it('shows none of the hard-coded rows it used to ship with', () => {
     useAuthStore.setState({ currentUser: OIC });

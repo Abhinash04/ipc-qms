@@ -43,6 +43,15 @@ export function AreaTrendChart({ series, height = 260, label }) {
 }
 
 export function BarVolumeChart({ points, name = "Cases", height = 240, label, horizontal = false }) {
+  // Counts are whole numbers: one tick per unit (capped at 5) so the value
+  // axis never shows 0.5, 1.5 ….
+  const max = Math.max(1, ...points.map((p) => p.value));
+  const valueTicks = Math.min(max, 5);
+  const wholeNumber = (v) => {
+    const n = Number(v);
+    return Number.isFinite(n) && Number.isInteger(n) ? String(n) : "";
+  };
+
   return (
     <ApexChart
       type="bar"
@@ -66,13 +75,18 @@ export function BarVolumeChart({ points, name = "Cases", height = 240, label, ho
           categories: points.map((p) => p.label),
           axisBorder: { show: false },
           axisTicks: { show: false },
-          labels: { style: { fontSize: "11px" } },
+          // In a horizontal chart the x axis carries the values.
+          ...(horizontal ? { tickAmount: valueTicks, max } : {}),
+          labels: {
+            ...(horizontal ? { formatter: wholeNumber } : {}),
+            style: { fontSize: "11px" },
+          },
         },
         yaxis: {
           min: 0,
-          forceNiceScale: true,
+          ...(horizontal ? {} : { tickAmount: valueTicks, max }),
           labels: {
-            formatter: (v) => (typeof v === "number" ? String(Math.round(v)) : v),
+            formatter: (v) => (typeof v === "number" ? wholeNumber(v) : v),
             style: { fontSize: "11px" },
           },
         },

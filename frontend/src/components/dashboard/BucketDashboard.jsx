@@ -4,7 +4,7 @@ import { StatTile } from "@/components/common/StatTile";
 import { DashboardQueryList } from "@/components/dashboard/DashboardQueryList";
 import { DashboardHero } from "@/components/dashboard/DashboardHero";
 import {
-  BucketBarsCard,
+  StageBreakdownCard,
   StatusMixCard,
   VolumeChartCard,
 } from "@/components/dashboard/DashboardCharts";
@@ -82,6 +82,8 @@ export function BucketDashboard({
   const selected =
     buckets.find((b) => b.key === selectedKey) || buckets[0] || null;
   const rows = selected ? recordsByKey[selected.key] || NO_RECORDS : NO_RECORDS;
+  // The charts follow the KPI card selection, like the query table does.
+  const selectedLabel = selected?.label || "Queries";
 
   return (
     <div className="pb-2">
@@ -127,7 +129,6 @@ export function BucketDashboard({
 
       <div className="mt-6 grid grid-cols-1 gap-6 xl:grid-cols-12">
         <div className="min-w-0 space-y-6 xl:col-span-8">
-          <VolumeChartCard visible={visible} selected={selected} selectedRecords={rows} />
           <DashboardQueryList
             title={selected?.label || "Queries"}
             subtitle={selected?.caption}
@@ -139,11 +140,12 @@ export function BucketDashboard({
               `Nothing in ${selected?.label || "this list"} right now.`
             }
           />
+          <VolumeChartCard label={selectedLabel} records={rows} />
         </div>
 
         <div className="min-w-0 space-y-6 xl:col-span-4">
-          <StatusMixCard visible={visible} />
-          <BucketBarsCard buckets={buckets} recordsByKey={recordsByKey} />
+          <StatusMixCard label={selectedLabel} records={rows} />
+          <StageBreakdownCard label={selectedLabel} records={rows} />
           {sidePanel}
         </div>
       </div>

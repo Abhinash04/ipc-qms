@@ -17,6 +17,7 @@ export function writeCollapsed(value) {
   try {
     localStorage.setItem(SIDEBAR_STORAGE_KEY, String(value));
   } catch {
+    // storage blocked: the in-memory value below still drives the sidebar
   }
   memory = value;
   window.dispatchEvent(new Event(CHANGE_EVENT));
@@ -36,6 +37,7 @@ function snapshot() {
     const raw = localStorage.getItem(SIDEBAR_STORAGE_KEY);
     if (raw !== null) return raw === "true";
   } catch {
+    // storage blocked: fall back to the in-memory value
   }
   return memory === true;
 }
