@@ -318,7 +318,7 @@ export function LoginPage() {
           </div>
 
           <p className="mt-6 text-center text-[12.5px] text-ink-muted">
-            © 2026 Integrated Processing Centre · Indian Pharmacopoeia Commission . Powered by Anuvadhini
+            © 2026 Integrated Processing Centre · Indian Pharmacopoeia Commission · Powered by Anuvadini
           </p>
         </div>
       </main>
