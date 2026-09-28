@@ -43,10 +43,9 @@ export function AreaTrendChart({ series, height = 260, label }) {
 }
 
 export function BarVolumeChart({ points, name = "Cases", height = 240, label, horizontal = false }) {
-  // Counts are whole numbers: one tick per unit (capped at 5) so the value
-  // axis never shows 0.5, 1.5 ….
-  const max = Math.max(1, ...points.map((p) => p.value));
-  const valueTicks = Math.min(max, 5);
+  const peak = Math.max(1, ...points.map((p) => p.value));
+  const valueTicks = Math.min(peak, 5);
+  const max = Math.ceil(peak / valueTicks) * valueTicks;
   const wholeNumber = (v) => {
     const n = Number(v);
     return Number.isFinite(n) && Number.isInteger(n) ? String(n) : "";
@@ -75,8 +74,7 @@ export function BarVolumeChart({ points, name = "Cases", height = 240, label, ho
           categories: points.map((p) => p.label),
           axisBorder: { show: false },
           axisTicks: { show: false },
-          // In a horizontal chart the x axis carries the values.
-          ...(horizontal ? { tickAmount: valueTicks, max } : {}),
+          ...(horizontal ? { min: 0, tickAmount: valueTicks, max } : {}),
           labels: {
             ...(horizontal ? { formatter: wholeNumber } : {}),
             style: { fontSize: "11px" },
