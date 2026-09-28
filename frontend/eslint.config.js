@@ -17,6 +17,9 @@ export default defineConfig([
       globals: globals.browser,
       parserOptions: { ecmaFeatures: { jsx: true } },
     },
+    rules: {
+      'no-empty': ['error', { allowEmptyCatch: true }],
+    },
   },
   {
     files: ['playwright.config.js', 'e2e/**/*.js'],
