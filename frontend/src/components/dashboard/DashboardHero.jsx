@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { IPC_ANNOUNCEMENTS } from "@/constants/announcements";
 import { AnnouncementDialog } from "@/components/common/ScrollingMarquee";
@@ -89,7 +90,10 @@ function AnnouncementCarousel() {
         ))}
       </div>
 
-      <AnnouncementDialog announcement={open} onClose={() => setOpen(null)} />
+      {createPortal(
+        <AnnouncementDialog announcement={open} onClose={() => setOpen(null)} />,
+        document.body,
+      )}
     </section>
   );
 }
