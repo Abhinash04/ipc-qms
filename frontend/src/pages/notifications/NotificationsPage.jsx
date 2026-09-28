@@ -65,9 +65,12 @@ export function NotificationsPage() {
     };
   };
 
-  const formatTimestamp = (isoString) => {
+  const formatTimestamp = (raw) => {
     try {
+      const isoString = typeof raw === 'object' ? (raw?.at || raw?.createdAt || raw?.timestamp || raw?.time) : raw;
+      if (!isoString) return "Just now";
       const d = new Date(isoString);
+      if (isNaN(d.getTime())) return "Just now";
       const dateStr = d.toLocaleDateString("en-GB", {
         day: "2-digit",
         month: "short",
@@ -76,12 +79,11 @@ export function NotificationsPage() {
       const timeStr = d.toLocaleTimeString("en-US", {
         hour: "2-digit",
         minute: "2-digit",
-        second: "2-digit",
         hour12: true,
       });
       return `${dateStr}, ${timeStr}`;
     } catch {
-      return "19 Aug 2026, 03:10:19 PM";
+      return "Just now";
     }
   };
 
@@ -155,7 +157,7 @@ export function NotificationsPage() {
 
                   <div className="flex items-center gap-1.5 text-[12px] font-medium text-slate-400 shrink-0 self-start sm:self-center">
                     <Calendar className="h-3.5 w-3.5 text-slate-400" />
-                    <span>{formatTimestamp(item.at)}</span>
+                    <span>{formatTimestamp(item)}</span>
                   </div>
                 </div>
               </div>

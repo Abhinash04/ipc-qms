@@ -33,6 +33,26 @@ function initials(name) {
   );
 }
 
+function formatNotificationTime(notif) {
+  if (!notif) return "Just now";
+  if (notif.time) return notif.time;
+  const iso = notif.at || notif.createdAt || notif.timestamp;
+  if (!iso) return "Just now";
+  const then = new Date(iso);
+  if (isNaN(then.getTime())) return "Just now";
+  const diffMs = Date.now() - then.getTime();
+  if (diffMs < 0) return "Just now";
+  const seconds = Math.floor(diffMs / 1000);
+  if (seconds < 60) return "Just now";
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days}d ago`;
+  return then.toLocaleDateString("en-GB", { day: "2-digit", month: "short" });
+}
+
 export function Header() {
   const currentUser = useAuthStore((state) => state.currentUser);
   const navigate = useNavigate();
@@ -249,7 +269,7 @@ export function Header() {
                         </span>
                         <div className="flex items-center gap-1 text-[10px] font-semibold text-slate-400 shrink-0">
                           <Clock className="h-3 w-3 text-slate-400" />
-                          <span>{notif.time || "Just now"}</span>
+                          <span>{formatNotificationTime(notif)}</span>
                         </div>
                       </div>
                       <p className="text-[11.5px] font-medium text-slate-600 line-clamp-2 mt-1 leading-snug">
@@ -289,7 +309,7 @@ export function Header() {
                       Notification Details
                     </h2>
                     <p className="text-xs text-slate-400">
-                      {activeModalNotif.time || "Recent Alert"}
+                      {formatNotificationTime(activeModalNotif)}
                     </p>
                   </div>
                 </div>
