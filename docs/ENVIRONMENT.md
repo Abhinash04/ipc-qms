@@ -98,7 +98,7 @@ working-directory paths as absolute paths, and start the backend from `backend\`
 | `backend/.env` | no | legacy: loaded only when there is no `.env.local`, with a warning | Rename it to `.env.local` |
 | `backend/.env.production` | no | the production VM's backend, selected by `NODE_ENV=production` in the real environment (or named by `ENV_FILE`) | The production values ([§6.1](#61-vm-backend-backendenvproduction)). On a developer machine this is at most a template with the secrets empty, and it is never loaded there. The filled file exists only on the VM |
 | `backend/.env.e2e` | yes | the Playwright suite, which starts the backend with `ENV_FILE=.env.e2e` | A self-contained, credential-free test configuration: its own test-only `JWT_SECRET` and the local `qms_e2e` database. Nothing is inherited from a developer's env file. Playwright points `QMS_PASSWORDS_FILE` at `backend/src/test/fixtures/passwords.json` |
-| `frontend/.env.example` | yes | nobody; it is the template for `frontend/.env.local` | `VITE_API_BASE_URL` and an empty `VITE_NIC_FRONT_OFFICE_EMAIL` |
+| `frontend/.env.example` | yes | nobody; it is the template for `frontend/.env.local` | `VITE_API_BASE_URL`, an empty `VITE_NIC_FRONT_OFFICE_EMAIL` and an empty `VITE_GOOGLE_CLIENT_ID` |
 | `frontend/.env.local` | no | the Vite dev server, and any `vite build` run on that machine | [§4](#4-frontend-variables) |
 | Render dashboard | — | the production frontend build | `VITE_API_BASE_URL=/api/v1` and `NODE_VERSION=22`. Nothing secret ([§6.2](#62-render-static-site)) |
 
@@ -147,6 +147,7 @@ The root `.gitignore` ignores `.env` and every `.env.*`, except the `.env.exampl
 | `SESSION_TTL_SECONDS` | optional | no | `28800` (8 h) | Session lifetime. It must be positive |
 | `SESSION_COOKIE_NAME` | advanced | no | `qms.session` | The session cookie's name |
 | `SESSION_COOKIE_SAMESITE` | optional | no | `lax` | `lax`, `strict` or `none`; anything else stops boot. **Keep `lax`**: production is same-origin through the Render rewrite. `none` forces `Secure` and is only for a cross-site deployment, which is not supported: there, text and PDF attachment previews break, and browsers that block third-party cookies fail outright |
+| `GOOGLE_CLIENT_ID` | optional | no; the OAuth **Web client ID** is public (no client secret is used) | empty | Enables **Sign in with Google** (`POST /api/v1/auth/google`). The backend verifies the Google ID token against this client ID as the audience and requires a verified email; it then signs in **only** the existing staff account whose email matches, with that account's role. Nobody can self-register. Empty: the endpoint answers 503 `GOOGLE_NOT_CONFIGURED`. Set the same value as the frontend's `VITE_GOOGLE_CLIENT_ID` |
 
 **Which accounts need a credential:**
 - USR-0003 through USR-0013, the 11 accounts in `backend/src/constants/users.js`.
@@ -329,12 +330,20 @@ them.
 
 ---
 
+**Setting up Sign in with Google** (Google Cloud Console, once per environment):
+1. APIs & Services → Credentials → **Create credentials → OAuth client ID** → application type **Web application**.
+2. **Authorized JavaScript origins:** `http://localhost:5173` for local development, plus the production frontend origin (the Render site). No redirect URI is needed: the button uses Google Identity Services and returns an ID token to the page.
+3. **OAuth consent screen:** *Internal* if the staff use a Google Workspace domain, otherwise *External* with the staff added as test users until it is published.
+4. Put the client ID in `GOOGLE_CLIENT_ID` (backend env file) and `VITE_GOOGLE_CLIENT_ID` (`frontend/.env.local`, or the Render environment), then restart the backend and rebuild the frontend. The client secret is not used; do not put it in any env file.
+5. A staff member can then sign in with Google only if their Google account email equals their IPC-QMS account email.
+
 ## 4. Frontend variables
 
 | Variable | Required | Secret | Default | Purpose |
 |---|---|---|---|---|
 | `VITE_API_BASE_URL` | both | no; it is public, compiled into the bundle | `http://localhost:5000/api/v1` | The base URL of every API call, sent with cookies. **Local:** `http://localhost:5000/api/v1`, in `frontend/.env.local`. **Render:** `/api/v1`, a relative URL, so the browser calls the Render origin and the `/api/*` rewrite forwards to the VM. If it is missing at build time, the bundle silently calls `localhost:5000` |
 | `VITE_NIC_FRONT_OFFICE_EMAIL` | local only | no | empty | Adds the NICeMail Front Office to the "Dev quick login" menu. Choosing it fills in the email, and you still type the password. It sits inside the `import.meta.env.DEV` block, so production builds compile it out. Set it to the same address as the backend's `NIC_EMAIL`. Never set it on Render |
+| `VITE_GOOGLE_CLIENT_ID` | optional | no; public, compiled into the bundle | empty | The Google OAuth Web client ID. When set, the login page shows Google's **Sign in with Google** button under the password form; when empty, the page is unchanged. Must equal the backend's `GOOGLE_CLIENT_ID`. On Render, set it only once the Cloud Console lists the production origin |
 
 **How Vite reads env files:**
 - It reads `.env`, `.env.local`, `.env.[mode]` and `.env.[mode].local` from `frontend/`; a later file
