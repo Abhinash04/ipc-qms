@@ -5,6 +5,11 @@ export async function login(email, password) {
   return data.user;
 }
 
+export async function googleLogin(credential) {
+  const { data } = await axiosClient.post('/auth/google', { credential });
+  return data.user;
+}
+
 export async function devLogin(email) {
   const { data } = await axiosClient.post('/auth/dev-login', { email });
   return data.user;

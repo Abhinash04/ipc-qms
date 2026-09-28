@@ -23,6 +23,12 @@ export const useAuthStore = create((set) => ({
     return user;
   },
 
+  googleLogin: async (credential) => {
+    const user = await authService.googleLogin(credential);
+    set({ currentUser: user, authReady: true });
+    return user;
+  },
+
   devLogin: async (email) => {
     const user = await authService.devLogin(email);
     set({ currentUser: user, authReady: true });

@@ -21,6 +21,7 @@ import { useResolvedMode } from "@/components/theme/themeRuntime";
 import { MOCK_USERS } from "@/constants/mockUsers";
 import { HeroBackdrop } from "@/components/common/HeroBackdrop";
 import { PageBackdrop } from "@/components/common/PageBackdrop";
+import { GoogleSignInButton } from "@/components/auth/GoogleSignInButton";
 import { notify } from "@/services/notify";
 
 const FEATURES = [
@@ -36,6 +37,7 @@ export function LoginPage() {
   const currentUser = useAuthStore((state) => state.currentUser);
   const login = useAuthStore((state) => state.login);
   const devLogin = useAuthStore((state) => state.devLogin);
+  const googleLogin = useAuthStore((state) => state.googleLogin);
   const setOption = useThemeStore((state) => state.setOption);
   const resolved = useResolvedMode();
   const navigate = useNavigate();
@@ -48,6 +50,7 @@ export function LoginPage() {
   const [devOpen, setDevOpen] = useState(false);
 
   const nicFrontOfficeEmail = (import.meta.env.VITE_NIC_FRONT_OFFICE_EMAIL || "").trim();
+  const googleEnabled = Boolean((import.meta.env.VITE_GOOGLE_CLIENT_ID || "").trim());
   const isDark = resolved === "dark";
 
   const home = currentUser ? roleHome(currentUser.role) : null;
@@ -65,6 +68,24 @@ export function LoginPage() {
     } catch (caught) {
       const message =
         caught?.response?.data?.error || "Incorrect email or password.";
+      setError(message);
+      notify.error("Sign-in failed", message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const googleSubmit = async (credential) => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      const user = await googleLogin(credential);
+      notify.success(`Welcome back, ${user.name || user.email}`);
+      navigate(roleHome(user.role), { replace: true });
+    } catch (caught) {
+      const message =
+        caught?.response?.data?.error || "Google sign-in failed. Please try again.";
       setError(message);
       notify.error("Sign-in failed", message);
     } finally {
@@ -217,6 +238,17 @@ export function LoginPage() {
                 )}
               </button>
             </form>
+
+            {googleEnabled && (
+              <div className="mt-5">
+                <div className="mb-4 flex items-center gap-3 text-[12px] font-medium uppercase tracking-widest text-ink-muted">
+                  <span className="h-px flex-1 bg-line" aria-hidden="true" />
+                  or
+                  <span className="h-px flex-1 bg-line" aria-hidden="true" />
+                </div>
+                <GoogleSignInButton onCredential={googleSubmit} onError={setError} dark={isDark} />
+              </div>
+            )}
 
             {import.meta.env.DEV && (
               <div className="mt-7 border-t border-dashed border-line pt-5">
