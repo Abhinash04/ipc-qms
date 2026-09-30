@@ -86,10 +86,13 @@ export function DashboardActivity({ auditEvents = [] }) {
                     <span className="shrink-0 text-[11.5px] text-ink-muted">{relativeTime(event.at)}</span>
                   </div>
                   <p className="m-0 mt-0.5 text-[12px] text-ink-muted">
-                    <span className="font-mono font-semibold text-primary">{event.queryId}</span>
+                    {event.queryId && (
+                      <span className="font-mono font-semibold text-primary">{event.queryId}</span>
+                    )}
                     {event.actor && (
                       <>
-                        {" "}· by <span className="font-medium text-ink-soft">{event.actor}</span>
+                        {event.queryId ? " · " : ""}by{" "}
+                        <span className="font-medium text-ink-soft">{event.actor}</span>
                       </>
                     )}
                   </p>

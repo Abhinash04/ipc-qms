@@ -30,3 +30,8 @@ export function allUsers() {
   const nic = nicFrontOfficeUser();
   return nic ? [...USERS, nic] : USERS;
 }
+
+export function findUserById(id) {
+  return allUsers().find((user) => user.id === id) || null;
+}
+

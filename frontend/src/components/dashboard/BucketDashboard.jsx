@@ -39,6 +39,7 @@ export function BucketDashboard({
   purpose,
   actions,
   sidePanel,
+  belowVolumePanel,
   emptyTextFor,
 }) {
   const buckets = bucketsForRole(role);
@@ -147,6 +148,12 @@ export function BucketDashboard({
           <StageBreakdownCard label={selectedLabel} records={rows} />
           {sidePanel}
         </div>
+
+        {belowVolumePanel && (
+          <div className="min-w-0 xl:col-span-12">
+            {belowVolumePanel}
+          </div>
+        )}
       </div>
     </div>
   );

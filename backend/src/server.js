@@ -8,6 +8,7 @@ import * as mailbox from './services/email/mailbox/index.js';
 import { outboundAllowed, internalForwardAllowed } from './services/email/nic/outboundGuard.js';
 import { startRetentionSweeps, stopRetentionSweeps } from './services/email/mailbox/retention.js';
 import { startMailboxSync, stopMailboxSync } from './services/email/mailbox/syncScheduler.js';
+import { startAutoTransferScheduler, stopAutoTransferScheduler } from './services/query/autoTransferScheduler.js';
 
 
 try {
@@ -59,6 +60,7 @@ try {
 
 startRetentionSweeps({ bootedAt: Date.now() });
 startMailboxSync();
+startAutoTransferScheduler();
 
 const server = app.listen(env.PORT, (error) => {
   if (error) return;
@@ -103,6 +105,7 @@ async function shutdown(signal) {
 
   stopRetentionSweeps();
   stopMailboxSync();
+  stopAutoTransferScheduler();
 
   const forced = setTimeout(() => {
     console.error('[qms] shutdown timed out with requests still open — exiting anyway');

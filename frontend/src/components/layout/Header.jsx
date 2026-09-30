@@ -1,10 +1,9 @@
 import { useState } from "react";
-import { Menu, Moon, RotateCcwIcon, Search, Settings, Sun } from "lucide-react";
+import { Menu, RotateCcwIcon, Search, Settings } from "lucide-react";
 
 import { useAuthStore } from "@/store/useAuthStore";
 import { useWorkflowStore } from "@/store/useWorkflowStore";
 import { useThemeStore } from "@/store/useThemeStore";
-import { useResolvedMode } from "@/components/theme/themeRuntime";
 import { ROLES } from "@/constants/roles";
 import { useT } from "@/i18n/useT";
 import { cn } from "@/utils/cn";
@@ -31,14 +30,11 @@ export function Header() {
   const lang = useThemeStore((state) => state.lang);
   const dir = useThemeStore((state) => state.dir);
   const setOption = useThemeStore((state) => state.setOption);
-  const resolved = useResolvedMode();
   const t = useT();
 
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
-
-  const isDark = resolved === "dark";
 
   return (
     <header
@@ -105,17 +101,6 @@ export function Header() {
           aria-label={`${t("navbar.language")}: ${lang === "en" ? "English" : "हिन्दी"}`}
         >
           {lang === "en" ? "EN" : "हिं"}
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setOption("mode", isDark ? "light" : "dark")}
-          className={NAV_ICON_BUTTON}
-          aria-label={t("navbar.theme")}
-          aria-pressed={isDark}
-          title={t("navbar.theme")}
-        >
-          {isDark ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
         </button>
 
         <NotificationBell />

@@ -11,7 +11,7 @@ function TileTrend({ delta, higherIsWorse, neutral, comparisonLabel }) {
       <span
         aria-hidden="true"
         title={`No ${comparisonLabel || "comparison"} to report yet`}
-        className="select-none text-[11px] font-semibold leading-none text-ink-muted/70"
+        className="select-none text-[11px] font-bold leading-none text-black/70"
       >
         —
       </span>
@@ -92,14 +92,14 @@ export function StatTile({
           <div className="min-w-0 flex-1">
             <p
               data-slot="stat-label"
-              className="m-0 line-clamp-2 text-[13px] font-medium leading-snug text-ink-muted"
+              className="m-0 line-clamp-2 text-[13px] font-semibold leading-snug text-black"
             >
               {label}
             </p>
             <div className="mt-1 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
               <div
                 data-slot="stat-value"
-                className="font-heading text-[26px] font-bold leading-none tracking-tight text-ink tabular-nums"
+                className="font-heading text-[26px] font-bold leading-none tracking-tight text-black tabular-nums"
               >
                 {value}
               </div>
@@ -114,12 +114,12 @@ export function StatTile({
         </div>
 
         {subtextMain && (
-          <div className="mt-3 flex items-center gap-1 text-[12px] font-medium text-ink-soft">
+          <div className="mt-3 flex items-center gap-1 text-[12px] font-semibold text-black">
             {subtextMain}
           </div>
         )}
         {caption && (
-          <p className="m-0 mt-3 line-clamp-2 text-[11.5px] leading-snug text-ink-muted">{caption}</p>
+          <p className="m-0 mt-3 line-clamp-2 text-[11.5px] font-medium leading-snug text-black">{caption}</p>
         )}
       </div>
 

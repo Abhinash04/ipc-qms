@@ -18,7 +18,7 @@ export function FrontOfficeDashboard({
       reviews={reviews}
       title="Front Office Dashboard"
       purpose={`Overview for ${currentUser?.name} · ${ROLE_LABELS[currentUser?.role]}`}
-      sidePanel={<DashboardActivity auditEvents={auditEvents} />}
+      belowVolumePanel={<DashboardActivity auditEvents={auditEvents} />}
     />
   );
 }

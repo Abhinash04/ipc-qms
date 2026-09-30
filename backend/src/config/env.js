@@ -61,6 +61,8 @@ const env = {
   ATTACHMENT_MAX_FILE_MB: parseInt(process.env.ATTACHMENT_MAX_FILE_MB || '10', 10),
   ATTACHMENT_MAX_TOTAL_MB: parseInt(process.env.ATTACHMENT_MAX_TOTAL_MB || '15', 10),
   ATTACHMENT_MAX_FILES: parseInt(process.env.ATTACHMENT_MAX_FILES || '10', 10),
+
+  QUERY_AUTO_TRANSFER_TIMEOUT_MINUTES: parseInt(process.env.QUERY_AUTO_TRANSFER_TIMEOUT_MINUTES || '2', 10),
 };
 
 const isProduction = () => (process.env.NODE_ENV || env.NODE_ENV) === 'production';

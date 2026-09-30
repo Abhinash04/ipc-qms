@@ -109,7 +109,7 @@ export function StageBreakdownCard({ label, records }) {
         <BarVolumeChart
           points={points}
           horizontal
-          height={Math.max(180, points.length * 44)}
+          height={Math.max(270, points.length * 44)}
           label={`${label} by workflow stage`}
         />
       )}

@@ -3,6 +3,7 @@ import { isConnected } from "../config/db.js";
 import * as audit from "../services/audit/auditService.js";
 import * as workflow from "../services/workflow/finalApproval.js";
 import * as caseMail from "../services/email/caseMail.js";
+import { processExpiredTransfers } from "../services/query/autoTransferScheduler.js";
 import {
   toPublic as publicOutbound,
   isDuplicateKey,
@@ -240,6 +241,19 @@ async function persistTransition(req, res, next) {
         ...clientQuery
       } = query;
       const inquirer = submittedInquirer;
+
+      if (clientQuery.workflowState === 'ASSIGNED' || clientQuery.currentAssigneeId) {
+        const timeoutMinutes = Number(process.env.QUERY_AUTO_TRANSFER_TIMEOUT_MINUTES || '2');
+        const nowISO = new Date().toISOString();
+        if (!clientQuery.assignedAt) {
+          clientQuery.assignedAt = nowISO;
+        }
+        if (!clientQuery.actionDeadline) {
+          const startMs = new Date(clientQuery.assignedAt).getTime();
+          clientQuery.actionDeadline = new Date(startMs + timeoutMinutes * 60 * 1000).toISOString();
+        }
+      }
+
       const update = { $set: clientQuery, $inc: { revision: 1 } };
       if (inquirer !== undefined) update.$setOnInsert = { inquirer };
 
@@ -476,6 +490,17 @@ async function resolveOutbound(req, res, next) {
   }
 }
 
+async function triggerAutoTransferCheck(req, res, next) {
+  if (!requireDb(next)) return;
+
+  try {
+    const result = await processExpiredTransfers();
+    return res.status(HTTP_STATUS.OK).json({ success: true, ...result });
+  } catch (error) {
+    return next(error);
+  }
+}
+
 export {
   loadAllQueries,
   checkIsEmpty,
@@ -483,4 +508,6 @@ export {
   resetQueryState,
   finalApproval,
   resolveOutbound,
+  triggerAutoTransferCheck,
 };
+

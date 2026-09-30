@@ -6,12 +6,12 @@ import {
   Eye,
   EyeOff,
   LogIn,
-  CheckCircle2,
   Loader2,
   ChevronDown,
   Zap,
-  Moon,
-  Sun,
+  Compass,
+  Sparkles,
+  ShieldCheck,
 } from "lucide-react";
 
 import { ROUTE_PATHS, roleHome } from "@/constants/routePaths";
@@ -23,12 +23,6 @@ import { HeroBackdrop } from "@/components/common/HeroBackdrop";
 import { PageBackdrop } from "@/components/common/PageBackdrop";
 import { GoogleSignInButton } from "@/components/auth/GoogleSignInButton";
 import { notify } from "@/services/notify";
-
-const FEATURES = [
-  "Real-time multi-role workflow tracking",
-  "Role-based access control (RBAC) security",
-  "Automated dispatch & audit trail history",
-];
 
 const FIELD =
   "w-full rounded-lg border border-line bg-surface py-3 ps-11 text-[15px] text-ink placeholder:text-ink-muted outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary/20";
@@ -116,33 +110,8 @@ export function LoginPage() {
     <div className="flex min-h-screen w-full bg-surface-muted text-ink">
       <main className="relative isolate flex w-full flex-col items-center justify-center overflow-y-auto px-5 py-10 sm:px-10 lg:w-1/2">
         <PageBackdrop />
-        <button
-          type="button"
-          onClick={() => setOption("mode", isDark ? "light" : "dark")}
-          aria-label="Toggle dark mode"
-          aria-pressed={isDark}
-          className="absolute inset-e-5 top-5 flex h-10 w-10 cursor-pointer items-center justify-center rounded-full bg-surface text-ink-muted shadow-card transition-colors hover:text-primary"
-        >
-          {isDark ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
-        </button>
 
         <div className="w-full max-w-md">
-          <div className="mb-8 flex items-center gap-3">
-            <img
-              src="/imageFile1.png"
-              alt="IPC Emblem Logo"
-              width="103"
-              height="199"
-              className="h-14 w-auto object-contain"
-            />
-            <div className="leading-tight">
-              <div className="text-[12px] font-semibold text-ink-soft">भारतीय भेषज संहिता आयोग</div>
-              <div className="font-heading text-[15px] font-bold uppercase tracking-tight text-ink">
-                Indian Pharmacopoeia Commission
-              </div>
-            </div>
-          </div>
-
           <div className="rounded-2xl border border-transparent bg-surface p-6 shadow-card sm:p-8 dark:border-line/60">
             <div className="flex items-center justify-between gap-4">
               <h2 className="font-heading text-[30px] font-bold leading-tight text-ink">Sign in</h2>
@@ -355,32 +324,60 @@ export function LoginPage() {
         </div>
       </main>
 
-      <aside className="relative hidden w-1/2 overflow-hidden bg-primary text-white lg:flex lg:flex-col lg:items-center lg:justify-center">
+      <aside className="relative hidden w-1/2 overflow-hidden bg-primary text-white lg:flex lg:flex-col lg:items-center lg:justify-start lg:pt-8 xl:pt-12">
         <HeroBackdrop />
 
-        <div className="relative z-10 max-w-lg px-12 text-center">
-          <p className="text-[12.5px] font-semibold uppercase tracking-[0.3em] text-white/75">
-            Query Management System
-          </p>
-          <h1 className="mt-3 font-heading text-[48px] font-bold leading-tight">Welcome back!</h1>
-          <p className="mx-auto mt-4 max-w-md text-[16px] leading-relaxed text-white/80">
-            Sign in to access your dashboard, track query workflows, review drafting documents, and
-            manage Indian Pharmacopoeia Commission operations.
+        <div className="relative z-10 max-w-xl px-10 text-center lg:px-12">
+          <div className="mb-7 flex flex-col items-center justify-center gap-3">
+            <img
+              src="/imageFile1.png"
+              alt="IPC Emblem Logo"
+              width="103"
+              height="199"
+              className="h-22 w-auto object-contain drop-shadow-lg brightness-110 xl:h-24"
+            />
+            <div className="text-center leading-tight">
+              <div className="text-[15px] font-semibold tracking-wide text-white/95 sm:text-[16px]">
+                भारतीय भेषज संहिता आयोग
+              </div>
+              <div className="mt-1 font-heading text-[19px] font-extrabold uppercase tracking-wider text-white sm:text-[21px]">
+                Indian Pharmacopoeia Commission
+              </div>
+            </div>
+          </div>
+
+          {/* <div className="inline-flex items-center gap-2.5 rounded-full border border-white/20 bg-white/10 px-4.5 py-2 text-[13px] font-bold uppercase tracking-wider text-white/95 shadow-sm backdrop-blur-md">
+            <Compass className="h-4.5 w-4.5 text-sky-300" />
+            <span>QMS PORTAL</span>
+          </div> */}
+
+          <h1 className="mt-5 font-heading text-[36px] font-extrabold leading-[1.15] tracking-tight text-white xl:text-[42px]">
+            IPC QMS —{" "}
+            <span className="bg-gradient-to-r from-sky-200 via-cyan-200 to-indigo-200 bg-clip-text text-transparent">
+              Query Management System
+            </span>
+          </h1>
+
+          <p className="mx-auto mt-4 max-w-lg text-[15.5px] leading-relaxed text-white/85">
+            Indian Pharmacopoeia Commission (IPC QMS) — official Query Management System
+            for handling technical enquiries, monograph reviews, reference standards, and
+            automated dispatch operations.
           </p>
 
-          <ul className="mt-10 space-y-3 text-start">
-            {FEATURES.map((feature) => (
-              <li
-                key={feature}
-                className="flex items-center gap-3 rounded-xl border border-white/15 bg-white/10 p-3.5 backdrop-blur-md"
-              >
-                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white text-primary">
-                  <CheckCircle2 className="h-4.5 w-4.5" strokeWidth={2.5} />
-                </span>
-                <span className="text-[15px] font-medium">{feature}</span>
-              </li>
-            ))}
-          </ul>
+          <div className="mt-8 flex flex-wrap items-center justify-center gap-3.5">
+            <div className="flex items-center gap-2.5 rounded-full border border-white/20 bg-white/10 px-5 py-2.5 text-[14.5px] font-bold text-white/95 shadow-sm backdrop-blur-md transition-transform hover:scale-105">
+              <Sparkles className="h-5 w-5 text-amber-300" />
+              <span>IP 2026 Monographs</span>
+            </div>
+            <div className="flex items-center gap-2.5 rounded-full border border-white/20 bg-white/10 px-5 py-2.5 text-[14.5px] font-bold text-white/95 shadow-sm backdrop-blur-md transition-transform hover:scale-105">
+              <ShieldCheck className="h-5 w-5 text-emerald-300" />
+              <span>ISO 17025 Certified</span>
+            </div>
+            <div className="flex items-center gap-2.5 rounded-full border border-white/20 bg-white/10 px-5 py-2.5 text-[14.5px] font-bold text-white/95 shadow-sm backdrop-blur-md transition-transform hover:scale-105">
+              <Zap className="h-5 w-5 text-sky-300" />
+              <span>24H SLA Protocol</span>
+            </div>
+          </div>
         </div>
       </aside>
     </div>

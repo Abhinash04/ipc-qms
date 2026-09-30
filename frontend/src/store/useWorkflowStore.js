@@ -663,6 +663,9 @@ export const useWorkflowStore = create((set, get) => ({
       });
     }
 
+    const assignedAtIso = new Date().toISOString();
+    const actionDeadlineIso = new Date(Date.now() + 2 * 60 * 1000).toISOString();
+
     get().applyTransition({
       queryId,
       actor,
@@ -670,6 +673,9 @@ export const useWorkflowStore = create((set, get) => ({
       patch: {
         workflowState: WORKFLOW_STATE.ASSIGNED,
         currentAssigneeId: assigneeId,
+        assignedAt: assignedAtIso,
+        actionDeadline: actionDeadlineIso,
+        autoTransferFailed: false,
         assignmentDecision: {
           assigneeId,
           acceptedAiRecommendation: acceptedAi,
@@ -1203,11 +1209,30 @@ export const useWorkflowStore = create((set, get) => ({
 
     const auditDetails = `Case ID: ${query.queryId} | Transferred From: ${prevName} | Transferred To: ${newName} | Transferred By: ${actorLabelStr} | Reason: ${trimmedReason}`;
 
+    const startMs = typeof timestamp === 'number' ? timestamp : new Date(timestamp).getTime();
+    const newAssignedAt = new Date(startMs).toISOString();
+    const newActionDeadline = new Date(startMs + 2 * 60 * 1000).toISOString();
+    const transferRecord = {
+      fromAssigneeId: query.currentAssigneeId,
+      toAssigneeId: newAssigneeId,
+      transferredAt: newAssignedAt,
+      reason: trimmedReason,
+      transferType: 'MANUAL',
+    };
+    const updatedTransferHistory = [...(query.transferHistory || []), transferRecord];
+
     get().applyTransition({
       queryId,
       actor,
       event: AUDIT_EVENT.QUERY_TRANSFERRED,
-      patch: { currentAssigneeId: newAssigneeId },
+      patch: {
+        currentAssigneeId: newAssigneeId,
+        assignedAt: newAssignedAt,
+        actionDeadline: newActionDeadline,
+        transferType: 'MANUAL',
+        transferHistory: updatedTransferHistory,
+        autoTransferFailed: false,
+      },
       details: auditDetails,
       notify: {
         recipientRole: null,

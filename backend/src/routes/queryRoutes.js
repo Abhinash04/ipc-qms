@@ -19,12 +19,14 @@ import {
   resetQueryState,
   finalApproval,
   resolveOutbound,
+  triggerAutoTransferCheck,
 } from '../controllers/queryController.js';
 
 const router = express.Router();
 
 router.get('/queries', verifyToken, loadAllQueries);
 router.get('/queries/is-empty', verifyToken, checkIsEmpty);
+router.post('/queries/auto-transfer-check', verifyToken, triggerAutoTransferCheck);
 
 router.post(
   '/queries/persist',

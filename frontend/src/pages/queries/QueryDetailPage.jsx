@@ -3,6 +3,7 @@ import { Breadcrumb } from '@/components/common/Breadcrumb';
 import { EmptyState } from '@/components/common/EmptyState';
 import { AttachmentList } from '@/components/attachments/AttachmentList';
 import { CaseSummaryBar } from '@/components/workflow/CaseSummaryBar';
+import { AutoTransferTimerCard } from '@/components/workflow/AutoTransferTimerCard';
 import { QueryLifecycleTimeline } from '@/components/workflow/QueryLifecycleTimeline';
 import { WorkflowActionsCard } from '@/components/workflow/WorkflowActionsCard';
 import { ReviewDecisionCard } from '@/components/workflow/ReviewDecisionCard';
@@ -34,7 +35,7 @@ function CaseDetailsPanel({ query }) {
   ];
 
   return (
-    <div  data-slot="panel" className="bg-card rounded-2xl border border-transparent p-5 shadow-card select-none dark:border-line/60">
+    <div data-slot="panel" className="bg-card rounded-2xl border border-transparent p-5 shadow-card select-none dark:border-line/60">
       <h2 className="font-heading text-[17px] font-bold text-slate-900 m-0 border-b border-slate-100 pb-2.5 mb-2.5">
         Case details
       </h2>
@@ -89,7 +90,7 @@ function DraftTabContent({ versions, latestVersion }) {
 
 function CaseWorkspaceTabs({ query, versions, latestVersion }) {
   return (
-    <div  data-slot="panel" className="bg-card rounded-2xl border border-transparent overflow-hidden shadow-card p-5 dark:border-line/60">
+    <div data-slot="panel" className="bg-card rounded-2xl border border-transparent overflow-hidden shadow-card p-5 dark:border-line/60">
       <Tabs defaultValue="draft">
         <div className="border-b border-slate-100 pb-3">
           <TabsList variant="line">
@@ -122,7 +123,7 @@ function CaseWorkspaceTabs({ query, versions, latestVersion }) {
 function CaseInsightPanels({ query, steps, audit, canAssign, currentUser, assignQuery }) {
   return (
     <>
-      <div  data-slot="panel" className="bg-card rounded-2xl border border-transparent p-5 shadow-card dark:border-line/60">
+      <div data-slot="panel" className="bg-card rounded-2xl border border-transparent p-5 shadow-card dark:border-line/60">
         <AiSummaryCard
           variant="embedded"
           summary={query.aiSummary}
@@ -143,7 +144,7 @@ function CaseInsightPanels({ query, steps, audit, canAssign, currentUser, assign
       <CaseOfficialsCard query={query} steps={steps} audit={audit} />
 
       {canAssign && (
-        <div  data-slot="panel" className="bg-card rounded-2xl border border-transparent p-5 shadow-card dark:border-line/60">
+        <div data-slot="panel" className="bg-card rounded-2xl border border-transparent p-5 shadow-card dark:border-line/60">
           <AiRecommendationCard
             variant="embedded"
             query={query}
@@ -221,7 +222,11 @@ export function QueryDetailPage() {
 
       <CaseSummaryBar query={query} />
 
-      <div  data-slot="panel" className="bg-card rounded-2xl border border-transparent p-5 shadow-card mb-5 dark:border-line/60">
+      <div className="mb-5">
+        <AutoTransferTimerCard query={query} />
+      </div>
+
+      <div data-slot="panel" className="bg-card rounded-2xl border border-transparent p-5 shadow-card mb-5 dark:border-line/60">
         <h2 className="font-heading text-[19px] font-bold text-slate-900 mb-3 border-b border-slate-100 pb-2.5">
           Workflow progress
         </h2>

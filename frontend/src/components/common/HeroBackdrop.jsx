@@ -1,21 +1,21 @@
 import { bandPath, BANDS_VIEWBOX } from "@/components/common/heroBands";
 
 const BANDS = [
-  { x: -520, w: 260, fill: "black", opacity: 0.18, motion: "hero-band-a" },
-  { x: -170, w: 170, fill: "white", opacity: 0.1, motion: "hero-band-b" },
-  { x: 140, w: 330, fill: "white", opacity: 0.16, motion: "hero-band-c" },
-  { x: 520, w: 190, fill: "black", opacity: 0.14, motion: "hero-band-a" },
-  { x: 810, w: 380, fill: "white", opacity: 0.12, motion: "hero-band-b" },
-  { x: 1260, w: 230, fill: "black", opacity: 0.16, motion: "hero-band-c" },
+  { x: -520, w: 260, fill: "black", opacity: 0.16, motion: "hero-band-a" },
+  { x: -170, w: 170, fill: "white", opacity: 0.07, motion: "hero-band-b" },
+  { x: 140, w: 330, fill: "white", opacity: 0.10, motion: "hero-band-c" },
+  { x: 520, w: 190, fill: "black", opacity: 0.12, motion: "hero-band-a" },
+  { x: 810, w: 380, fill: "white", opacity: 0.08, motion: "hero-band-b" },
+  { x: 1260, w: 230, fill: "black", opacity: 0.14, motion: "hero-band-c" },
 ];
 
 const BASE_GRADIENT = [
   "linear-gradient(115deg",
-  "color-mix(in oklab, var(--color-primary-500) 72%, black) 0%",
-  "var(--color-primary-500) 42%",
-  "color-mix(in oklab, var(--color-primary-500) 78%, white) 60%",
-  "var(--color-primary-500) 76%",
-  "color-mix(in oklab, var(--color-primary-500) 70%, black) 100%)",
+  "color-mix(in oklab, var(--color-primary-600) 85%, black) 0%",
+  "var(--color-primary-600) 35%",
+  "var(--color-primary-500) 55%",
+  "color-mix(in oklab, var(--color-primary-500) 92%, white) 75%",
+  "color-mix(in oklab, var(--color-primary-700) 80%, black) 100%)",
 ].join(", ");
 
 export function HeroBackdrop() {
