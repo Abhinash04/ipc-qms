@@ -151,12 +151,12 @@ describe('acknowledgement template', () => {
   it('uses the supplied wording and configurable sender', () => {
     const ack = buildAcknowledgement({
       to: 'inquirer@test.invalid',
-      fromEmail: 'arnd-ipc-mock@example.com',
-      fromName: 'AR&D Division',
+      fromEmail: 'ipc-mock@example.com',
+      fromName: 'Indian Pharmacopoeia Commission (IPC)',
       queryId: 'QRY-2026-00001',
     });
 
-    expect(ack.from).toBe('AR&D Division <arnd-ipc-mock@example.com>');
+    expect(ack.from).toBe('Indian Pharmacopoeia Commission (IPC) <ipc-mock@example.com>');
     expect(ack.to).toEqual(['inquirer@test.invalid']);
     expect(ack.subject).toBe(`${ACKNOWLEDGEMENT_SUBJECT} [QRY-2026-00001]`);
     expect(ack.body).toContain('Greetings from the Indian Pharmacopoeia Commission (IPC)!');

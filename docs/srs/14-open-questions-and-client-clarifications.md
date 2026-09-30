@@ -59,7 +59,7 @@ Nothing sends as the Officer-in-Charge either; that role is a recipient, address
   a single IPC query mailbox (`lab.ipc@gov.in`), not a named officer. This is a development
   arrangement for the multi-account test. — *Proposed Design* (user-directed)
 - **The acknowledgement, the forward and the final response are all sent by the Front Officer
-  personally**, replacing the `AR&D Division` departmental sender in
+  personally**, replacing the earlier departmental sender in
   [12-email-integration.md](./12-email-integration.md). Is a named individual an acceptable sender
   for official IPC correspondence, or must it remain a departmental address? — *Client
   Clarification Required*

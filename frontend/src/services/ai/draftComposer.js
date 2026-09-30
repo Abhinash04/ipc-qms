@@ -1,5 +1,4 @@
 export const IPC_SIGNATURE = `Regards,
-AR&D Division
 Indian Pharmacopoeia Commission (IPC)
 Ministry of Health & Family Welfare
 Government of India`;

@@ -81,7 +81,7 @@ describe('direction convention (from the QMS/IPC perspective)', () => {
       ...base,
       direction: EMAIL_DIRECTION.OUTBOUND,
       emailType: EMAIL_TYPE.OUTGOING_RESPONSE,
-      from: 'arnd-ipc-mock@example.com',
+      from: 'ipc-mock@example.com',
       to: ['abhinash.pritiraj@pharma.example'],
     });
     expect(msg.direction).toBe(EMAIL_DIRECTION.OUTBOUND);

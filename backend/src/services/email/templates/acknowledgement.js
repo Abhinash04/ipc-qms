@@ -1,3 +1,5 @@
+import { IPC_SIGNATURE } from './signature.js';
+
 const SUBJECT = 'Acknowledgement of Query Received – Indian Pharmacopoeia Commission';
 
 const BODY = `Dear Sir/Madam,
@@ -12,11 +14,7 @@ We appreciate your patience and understanding.
 
 Thank you.
 
-Regards,
-AR&D Division
-Indian Pharmacopoeia Commission (IPC)
-Ministry of Health & Family Welfare
-Government of India
+${IPC_SIGNATURE}
 
 This is an auto-generated email. Please do not reply to this message.`;
 
