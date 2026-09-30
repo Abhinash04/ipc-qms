@@ -12,6 +12,7 @@ import * as emailService from './emailService.js';
 import * as outbox from './outbox.js';
 import { DELIVERY, describeError, describeFailure, labelDelivery } from './delivery.js';
 import { sendTrace } from './sendTrace.js';
+import { withIpcSignature } from './templates/signature.js';
 import * as audit from '../audit/auditService.js';
 import { ACTOR_TYPES } from '../../constants/roles.js';
 import { AUDIT_RESULTS } from '../../constants/auditActions.js';
@@ -264,7 +265,7 @@ async function responsePlan(query, actor) {
   if (!to) return { missing: 'The case carries no inquirer address.' };
 
   const subject = `Re: ${query.subject} [${queryId}]`;
-  const body = approved.content || '';
+  const body = withIpcSignature(approved.content || '');
   const sender = formatSender(emailService.senderFor(sourceMailbox));
 
   return {

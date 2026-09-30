@@ -40,6 +40,7 @@ import { authHeader } from './helpers/auth.js';
 import { ROLES } from '../constants/roles.js';
 import * as emailService from '../services/email/emailService.js';
 import env from '../config/env.js';
+import { IPC_SIGNATURE } from '../services/email/templates/signature.js';
 import {
   QueryCase,
   ResponseVersion,
@@ -136,7 +137,9 @@ describe('POST /queries/:queryId/final-approval — the happy path', () => {
     await approve();
 
     expect(sendSpy).toHaveBeenCalledWith(
-      expect.objectContaining({ body: 'The applicable limit is stated in the current monograph.' }),
+      expect.objectContaining({ body: `The applicable limit is stated in the current monograph.
+
+${IPC_SIGNATURE}` }),
     );
 
     const version = await ResponseVersion.findOne({ responseId: 'RESP-00002' }).lean();

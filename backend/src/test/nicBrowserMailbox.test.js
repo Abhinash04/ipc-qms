@@ -84,6 +84,7 @@ import * as nicBrowserTransport from '../services/email/transports/nicBrowserTra
 import * as attachments from '../services/attachments/attachmentStore.js';
 import { QueryCase, ResponseVersion } from '../models/index.js';
 import { traceSink } from '../services/email/sendTrace.js';
+import { IPC_SIGNATURE } from '../services/email/templates/signature.js';
 
 const NIC_ADDRESS = 'nic-mailbox@test.invalid';
 const NIC_PASSWORD = 'test-pw-nic-frontoffice-0014';
@@ -498,7 +499,9 @@ describe('outbound mail follows the case mailbox', () => {
       expect(browser.sendMail).toHaveBeenCalledTimes(1);
       const sent = browser.sendMail.mock.calls[0][0];
       expect(sent.to).toEqual(['ravi@pharma.example']);
-      expect(sent.body).toBe('The limit is stated in the current monograph.');
+      expect(sent.body).toBe(`The limit is stated in the current monograph.
+
+${IPC_SIGNATURE}`);
     });
 
     it('retries a NICeMail acknowledgement through the browser', async () => {
