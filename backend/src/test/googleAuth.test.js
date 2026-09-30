@@ -65,7 +65,7 @@ describe('POST /auth/google', () => {
     expect(sessionCookie(res)).toBeUndefined();
   });
 
-  it('refuses a Google account that is not an IPC-QMS staff account, and audits it', async () => {
+  it('refuses a Google account that is not a BRIDGETECH staff account, and audits it', async () => {
     googleSays('stranger@gmail.example');
 
     const res = await signIn();

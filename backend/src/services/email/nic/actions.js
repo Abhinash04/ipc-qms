@@ -51,11 +51,11 @@ export async function send_nicemail({
 
   return sendMessage({
     to: nicConfig.testRecipient,
-    subject: subject || `QMS NICeMail connectivity test ${stamp}`,
+    subject: subject || `BRIDGETECH NICeMail connectivity test ${stamp}`,
     text:
       body ||
       [
-        'This is an automated connectivity test from the IPC QMS backend.',
+        'This is an automated connectivity test from the AI-powered IP Stakeholder’s BRIDGETECH backend.',
         '',
         `Sent at: ${stamp}`,
         'No action is required.',
