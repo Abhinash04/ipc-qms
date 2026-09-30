@@ -9,14 +9,12 @@ import {
   Loader2,
   ChevronDown,
   Zap,
-  Compass,
   Sparkles,
   ShieldCheck,
 } from "lucide-react";
 
 import { ROUTE_PATHS, roleHome } from "@/constants/routePaths";
 import { useAuthStore } from "@/store/useAuthStore";
-import { useThemeStore } from "@/store/useThemeStore";
 import { useResolvedMode } from "@/components/theme/themeRuntime";
 import { MOCK_USERS } from "@/constants/mockUsers";
 import { HeroBackdrop } from "@/components/common/HeroBackdrop";
@@ -32,7 +30,6 @@ export function LoginPage() {
   const login = useAuthStore((state) => state.login);
   const devLogin = useAuthStore((state) => state.devLogin);
   const googleLogin = useAuthStore((state) => state.googleLogin);
-  const setOption = useThemeStore((state) => state.setOption);
   const resolved = useResolvedMode();
   const navigate = useNavigate();
 
@@ -345,11 +342,6 @@ export function LoginPage() {
               </div>
             </div>
           </div>
-
-          {/* <div className="inline-flex items-center gap-2.5 rounded-full border border-white/20 bg-white/10 px-4.5 py-2 text-[13px] font-bold uppercase tracking-wider text-white/95 shadow-sm backdrop-blur-md">
-            <Compass className="h-4.5 w-4.5 text-sky-300" />
-            <span>QMS PORTAL</span>
-          </div> */}
 
           <h1 className="mt-5 font-heading text-[36px] font-extrabold leading-[1.15] tracking-tight text-white xl:text-[42px]">
             IPC QMS —{" "}
