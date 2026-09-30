@@ -158,10 +158,10 @@ export function SidebarContent({ open, collapsed = !open, onNavigate, onToggle }
             />
             <div className="min-w-0">
               <div className="truncate font-heading text-[13px] font-bold text-side-fg">
-                IPC-QMS
+                BRIDGETECH
               </div>
               <div className="truncate text-[11px] text-side-muted">
-                Query Management System
+                AI-powered IP Stakeholder’s
               </div>
             </div>
           </div>

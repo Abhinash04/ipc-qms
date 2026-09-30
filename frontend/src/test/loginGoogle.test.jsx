@@ -112,10 +112,10 @@ describe('Sign in with Google', () => {
     await waitFor(() => expect(screen.queryByRole('button', { name: 'Sign in' })).toBeNull());
   });
 
-  it('shows the server\'s refusal for a Google account with no IPC-QMS account', async () => {
+  it('shows the server\'s refusal for a Google account with no BRIDGETECH account', async () => {
     vi.stubEnv('VITE_GOOGLE_CLIENT_ID', 'client-123.apps.googleusercontent.com');
     installFakeGoogle();
-    const message = 'No IPC-QMS account uses this Google email. Sign in with your IPC-QMS email and password.';
+    const message = 'No BRIDGETECH account uses this Google email. Sign in with your BRIDGETECH email and password.';
     vi.mocked(authService.googleLogin).mockRejectedValue(
       Object.assign(new Error(message), { response: { status: 403, data: { code: 'NO_ACCOUNT', error: message } } }),
     );

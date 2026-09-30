@@ -1,6 +1,6 @@
-# QMS Frontend
+# BRIDGETECH Frontend
 
-React 19 + Vite 8 single-page app for the Query Management System. **JavaScript only** — no
+React 19 + Vite 8 single-page app for the AI-powered IP Stakeholder’s BRIDGETECH. **JavaScript only** — no
 TypeScript. Path alias `@` → `./src` (set in both `vite.config.js` and `jsconfig.json`).
 
 ## Setup
@@ -322,7 +322,7 @@ All modules share `services/api/axiosClient.js` (`withCredentials: true` for the
 | Module | Endpoints |
 |---|---|
 | `authService.js` | `POST /auth/login`, `POST /auth/logout`, `GET /auth/me` |
-| `mailboxService.js` | `/emails/config`, `/emails/enquiry`, `/emails/acknowledgement`, `/emails/forward`, `/emails/response`, `/mailbox/*`: `GET /mailbox/messages` (`q`; `limit`/`offset` add `total`; `unreadOnly` means awaiting validation, not `isRead`), `GET /mailbox/messages/:messageId` (adds `bodyHtml`), `POST /mailbox/messages/:messageId/read` (QMS-local), `POST /mailbox/sync` (NICeMail, 202), plus `mailboxAttachmentUrl()` for `/mailbox/messages/:messageId/attachments/:attachmentId` |
+| `mailboxService.js` | `/emails/config`, `/emails/enquiry`, `/emails/acknowledgement`, `/emails/forward`, `/emails/response`, `/mailbox/*`: `GET /mailbox/messages` (`q`; `limit`/`offset` add `total`; `unreadOnly` means awaiting validation, not `isRead`), `GET /mailbox/messages/:messageId` (adds `bodyHtml`), `POST /mailbox/messages/:messageId/read` (BRIDGETECH-local), `POST /mailbox/sync` (NICeMail, 202), plus `mailboxAttachmentUrl()` for `/mailbox/messages/:messageId/attachments/:attachmentId` |
 | `attachmentService.js` | `POST /attachments`, `GET /attachments/:id/meta`, plus `attachmentUrl()` |
 | `adminService.js` | `GET /audit`, `/audit/summary`, `/audit/query/:queryId` |
 | `aiService.js` | `POST /ai/summary`, `/ai/draft`, `/ai/recommend` |

@@ -23,7 +23,7 @@ const fakeForward = caseMail.forwardQuery;
 
 const fakeSend = (payload) =>
   Promise.resolve({
-    from: 'AR&D Division <arnd-ipc-mock@example.com>',
+    from: 'Indian Pharmacopoeia Commission (IPC) <ipc-mock@example.com>',
     to: [payload.to],
     subject: payload.subject,
     body: payload.body,

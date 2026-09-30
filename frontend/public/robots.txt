@@ -1,4 +1,4 @@
-# Internal authenticated tool (IPC Query Management System).
+# Internal authenticated tool (AI-powered IP Stakeholder’s BRIDGETECH).
 # Deliberately excluded from search indexing; see docs — the login page is the
 # only public surface and there is nothing useful to crawl behind it.
 User-agent: *

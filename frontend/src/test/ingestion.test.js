@@ -94,7 +94,7 @@ describe('requirement 2 — a query is created dynamically from an email', () =>
     expect(second.threadId).toBe('THREAD-2026-00002');
   });
 
-  it('records the inbound message with the QMS/IPC direction convention', () => {
+  it('records the inbound message with the BRIDGETECH/IPC direction convention', () => {
     const { messageId } = s().ingestEmail(mailboxMessage());
     const message = s().emailMessages.find((m) => m.messageId === messageId);
 

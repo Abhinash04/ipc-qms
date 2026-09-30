@@ -31,13 +31,13 @@ export const IPC_ANNOUNCEMENTS = [
       "Strict 24-Hour SLA Mandatory for High Priority (P1) Technical Queries",
     titleHi: "उच्च प्राथमिकता (P1) प्रश्नों हेतु 24 घंटे की एसएलए अनिवार्य",
     summary:
-      "All P1 queries submitted via IPC-QMS must be acknowledged, assigned, and verified within 24 hours.",
+      "All P1 queries submitted via BRIDGETECH must be acknowledged, assigned, and verified within 24 hours.",
     date: "2026-08-26",
     priority: "high",
     icon: Zap,
     badgeColor: "bg-rose-500/15 text-rose-700 border-rose-300/50",
     dotColor: "bg-rose-500",
-    refCode: "SOP-IPC-QMS-V4.2",
+    refCode: "SOP-IPC-BRIDGETECH-V4.2",
   },
   {
     id: "ann-3",
@@ -58,8 +58,8 @@ export const IPC_ANNOUNCEMENTS = [
     id: "ann-4",
     category: "MoHFW Directive",
     categoryHi: "स्वास्थ्य मंत्रालय निर्देश",
-    title: "Mandatory Digital Query Submission via IPC-QMS Portal",
-    titleHi: "IPC-QMS पोर्टल के माध्यम से डिजिटल प्रश्न पंजीकरण अनिवार्य",
+    title: "Mandatory Digital Query Submission via BRIDGETECH Portal",
+    titleHi: "BRIDGETECH पोर्टल के माध्यम से डिजिटल प्रश्न पंजीकरण अनिवार्य",
     summary:
       "Ministry of Health & Family Welfare directs all drug manufacturers to submit official technical queries online.",
     date: "2026-08-22",
