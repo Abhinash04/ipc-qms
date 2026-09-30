@@ -1,8 +1,8 @@
-# Query Management System (QMS)
+# AI-powered IP Stakeholder’s BRIDGETECH
 
 ## Purpose
 
-QMS manages incoming query emails for an IPC client, end to end: receipt, Front Office
+BRIDGETECH manages incoming query emails for an IPC client, end to end: receipt, Front Office
 validation, AI-assisted assignment, AI-assisted drafting, dynamic multi-level review, final
 Officer-in-Charge approval, response dispatch, and closure — with a complete audit trail
 throughout.

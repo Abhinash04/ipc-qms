@@ -335,7 +335,7 @@ them.
 2. **Authorized JavaScript origins:** `http://localhost:5173` for local development, plus the production frontend origin (the Render site). No redirect URI is needed: the button uses Google Identity Services and returns an ID token to the page.
 3. **OAuth consent screen:** *Internal* if the staff use a Google Workspace domain, otherwise *External* with the staff added as test users until it is published.
 4. Put the client ID in `GOOGLE_CLIENT_ID` (backend env file) and `VITE_GOOGLE_CLIENT_ID` (`frontend/.env.local`, or the Render environment), then restart the backend and rebuild the frontend. The client secret is not used; do not put it in any env file.
-5. A staff member can then sign in with Google only if their Google account email equals their IPC-QMS account email.
+5. A staff member can then sign in with Google only if their Google account email equals their BRIDGETECH account email.
 
 ## 4. Frontend variables
 

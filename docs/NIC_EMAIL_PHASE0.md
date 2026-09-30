@@ -161,7 +161,7 @@ Send to `support@gov.in`, copying your Delegated Administrator.
 > Respected Sir/Madam,
 >
 > We are integrating the official mailbox `contact.ecoclubs-edu@gov.in` with an internal
-> departmental application (IPC Query Management System) so that official correspondence
+> departmental application (AI-powered IP Stakeholder’s BRIDGETECH) so that official correspondence
 > is handled through NIC eMail rather than a third-party provider, in line with the
 > E-mail Policy of the Government of India.
 >

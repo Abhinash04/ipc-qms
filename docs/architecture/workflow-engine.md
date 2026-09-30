@@ -4,7 +4,7 @@
 
 A fixed set of review fields caps the workflow at a hardcoded number of levels and makes
 "add a review level" or "delete a review level" a schema change instead of a data operation.
-QMS must support any number of review levels per query (spec requirement — see
+BRIDGETECH must support any number of review levels per query (spec requirement — see
 [srs/04-functional-requirements.md](../srs/04-functional-requirements.md#44-dynamic-review)),
 so the workflow is modeled as a dynamic, ordered collection instead.
 

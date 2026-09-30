@@ -1,6 +1,6 @@
-# IPC-QMS — Deployment Strategy and Production-Readiness Audit
+# BRIDGETECH — Deployment Strategy and Production-Readiness Audit
 
-**System:** IPC Query Management System (IPC-QMS), including the NICeMail Browser Agent
+**System:** AI-powered IP Stakeholder’s BRIDGETECH, including the NICeMail Browser Agent
 **Scope:** Technical audit of the repository, and a production deployment strategy
 **Code audited:** branch `abhi-agent`, commit `438997e` (2026-09-22)
 **Revised:** 2026-09-23, against branch `abhi-clean` (commit `7e22bbb`), after the Gmail removal this report called for
@@ -50,7 +50,7 @@ and Appendix B.
 
 **The short answer** (details in Sections 10 and 19):
 
-> **IPC-QMS, including the NICeMail Browser Agent, runs on ordinary CPU servers. No component needs a GPU — as long as the AI stays with the external Pravah service.** All three AI features (case summary, officer recommendation, draft response) call an **external AI service over HTTPS**: the Pravah Gemma endpoint. No AI model runs inside IPC-QMS. The enquiry text therefore leaves IPC's network, and the production server needs outbound HTTPS and DNS to `pravahai.aicte-india.org`.
+> **BRIDGETECH, including the NICeMail Browser Agent, runs on ordinary CPU servers. No component needs a GPU — as long as the AI stays with the external Pravah service.** All three AI features (case summary, officer recommendation, draft response) call an **external AI service over HTTPS**: the Pravah Gemma endpoint. No AI model runs inside BRIDGETECH. The enquiry text therefore leaves IPC's network, and the production server needs outbound HTTPS and DNS to `pravahai.aicte-india.org`.
 >
 > The real constraint is not hardware. **The Browser Agent drives a real Chrome browser that a person must sign in to NICeMail** (with MFA/OTP if NIC requires it for this account [Unknown]), and sign in again whenever the session expires. So that server needs an interactive desktop session and an operator. It cannot run as an unattended background service **in the current implementation**.
 >
@@ -85,24 +85,24 @@ and Appendix B.
 
 ## 1. Primary objective and answer
 
-**Question:** Can the complete IPC-QMS, including the NICeMail Browser Agent, be deployed on CPU-based servers, or are GPU servers required?
+**Question:** Can the complete BRIDGETECH, including the NICeMail Browser Agent, be deployed on CPU-based servers, or are GPU servers required?
 
-**Answer: CPU servers are sufficient. No GPU is required by any part of IPC-QMS, as long as the AI model stays with the external Pravah service.** [Verified] (an on-premise model would need its own GPU server — see the qualifications below and Section 19, item 8)
+**Answer: CPU servers are sufficient. No GPU is required by any part of BRIDGETECH, as long as the AI model stays with the external Pravah service.** [Verified] (an on-premise model would need its own GPU server — see the qualifications below and Section 19, item 8)
 
 | What was checked | Finding |
 |---|---|
-| Where AI inference happens | Every AI feature (summary, officer recommendation, draft, and the question split used by the draft) is an HTTPS `POST` to one external endpoint, `GEMMA_API_URL`. It defaults to `https://pravahai.aicte-india.org/llm/api/gemma`. No model is loaded or run inside IPC-QMS. [Verified] (`backend/src/services/ai/gemmaService.js:170, 315, 440`; `backend/src/config/env.js:47-48`) |
+| Where AI inference happens | Every AI feature (summary, officer recommendation, draft, and the question split used by the draft) is an HTTPS `POST` to one external endpoint, `GEMMA_API_URL`. It defaults to `https://pravahai.aicte-india.org/llm/api/gemma`. No model is loaded or run inside BRIDGETECH. [Verified] (`backend/src/services/ai/gemmaService.js:170, 315, 440`; `backend/src/config/env.js:47-48`) |
 | Local ML, CUDA, ONNX, TensorFlow, PyTorch, embeddings, vector DB, OCR | None in either `package.json` or either lockfile, and none in the source code. [Verified] (dependency and source scan of `backend/` and `frontend/`) |
 | The "knowledge grounding" used by the AI draft | Plain JavaScript word matching over a 0.46 MB JSON index shipped in the repository (412 text chunks). No embeddings, no vectors, no native code. [Verified] (`backend/src/data/ipcKnowledge.js`, `backend/src/data/ipcKnowledge.json`) |
 | PDF / document / image processing | Attachments are only type-checked, size-checked, checksummed and stored. They are never parsed, OCR'd or sent to the AI. [Verified] (`backend/src/services/attachments/attachmentPolicy.js`, `attachmentStore.js`) |
 | Background workers | Two in-process timers, both `unref`'d, started in `server.js` and stopped first on shutdown, both silent under `NODE_ENV=test`: the **mailbox sync** every `MAILBOX_SYNC_INTERVAL_MS` (15 s, off when `MAILBOX_SYNC_ENABLED=false`) and the **junk-retention sweep** hourly (off when `MAILBOX_RETENTION_ENABLED=false`). `services/email/mailbox/syncScheduler.js`, `retention.js`. No job queue, cron, `worker_threads` or `child_process`. [Verified, 2026-09-24] |
-| The Browser Agent | Uses a normal Chrome browser through the Chrome DevTools Protocol (CDP). IPC-QMS asks Chrome for nothing graphical: it drives the page with DOM events from page scripts, plus CDP text and key input (`Input.insertText`, `Input.dispatchKeyEvent`), tab control (`Target.createTarget`, `Page.navigate`) and file-chooser interception for attachments (`DOM.setFileInputFiles`). No screenshots, WebGL or GPU flags. [Verified] (`backend/src/services/email/nic/browser/selectors.js:368-408, 494-501`; `sendMail.js:430, 440-462`; `session.js:58-64`). Note the limit of this evidence: IPC-QMS never launches Chrome, so how Chrome itself renders (GPU compositing, or software rendering on a GPU-less VM) is set by the operator's launch, and its CPU cost was not measured — see the qualification below. |
+| The Browser Agent | Uses a normal Chrome browser through the Chrome DevTools Protocol (CDP). BRIDGETECH asks Chrome for nothing graphical: it drives the page with DOM events from page scripts, plus CDP text and key input (`Input.insertText`, `Input.dispatchKeyEvent`), tab control (`Target.createTarget`, `Page.navigate`) and file-chooser interception for attachments (`DOM.setFileInputFiles`). No screenshots, WebGL or GPU flags. [Verified] (`backend/src/services/email/nic/browser/selectors.js:368-408, 494-501`; `sendMail.js:430, 440-462`; `session.js:58-64`). Note the limit of this evidence: BRIDGETECH never launches Chrome, so how Chrome itself renders (GPU compositing, or software rendering on a GPU-less VM) is set by the operator's launch, and its CPU cost was not measured — see the qualification below. |
 
 **Three important qualifications:**
 
-1. **The AI model itself runs on external infrastructure (Pravah).** That infrastructure almost certainly uses GPUs, but it is outside this project. [Unknown] The project documentation lists "external API vs on-premise model" as an open client question (`docs/srs/14-open-questions-and-client-clarifications.md`, `docs/srs/07-ai-requirements.md`). [Documented only] **If IPC requires an on-premise model instead of Pravah, a separate GPU-equipped model server would be needed.** IPC-QMS itself would still not need a GPU.
+1. **The AI model itself runs on external infrastructure (Pravah).** That infrastructure almost certainly uses GPUs, but it is outside this project. [Unknown] The project documentation lists "external API vs on-premise model" as an open client question (`docs/srs/14-open-questions-and-client-clarifications.md`, `docs/srs/07-ai-requirements.md`). [Documented only] **If IPC requires an on-premise model instead of Pravah, a separate GPU-equipped model server would be needed.** BRIDGETECH itself would still not need a GPU.
 2. **The Browser Agent is CPU-only but not "server-style".** It attaches to an **already running, signed-in Chrome**, which should run on the **same machine** as the backend (Section 9.2), and a person must perform the NICeMail sign-in in that browser (including MFA/OTP if required [Unknown]). This is an operational constraint, covered in Sections 9, 11 and 12. It is not a hardware constraint.
-3. **"No GPU" is a statement about what IPC-QMS asks for, not a measurement of Chrome's cost.** On a virtual machine without a GPU, Chrome renders in software. That is normal and supported, but its CPU and memory cost on the target VM was **not measured** in this audit. [Unknown] Make it a Phase 7 acceptance criterion: measure Chrome's CPU and memory while the NICeMail web app is loaded, and size the VM from that (Section 11.4).
+3. **"No GPU" is a statement about what BRIDGETECH asks for, not a measurement of Chrome's cost.** On a virtual machine without a GPU, Chrome renders in software. That is normal and supported, but its CPU and memory cost on the target VM was **not measured** in this audit. [Unknown] Make it a Phase 7 acceptance criterion: measure Chrome's CPU and memory while the NICeMail web app is loaded, and size the VM from that (Section 11.4).
 
 ---
 
@@ -143,7 +143,7 @@ The Browser Agent is currently exercised with a test account (`contact.ecoclubs-
 | 3 | Chrome sign-in | Reads use whatever account the Chrome window is signed into: sync has **no account check** and files what it reads under the current `NIC_EMAIL`. Sends are refused unless the compose From contains `NIC_EMAIL`. If `NIC_EMAIL` and the Chrome sign-in are switched at different times, one account's mail is filed under the other address. | Sign in to `lab.ipc@gov.in` in the dedicated Chrome profile (MFA/OTP if NIC requires it [Unknown]). **Switch `NIC_EMAIL` and the Chrome sign-in together, with the backend stopped.** | `nic/browser/attach.js:4-15`; `session.js:43-75`; `sendMail.js:358-368`; `nicBrowserMailbox.js:68, 145` |
 | 4 | `NIC_ALLOW_OUTBOUND` | Outbound safety interlock. Until it is `true`, NICeMail sends only go to the test recipient. `NIC_ALLOW_INTERNAL_FORWARD=true` additionally opens exactly `OFFICER_IN_CHARGE_EMAIL`, for the forward alone — a recipient allowance, not a second channel [Verified, 2026-09-23] | Set `NIC_ALLOW_OUTBOUND=true` **only** at go-live, deliberately. Build the production configuration (`backend/.env.production`) from [docs/ENVIRONMENT.md](ENVIRONMENT.md), never from a development `.env.local`. Start with `NIC_ALLOW_OUTBOUND=false`, and use `NIC_ALLOW_INTERNAL_FORWARD=true` so intake completes end to end while it is closed. | `nic/outboundGuard.js`; `config/env.js` |
 | 5 | `NIC_BROWSER_TEST_RECIPIENT` | The only allowed recipient while the interlock is closed; also used by the calibration tool. If unset, it falls back to `NIC_TEST_RECIPIENT`. One of the two is **required at boot** while the agent is on and `NIC_ALLOW_OUTBOUND` is not `true`; only the standalone scripts still fall back to `NIC_EMAIL`. | Set explicitly to an IPC-controlled test inbox | `browserConfig.js:25-32`; `config/env.js:121-127` |
-| 6 | `NIC_FRONT_OFFICE_NAME` | Display name inside IPC-QMS only. The name recipients see comes from the NICeMail account profile. | Set an IPC name; check the NICeMail profile display name | `emailService.js:75-78`; `transports/nicBrowserTransport.js` |
+| 6 | `NIC_FRONT_OFFICE_NAME` | Display name inside BRIDGETECH only. The name recipients see comes from the NICeMail account profile. | Set an IPC name; check the NICeMail profile display name | `emailService.js:75-78`; `transports/nicBrowserTransport.js` |
 | 7 | `NIC_WEBMAIL_APP_URL`, `NIC_WEBMAIL_URL_PATTERNS`, `NIC_WEBMAIL_TITLE_PATTERNS` | Which web address the agent opens, and which browser tab it recognises as NICeMail | Confirm `lab.ipc@gov.in` is on the same NICeMail (Zoho / mgovcloud) platform and URLs [Unknown] | `browserConfig.js:6-23` |
 | 8 | Password for `USR-0014` | The boot check runs in every mode, but **outside production an unset `QMS_ALLOW_SHARED_PASSWORD` still switches the shared mode ON whenever `QMS_SEED_PASSWORD` is non-empty** — so a successful start in development or staging proves nothing about the production credential set. In production each of the 13 accounts, plus the NICeMail Front Office, needs its own credential. The `USR-0014` id itself comes from the hard-coded directory and changes when that directory is replaced. | Set `QMS_PASSWORD_USR_0014` (or add it to `QMS_PASSWORDS_FILE`), set `QMS_ALLOW_SHARED_PASSWORD=false` explicitly rather than leaving it unset, and test the production credential set with `NODE_ENV=production` | `config/authConfig.js`; `services/auth/credentials.js:73-78`; `constants/users.js` |
 | 9 | UI calibration | Selectors were calibrated against the test account's NICeMail interface | Run `npm run nic:browser:discover` and `npm run nic:browser:calibrate` after signing in to `lab.ipc@gov.in` | `scripts/nicBrowserDiscover.js`, `scripts/nicBrowserCalibrate.js` |
@@ -152,7 +152,7 @@ The Browser Agent is currently exercised with a test account (`contact.ecoclubs-
 
 - **Messages stored under the old address stop appearing** in the Front Office inbox. The list is filtered by the current `NIC_EMAIL`. They are hidden, not deleted (`nicBrowserMailbox.js:254`).
 - **Mail already in lab.ipc@gov.in's inbox will appear in the Front Office inbox.** If the database already holds messages from the test account, none of their ids occur in the new inbox, so every row the new inbox loads (about 50 per the documentation [Documented only]; the code says "the newest few dozen") is stored as a **pending Front Office inbox message**, 20 per sync. With an empty database, only the newest 20 are stored and older mail is skipped without notice. These are un-accepted inbox items, not cases; no case exists until the Front Office accepts one (`nic/browser/readInbox.js:616-648`; `nicBrowserMailbox.js:87, 152-153`). **Recommendation:** have the Front Office review and reject the unwanted ones.
-- **Existing cases keep the old address in their `sourceMailbox` record.** Their later mail is actually sent from `lab.ipc@gov.in` (the compose From is checked against the current `NIC_EMAIL`, `sendMail.js:358-368`), but IPC-QMS records it as sent from the old address (`emailService.js:75-78`).
+- **Existing cases keep the old address in their `sourceMailbox` record.** Their later mail is actually sent from `lab.ipc@gov.in` (the compose From is checked against the current `NIC_EMAIL`, `sendMail.js:358-368`), but BRIDGETECH records it as sent from the old address (`emailService.js:75-78`).
 - **Active sessions of the NICeMail Front Office user** issued before the switch are routed to the wrong mailbox until they expire (`SESSION_TTL_SECONDS`, 8 hours by default). Sessions are stateless tokens and a restart does not end them: have that user log out, or rotate `JWT_SECRET` (which signs everyone out) (`services/auth/tokenService.js:5-21`, `mailbox/index.js:165-166`).
 - The IPC knowledge corpus quotes `lab.ipc@gov.in` as guidance text. That is content, not configuration, and must **not** be changed as part of the switch (`backend/README.md:716-720`).
 
@@ -167,7 +167,7 @@ Inquirer (any email account, e.g. Gmail)
 NICeMail (Zoho/mgovcloud, run by NIC)
    │  Browser Agent reads the inbox through a signed-in Chrome (CDP, localhost:9222)
    ▼
-IPC-QMS backend (Node.js) ──► MongoDB (MailboxMessage)
+BRIDGETECH backend (Node.js) ──► MongoDB (MailboxMessage)
    │
    ▼
 Front Officer ✓ Accept ──► Case + Case ID ──► AI summary (Pravah API)
@@ -219,7 +219,7 @@ Under `EMAIL_TRANSPORT=mock` (the default when the variable is unset, `config/en
 **What happens** [Verified]
 1. The inquirer emails the NICeMail mailbox. For the production mailbox (`lab.ipc@gov.in`), no inquirer-side setup is needed.
 2. Ingestion is **triggered by the browser, not the server**:
-   - While the NICeMail Front Officer has IPC-QMS open, the page polls the inbox: every 30 s app-wide, every 15 s on the inbox page, and every 3 s while a sync runs. While the mailbox cannot be reached, the poll backs off to 1, 2 and then 5 minutes (`frontend/src/components/workflow/MailboxAutoSync.jsx:7, 16, 85`; `pages/frontOffice/MailboxInboxPage.jsx:59-61`).
+   - While the NICeMail Front Officer has BRIDGETECH open, the page polls the inbox: every 30 s app-wide, every 15 s on the inbox page, and every 3 s while a sync runs. While the mailbox cannot be reached, the poll backs off to 1, 2 and then 5 minutes (`frontend/src/components/workflow/MailboxAutoSync.jsx:7, 16, 85`; `pages/frontOffice/MailboxInboxPage.jsx:59-61`).
    - The backend starts a background sync when the last one *ended* more than `NIC_BROWSER_SYNC_TTL_MS` (default 15 s) ago (`mailbox/nicBrowserMailbox.js:192-196, 217-219`). The server-side timer asks for one every `MAILBOX_SYNC_INTERVAL_MS` (default 15 s) while `MAILBOX_SYNC_ENABLED` is not `false`, so mail is read even when nobody has the inbox open (`mailbox/syncScheduler.js`). A **"Sync now"** button requests one (`POST /mailbox/sync`); it is ignored while a sync is running or if the last one ended less than 15 s ago (`nicBrowserMailbox.js:252-259`).
    - **Ingestion now has a server-side scheduler**, so mail arrives with nobody signed in. `services/email/mailbox/syncScheduler.js` asks for a sync every `MAILBOX_SYNC_INTERVAL_MS` (15 s) whenever Chrome's CDP endpoint answers, and `MAILBOX_SYNC_ENABLED=false` returns the deployment to browser-driven ingestion. Cron and a job queue are still absent. [Verified, 2026-09-24]
    - **The interval is a floor, not a period.** Every tick goes through `syncIfDue`, which keeps its single-flight, its `NIC_BROWSER_SYNC_TTL_MS` gap measured from the *end* of the previous sync, and its refusal to start while any browser work is queued. A full twenty-message sync was measured at 91 s, so ticks landing inside one are absorbed and the real cadence is whichever is longer. An acknowledgement or a final response always goes before a sync. [Verified, 2026-09-24]
@@ -477,7 +477,7 @@ resolved, and risks #1 and #2 below are the consequences of how it was resolved.
 | 8 | Medium | Crashed sends need a retry to surface; the ledger has no sweeper for a lease that expired mid-send | Lease sweeper (code) |
 | 9 | Medium | Server clock ahead of NICeMail by > 10 s makes every send UNCERTAIN; a clock well behind could confirm a send against an older Sent message | NTP, both directions |
 | 10 | Medium | NICeMail UI changes (English text literals and accessible names, 3 uncalibrated keys); a UI language change stops all reads and sends | Keep the account's UI in English; scheduled `nic:browser:discover`; recalibration procedure |
-| 11 | Low-Medium | **Resolved for the sign-in dependency**: the server syncs on its own timer, so ingestion no longer needs anyone signed in to IPC-QMS. It still needs the dedicated Chrome running and the NICeMail session live. Limited loaded window remains (~50 rows [Documented only]) | Monitor `sync.ok` and the Browser Agent's session; keep the Chrome profile signed in |
+| 11 | Low-Medium | **Resolved for the sign-in dependency**: the server syncs on its own timer, so ingestion no longer needs anyone signed in to BRIDGETECH. It still needs the dedicated Chrome running and the NICeMail session live. Limited loaded window remains (~50 rows [Documented only]) | Monitor `sync.ok` and the Browser Agent's session; keep the Chrome profile signed in |
 | 12 | Medium | Three serialised browser jobs per case now, not two, all inside HTTP requests and sharing one queue with syncs | Accept at low volume; a dedicated worker is the future step, and matters more now than it did |
 | 13 | Medium-Low | Production refuses `EMAIL_TRANSPORT=mock` unconditionally, so a NICeMail-agent-only deployment must still name `nic` — which boots without an app password and then fails at the first non-agent send [Verified, 2026-09-23] (`config/env.js`) | Obtain the app password and configure SMTP properly, which is wanted anyway as the second channel for non-agent cases. Not a defect; a configuration trap worth knowing |
 
@@ -496,7 +496,7 @@ Every component, classified from the code:
 | File storage (attachments) | Yes (disk) | **No** | No | `attachmentStore.js`; local disk `ATTACHMENT_DIR` |
 | Chrome for the Browser Agent | Yes | **No** | No | DOM events plus CDP text/key input and file-chooser interception; no WebGL, screenshots or GPU flags in the code. On a GPU-less VM Chrome renders in software; that CPU cost is unmeasured (Section 1, qualification 3) |
 | NICeMail web application | – (hosted by NIC) | **No** | **NICeMail (NIC)** | Accessed over HTTPS through the browser |
-| AI Summary | Yes (HTTP call) | **No** (in IPC-QMS) | **Pravah Gemma API** | `gemmaService.js:170`; 12 s timeout; deterministic fallback |
+| AI Summary | Yes (HTTP call) | **No** (in BRIDGETECH) | **Pravah Gemma API** | `gemmaService.js:170`; 12 s timeout; deterministic fallback |
 | AI Officer Recommendation | Yes (HTTP call + keyword fallback) | **No** | **Pravah Gemma API** | `gemmaService.js:315`; 36 s timeout |
 | AI Draft | Yes (HTTP call + local text retrieval) | **No** | **Pravah Gemma API** | `gemmaService.js:440`; up to ~72 s |
 | Knowledge retrieval / "grounding" | Yes (light, in-process JS) | **No** | No | `ipcKnowledge.js`; 0.46 MB JSON; no embeddings or vectors |
@@ -504,7 +504,7 @@ Every component, classified from the code:
 | OCR / PDF / image processing | Not present | – | – | Attachments stored only, never parsed |
 | Background workers | 15 s mailbox sync + hourly junk-retention sweep, both in process | Sync is browser-bound, not CPU-bound | Negligible | Both `unref`'d and env-disableable; no cron, queue or worker threads |
 | NIC SMTP / IMAP (optional path) | Yes | **No** | NIC mail servers | App password pending [Documented only] |
-| The AI model itself (Gemma, at Pravah) | – | Almost certainly (outside IPC) | Pravah | [Unknown]: hosted by Pravah/AICTE, not by IPC-QMS |
+| The AI model itself (Gemma, at Pravah) | – | Almost certainly (outside IPC) | Pravah | [Unknown]: hosted by Pravah/AICTE, not by BRIDGETECH |
 
 **Hardware recommendation** [Recommendation]: standard CPU virtual machines, with no GPU and no special hardware, **but** the application VM must provide an interactive desktop session for the agent's Chrome, and that Chrome should run on the backend's host (Sections 9.2 and 11). The resource drivers are:
 - **Chrome with the NICeMail web app loaded**: the largest memory consumer on the application host.
@@ -544,7 +544,7 @@ The static frontend is served by Render (§11.5); the VM proxy serves `/api` onl
 ┌──────────────────────────────────▼───────────────────────────────────────┐
 │ APPLICATION VM  (Windows Server with Desktop Experience, or Windows      │
 │                  10/11 Enterprise — tested only on a 10/11 workstation)  │
-│  • Node.js 22 LTS — IPC-QMS backend, EXACTLY ONE instance, NODE_ENV=prod │
+│  • Node.js 22 LTS — BRIDGETECH backend, ONLY ONE instance, NODE_ENV=prod │
 │  • Google Chrome (headed) — dedicated profile, --remote-debugging-port   │
 │      bound to localhost:9222, signed in to lab.ipc@gov.in by its owner   │
 │  • Interactive logon session for the agent account (kept alive)          │
@@ -619,7 +619,7 @@ Render Static Site ──► dist/ (hashed assets); /* → /index.html (SPA fall
 Application VM: reverse proxy (TLS, /api only, inbound 443 from Render's outbound IP ranges only)
    │  http://127.0.0.1:5000
    ▼
-IPC-QMS backend (NODE_ENV=production, exactly one instance) ──► MongoDB Atlas (separate production cluster)
+BRIDGETECH backend (NODE_ENV=production, exactly one instance) ──► MongoDB Atlas (separate production cluster)
    │  CDP http://localhost:9222 (never leaves the VM)
    ▼
 Headed Chrome, dedicated profile, signed in to lab.ipc@gov.in by its owner ──► NICeMail (HTTPS)
@@ -743,9 +743,9 @@ about the host, not about any one variable:
 | **Session expiry** | Expiry is detected as `SESSION_EXPIRED` / `NOT_AUTHENTICATED`, or as a generic readiness timeout if NICeMail shows some other sign-in page (Section 9.3). All sends fail safely before Send and ingestion pauses. The owner signs in again — but note that **no dependable expiry alert exists today** (Section 15.2): the scheduled discover check both false-alarms and can miss, so until the readiness endpoint is built, treat a run of failed sends or syncs as the signal. |
 | **Re-authentication** | Sign in by hand, then run `nic:browser:discover`. No calibration is needed for a routine sign-in. Afterwards, check the IPC Mailbox sync status and any `FAILED` / `UNCERTAIN` sends on the Dispatch and case pages. |
 | **Browser restart** | Chrome is restarted with the same flags and profile, and a NICeMail tab is reopened. If the session did not survive, re-authenticate. |
-| **Credential handling** | The NICeMail account password and OTP device are **never** stored on the server, in `.env`, or in IPC-QMS. If NIC SMTP is adopted for the OIC forward (Section 17.2), its application-specific password is kept only in a protected `NIC_APP_PASSWORD_FILE` (`services/email/nic/credentials.js:42-62`). |
+| **Credential handling** | The NICeMail account password and OTP device are **never** stored on the server, in `.env`, or in BRIDGETECH. If NIC SMTP is adopted for the OIC forward (Section 17.2), its application-specific password is kept only in a protected `NIC_APP_PASSWORD_FILE` (`services/email/nic/credentials.js:42-62`). |
 | **Access restrictions** | Interactive logon to the app VM is limited to the owner, the deputy and administrators. CDP (9222) is never reachable from the network. The VM screen is locked when unattended, and the logon session stays signed in. |
-| **Auditability** | IPC-QMS records every send with the acting user, case, outcome and provider message id (audit trail plus outbound ledger). The NICeMail Sent folder is the external record. Sign-ins should be recorded in an operations log (who, when, why). NICeMail's own sign-in logs are held by NIC [Unknown]. |
+| **Auditability** | BRIDGETECH records every send with the acting user, case, outcome and provider message id (audit trail plus outbound ledger). The NICeMail Sent folder is the external record. Sign-ins should be recorded in an operations log (who, when, why). NICeMail's own sign-in logs are held by NIC [Unknown]. |
 
 ### 12.2 Must be confirmed with NIC / IT administration before production
 
@@ -774,7 +774,7 @@ about the host, not about any one variable:
 | 6 | Sessions | JWT in an httpOnly cookie, 8 h default; **no revocation** (a stolen cookie stays valid until expiry) [Verified] | Medium | Keep the TTL short; rotate `JWT_SECRET` to revoke all sessions if needed |
 | 7 | Secrets management | Plain env file (`backend/.env.production` on the VM); no secret manager. Every `.env` and `.env.*` file except `.env.example` and `backend/.env.e2e` is git-ignored, and nothing secret is set on Render. | Medium | ACL-restricted `backend/.env.production`; passwords file; no secrets in logs or tickets |
 | 8 | Database credentials | The example URL is an Atlas placeholder; production uses a separate Atlas cluster (Section 11.3) with its own user, TLS and IP access list, none of which the repo configures [Unknown] | High | MongoDB authentication, TLS, network restriction |
-| 9 | AI API | Enquiry text (possibly containing personal data) is sent to Pravah **with no authentication header**. The `/ai/summary`, `/ai/recommend` and `/ai/draft` routes only check that the user is signed in, so any signed-in staff role can send arbitrary text to Pravah through IPC-QMS. [Verified] `gemmaService.js:170-172`; `routes/aiRoutes.js:7-11`. **Changed 2026-09-24:** mail triage now sends the sender, subject and plain body of every message the deterministic rules could not settle to the same endpoint **automatically**, once an hour, with no person in the loop — so unsolicited mail from the public, not just text a member of staff chose to submit, now leaves the deployment. `GEMMA_API_URL=` blank disables it and triage falls back to GENUINE. [Verified, 2026-09-24] `retention.js#classifyPending`; `gemmaService.js#classifyMail` | Medium | Data-sharing approval; confirm endpoint access controls with Pravah/AICTE; restrict the AI routes to staff roles (code change) |
+| 9 | AI API | Enquiry text (possibly containing personal data) is sent to Pravah **with no authentication header**. The `/ai/summary`, `/ai/recommend` and `/ai/draft` routes only check that the user is signed in, so any signed-in staff role can send arbitrary text to Pravah through BRIDGETECH. [Verified] `gemmaService.js:170-172`; `routes/aiRoutes.js:7-11`. **Changed 2026-09-24:** mail triage now sends the sender, subject and plain body of every message the deterministic rules could not settle to the same endpoint **automatically**, once an hour, with no person in the loop — so unsolicited mail from the public, not just text a member of staff chose to submit, now leaves the deployment. `GEMMA_API_URL=` blank disables it and triage falls back to GENUINE. [Verified, 2026-09-24] `retention.js#classifyPending`; `gemmaService.js#classifyMail` | Medium | Data-sharing approval; confirm endpoint access controls with Pravah/AICTE; restrict the AI routes to staff roles (code change) |
 | 10 | Email addresses and PII | Inquirer addresses, subjects and bodies are stored in MongoDB. Addresses and subjects **appear in application logs**. Retention covers **junk and rejected mail only**: body, HTML and attachment bytes are stripped after `MAILBOX_RETENTION_HOURS` (42) for mail judged junk or rejected by a person. **Unregistered mail that is not junk has no retention limit** — it is kept whole until somebody accepts or rejects it (the former 14-day `MAILBOX_UNREGISTERED_RETENTION_HOURS` tier was removed). An id stub is kept so a purged message cannot be re-ingested. Every purge writes an `EMAIL_PURGED` audit row naming the sender and subject — so the audit trail deliberately retains the PII the message body loses, and that row is now the long-lived copy. Mail that became a case, unregistered genuine mail, and the logs have **no retention policy**. [Verified, 2026-09-24] | Medium | Restrict log access; define retention for accepted mail, for unregistered mail nobody acts on, and for logs; include logs and the `EMAIL_PURGED` rows in the data-protection assessment |
 | 11 | Attachments | Type, size and checksum checks. Files stored unencrypted on disk; never deleted. Case-scoped access control. [Verified] | Medium | Disk encryption; retention policy; backup |
 | 12 | `/api/v1/health` endpoint | Public. Reveals mailbox and AI error text; **always answers "healthy"** even with the database down. It never reports the Browser Agent's sync or session state, so it is **unusable for monitoring the Browser Agent**. [Verified] `healthController.js:15-24` | Low-Medium | Restrict to internal monitoring with an explicit **reverse-proxy rule that refuses `/api/v1/health` from the staff network** (the app has no auth on it, and §11.1 otherwise proxies all of `/api`); do not rely on it as a readiness probe |
@@ -1038,7 +1038,7 @@ Statuses are based **only** on what the repository and the controlled live test 
 
 | Area | Item | Status | Evidence / gap |
 |---|---|---|---|
-| Infrastructure | No GPU required anywhere in IPC-QMS | **READY** | Section 10; dependency and source scan |
+| Infrastructure | No GPU required anywhere in BRIDGETECH | **READY** | Section 10; dependency and source scan |
 | Infrastructure | Application and database servers provisioned | **UNKNOWN** | Nothing in the repository |
 | Infrastructure | Deployment automation (Docker, IaC, service definitions) | **BLOCKED** | None in the repository; to be created or documented |
 | Infrastructure | Reverse proxy + TLS | **UNKNOWN** | Expected by the app (plain HTTP, trusts the proxy in production); not provided |
@@ -1103,14 +1103,14 @@ Statuses are based **only** on what the repository and the controlled live test 
 <a id="19-management-summary"></a>
 ## 19. Management summary
 
-**1. Can IPC-QMS run on CPU servers?**
-**Yes.** Every part of IPC-QMS runs on standard CPU virtual machines: the web frontend, the Node.js backend, MongoDB and the NICeMail Browser Agent.
+**1. Can BRIDGETECH run on CPU servers?**
+**Yes.** Every part of BRIDGETECH runs on standard CPU virtual machines: the web frontend, the Node.js backend, MongoDB and the NICeMail Browser Agent.
 
 **2. Does the Browser Agent require a GPU?**
 **No.** It drives an ordinary Chrome browser without any graphics or GPU features. It does require **a person to sign in interactively** (and so a desktop session on the server). No code requires a visible browser; the manual sign-in does.
 
 **3. Does any AI component require a GPU?**
-**Not within IPC-QMS.** The summary, officer recommendation and draft are calls to an external AI service (Pravah Gemma), whose hardware is outside this project. A GPU server would be needed **only if** IPC decides the model must run on-premise.
+**Not within BRIDGETECH.** The summary, officer recommendation and draft are calls to an external AI service (Pravah Gemma), whose hardware is outside this project. A GPU server would be needed **only if** IPC decides the model must run on-premise.
 
 **4. Which components depend on external services?**
 - **Pravah Gemma API:** AI summary, recommendation and draft. Every call has a fallback if it is unavailable.
@@ -1297,7 +1297,7 @@ it has been "completely removed" would be false.
 
 ---
 
-*Prepared from a read-only audit of the IPC-QMS repository (commit `438997e`, 2026-09-22), and revised
+*Prepared from a read-only audit of the BRIDGETECH repository (commit `438997e`, 2026-09-22), and revised
 2026-09-23 against `abhi-clean` after the Gmail removal it called for. Claims marked [Unknown] or
 listed for NIC/IT confirmation must be resolved before the production go-live decision. A finding
 marked [Verified, 2026-09-23] was re-checked against the code on that date; every other [Verified]

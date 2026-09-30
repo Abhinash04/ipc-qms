@@ -165,7 +165,7 @@ NICeMail is **one mailbox rather than one account per role**, so every role send
 configured address with the role carried in the display name. Inquirers are external senders who
 authenticate to nothing here, and the Officer-in-Charge is a recipient addressed by
 `OFFICER_IN_CHARGE_EMAIL`, never a sender. A role holding no usable credential falls back to the mock
-transport rather than borrowing another account's; the QMS never claims a `From` address it did not
+transport rather than borrowing another account's; BRIDGETECH never claims a `From` address it did not
 authenticate as.
 
 The mailbox address is environment-driven (`NIC_EMAIL`) and hardcoded nowhere: it is a test mailbox

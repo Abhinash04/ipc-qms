@@ -4,7 +4,7 @@
 
 The PDF is an email thread about a query regarding the **Magnesium Stearate monograph in IP 2026**.
 
-It contains: - Original query email - From / To / CC / Date / Subject - IPC/AR&D response - Forwarded email history - Technical clarification and amendments - Official disclaimer - Official bilingual signature - Three attachments
+It contains: - Original query email - From / To / CC / Date / Subject - IPC response - Forwarded email history - Technical clarification and amendments - Official disclaimer - Official bilingual signature - Three attachments
 
 This should therefore be treated as a **traceable email-thread/query
 record**, not simply a question-and-answer document.
@@ -12,7 +12,7 @@ record**, not simply a question-and-answer document.
 ## 2. Original Query
 
 **From:** Maria Reis `<maria.reis@indoco.com>`\
-**To:** AR&D Division `<arnd-ipc@gov.in>`\
+**To:** Indian Pharmacopoeia Commission (IPC) `<arnd-ipc@gov.in>`\
 **Date:** 22 July 2026, 09:34:49\
 **Subject:** Clarification Regarding Magnesium Stearate Monograph in IP
 2026
@@ -26,7 +26,7 @@ The sender asks whether these differences are intentional or typographical/edito
 
 ## 3. Response
 
-The AR&D Division provides proposed amendments based on the PDG harmonized text, including:
+IPC provides proposed amendments based on the PDG harmonized text, including:
 
 -   Specific Surface Area --- Page 357
 -   Magnesium Stearate --- Page 3185
@@ -56,7 +56,7 @@ Attachments:
 Example:
 
 ``` text
-From: AR&D Division <arnd-ipc@gov.in>
+From: Indian Pharmacopoeia Commission (IPC) <arnd-ipc@gov.in>
 To: Shruti Rastogi <shruti.ipc@gov.in>
 Cc: aishvigupta8@gmail.com
 Date: 14 Aug 2026, 14:33:33

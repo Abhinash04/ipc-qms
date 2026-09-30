@@ -59,7 +59,7 @@ Nothing sends as the Officer-in-Charge either; that role is a recipient, address
   a single IPC query mailbox (`lab.ipc@gov.in`), not a named officer. This is a development
   arrangement for the multi-account test. — *Proposed Design* (user-directed)
 - **The acknowledgement, the forward and the final response are all sent by the Front Officer
-  personally**, replacing the `AR&D Division` departmental sender in
+  personally**, replacing the earlier departmental sender in
   [12-email-integration.md](./12-email-integration.md). Is a named individual an acceptable sender
   for official IPC correspondence, or must it remain a departmental address? — *Client
   Clarification Required*
@@ -71,7 +71,7 @@ Nothing sends as the Officer-in-Charge either; that role is a recipient, address
   the system mark messages read. In production this should be a delegated/service mailbox, not a
   personal account. — *Client Clarification Required*
   > **The concern transfers intact (2026-09-23).** Deleting Gmail did not answer this question, it
-  > moved it. With `NIC_BROWSER_MAILBOX=true` the QMS reads and answers a whole **live government
+  > moved it. With `NIC_BROWSER_MAILBOX=true` BRIDGETECH reads and answers a whole **live government
   > mailbox** through a **person's own signed-in Chrome profile**, over CDP on `localhost:9222`. The
   > agent never signs in and holds no credential — authentication is the operator's, by hand — but
   > the session it borrows is that person's, and its reach is the whole mailbox, not a scoped

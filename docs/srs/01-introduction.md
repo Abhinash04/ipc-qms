@@ -2,7 +2,7 @@
 
 ## 1.1 Purpose
 
-This document specifies the requirements for the **Query Management System (QMS)** being
+This document specifies the requirements for the **AI-powered IP Stakeholder’s BRIDGETECH** being
 built for the IPC client. It covers the full lifecycle of an incoming query — from receipt
 through registration, assignment, drafting, dynamic review, final approval, response dispatch,
 and closure.
