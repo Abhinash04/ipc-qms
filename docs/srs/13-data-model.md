@@ -189,9 +189,9 @@ first email of a new case carrying an old case's id.
   - `toAddresses` — the message's own To header, as read. `to` stays the mailbox the message was filed under, so Bcc'd and list mail still belongs to that mailbox's Front Office; the API falls back to `[to]` when this is empty.
   - `providerThreadId` — the provider's conversation id. Null for `nic-browser` until the thread id is calibrated.
   - `bodyHtml` — the body as the provider rendered it, for the dashboard's sandboxed view. Null when there is none or it is over 1,000,000 characters (dropped, never cut). Left out of list responses; only a message's own endpoint returns it.
-  - `providerUnread` — whether the provider showed the message unread when it was first read. A record of the provider's state, not the QMS read state.
+  - `providerUnread` — whether the provider showed the message unread when it was first read. A record of the provider's state, not the BRIDGETECH read state.
   - `receivedAtSource` — `message` when `receivedAt` is the message's own timestamp, `sync` when it is only the time the agent read it.
-  - `readAt` / `readByUserId` — the QMS read state, set once by the first `POST /api/v1/mailbox/messages/:id/read`. Only the NICeMail mailbox keeps it, and it is never written back to NICeMail.
+  - `readAt` / `readByUserId` — the BRIDGETECH read state, set once by the first `POST /api/v1/mailbox/messages/:id/read`. Only the NICeMail mailbox keeps it, and it is never written back to NICeMail.
   - `createdAt` — when the row was written, set explicitly on insert. Its schema default is `null`, not the current time, so an older row reads `null` rather than the time it was loaded.
 
   A compound index `{ to: 1, source: 1, removedAt: 1, receivedAt: -1, mailboxMessageId: -1 }` serves the inbox list: one mailbox, not removed, newest first.

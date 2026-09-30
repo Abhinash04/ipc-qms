@@ -8,7 +8,7 @@ circulate informally, and there is no consolidated audit trail of who did what a
 
 ## 2.2 Proposed Solution
 
-QMS gives every query a structured record that moves through a defined workflow: intake,
+BRIDGETECH gives every query a structured record that moves through a defined workflow: intake,
 verification, assignment (AI-assisted), drafting (AI-assisted), one or more review levels,
 final approval, and dispatch. Every transition is audited. The workflow supports transfer and
 pullback for exceptional cases.

@@ -60,7 +60,7 @@ No seeded account can receive mail: the directory in `backend/src/constants/user
 
 | Part | Who | Where their address comes from |
 |---|---|---|
-| The inquirer | a member of the public | nothing — read off the `From` header at intake. **They hold no QMS account and never sign in.** |
+| The inquirer | a member of the public | nothing — read off the `From` header at intake. **They hold no BRIDGETECH account and never sign in.** |
 | Front Office | signs in, works the inbox | `FRONT_OFFICE_EMAIL`, or `NIC_EMAIL` for the NICeMail Front Office (`USR-0014`) |
 | Officer-in-Charge | recipient of the forward; assigns; approves | `OFFICER_IN_CHARGE_EMAIL`. Nothing ever sends *as* this role |
 | Assigned Official, Reviewers | draft and review | nothing — no mail is sent on their behalf at all |
@@ -81,7 +81,7 @@ cd backend  && npm start      # must print "listening on port 5000"
 cd frontend && npm run dev    # http://localhost:5173
 ```
 
-To start clean: **Reset** in the header clears the QMS workflow domain, and is rendered for the
+To start clean: **Reset** in the header clears the BRIDGETECH workflow domain, and is rendered for the
 **Super Admin only**, matching `POST /api/v1/queries/reset`. Local state is cleared only once the
 server has accepted the reset. From a terminal, `cd backend && npm run db:reset` does the same
 against the database (`--dry-run` to see what would go). Both are refused on the team's shared
@@ -93,9 +93,9 @@ a local MongoDB.
 survives both the reset and anything you do to the mail itself — the first decision on a message
 wins, permanently. To exercise the gate again, **send a fresh email**.
 
-| # | Sign in as | Do this | The mailboxes should show | QMS should show |
+| # | Sign in as | Do this | The mailboxes should show | BRIDGETECH should show |
 |---|---|---|---|---|
-| 1 | — (any mail client) | Email the enquiry to the Front Office address **from any external address**. No QMS account is needed | it arrives in the Front Office inbox | — |
+| 1 | — (any mail client) | Email the enquiry to the Front Office address **from any external address**. No BRIDGETECH account is needed | it arrives in the Front Office inbox | — |
 | 2 | Front Office | **IPC Mailbox** → Check IPC mailbox | — | the message listed with the real sender and **Awaiting validation**. **No case, no Query ID, no acknowledgement** — checking registers nothing |
 | 3 | Front Office | Click **✓** on that row → confirm **Yes**. This is the whole intake: one click, one server call | **Sent**: the acknowledgement **and** `Fwd: … [QRY-…]`. **The sender's inbox**: the acknowledgement. **The Officer-in-Charge's inbox**: the forward | the case created; state **`PENDING_ASSIGNMENT`**; audit in this order: QUERY RECEIVED, QUERY REGISTERED, AI SUMMARY GENERATED, ACKNOWLEDGEMENT SENT, QUERY FORWARDED, EMAIL CLASSIFIED |
 | 4 | Front Office | Open the case — **nothing to do here**. Confirm the thread | — | _Original enquiry → Acknowledgement → Forwarded to Officer-in-Charge_. **Forward to Officer-in-Charge** is present but is only the recovery path, for a forward that failed at step 3 |
@@ -247,9 +247,9 @@ Run `npm run nic:browser:calibrate -- --attach` first, or the forward will refus
 - **The attach control is uncalibrated.** Until `nic:browser:calibrate -- --attach` has been run,
   every accept of a case carrying an attachment fails at the forward. The agent refuses the selector
   rather than guessing, which is the right failure but is a failure.
-- **A QMS "mark read" does not mark the message read in NICeMail.** Read state is QMS's own; the
+- **A BRIDGETECH "mark read" does not mark the message read in NICeMail.** Read state is BRIDGETECH's own; the
   server answers 409 for a mailbox that keeps none.
-- **The QMS needs a reachable database.** Without Mongo, `/api/v1/queries` answers 503 and nothing is
+- **BRIDGETECH needs a reachable database.** Without Mongo, `/api/v1/queries` answers 503 and nothing is
   saved. Check the backend printed "MongoDB connected" before a run.
 - Left unset, `FRONT_OFFICE_EMAIL` is `front-office-unconfigured@example.com`, the address the mock
   mailbox is keyed to, and it **can never receive mail**: `example.com` is reserved with a null MX,

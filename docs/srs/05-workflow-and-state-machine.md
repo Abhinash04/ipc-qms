@@ -2,7 +2,7 @@
 
 ## 5.1 Business Status vs Workflow State
 
-QMS tracks two **separate** fields on every query — never derive one by parsing the other:
+BRIDGETECH tracks two **separate** fields on every query — never derive one by parsing the other:
 
 - **Business Status** — the coarse, client-facing lifecycle summary:
   `OPEN`, `IN_PROGRESS`, `CLOSED`.

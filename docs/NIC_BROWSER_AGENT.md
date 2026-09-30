@@ -51,7 +51,7 @@ work is serialised: one read or send at a time.
                      │
                      │  CDP — Chrome listens on localhost:9222
                      ↓
-             IPC-QMS browser agent (Node, raw CDP client — cdp.js)
+             BRIDGETECH browser agent (Node, raw CDP client — cdp.js)
                      │  attaches; opens a background tab of its own at NIC_WEBMAIL_APP_URL
                      ↓
                NICeMail web UI (mail.mgovcloud.in/zm, a top-level document in that tab)
@@ -59,7 +59,7 @@ work is serialised: one read or send at a time.
                      ↓
               NICeMail mailbox
                      ↓
-              IPC-QMS workflow (the second Front Office inbox — §17)
+              BRIDGETECH workflow (the second Front Office inbox — §17)
 ```
 
 **Port 9222 belongs to Chrome, not to Node.** Chrome opens the DevTools endpoint. The Node process
@@ -68,13 +68,13 @@ is a *client* that connects to it for the duration of one command and then detac
 Authentication boundary:
 
 ```text
-User → manual NICeMail sign-in (+ MFA) → authenticated Chrome session → CDP → QMS browser agent
+User → manual NICeMail sign-in (+ MFA) → authenticated Chrome session → CDP → BRIDGETECH browser agent
 ```
 
 The browser agent is an **optional operational dependency**:
 
 ```text
-Core QMS backend  (npm run dev / npm start)
+Core BRIDGETECH backend  (npm run dev / npm start)
    ├── MongoDB
    ├── AI services (Pravah Gemma)
    └── REST API
@@ -221,7 +221,7 @@ and points `NIC_CDP_ENDPOINT` at an unroutable address. Enabling the feature loc
 change what the suite sees; tests that exercise it switch it on themselves.
 
 **Which mailbox?** The agent reads and sends as whichever account is signed in to the Chrome tab.
-With `NIC_BROWSER_MAILBOX=true`, `NIC_EMAIL` is where the QMS files that mail — the mailbox its stored
+With `NIC_BROWSER_MAILBOX=true`, `NIC_EMAIL` is where BRIDGETECH files that mail — the mailbox its stored
 messages belong to, the second Front Office's sign-in, the From address it records, and the last
 fallback for the test recipient. **A send checks it**: the compose form's From must be `NIC_EMAIL`, or
 nothing is sent. **A read does not** (§17, open items). Sign in to the right account;
@@ -681,7 +681,7 @@ session on the page target cannot evaluate in the iframe's target. It is **not**
 documents have 0 shadow roots. The mail frame is also `document.hidden`, so mouse input sent to
 coordinates does nothing there; the agent dispatches DOM events instead.
 
-**The QMS agent is unaffected.** It never reads the operator's tab. It opens `NIC_WEBMAIL_APP_URL`
+**The BRIDGETECH agent is unaffected.** It never reads the operator's tab. It opens `NIC_WEBMAIL_APP_URL`
 (`https://mail.mgovcloud.in/zm/`) as a top-level document in a background tab of its own, where the
 mailbox is the whole page (§9, §10).
 
@@ -822,7 +822,7 @@ email not arriving. No channel here can search its own Sent folder for a message
 so the answer has to come from a person.
 
 1. Open the **Sent** folder in the dedicated Chrome and look for the message.
-2. **If it is there**, press **It was sent**. The QMS records the email exactly as a successful send
+2. **If it is there**, press **It was sent**. BRIDGETECH records the email exactly as a successful send
    would — the acknowledgement appears on the case, a final response closes it — and **sends
    nothing**. The answer is audited as `EMAIL_DELIVERY_CONFIRMED` against your account.
 3. **If it is not there**, press **It was not sent — send it**. That marks the dispatch `FAILED`
@@ -885,7 +885,7 @@ starts without MongoDB, but this mailbox does not work until it is connected (§
 - `C:\qms-chrome` holds live session cookies. Keep it outside the repository, do not copy or share
   it, and restrict it to your Windows account.
 
-With `NIC_BROWSER_MAILBOX=true` a QMS account can read the live mailbox and make the agent send, so:
+With `NIC_BROWSER_MAILBOX=true` a BRIDGETECH account can read the live mailbox and make the agent send, so:
 
 - **The NICeMail Front Office signs in with a password.** `POST /auth/dev-login` refuses that account
   with **403** (`This account reads a live NICeMail mailbox. Sign in with a password.`) and audits the
@@ -924,7 +924,7 @@ With `NIC_BROWSER_MAILBOX=true` a QMS account can read the live mailbox and make
   for either mechanism. With `NIC_BROWSER_MAILBOX=true`, `NIC_EMAIL` is also the second Front
   Office's sign-in and the mailbox its stored messages are filed under: after the switch that
   account signs in with the new address, messages stored under the old one are no longer listed, and
-  open NICeMail cases are answered through whichever account is signed in to Chrome while the QMS
+  open NICeMail cases are answered through whichever account is signed in to Chrome while BRIDGETECH
   records them as sent from the address stored on the case.
 - The browser agent is **optional at boot**: its code is imported lazily, and the backend must keep
   starting without Chrome. With `NIC_BROWSER_MAILBOX=true` it is in the request path for the
@@ -966,7 +966,7 @@ With `NIC_BROWSER_MAILBOX=true` a QMS account can read the live mailbox and make
 
 ## 17. Two Front Office Mailboxes
 
-With `NIC_BROWSER_MAILBOX=true`, IPC-QMS runs two Front Office mailboxes at once. Both feed the
+With `NIC_BROWSER_MAILBOX=true`, BRIDGETECH runs two Front Office mailboxes at once. Both feed the
 **same** workflow:
 
 ```text
@@ -1001,7 +1001,7 @@ Primary mailbox (FRONT_OFFICE_EMAIL)          NICeMail mailbox (NIC_EMAIL)
   in [backend/README.md, *Which channel a case's mail goes out through*](../backend/README.md#which-channel-a-cases-mail-goes-out-through).
 - **Division of work.** The agent only reads mail and hands back plain message data, or types and
   sends one message it is given. Validation, case creation, the Case ID, AI summary, the workflow
-  and closure all stay in the QMS, unchanged.
+  and closure all stay in BRIDGETECH, unchanged.
 - **No duplicates.** Each NICeMail message is stored under an id derived from its inbox row's `id`:
   Zoho's own message id, the one its route (`#mail/folder/inbox/p/<id>`) and the open message's
   container (`zm_Container_m<id>`) carry, measured live. A row whose id is not such an id is skipped,
@@ -1031,10 +1031,10 @@ Primary mailbox (FRONT_OFFICE_EMAIL)          NICeMail mailbox (NIC_EMAIL)
   [README.md, *Shared development database*](../README.md#shared-development-database-mongodb-atlas).
 - **In the dashboard.** The IPC Mailbox lists the stored messages with search, an All / Awaiting
   validation filter, pages of 50, a snippet of each body, and an unread dot for a message nobody has
-  opened in the QMS. Opening one (`/front-officer/inbox/:messageId`) shows its headers, the body as
+  opened in BRIDGETECH. Opening one (`/front-officer/inbox/:messageId`) shows its headers, the body as
   plain text or — when there is HTML — a **Formatted** view inside `<iframe sandbox="">` with a
   `default-src 'none'` CSP, its attachments with a download scoped to the message, and the case it
-  became with that case's status. Opening it marks it read **in the QMS only**; NICeMail's own read
+  became with that case's status. Opening it marks it read **in BRIDGETECH only**; NICeMail's own read
   state is never touched.
 - **Sending guard.** Browser sends are confined to `NIC_BROWSER_TEST_RECIPIENT` until
   `NIC_ALLOW_OUTBOUND=true`, the same two-key interlock as NIC SMTP; `NIC_ALLOW_INTERNAL_FORWARD=true`
@@ -1279,7 +1279,7 @@ reports `SELECTORS_DRIFTED` with a compose form open, or a send fails with *was 
    was left. It **never presses Send**. The report (addresses masked) is written to
    `NIC_BROWSER_ARTIFACT_DIR`.
 4. With `NIC_ALLOW_OUTBOUND=false`, send one message to `NIC_BROWSER_TEST_RECIPIENT` through the
-   transport, with a subject such as `IPC-QMS calibration test <time>`. It must return a
+   transport, with a subject such as `BRIDGETECH calibration test <time>`. It must return a
    `providerMessageId`, and the message in **Sent**, opened by hand, must show exactly that recipient,
    the subject and the body.
 5. Only keys proven by steps 3 and 4 leave `UNCALIBRATED`. Re-run step 2 with a form open: the
@@ -1363,7 +1363,7 @@ only go to the test inquirer. A backend started before compose was calibrated st
 acknowledgement with the *never been calibrated* error (§13); restart it.
 1. Close Brave or any other program on port 9222. Start the dedicated Chrome and sign in to NICeMail.
 2. From the test inquirer address (`NIC_BROWSER_TEST_RECIPIENT`), mail `NIC_EMAIL`.
-3. Sign in to IPC-QMS as `NIC_EMAIL` with that account's own credential (dev login refuses it). Within
+3. Sign in to BRIDGETECH as `NIC_EMAIL` with that account's own credential (dev login refuses it). Within
    about a minute the message appears, or shortly after **Sync now**. Reloading repeatedly shows it
    once. If the page shows **The mailbox could not be read**, fix what its stage names (§13) before going
    on.

@@ -1,6 +1,6 @@
-# QMS Backend
+# BRIDGETECH Backend
 
-Node.js + Express 5 API for the Query Management System. **JavaScript only, ES Modules
+Node.js + Express 5 API for the AI-powered IP Stakeholder’s BRIDGETECH. **JavaScript only, ES Modules
 throughout** (`"type": "module"`) — no TypeScript, no CommonJS.
 
 ## What is implemented
@@ -188,7 +188,7 @@ state), `status` (`NEW` / `READ` / `ACCEPTED` / `REJECTED`, derived in
 - `GET /messages/:messageId/attachments/:attachmentId[?download=1]` — the attachment only if it is on
   that message in the caller's mailbox, else 404; served by the same `sendAttachment` as
   `/attachments/:id` and audited `ATTACHMENT_DOWNLOADED` with the `messageId`.
-- `POST /messages/:messageId/read` — QMS-local read state (`readAt`, `readByUserId`); NICeMail's own
+- `POST /messages/:messageId/read` — BRIDGETECH-local read state (`readAt`, `readByUserId`); NICeMail's own
   is never touched. Idempotent, `EMAIL_MARKED_READ` on the first call only; 409 for a mailbox that
   keeps no read state.
 - `POST /sync` — NICeMail: 202 `{ supported: true, started, sync }`, `started: false` while a sync
@@ -529,7 +529,7 @@ incoming message, ignored by those that did not.
 | `Notification` | per-role / per-user notifications |
 | `EmailMessage`, `EmailThread` | the case's email record |
 | `AuditEvent` | 14 fields, indexed on timestamp/actorType/actorId/auditId/action/queryId/messageId. `action` is deliberately *not* an enum so a new action never fails to record; `auditId` is indexed but **not unique**, because the counter behind it lives in a browser |
-| `MailboxMessage` + `Counter` | the ingest mailbox and the numeric `MSG-00001` sequence. Also holds the NICeMail browser mailbox's messages: `source: 'nic-browser'`, a `providerMessageId` under a unique partial index, and `removedAt`, which hides a deleted message so the next sync cannot bring it back. Additive, insert-only and not backfilled: `toAddresses` (the To header; `to` stays the mailbox), `providerThreadId`, `bodyHtml` (null over 1,000,000 chars), `providerUnread`, `receivedAtSource` (`message`/`sync`), the QMS read state `readAt`/`readByUserId`, and `createdAt`. Compound index `{to, source, removedAt, receivedAt: -1, mailboxMessageId: -1}` for the inbox list |
+| `MailboxMessage` + `Counter` | the ingest mailbox and the numeric `MSG-00001` sequence. Also holds the NICeMail browser mailbox's messages: `source: 'nic-browser'`, a `providerMessageId` under a unique partial index, and `removedAt`, which hides a deleted message so the next sync cannot bring it back. Additive, insert-only and not backfilled: `toAddresses` (the To header; `to` stays the mailbox), `providerThreadId`, `bodyHtml` (null over 1,000,000 chars), `providerUnread`, `receivedAtSource` (`message`/`sync`), the BRIDGETECH read state `readAt`/`readByUserId`, and `createdAt`. Compound index `{to, source, removedAt, receivedAt: -1, mailboxMessageId: -1}` for the inbox list |
 | `MailboxDecision` | the Front Officer's accept/reject on one incoming message |
 | `MailboxTriage` | the machine's verdict on one incoming message — `GENUINE`/`JUNK`, a confidence, which rule or the model decided, and `classifiedAt`, which is the retention clock. Also `rescuedAt` (a person said "not junk": terminal) and `purgedAt`, the sweep's watermark |
 | `OutboundEmail` | one row per case email — `dispatchKey` = `"${emailType}:${queryId}"`, **unique**. `status` is `SENDING`/`SENT`/`FAILED`/`UNCERTAIN`, with `claimToken`, `leaseExpiresAt`, `attempts`, `recipients`, `rfcMessageId`, `lastError`, `resolvedBy` and a capped `history`. The unique key is the idempotency guard: see *One email per case* below |
@@ -823,8 +823,8 @@ credential, and must not be conflated.
 ### 1. IMAP/SMTP — the mail protocols
 
 ```
-QMS ──IMAP──> imap.mgovcloud.in:993 ──> NICeMail mailbox
-QMS ──SMTP──> smtp.mgovcloud.in:465
+BRIDGETECH ──IMAP──> imap.mgovcloud.in:993 ──> NICeMail mailbox
+BRIDGETECH ──SMTP──> smtp.mgovcloud.in:465
 ```
 
 Configured by `NIC_EMAIL`, `NIC_APP_PASSWORD` (or `NIC_APP_PASSWORD_FILE`), the host/port/TLS
@@ -869,7 +869,7 @@ Operator ──manually signs in──> NICeMail in Chrome
                                       │
                     CDP on localhost:9222 exposes controlled access
                                       │
-                         QMS browser agent attaches to the tab
+                      BRIDGETECH browser agent attaches to the tab
 ```
 
 Configured by `NIC_CDP_ENDPOINT` and the `NIC_WEBMAIL_*` / `NIC_BROWSER_*` variables. Code lives in
@@ -981,7 +981,7 @@ The IMAP settings are not needed. MongoDB is: the mailbox is stored in `MailboxM
 `nic/browser/selectors.js` are calibrated and verified live. The attachment-reading keys and
 `ccToggle` are still in `UNCALIBRATED`, and `providerThreadId` is stored as null. The mailbox has other open items — no scrolling beyond the
 ~50 rows a fresh agent tab loads, isolation that does not cover accept or the decision routes,
-tombstones that live only in MongoDB, and unconfirmed sends the QMS cannot later record. Setup, the
+tombstones that live only in MongoDB, and unconfirmed sends BRIDGETECH cannot later record. Setup, the
 calibration runbooks, troubleshooting and the full list:
 [docs/NIC_BROWSER_AGENT.md §17](../docs/NIC_BROWSER_AGENT.md#17-two-front-office-mailboxes).
 
@@ -1151,7 +1151,7 @@ Also required:
 | `nic:verify` → `Invalid credentials` / `535` | webmail password used instead of an app password | generate one at webmail → Security → App Passwords |
 | `nic:preflight` → `mail.gov.in` times out | those endpoints are not reachable from outside NICNET | use the `mgovcloud.in` pair, which is what `.env.example` configures |
 | `nic:browser:discover` → `Chrome is not available … (CDP endpoint answered HTTP 404)` (diagnosis `NO_CDP`); a sync → "not a Chrome DevTools endpoint" | another browser holds port 9222 | close it, or set `NIC_CDP_ENDPOINT` to a free port |
-| An agent or tool attached to the operator's NICeMail tab sees no mail rows, only `zmbtn__<hash>`-style classes | that tab is the Zoho Workplace shell; the mailbox is a cross-origin iframe with its own CDP target. `nic:browser:discover` reports it as `MAILBOX_IN_OOPIF` | nothing to fix for the QMS agent, which opens `NIC_WEBMAIL_APP_URL` in a tab of its own — [runbook §13](../docs/NIC_BROWSER_AGENT.md#why-an-agent-cannot-see-the-nicemail-elements) |
+| An agent or tool attached to the operator's NICeMail tab sees no mail rows, only `zmbtn__<hash>`-style classes | that tab is the Zoho Workplace shell; the mailbox is a cross-origin iframe with its own CDP target. `nic:browser:discover` reports it as `MAILBOX_IN_OOPIF` | nothing to fix for the BRIDGETECH agent, which opens `NIC_WEBMAIL_APP_URL` in a tab of its own — [runbook §13](../docs/NIC_BROWSER_AGENT.md#why-an-agent-cannot-see-the-nicemail-elements) |
 | A NICeMail acknowledgement or response fails (HTTP 503/504, or the case page's notice) | the error ends in `[stage: <step>; cause: …; seen: …]`: the step the browser agent stopped at, what it ran into, and what the page showed. The backend log has every step as `ACK …` / `RESPONSE …` lines | a failure before `click_send` sent nothing and can be retried once the cause is fixed; from `click_send` on it is unconfirmed — check the NICeMail Sent folder first — [§13](../docs/NIC_BROWSER_AGENT.md#13-troubleshooting), [§17](../docs/NIC_BROWSER_AGENT.md#17-two-front-office-mailboxes) |
 | A NICeMail case's acknowledgement or response fails with `… has never been calibrated against the live NICeMail …` | the key it names is in `UNCALIBRATED`; the agent refuses it before touching the page, and nothing is sent. A backend started before 2026-09-22 still has every compose key there | restart the backend; for a key still uncalibrated, calibrate it live — [§17](../docs/NIC_BROWSER_AGENT.md#calibrating-the-selectors) |
 | IPC Mailbox shows **The mailbox could not be read** | the last sync failed; `sync.stage` or `sync.error` says why | fix what the stage names — [runbook §13](../docs/NIC_BROWSER_AGENT.md#13-troubleshooting). For a name-resolution failure, see the DNS row below |

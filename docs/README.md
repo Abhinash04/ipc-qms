@@ -1,6 +1,6 @@
-# QMS Documentation
+# BRIDGETECH Documentation
 
-Documentation for the Query Management System, built for an IPC client.
+Documentation for the AI-powered IP Stakeholder’s BRIDGETECH, built for an IPC client.
 
 **New here?** Start with [HANDOFF.md](./HANDOFF.md) — status at a glance, how to run it, what is
 real versus mock, known gaps, and what to do next.
@@ -22,7 +22,7 @@ design system).
   that: the automated suites are listed first so the same ground is not covered twice. Covers the
   mock, NICeMail browser-agent and NICeMail SMTP postures, the three-inbox walkthrough, what the
   backend log should and should not say, and the attachment checklist. An enquiry is sent from any
-  external address; no QMS account is involved.
+  external address; no BRIDGETECH account is involved.
 - [NIC_EMAIL_PHASE0.md](./NIC_EMAIL_PHASE0.md) — the feasibility gate for NIC government email
   (`@gov.in`) over IMAP/SMTP. The `mgovcloud.in` endpoints are reachable and the transport is
   implemented and selectable, but **authentication has not yet succeeded**: an application-specific
