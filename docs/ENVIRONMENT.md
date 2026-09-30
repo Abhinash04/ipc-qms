@@ -297,6 +297,28 @@ values.
 | `ATTACHMENT_MAX_TOTAL_MB` | optional | no | `15` | The combined size cap for one upload |
 | `ATTACHMENT_MAX_FILES` | optional | no | `10` | The most files in one upload |
 
+### 3.9a Automatic query transfer
+
+When an Assigned Official takes no action on a newly assigned case within the limit, the case moves to
+the next official in the AI recommendation ranking the OIC saw when assigning it (or, if none was
+captured, the backend recommender's ranking). Each new holder gets the full limit again. The countdown
+runs only while the case is `ASSIGNED`; generating or saving a draft (the case moves to `DRAFTING`)
+stops it. Officials who already held the case are never picked again. When nobody eligible remains,
+the case stays with its holder, the transfer is marked failed, and the OIC is notified once. Cases
+assigned before the feature was switched on have no deadline and are never transferred. Deadlines,
+counters and transfer history are set by the server only.
+
+| Variable | Required | Secret | Default | Purpose |
+|---|---|---|---|---|
+| `QUERY_AUTO_TRANSFER_ENABLED` | optional | no | `false` | `true` starts a countdown on every new assignment and manual transfer, and lets a sweep act on it. `false` stamps no deadlines and every sweep does nothing |
+| `QUERY_AUTO_TRANSFER_SCHEDULER` | optional | no | `false` | `true` makes **this** backend run the periodic sweep. Set it on exactly one machine per database: the production VM, or the one developer testing the feature. Teammates on the shared database leave it unset. It never runs under `NODE_ENV=test`, and the boot log says when it runs against a shared database |
+| `QUERY_AUTO_TRANSFER_TIMEOUT_MINUTES` | optional | no | `2` | The action limit per assignment, in minutes (decimals allowed). `2` is the current testing value. A value that is not positive disables the feature with a warning |
+| `QUERY_AUTO_TRANSFER_INTERVAL_SECONDS` | optional | no | `10` | How often the sweep looks for expired deadlines. At least 1 |
+
+The OIC, an Admin or a Super Admin can also run one sweep on demand with
+`POST /api/v1/queries/auto-transfer-check`. It transfers only cases whose deadline has genuinely
+passed, and does nothing while the feature is disabled.
+
 ### 3.10 Loader and tooling
 
 | Variable | Required | Secret | Default | Purpose |
