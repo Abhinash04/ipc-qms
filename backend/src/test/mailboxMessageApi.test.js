@@ -317,7 +317,7 @@ describe('POST /mailbox/messages/:id/read', () => {
   const markRead = (id, user = nicUser()) =>
     request(app).post(`/api/v1/mailbox/messages/${id}/read`).set(cookieFor(user));
 
-  it('marks it read in the QMS, once, and never touches NICeMail', async () => {
+  it('marks it read in BRIDGETECH, once, and never touches NICeMail', async () => {
     const { newer } = await seed();
 
     const first = await markRead(newer.mailboxMessageId);

@@ -150,7 +150,7 @@ async function googleLogin(req, res, next) {
       });
       return res.status(HTTP_STATUS.FORBIDDEN).json({
         code: 'NO_ACCOUNT',
-        error: 'No IPC-QMS account uses this Google email. Sign in with your IPC-QMS email and password.',
+        error: 'No BRIDGETECH account uses this Google email. Sign in with your BRIDGETECH email and password.',
       });
     }
 

@@ -333,8 +333,8 @@ async function calibrate(session) {
   const report = { at: new Date().toISOString(), steps: {} };
   const recipient = browserConfig.testRecipient;
   if (!recipient) throw new Error('NIC_BROWSER_TEST_RECIPIENT (or NIC_TEST_RECIPIENT / NIC_EMAIL) is not set.');
-  const marker = `IPC-QMS calibration dry run ${report.at}`;
-  const lines = ['IPC-QMS calibration dry run.', 'This draft is discarded without being sent.'];
+  const marker = `BRIDGETECH calibration dry run ${report.at}`;
+  const lines = ['BRIDGETECH calibration dry run.', 'This draft is discarded without being sent.'];
 
   report.steps.sent = await visitFolder(session, 'folderSent', 'Sent');
   report.steps.draftsBefore = await visitFolder(session, 'folderDrafts', 'Drafts');

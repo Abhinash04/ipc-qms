@@ -152,7 +152,7 @@ describe('recipient keying', () => {
   it('treats "Name <addr>" and the bare address as one inbox', async () => {
     await mailbox.deliver({
       to: 'Abhinash Pritiraj <abhinash.pritiraj@pharma.example>',
-      from: 'arnd-ipc-mock@example.com',
+      from: 'ipc-mock@example.com',
       subject: 'Acknowledgement',
     });
 

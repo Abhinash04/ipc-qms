@@ -73,7 +73,7 @@ async function main() {
   }
 
   console.log('\n── Test B — SEND (SMTP)');
-  const marker = `QMS NICeMail connectivity test ${new Date().toISOString()}`;
+  const marker = `BRIDGETECH NICeMail connectivity test ${new Date().toISOString()}`;
   const send = await send_nicemail({ subject: marker });
 
   const sendGrades = {

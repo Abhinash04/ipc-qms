@@ -236,7 +236,7 @@ async function markRead(req, res, next) {
     if (!box.own) {
       return res
         .status(HTTP_STATUS.CONFLICT)
-        .json({ error: `The ${box.source} mailbox keeps no QMS read state.`, messageId });
+        .json({ error: `The ${box.source} mailbox keeps no BRIDGETECH read state.`, messageId });
     }
 
     const result = await box.store.markRead(box.address, messageId, req.user);
