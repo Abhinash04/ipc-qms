@@ -69,7 +69,7 @@ describe('createEmailMessage', () => {
   });
 });
 
-describe('direction convention (from the QMS/IPC perspective)', () => {
+describe('direction convention (from the BRIDGETECH/IPC perspective)', () => {
   it('treats inquirer → IPC as INBOUND', () => {
     const msg = createEmailMessage(base);
     expect(msg.direction).toBe(EMAIL_DIRECTION.INBOUND);

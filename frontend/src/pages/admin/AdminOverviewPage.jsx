@@ -494,8 +494,8 @@ function SupportCard({ supportAddress }) {
         <span className="block text-[14px] font-semibold text-ink">Need help?</span>
         <span className="mt-0.5 block truncate text-[12px] text-ink-muted">
           {supportAddress
-            ? `Contact the QMS team at ${supportAddress}`
-            : 'Contact the QMS team'}
+            ? `Contact the BRIDGETECH team at ${supportAddress}`
+            : 'Contact the BRIDGETECH team'}
         </span>
       </span>
       {supportAddress && (
@@ -517,7 +517,7 @@ function AdminAreasSection({ paths, supportAddress }) {
         <PanelHeader
           id="console-areas"
           title="Administration areas"
-          note="Manage all aspects of the QMS platform"
+          note="Manage all aspects of the BRIDGETECH platform"
         />
 
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -555,7 +555,7 @@ export function AdminOverviewPage() {
       <DashboardHero
         userName={currentUser?.name}
         title="Administration"
-        purpose="What is happening in the QMS right now, and what has happened so far."
+        purpose="What is happening in BRIDGETECH right now, and what has happened so far."
       />
 
       <SystemActivitySection summary={summary} overall={overall} tiles={tiles} />

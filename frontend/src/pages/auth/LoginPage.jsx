@@ -345,16 +345,14 @@ export function LoginPage() {
           </div>
 
           <h1 className="mt-5 font-heading text-[36px] font-extrabold leading-[1.15] tracking-tight text-white xl:text-[42px]">
-            IPC QMS —{" "}
-            <span className="bg-gradient-to-r from-sky-200 via-cyan-200 to-indigo-200 bg-clip-text text-transparent">
-              Query Management System
+            AI-powered IP Stakeholder’s {" "}
+            <span className="bg-linear-to-r from-sky-200 via-cyan-200 to-indigo-200 bg-clip-text text-transparent">
+              BRIDGETECH
             </span>
           </h1>
 
           <p className="mx-auto mt-4 max-w-lg text-[15.5px] leading-relaxed text-white/85">
-            Indian Pharmacopoeia Commission (IPC QMS) — official Query Management System
-            for handling technical enquiries, monograph reviews, reference standards, and
-            automated dispatch operations.
+            Indian Pharmacopoeia Commission (IPC QMS) — official AI-powered IP Stakeholder’s BRIDGETECH for handling technical enquiries, monograph reviews, reference standards, and automated dispatch operations.
           </p>
 
           <div className="mt-8 flex flex-wrap items-center justify-center gap-3.5">
