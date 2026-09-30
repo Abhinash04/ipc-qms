@@ -3,6 +3,7 @@ import * as authService from '@/services/api/authService';
 import { setUnauthorizedHandler } from '@/services/api/axiosClient';
 import { useWorkflowStore } from '@/store/useWorkflowStore';
 import { notify } from '@/services/notify';
+import { brandUser } from '@/constants/orgBranding';
 
 export const useAuthStore = create((set) => ({
   currentUser: null,
@@ -10,7 +11,7 @@ export const useAuthStore = create((set) => ({
 
   hydrate: async () => {
     try {
-      const user = await authService.fetchMe();
+      const user = brandUser(await authService.fetchMe());
       set({ currentUser: user, authReady: true });
     } catch {
       set({ currentUser: null, authReady: true });
@@ -18,19 +19,19 @@ export const useAuthStore = create((set) => ({
   },
 
   login: async (email, password) => {
-    const user = await authService.login(email, password);
+    const user = brandUser(await authService.login(email, password));
     set({ currentUser: user, authReady: true });
     return user;
   },
 
   googleLogin: async (credential) => {
-    const user = await authService.googleLogin(credential);
+    const user = brandUser(await authService.googleLogin(credential));
     set({ currentUser: user, authReady: true });
     return user;
   },
 
   devLogin: async (email) => {
-    const user = await authService.devLogin(email);
+    const user = brandUser(await authService.devLogin(email));
     set({ currentUser: user, authReady: true });
     return user;
   },

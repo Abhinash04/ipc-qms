@@ -7,6 +7,7 @@ import { HeroBackdrop } from "@/components/common/HeroBackdrop";
 import { greetingPeriod } from "@/utils/greeting";
 import { useT } from "@/i18n/useT";
 import { cn } from "@/utils/cn";
+import { greetingName } from "@/constants/orgBranding";
 
 const ROTATE_MS = 7000;
 
@@ -100,7 +101,7 @@ function AnnouncementCarousel() {
 
 export function DashboardHero({ userName, title, purpose, actions }) {
   const t = useT();
-  const firstName = userName ? userName.split(" ")[0] : "";
+  const firstName = greetingName(userName);
   const greeting = `${t(`dashboard.greeting.${greetingPeriod()}`)}${firstName ? `, ${firstName}` : ""}`;
 
   return (

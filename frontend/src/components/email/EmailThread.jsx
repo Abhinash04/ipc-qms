@@ -9,6 +9,7 @@ import {
   sortThreadMessages,
 } from "@/constants/emailModel";
 import { cn } from "@/utils/cn";
+import { brandedFrom } from "@/constants/orgBranding";
 
 const FILTER_TABS = [
   {
@@ -206,7 +207,7 @@ function CollapsedMessage({ message, onExpand }) {
         )}
       />
       <span className="text-[13px] font-semibold text-slate-700 shrink-0 max-w-40 truncate">
-        {message.from}
+        {inbound ? message.from : brandedFrom(message.from)}
       </span>
       <span className="text-[13px] font-medium text-slate-400 truncate flex-1 min-w-0">
         {message.subject}
@@ -288,7 +289,7 @@ function ThreadMessage({ message, isFilteredView, onCollapse }) {
               From
             </span>
             <span className="break-all font-semibold text-slate-600">
-              {message.from}
+              {inbound ? message.from : brandedFrom(message.from)}
             </span>
           </div>
           <div className="flex gap-2 items-start">

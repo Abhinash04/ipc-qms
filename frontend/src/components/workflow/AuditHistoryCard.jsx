@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { ShieldCheck } from 'lucide-react';
 
 import { stableKey } from '@/utils/stableKey';
+import { brandedName } from '@/constants/orgBranding';
 
 const AUDIT_PREVIEW = 8;
 
@@ -57,7 +58,8 @@ function describeDetails(details) {
 function AuditRow({ entry }) {
   const rawEvent = String(entry.event || entry.action || '').toUpperCase();
   const eventText = rawEvent.replace(/_/g, ' ') || '—';
-  const actor = describeActor(entry.actor);
+  const actorName = brandedName(entry.actor);
+  const actor = describeActor(actorName);
   const at = new Date(entry.at);
 
   return (
@@ -75,7 +77,7 @@ function AuditRow({ entry }) {
           className={`inline-flex items-center gap-1.5 text-[14px] font-bold px-2.5 py-1 rounded-xl border ${actor.className}`}
         >
           {actor.icon}
-          {entry.actor}
+          {actorName}
         </span>
       </td>
 
