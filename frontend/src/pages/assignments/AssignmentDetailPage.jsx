@@ -29,8 +29,8 @@ export function AssignmentDetailPage() {
 
   const canAssign = can(WORKFLOW_ACTION.ASSIGN);
 
-  const handleAssignToOfficial = (officialId) => {
-    run(() => assignQuery(queryId, officialId, currentUser));
+  const handleAssignToOfficial = (officialId, ranking) => {
+    run(() => assignQuery(queryId, officialId, currentUser, ranking));
   };
 
   return (

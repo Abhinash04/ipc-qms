@@ -127,7 +127,7 @@ export function AiRecommendationCard({ query, onAssign, currentAssigneeId, varia
                     {onAssign && (
                       <button
                         type="button"
-                        onClick={() => onAssign(rec.userId)}
+                        onClick={() => onAssign(rec.userId, recommendations)}
                         disabled={isAssigned}
                         className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[12px] font-bold transition-colors cursor-pointer disabled:opacity-70 disabled:cursor-not-allowed ${
                           isAssigned

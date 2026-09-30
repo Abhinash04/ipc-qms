@@ -65,6 +65,11 @@ export const AUDIT_EVENT = {
   QUERY_CLOSED: 'QUERY_CLOSED',
 };
 
+export const SERVER_EVENTS = {
+  QUERY_AUTO_TRANSFERRED: 'QUERY_AUTO_TRANSFERRED',
+  QUERY_AUTO_TRANSFER_FAILED: 'QUERY_AUTO_TRANSFER_FAILED',
+};
+
 export const AUDIT_EVENT_LABELS = {
   [AUDIT_EVENT.QUERY_RECEIVED]: 'Enquiry received',
   [AUDIT_EVENT.ACKNOWLEDGEMENT_SENT]: 'Acknowledgement sent to the inquirer',
@@ -81,6 +86,8 @@ export const AUDIT_EVENT_LABELS = {
   [AUDIT_EVENT.REVIEW_COMPLETED]: 'Review approved',
   [AUDIT_EVENT.REVISION_REQUESTED]: 'Changes requested',
   [AUDIT_EVENT.QUERY_TRANSFERRED]: 'Transferred',
+  [SERVER_EVENTS.QUERY_AUTO_TRANSFERRED]: 'Automatically transferred',
+  [SERVER_EVENTS.QUERY_AUTO_TRANSFER_FAILED]: 'Automatic transfer stopped',
   [AUDIT_EVENT.QUERY_PULLED_BACK]: 'Pulled back',
   [AUDIT_EVENT.FINAL_APPROVAL_GRANTED]: 'Final approval granted',
   [AUDIT_EVENT.FINAL_APPROVAL_REJECTED]: 'Final approval rejected',

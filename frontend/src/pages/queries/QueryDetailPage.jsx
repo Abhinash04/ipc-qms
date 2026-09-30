@@ -149,7 +149,7 @@ function CaseInsightPanels({ query, steps, audit, canAssign, currentUser, assign
             variant="embedded"
             query={query}
             currentAssigneeId={query.currentAssigneeId}
-            onAssign={(officialId) => assignQuery(query.queryId, officialId, currentUser)}
+            onAssign={(officialId, ranking) => assignQuery(query.queryId, officialId, currentUser, ranking)}
           />
         </div>
       )}

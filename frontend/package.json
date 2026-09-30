@@ -11,6 +11,7 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:auto-transfer": "vitest run src/test/autoTransferUi.test.jsx",
     "test:e2e": "playwright test",
     "doctor": "npx react-doctor@latest"
   },

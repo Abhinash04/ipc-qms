@@ -1,63 +1,75 @@
 import { useState, useEffect } from 'react';
-import { Clock, AlertTriangle, ArrowRightLeft, CheckCircle2, ShieldAlert } from 'lucide-react';
+import { Clock, AlertTriangle, ArrowRightLeft, ShieldAlert } from 'lucide-react';
 import { findUserById } from '@/constants/mockUsers';
+import { useWorkflowStore } from '@/store/useWorkflowStore';
+
+const REFRESH_AFTER_EXPIRY_MS = 5000;
 
 function formatDateTime(isoString) {
   if (!isoString) return '—';
-  try {
-    const d = new Date(isoString);
-    if (isNaN(d.getTime())) return '—';
-    return d.toLocaleString('en-GB', {
-      day: 'numeric',
-      month: 'short',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-    });
-  } catch {
-    return '—';
-  }
+  const d = new Date(isoString);
+  if (Number.isNaN(d.getTime())) return '—';
+  return d.toLocaleString('en-GB', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  });
 }
 
 function formatCountdown(totalSeconds) {
-  if (totalSeconds <= 0) return '00:00 (Expired)';
+  if (totalSeconds <= 0) return '0m 00s';
   const mins = Math.floor(totalSeconds / 60);
   const secs = totalSeconds % 60;
   return `${mins}m ${secs < 10 ? '0' : ''}${secs}s`;
 }
 
+function limitMinutes(assignedAt, actionDeadline) {
+  const start = Date.parse(assignedAt);
+  const end = Date.parse(actionDeadline);
+  if (Number.isNaN(start) || Number.isNaN(end) || end <= start) return null;
+  const minutes = (end - start) / 60000;
+  return Number.isInteger(minutes) ? minutes : Number(minutes.toFixed(1));
+}
+
+const TRANSFER_LABELS = { AUTO_TRANSFER: 'AUTOMATIC', MANUAL: 'MANUAL' };
+
 export function AutoTransferTimerCard({ query }) {
-  const [now, setNow] = useState(Date.now());
+  const [now, setNow] = useState(() => Date.now());
+  const revalidate = useWorkflowStore((state) => state.revalidate);
+
+  const deadline = query?.actionDeadline ? Date.parse(query.actionDeadline) : null;
+  const live =
+    query?.workflowState === 'ASSIGNED' && query?.businessStatus !== 'CLOSED' && Number.isFinite(deadline);
+  const expired = live && now >= deadline;
 
   useEffect(() => {
-    const interval = setInterval(() => {
-      setNow(Date.now());
-    }, 1000);
+    if (!live) return undefined;
+    const interval = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(interval);
-  }, []);
+  }, [live, query?.actionDeadline]);
 
-  if (!query) return null;
+  useEffect(() => {
+    if (!expired || typeof revalidate !== 'function') return undefined;
+    const interval = setInterval(() => revalidate(), REFRESH_AFTER_EXPIRY_MS);
+    return () => clearInterval(interval);
+  }, [expired, revalidate]);
 
-  const isAssigned = query.workflowState === 'ASSIGNED';
-  const isClosed = query.businessStatus === 'CLOSED';
-  const assignee = query.currentAssigneeId ? findUserById(query.currentAssigneeId) : null;
-
-  const assignedAtIso = query.assignedAt || query.createdAt;
-  const timeoutMinutes = 2; // Configured testing limit
-  const actionDeadlineIso =
-    query.actionDeadline ||
-    (assignedAtIso ? new Date(new Date(assignedAtIso).getTime() + timeoutMinutes * 60 * 1000).toISOString() : null);
-
-  const deadlineTime = actionDeadlineIso ? new Date(actionDeadlineIso).getTime() : 0;
-  const remainingSeconds = Math.max(0, Math.floor((deadlineTime - now) / 1000));
+  if (!query || query.workflowState !== 'ASSIGNED' || query.businessStatus === 'CLOSED') return null;
 
   const transferHistory = Array.isArray(query.transferHistory) ? query.transferHistory : [];
+  const failed = Boolean(query.autoTransferFailed);
+  if (!live && !failed && transferHistory.length === 0) return null;
+
+  const assignee = query.currentAssigneeId ? findUserById(query.currentAssigneeId) : null;
+  const minutes = limitMinutes(query.assignedAt, query.actionDeadline);
+  const remainingSeconds = live ? Math.max(0, Math.floor((deadline - now) / 1000)) : 0;
   const autoTransferCount = query.autoTransferCount || 0;
-  const currentTransferType = query.transferType || (transferHistory.length > 0 ? transferHistory[transferHistory.length - 1].transferType : 'INITIAL_ASSIGNMENT');
 
   let timerBadgeColor = 'bg-emerald-50 text-emerald-700 border-emerald-200';
-  if (remainingSeconds === 0) {
+  if (expired) {
     timerBadgeColor = 'bg-rose-50 text-rose-700 border-rose-200 animate-pulse';
   } else if (remainingSeconds < 30) {
     timerBadgeColor = 'bg-rose-50 text-rose-700 border-rose-200';
@@ -77,14 +89,18 @@ export function AutoTransferTimerCard({ query }) {
               Action Timeline &amp; Auto Transfer Status
             </h2>
             <p className="text-[12px] font-medium text-slate-500 m-0">
-              Strict 2-minute deadline per assignment (Testing Mode)
+              {minutes
+                ? `The assigned official has ${minutes} minute${minutes === 1 ? '' : 's'} to act before the case moves to the next recommended official`
+                : 'Automatic transfer is not running for this assignment'}
             </p>
           </div>
         </div>
 
-        <span className="text-[11.5px] font-bold text-purple-700 bg-purple-50 px-2.5 py-1 rounded-full border border-purple-200 shadow-2xs">
-          Timeline: 2 Min (Testing)
-        </span>
+        {minutes && (
+          <span className="text-[11.5px] font-bold text-purple-700 bg-purple-50 px-2.5 py-1 rounded-full border border-purple-200 shadow-2xs">
+            Limit: {minutes} min
+          </span>
+        )}
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
@@ -98,28 +114,30 @@ export function AutoTransferTimerCard({ query }) {
         <div className="bg-slate-50/80 p-3 rounded-xl border border-slate-200/60">
           <span className="text-[11px] font-bold uppercase text-slate-400 tracking-wider block">Assignment Time</span>
           <span className="font-semibold text-[12.5px] text-slate-700 block mt-0.5">
-            {formatDateTime(assignedAtIso)}
+            {formatDateTime(query.assignedAt)}
           </span>
         </div>
 
         <div className="bg-slate-50/80 p-3 rounded-xl border border-slate-200/60">
           <span className="text-[11px] font-bold uppercase text-slate-400 tracking-wider block">Action Deadline</span>
           <span className="font-semibold text-[12.5px] text-slate-700 block mt-0.5">
-            {formatDateTime(actionDeadlineIso)}
+            {formatDateTime(query.actionDeadline)}
           </span>
         </div>
 
         <div className="bg-slate-50/80 p-3 rounded-xl border border-slate-200/60">
           <span className="text-[11px] font-bold uppercase text-slate-400 tracking-wider block">Remaining Time</span>
-          {isAssigned && !isClosed ? (
-            <span className={`inline-flex items-center gap-1.5 font-bold text-[13px] px-2.5 py-0.5 rounded-full border mt-0.5 ${timerBadgeColor}`}>
+          {live ? (
+            <span
+              data-testid="auto-transfer-countdown"
+              className={`inline-flex items-center gap-1.5 font-bold text-[13px] px-2.5 py-0.5 rounded-full border mt-0.5 ${timerBadgeColor}`}
+            >
               <Clock className="h-3.5 w-3.5 shrink-0" />
               {formatCountdown(remainingSeconds)}
             </span>
           ) : (
             <span className="inline-flex items-center gap-1 font-semibold text-[12.5px] text-slate-500 mt-0.5">
-              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
-              Action Completed ({query.workflowState})
+              Not running
             </span>
           )}
         </div>
@@ -128,44 +146,40 @@ export function AutoTransferTimerCard({ query }) {
       <div className="rounded-xl border border-slate-100 bg-slate-50/50 p-3 flex flex-wrap items-center justify-between gap-2 text-xs">
         <div className="flex items-center gap-2">
           <span className="font-bold text-slate-400 uppercase tracking-wider text-[11px]">Auto Transfer Status:</span>
-          {isAssigned && !isClosed ? (
-            remainingSeconds > 0 ? (
-              <span className="font-bold text-amber-700 bg-amber-50 px-2.5 py-0.5 rounded-full border border-amber-200 flex items-center gap-1">
-                <Clock className="h-3 w-3" /> Action Pending (Timer Running)
-              </span>
-            ) : (
-              <span className="font-bold text-rose-700 bg-rose-50 px-2.5 py-0.5 rounded-full border border-rose-200 flex items-center gap-1">
-                <AlertTriangle className="h-3 w-3" /> Expired (Auto-Transfer Triggered)
-              </span>
-            )
+          {failed ? (
+            <span className="font-bold text-rose-700 bg-rose-50 px-2.5 py-0.5 rounded-full border border-rose-200 flex items-center gap-1">
+              <ShieldAlert className="h-3 w-3" /> Stopped — no eligible official left
+            </span>
+          ) : expired ? (
+            <span className="font-bold text-rose-700 bg-rose-50 px-2.5 py-0.5 rounded-full border border-rose-200 flex items-center gap-1">
+              <AlertTriangle className="h-3 w-3" /> Deadline passed — transferring to the next recommended official
+            </span>
+          ) : live ? (
+            <span className="font-bold text-amber-700 bg-amber-50 px-2.5 py-0.5 rounded-full border border-amber-200 flex items-center gap-1">
+              <Clock className="h-3 w-3" /> Awaiting action from the assigned official
+            </span>
           ) : (
-            <span className="font-bold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200 flex items-center gap-1">
-              <CheckCircle2 className="h-3 w-3" /> Officer Acted ({query.workflowState})
+            <span className="font-bold text-slate-600 bg-slate-100 px-2.5 py-0.5 rounded-full border border-slate-200">
+              Not running
             </span>
           )}
         </div>
 
-        <div className="flex items-center gap-3">
-          <div>
-            <span className="font-bold text-slate-400 uppercase tracking-wider text-[11px] mr-1">Transfer Type:</span>
-            <span className="font-bold text-slate-700 bg-card px-2 py-0.5 rounded border border-slate-200">
-              {currentTransferType === 'AUTO_TRANSFER' ? 'AUTOMATIC (System)' : currentTransferType === 'MANUAL' ? 'MANUAL (User)' : 'INITIAL'}
-            </span>
-          </div>
-
-          <div>
-            <span className="font-bold text-slate-400 uppercase tracking-wider text-[11px] mr-1">Auto Transfers:</span>
-            <span className="font-bold text-purple-700 bg-purple-50 px-2 py-0.5 rounded border border-purple-200">
-              {autoTransferCount}
-            </span>
-          </div>
+        <div>
+          <span className="font-bold text-slate-400 uppercase tracking-wider text-[11px] mr-1">Auto Transfers:</span>
+          <span className="font-bold text-purple-700 bg-purple-50 px-2 py-0.5 rounded border border-purple-200">
+            {autoTransferCount}
+          </span>
         </div>
       </div>
 
-      {query.autoTransferFailed && (
-        <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 flex items-center gap-2.5 text-xs text-rose-800 font-semibold">
+      {failed && (
+        <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-3 flex items-center gap-2.5 text-xs text-rose-800 font-semibold">
           <ShieldAlert className="h-4 w-4 text-rose-600 shrink-0" />
-          <span>Notice: Automatic transfer attempted after 2-minute deadline, but no eligible recommended officer was available. OIC handling required.</span>
+          <span>
+            The action limit passed, but no eligible recommended official remains. The case stays with{' '}
+            {assignee?.name || query.currentAssigneeId} and the Officer-in-Charge has been notified to reassign it.
+          </span>
         </div>
       )}
 
@@ -191,18 +205,22 @@ export function AutoTransferTimerCard({ query }) {
                 {transferHistory.map((item, idx) => {
                   const fromUser = findUserById(item.fromAssigneeId);
                   const toUser = findUserById(item.toAssigneeId);
+                  const automatic = item.transferType === 'AUTO_TRANSFER';
                   return (
-                    <tr key={idx} className="hover:bg-slate-50/60">
+                    <tr key={`${item.transferredAt}-${idx}`} className="hover:bg-slate-50/60">
                       <td className="py-2 px-3 font-bold text-slate-400">{idx + 1}</td>
                       <td className="py-2 px-3 font-semibold text-slate-700">{fromUser?.name || item.fromAssigneeId}</td>
                       <td className="py-2 px-3 font-bold text-purple-700">{toUser?.name || item.toAssigneeId}</td>
                       <td className="py-2 px-3">
-                        <span className={`font-bold px-2 py-0.5 rounded-full text-[10px] border ${item.transferType === 'AUTO_TRANSFER' ? 'bg-purple-50 text-purple-700 border-purple-200' : 'bg-slate-100 text-slate-700 border-slate-200'}`}>
-                          {item.transferType === 'AUTO_TRANSFER' ? 'AUTOMATIC' : 'MANUAL'}
+                        <span className={`font-bold px-2 py-0.5 rounded-full text-[10px] border ${automatic ? 'bg-purple-50 text-purple-700 border-purple-200' : 'bg-slate-100 text-slate-700 border-slate-200'}`}>
+                          {TRANSFER_LABELS[item.transferType] || item.transferType}
                         </span>
                       </td>
                       <td className="py-2 px-3 text-slate-500 font-medium whitespace-nowrap">{formatDateTime(item.transferredAt)}</td>
-                      <td className="py-2 px-3 text-slate-600 max-w-xs truncate">{item.reason}</td>
+                      <td className="py-2 px-3 text-slate-600 max-w-xs truncate">
+                        {item.reason || '—'}
+                        {automatic && item.matchPercent != null ? ` (AI match ${item.matchPercent}%)` : ''}
+                      </td>
                     </tr>
                   );
                 })}
