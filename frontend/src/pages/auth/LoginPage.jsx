@@ -22,6 +22,7 @@ import { MOCK_USERS } from "@/constants/mockUsers";
 import { HeroBackdrop } from "@/components/common/HeroBackdrop";
 import { PageBackdrop } from "@/components/common/PageBackdrop";
 import { GoogleSignInButton } from "@/components/auth/GoogleSignInButton";
+import { IPC_FRONT_OFFICE_NAME } from "@/constants/orgBranding";
 import { notify } from "@/services/notify";
 
 const FEATURES = [
@@ -297,12 +298,12 @@ export function LoginPage() {
                           className="group mb-1.5 flex w-full cursor-pointer items-center gap-3 rounded-lg border border-emerald-200 bg-emerald-50/60 px-3 py-2.5 text-start transition-colors hover:bg-emerald-50"
                         >
                           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-emerald-500 text-[12.5px] font-semibold text-white">
-                            EC
+                            IPC
                           </div>
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-2">
                               <span className="truncate text-[14px] font-semibold text-ink group-hover:text-emerald-700">
-                                Eco-Clubs Front Office
+                                {IPC_FRONT_OFFICE_NAME}
                               </span>
                               <span className="shrink-0 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-700">
                                 NICeMail
@@ -360,7 +361,7 @@ export function LoginPage() {
 
         <div className="relative z-10 max-w-lg px-12 text-center">
           <p className="text-[12.5px] font-semibold uppercase tracking-[0.3em] text-white/75">
-            Query Management System
+            AI-powered IP Stakeholder’s BRIDGETECH
           </p>
           <h1 className="mt-3 font-heading text-[48px] font-bold leading-tight">Welcome back!</h1>
           <p className="mx-auto mt-4 max-w-md text-[16px] leading-relaxed text-white/80">

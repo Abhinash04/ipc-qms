@@ -1,6 +1,7 @@
 import { AUDIT_EVENT, WORKFLOW_STATE } from './statusEnums';
 import { findUserById } from './mockUsers';
 import { reviewLevelName, STAGE_STATUS } from './queryLifecycle';
+import { brandedName } from './orgBranding';
 
 const PENDING_ASSIGNMENT_STATES = [
   WORKFLOW_STATE.RECEIVED,
@@ -41,7 +42,7 @@ export function buildCaseOfficials({ query, steps = [], audit = [] } = {}) {
   rows.push(
     official(
       'Front Office',
-      actorOf(AUDIT_EVENT.QUERY_FORWARDED, AUDIT_EVENT.QUERY_REGISTERED),
+      brandedName(actorOf(AUDIT_EVENT.QUERY_FORWARDED, AUDIT_EVENT.QUERY_REGISTERED)),
       forwarded
         ? STAGE_STATUS.COMPLETE
         : state === WORKFLOW_STATE.READY_FOR_DISPATCH
