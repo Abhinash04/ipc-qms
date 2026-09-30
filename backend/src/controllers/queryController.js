@@ -3,13 +3,14 @@ import { isConnected } from "../config/db.js";
 import * as audit from "../services/audit/auditService.js";
 import * as workflow from "../services/workflow/finalApproval.js";
 import * as caseMail from "../services/email/caseMail.js";
-import { processExpiredTransfers } from "../services/query/autoTransferScheduler.js";
+import { runAutoTransferSweep } from "../services/query/autoTransferScheduler.js";
+import { assignmentClockUpdate, transferReasonFrom } from "../services/query/assignmentClock.js";
 import {
   toPublic as publicOutbound,
   isDuplicateKey,
 } from "../services/email/outbox.js";
 import { ACTOR_TYPES } from "../constants/roles.js";
-import { isKnownAuditAction } from "../constants/auditActions.js";
+import { isKnownAuditAction, SERVER_ONLY_CASE_EVENTS } from "../constants/auditActions.js";
 import { caseScopeFor, scopeFilter } from "../services/authz/caseAccess.js";
 import {
   QueryCase,
@@ -207,7 +208,9 @@ async function persistTransition(req, res, next) {
 
     if (query?.queryId) {
       const existing = await QueryCase.findOne({ queryId: query.queryId })
-        .select("createdAt workflowState businessStatus")
+        .select(
+          "createdAt workflowState businessStatus currentAssigneeId actionDeadline autoTransferHeldIds",
+        )
         .lean();
 
       if (
@@ -242,19 +245,18 @@ async function persistTransition(req, res, next) {
       } = query;
       const inquirer = submittedInquirer;
 
-      if (clientQuery.workflowState === 'ASSIGNED' || clientQuery.currentAssigneeId) {
-        const timeoutMinutes = Number(process.env.QUERY_AUTO_TRANSFER_TIMEOUT_MINUTES || '2');
-        const nowISO = new Date().toISOString();
-        if (!clientQuery.assignedAt) {
-          clientQuery.assignedAt = nowISO;
-        }
-        if (!clientQuery.actionDeadline) {
-          const startMs = new Date(clientQuery.assignedAt).getTime();
-          clientQuery.actionDeadline = new Date(startMs + timeoutMinutes * 60 * 1000).toISOString();
-        }
-      }
+      const clock = assignmentClockUpdate({
+        stored: existing,
+        next: clientQuery,
+        reason: transferReasonFrom(auditEvent?.details),
+        actorId: req.user?.id ?? null,
+      });
 
-      const update = { $set: clientQuery, $inc: { revision: 1 } };
+      const update = {
+        $set: { ...clientQuery, ...(clock?.set || {}) },
+        $inc: { revision: 1 },
+      };
+      if (clock?.push) update.$push = clock.push;
       if (inquirer !== undefined) update.$setOnInsert = { inquirer };
 
       const saved = await QueryCase.findOneAndUpdate(
@@ -366,7 +368,11 @@ async function persistTransition(req, res, next) {
 
     await Promise.all(ops);
 
-    if (auditEvent?.event && !isKnownAuditAction(auditEvent.event)) {
+    if (auditEvent?.event && SERVER_ONLY_CASE_EVENTS.has(auditEvent.event)) {
+      console.warn(
+        `[qms] refusing a client-sent audit event the server records itself: ${auditEvent.event}`,
+      );
+    } else if (auditEvent?.event && !isKnownAuditAction(auditEvent.event)) {
       console.warn(
         `[qms] refusing an audit event with an unknown action: ${auditEvent.event}`,
       );
@@ -494,8 +500,8 @@ async function triggerAutoTransferCheck(req, res, next) {
   if (!requireDb(next)) return;
 
   try {
-    const result = await processExpiredTransfers();
-    return res.status(HTTP_STATUS.OK).json({ success: true, ...result });
+    const result = await runAutoTransferSweep();
+    return res.status(HTTP_STATUS.OK).json(result);
   } catch (error) {
     return next(error);
   }

@@ -1,318 +1,266 @@
 import env from '../../config/env.js';
-import { isConnected } from '../../config/db.js';
-import { QueryCase, Notification, AuditEvent, EmailMessage } from '../../models/index.js';
+import { isConnected, isSharedDatabase } from '../../config/db.js';
+import { QueryCase, Notification } from '../../models/index.js';
 import { WORKFLOW_STATE } from '../../constants/workflowStates.js';
 import { ACTOR_TYPES, ROLES } from '../../constants/roles.js';
-import { USERS, findUserById } from '../../constants/users.js';
+import { AUDIT_ACTIONS, AUDIT_RESULTS } from '../../constants/auditActions.js';
+import { allUsers } from '../../constants/users.js';
 import * as gemmaService from '../ai/gemmaService.js';
 import * as audit from '../audit/auditService.js';
+import { autoTransferSettings, deadlineFrom, sanitizeRanking, TRANSFER_TYPES } from './assignmentClock.js';
 
-let schedulerTimer = null;
-let isProcessing = false;
+const BATCH = 50;
 
-export const MAX_AUTO_TRANSFERS = 1;
+let timer = null;
+let inFlight = null;
 
-export function getTimeoutMinutes() {
-  return env.QUERY_AUTO_TRANSFER_TIMEOUT_MINUTES || 2;
+export function isEligibleOfficial(user) {
+  return Boolean(user) && user.role === ROLES.ASSIGNED_OFFICIAL && user.active !== false;
 }
 
-export function calculateDeadline(assignedAt, timeoutMinutes = getTimeoutMinutes()) {
-  const start = assignedAt ? new Date(assignedAt).getTime() : Date.now();
-  const deadlineMs = start + timeoutMinutes * 60 * 1000;
-  return new Date(deadlineMs).toISOString();
-}
-
-export function selectNextRecommendedOfficial({ query, currentAssigneeId, recommendations = [] }) {
-  const allAssignedOfficials = USERS.filter((u) => u.role === ROLES.ASSIGNED_OFFICIAL);
-  if (allAssignedOfficials.length === 0) return null;
-
-  const history = Array.isArray(query?.transferHistory) ? query.transferHistory : [];
-  const assignedSet = new Set();
-  if (currentAssigneeId) assignedSet.add(currentAssigneeId);
-
-  for (const record of history) {
-    if (record?.fromAssigneeId) assignedSet.add(record.fromAssigneeId);
-    if (record?.toAssigneeId) assignedSet.add(record.toAssigneeId);
+export function nextRecommendedOfficial({ ranking, heldIds = [], currentAssigneeId = null, directory = allUsers() }) {
+  const held = new Set([...heldIds, currentAssigneeId].filter(Boolean));
+  const byId = new Map(directory.map((user) => [user.id, user]));
+  for (const entry of ranking) {
+    const user = byId.get(entry.userId);
+    if (held.has(entry.userId) || !isEligibleOfficial(user)) continue;
+    return { user, matchPercent: entry.matchPercent ?? null };
   }
-
-  if (Array.isArray(recommendations) && recommendations.length > 0) {
-    for (const rec of recommendations) {
-      const candidateId = rec.userId || rec.id;
-      if (!candidateId || candidateId === currentAssigneeId) continue;
-
-      const userObj = findUserById(candidateId);
-      if (!userObj || userObj.role !== ROLES.ASSIGNED_OFFICIAL) continue;
-
-      if (!assignedSet.has(candidateId)) {
-        return { selected: userObj, source: 'AI_RECOMMENDATION', matchPercent: rec.matchPercent || null };
-      }
-    }
-  }
-
-  const unassignedColleague = allAssignedOfficials.find((u) => u.id !== currentAssigneeId && !assignedSet.has(u.id));
-  if (unassignedColleague) {
-    return { selected: unassignedColleague, source: 'DIRECTORY_FALLBACK' };
-  }
-
-  const anyOtherColleague = allAssignedOfficials.find((u) => u.id !== currentAssigneeId);
-  if (anyOtherColleague) {
-    return { selected: anyOtherColleague, source: 'DIRECTORY_REPEAT' };
-  }
-
   return null;
 }
 
-export async function executeAutoTransfer(query, { timeoutMinutes = getTimeoutMinutes(), nowISO = new Date().toISOString() } = {}) {
-  const queryId = typeof query === 'string' ? query : (query?.queryId || null);
-  if (!queryId && typeof query !== 'object') return { success: false, reason: 'INVALID_QUERY_ID' };
+export function expiredAssignmentFilter(nowIso) {
+  return {
+    workflowState: WORKFLOW_STATE.ASSIGNED,
+    businessStatus: { $ne: 'CLOSED' },
+    currentAssigneeId: { $nin: [null, ''] },
+    actionDeadline: { $ne: null, $lte: nowIso },
+    autoTransferFailed: { $ne: true },
+  };
+}
 
-  let freshQuery = null;
-  if (isConnected()) {
-    freshQuery = await QueryCase.findOne({ queryId }).lean();
-  } else if (typeof query === 'object' && query !== null) {
-    freshQuery = query;
-  }
-
-  if (!freshQuery) return { success: false, reason: 'QUERY_NOT_FOUND' };
-  if (freshQuery.workflowState !== WORKFLOW_STATE.ASSIGNED) return { success: false, reason: 'STATE_NOT_ASSIGNED' };
-  if (freshQuery.businessStatus === 'CLOSED') return { success: false, reason: 'QUERY_CLOSED' };
-  if (!freshQuery.currentAssigneeId) return { success: false, reason: 'NO_ASSIGNEE' };
-  if ((freshQuery.autoTransferCount || 0) >= MAX_AUTO_TRANSFERS) return { success: false, reason: 'MAX_AUTO_TRANSFERS_REACHED' };
-
-  const effectiveAssignedAt = freshQuery.assignedAt || freshQuery.createdAt || nowISO;
-  const effectiveDeadline = freshQuery.actionDeadline || calculateDeadline(effectiveAssignedAt, timeoutMinutes);
-
-  if (new Date(nowISO).getTime() < new Date(effectiveDeadline).getTime()) {
-    return { success: false, reason: 'DEADLINE_NOT_EXPIRED', deadline: effectiveDeadline };
-  }
-
-  const currentAssigneeId = freshQuery.currentAssigneeId;
-  const prevUser = findUserById(currentAssigneeId);
-  const prevName = prevUser?.name || currentAssigneeId;
-
-  let recommendations = [];
-  try {
-    recommendations = await gemmaService.recommendOfficial({
-      subject: freshQuery.subject || '',
-      body: freshQuery.description || '',
-      summaryText: freshQuery.aiSummary?.text || '',
-    });
-  } catch (err) {
-    console.warn(`[AutoTransfer] Recommendation lookup warning for ${queryId}: ${err.message}`);
-  }
-
-  const selection = selectNextRecommendedOfficial({
-    query: freshQuery,
-    currentAssigneeId,
-    recommendations,
+async function rankingFor(query) {
+  const stored = sanitizeRanking(query.autoTransferRanking);
+  if (stored.length) return { ranking: stored, computed: false };
+  const recommendations = await gemmaService.recommendOfficial({
+    subject: query.subject || '',
+    body: query.description || '',
+    summaryText: query.aiSummary?.text || '',
   });
+  return { ranking: sanitizeRanking(recommendations), computed: true };
+}
 
-  if (!selection || !selection.selected) {
-    if (isConnected()) {
-      await QueryCase.updateOne({ queryId }, { $set: { autoTransferFailed: true } }).catch(() => {});
-      const failNotifId = `NOTIF-FAIL-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
-      await Notification.create({
-        notificationId: failNotifId,
-        queryId,
-        recipientRole: ROLES.OFFICER_IN_CHARGE,
-        recipientUserId: null,
-        title: 'Automatic Transfer Failed',
-        message: `Query ${queryId} reached the ${timeoutMinutes}-minute action limit, but no eligible recommendation officer was available.`,
-        type: 'WARNING',
-        read: false,
-        at: nowISO,
-      }).catch(() => {});
-    }
-    return { success: false, reason: 'NO_ELIGIBLE_OFFICER_AVAILABLE' };
+const nameOf = (userId, directory) => directory.find((user) => user.id === userId)?.name || userId;
+
+async function notify(notification) {
+  await Notification.findOneAndUpdate(
+    { notificationId: notification.notificationId },
+    { $setOnInsert: notification },
+    { upsert: true },
+  );
+}
+
+async function recordExhausted(query, { nowIso, ranking, computed, settings, directory }) {
+  const claimed = await QueryCase.findOneAndUpdate(
+    {
+      queryId: query.queryId,
+      workflowState: WORKFLOW_STATE.ASSIGNED,
+      currentAssigneeId: query.currentAssigneeId,
+      actionDeadline: query.actionDeadline,
+      autoTransferFailed: { $ne: true },
+    },
+    {
+      $set: {
+        actionDeadline: null,
+        autoTransferFailed: true,
+        autoTransferFailedAt: nowIso,
+        ...(computed ? { autoTransferRanking: ranking } : {}),
+      },
+      $inc: { revision: 1 },
+    },
+    { returnDocument: 'after' },
+  );
+  if (!claimed) return { queryId: query.queryId, outcome: 'SKIPPED', reason: 'CASE_CHANGED' };
+
+  const holder = nameOf(query.currentAssigneeId, directory);
+  await audit.record({
+    action: AUDIT_ACTIONS.QUERY_AUTO_TRANSFER_FAILED,
+    queryId: query.queryId,
+    actorType: ACTOR_TYPES.SYSTEM,
+    actorRole: 'SYSTEM',
+    result: AUDIT_RESULTS.FAILURE,
+    details: `Case ID: ${query.queryId} | Held By: ${holder} | Reason: No eligible recommended official remains after the ${settings.timeoutMinutes}-minute action limit`,
+  });
+  await notify({
+    notificationId: `NOTIF-AUTO-FAILED-${query.queryId}-${query.actionDeadline}`,
+    queryId: query.queryId,
+    recipientRole: ROLES.OFFICER_IN_CHARGE,
+    recipientUserId: null,
+    title: 'Automatic transfer stopped',
+    message: `${query.queryId}: ${holder} took no action within ${settings.timeoutMinutes} minutes and no eligible recommended official remains. The case stays with ${holder}; please reassign it manually.`,
+    type: 'WARNING',
+    read: false,
+    at: nowIso,
+  });
+  return { queryId: query.queryId, outcome: 'EXHAUSTED' };
+}
+
+export async function executeAutoTransfer(
+  query,
+  { now = Date.now(), settings = autoTransferSettings(), directory = allUsers() } = {},
+) {
+  const nowIso = new Date(now).toISOString();
+  if (!query?.actionDeadline || query.actionDeadline > nowIso) {
+    return { queryId: query?.queryId ?? null, outcome: 'SKIPPED', reason: 'NOT_EXPIRED' };
   }
 
-  const nextOfficer = selection.selected;
-  const newName = nextOfficer.name || nextOfficer.id;
-  const newAssignedAt = nowISO;
-  const newActionDeadline = calculateDeadline(newAssignedAt, timeoutMinutes);
-  const reasonText = `Automatic transfer after ${timeoutMinutes}-minute action limit`;
+  const { ranking, computed } = await rankingFor(query);
+  const heldIds = query.autoTransferHeldIds?.length ? query.autoTransferHeldIds : [query.currentAssigneeId];
+  const next = nextRecommendedOfficial({ ranking, heldIds, currentAssigneeId: query.currentAssigneeId, directory });
 
-  const transferRecord = {
-    fromAssigneeId: currentAssigneeId,
-    toAssigneeId: nextOfficer.id,
-    transferredAt: nowISO,
-    reason: reasonText,
-    transferType: 'AUTO_TRANSFER',
+  if (!next) return recordExhausted(query, { nowIso, ranking, computed, settings, directory });
+
+  const reason = `No action within the ${settings.timeoutMinutes}-minute action limit`;
+  const record = {
+    fromAssigneeId: query.currentAssigneeId,
+    toAssigneeId: next.user.id,
+    transferredAt: nowIso,
+    transferType: TRANSFER_TYPES.AUTOMATIC,
+    reason,
+    matchPercent: next.matchPercent,
+    byUserId: null,
   };
 
-  let updated = null;
-  if (isConnected()) {
-    updated = await QueryCase.findOneAndUpdate(
-      {
-        queryId,
-        workflowState: WORKFLOW_STATE.ASSIGNED,
-        businessStatus: { $ne: 'CLOSED' },
-        currentAssigneeId: currentAssigneeId,
-        revision: freshQuery.revision ?? 0,
+  const updated = await QueryCase.findOneAndUpdate(
+    {
+      queryId: query.queryId,
+      workflowState: WORKFLOW_STATE.ASSIGNED,
+      businessStatus: { $ne: 'CLOSED' },
+      currentAssigneeId: query.currentAssigneeId,
+      actionDeadline: query.actionDeadline,
+    },
+    {
+      $set: {
+        currentAssigneeId: next.user.id,
+        assignedAt: nowIso,
+        actionDeadline: deadlineFrom(nowIso, settings.timeoutMinutes),
+        lastAutoTransferAt: nowIso,
+        transferType: TRANSFER_TYPES.AUTOMATIC,
+        autoTransferFailed: false,
+        autoTransferFailedAt: null,
+        autoTransferHeldIds: [...new Set([...heldIds, query.currentAssigneeId, next.user.id])],
+        ...(computed ? { autoTransferRanking: ranking } : {}),
       },
-      {
-        $set: {
-          currentAssigneeId: nextOfficer.id,
-          assignedAt: newAssignedAt,
-          actionDeadline: newActionDeadline,
-          lastAutoTransferAt: nowISO,
-          transferType: 'AUTO_TRANSFER',
-          autoTransferFailed: false,
-        },
-        $inc: { autoTransferCount: 1, revision: 1 },
-        $push: { transferHistory: transferRecord },
-      },
-      { returnDocument: 'after' }
-    );
+      $inc: { autoTransferCount: 1, revision: 1 },
+      $push: { transferHistory: record },
+    },
+    { returnDocument: 'after' },
+  );
+  if (!updated) return { queryId: query.queryId, outcome: 'SKIPPED', reason: 'CASE_CHANGED' };
 
-    if (!updated) {
-      return { success: false, reason: 'RACE_CONDITION_PREVENTED' };
+  const from = nameOf(query.currentAssigneeId, directory);
+  const to = next.user.name || next.user.id;
+  const match = next.matchPercent !== null ? ` | AI Match: ${next.matchPercent}%` : '';
+  await audit.record({
+    action: AUDIT_ACTIONS.QUERY_AUTO_TRANSFERRED,
+    queryId: query.queryId,
+    actorType: ACTOR_TYPES.SYSTEM,
+    actorRole: 'SYSTEM',
+    result: AUDIT_RESULTS.SUCCESS,
+    details: `Case ID: ${query.queryId} | Transferred From: ${from} | Transferred To: ${to} | Transferred By: System (automatic) | Reason: ${reason}${match}`,
+  });
+  await notify({
+    notificationId: `NOTIF-AUTO-${query.queryId}-${updated.autoTransferCount}`,
+    queryId: query.queryId,
+    recipientRole: null,
+    recipientUserId: next.user.id,
+    title: 'Query automatically transferred to you',
+    message: `${query.queryId} (${query.subject || 'no subject'}) was transferred to you because ${from} took no action within ${settings.timeoutMinutes} minutes. Please act before ${updated.actionDeadline}.`,
+    type: 'INFO',
+    read: false,
+    at: nowIso,
+  });
+
+  return {
+    queryId: query.queryId,
+    outcome: 'TRANSFERRED',
+    fromAssigneeId: query.currentAssigneeId,
+    toAssigneeId: next.user.id,
+    actionDeadline: updated.actionDeadline,
+  };
+}
+
+export async function processExpiredTransfers({
+  now = Date.now(),
+  settings = autoTransferSettings(),
+  directory = allUsers(),
+} = {}) {
+  if (!settings.enabled) return { ran: false, reason: 'DISABLED', transferred: 0, exhausted: 0, results: [] };
+  if (!isConnected()) return { ran: false, reason: 'DB_DISCONNECTED', transferred: 0, exhausted: 0, results: [] };
+
+  const nowIso = new Date(now).toISOString();
+  const expired = await QueryCase.find(expiredAssignmentFilter(nowIso))
+    .sort({ actionDeadline: 1 })
+    .limit(BATCH)
+    .lean();
+
+  const results = [];
+  for (const query of expired) {
+    try {
+      results.push(await executeAutoTransfer(query, { now, settings, directory }));
+    } catch (error) {
+      results.push({ queryId: query.queryId, outcome: 'ERROR', error: error.message });
     }
-  } else {
-    updated = {
-      ...freshQuery,
-      currentAssigneeId: nextOfficer.id,
-      assignedAt: newAssignedAt,
-      actionDeadline: newActionDeadline,
-      lastAutoTransferAt: nowISO,
-      transferType: 'AUTO_TRANSFER',
-      autoTransferCount: (freshQuery.autoTransferCount || 0) + 1,
-      transferHistory: [...(freshQuery.transferHistory || []), transferRecord],
-      autoTransferFailed: false,
-    };
-  }
-
-  const auditDetails = `Case ID: ${queryId} | Transferred From: ${prevName} | Transferred To: ${newName} | Transferred By: System (Auto-Transfer) | Reason: ${reasonText} | Transfer Type: AUTO_TRANSFER`;
-
-  if (isConnected()) {
-    await audit.record({
-      action: 'QUERY_TRANSFERRED',
-      auditId: `AUD-AUTO-${Date.now()}-${Math.floor(Math.random() * 10000)}`,
-      timestamp: nowISO,
-      queryId,
-      actorType: ACTOR_TYPES.SYSTEM,
-      actorRole: 'SYSTEM',
-      details: auditDetails,
-    }).catch(() => {});
-
-    const notificationId = `NOTIF-AUTO-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
-    await Notification.create({
-      notificationId,
-      queryId,
-      recipientUserId: nextOfficer.id,
-      recipientRole: null,
-      title: 'Query Automatically Transferred',
-      message: `Query ${queryId} (${freshQuery.subject}) was automatically transferred to ${newName} because ${prevName} did not take action within the ${timeoutMinutes}-minute limit. Reason: ${reasonText}`,
-      type: 'INFO',
-      read: false,
-      at: nowISO,
-    }).catch(() => {});
-
-    const messageId = `MSG-AUTO-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
-    await EmailMessage.create({
-      messageId,
-      threadId: freshQuery.threadId || `TRD-${queryId}`,
-      queryId,
-      direction: 'OUTBOUND',
-      emailType: 'TRANSFER_NOTIFICATION',
-      from: 'System (Auto-Transfer)',
-      to: [nextOfficer.email || `${nextOfficer.id}@ipc.example`],
-      subject: `Query ${queryId} Transferred: ${freshQuery.subject}`,
-      body: `Query ${queryId} ("${freshQuery.subject}") has been automatically transferred to you.\n\nPrevious Assignee: ${prevName}\nTransfer Reason: ${reasonText}\nDate & Time: ${new Date(nowISO).toLocaleString()}`,
-      timestamp: nowISO,
-    }).catch(() => {});
   }
 
   return {
-    success: true,
-    queryId,
-    previousAssigneeId: currentAssigneeId,
-    newAssigneeId: nextOfficer.id,
-    transferredTo: newName,
-    assignedAt: newAssignedAt,
-    actionDeadline: newActionDeadline,
-    updated,
+    ran: true,
+    scanned: expired.length,
+    transferred: results.filter((r) => r.outcome === 'TRANSFERRED').length,
+    exhausted: results.filter((r) => r.outcome === 'EXHAUSTED').length,
+    results,
   };
 }
 
-export async function processExpiredTransfers({ now = Date.now(), timeoutMinutes = getTimeoutMinutes() } = {}) {
-  if (!isConnected()) return { ran: false, reason: 'DB_DISCONNECTED', processed: 0 };
-
-  const nowISO = new Date(now).toISOString();
-
-  const assignedQueries = await QueryCase.find({
-    workflowState: WORKFLOW_STATE.ASSIGNED,
-    businessStatus: { $ne: 'CLOSED' },
-    currentAssigneeId: { $ne: null },
-  }).lean();
-
-  let scanned = 0;
-  let transferred = 0;
-  const results = [];
-
-  for (const q of assignedQueries) {
-    if ((q.autoTransferCount || 0) >= MAX_AUTO_TRANSFERS) continue;
-    scanned += 1;
-    let assignedAt = q.assignedAt;
-    let actionDeadline = q.actionDeadline;
-
-    if (!assignedAt || !actionDeadline) {
-      assignedAt = q.createdAt || nowISO;
-      actionDeadline = calculateDeadline(assignedAt, timeoutMinutes);
-
-      await QueryCase.updateOne(
-        { queryId: q.queryId, assignedAt: null },
-        { $set: { assignedAt, actionDeadline } }
-      );
-    }
-
-    if (new Date(nowISO).getTime() >= new Date(actionDeadline).getTime()) {
-      const res = await executeAutoTransfer(q.queryId, { timeoutMinutes, nowISO });
-      results.push(res);
-      if (res.success) transferred += 1;
-    }
-  }
-
-  return { ran: true, scanned, transferred, results };
+export async function runAutoTransferSweep(options = {}) {
+  if (inFlight) return inFlight;
+  inFlight = processExpiredTransfers(options).finally(() => {
+    inFlight = null;
+  });
+  return inFlight;
 }
 
-export function startAutoTransferScheduler({ intervalMs = 10000 } = {}) {
-  if (schedulerTimer) return schedulerTimer;
+export function startAutoTransferScheduler({ config = env } = {}) {
+  if (timer) return timer;
+  if (config.NODE_ENV === 'test') return null;
 
-  schedulerTimer = setInterval(async () => {
-    if (isProcessing) return;
-    isProcessing = true;
-    try {
-      await processExpiredTransfers();
-    } catch (err) {
-      console.warn(`[AutoTransferScheduler] Tick error: ${err.message}`);
-    } finally {
-      isProcessing = false;
-    }
-  }, intervalMs);
+  const settings = autoTransferSettings(config);
+  if (settings.problems.length) {
+    console.warn(`[qms] automatic transfer disabled: ${settings.problems.join('; ')}`);
+    return null;
+  }
+  if (!settings.scheduler) return null;
 
-  schedulerTimer.unref();
-  return schedulerTimer;
+  const shared = isSharedDatabase();
+  console.log(
+    `[qms] automatic transfer scheduler on: ${settings.timeoutMinutes}-minute action limit, checked every ` +
+      `${settings.intervalMs / 1000}s${shared ? ' — against a SHARED database' : ''}`,
+  );
+
+  timer = setInterval(() => {
+    runAutoTransferSweep({ settings }).catch((error) => {
+      console.warn(`[qms] automatic transfer sweep failed: ${error.message}`);
+    });
+  }, settings.intervalMs);
+  timer.unref();
+  return timer;
 }
 
 export function stopAutoTransferScheduler() {
-  if (schedulerTimer) {
-    clearInterval(schedulerTimer);
-    schedulerTimer = null;
-  }
+  if (timer) clearInterval(timer);
+  timer = null;
 }
 
 export function autoTransferSchedulerState() {
-  return { running: Boolean(schedulerTimer), isProcessing };
+  return { running: Boolean(timer), sweeping: Boolean(inFlight) };
 }
-
-export default {
-  getTimeoutMinutes,
-  calculateDeadline,
-  selectNextRecommendedOfficial,
-  executeAutoTransfer,
-  processExpiredTransfers,
-  startAutoTransferScheduler,
-  stopAutoTransferScheduler,
-  autoTransferSchedulerState,
-};

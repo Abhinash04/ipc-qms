@@ -9,6 +9,7 @@
     "lint": "eslint .",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:auto-transfer": "vitest run src/test/autoTransfer.test.js",
     "nic:preflight": "node src/scripts/nicPreflight.js",
     "nic:verify": "node src/scripts/nicVerify.js",
     "nic:browser:discover": "node src/scripts/nicBrowserDiscover.js",
