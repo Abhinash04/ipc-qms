@@ -139,7 +139,7 @@ beforeEach(() => {
   nicMailbox.resetSyncState();
   vi.stubEnv('NIC_BROWSER_MAILBOX', 'true');
   vi.stubEnv('NIC_EMAIL', NIC_ADDRESS);
-  vi.stubEnv('NIC_FRONT_OFFICE_NAME', 'Eco-Clubs Front Office');
+  vi.stubEnv('NIC_FRONT_OFFICE_NAME', 'IPC Front Office');
   vi.stubEnv('NIC_BROWSER_TEST_RECIPIENT', 'ravi@pharma.example');
   browser.sendMail = vi.fn(async () => ({ ok: true, providerMessageId: null }));
   browser.readInbox = vi.fn(async () => ({ messages: [], failures: [], remaining: 0 }));

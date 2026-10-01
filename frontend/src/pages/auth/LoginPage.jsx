@@ -110,26 +110,75 @@ export function LoginPage() {
 
   return (
     <div className="flex min-h-screen w-full bg-surface-muted text-ink">
+      <aside className="relative hidden w-1/2 overflow-hidden bg-primary text-white lg:flex lg:flex-col lg:items-center lg:justify-center lg:py-12">
+        <HeroBackdrop />
+
+        <div className="relative z-10 max-w-xl px-10 text-center xl:px-12">
+          <div className="flex flex-col items-center justify-center gap-3">
+            <img
+              src="/imageFile1.png"
+              alt="IPC Emblem Logo"
+              width="103"
+              height="199"
+              className="h-24 w-auto object-contain drop-shadow-lg brightness-110"
+            />
+            <div className="text-center leading-tight">
+              <div className="text-[17px] font-semibold tracking-wide text-white/95 xl:text-[18px]">
+                भारतीय भेषज संहिता आयोग
+              </div>
+              <div className="mt-1 font-heading text-[19px] font-extrabold uppercase tracking-wider text-white xl:text-[21px]">
+                Indian Pharmacopoeia Commission
+              </div>
+            </div>
+          </div>
+
+          <h1 className="mt-9 font-heading text-[40px] font-extrabold leading-[1.15] tracking-tight text-white xl:text-[46px]">
+            <span className="block">AI-powered IP</span>{" "}
+            <span className="block">Stakeholder’s</span>{" "}
+            <span className="block bg-linear-to-r from-[#bae6fd] via-[#a5f3fc] to-status-indigo-line bg-clip-text text-transparent">
+              BRIDGETECH
+            </span>
+          </h1>
+
+          <p className="mx-auto mt-6 max-w-lg text-[15.5px] leading-relaxed text-white/90">
+            Indian Pharmacopoeia Commission — official AI-powered IP Stakeholder’s BRIDGETECH for handling technical enquiries, monograph reviews, reference standards, and automated dispatch operations.
+          </p>
+
+          <div className="mx-auto mt-8 flex max-w-lg flex-wrap items-center justify-center gap-3.5">
+            <div className="flex items-center gap-2.5 rounded-full border border-white/25 bg-white/10 px-5 py-3 text-[15px] font-bold text-white shadow-sm backdrop-blur-md transition-transform hover:scale-105">
+              <Sparkles className="h-5 w-5 text-amber-300" />
+              <span>IP 2026 Monographs</span>
+            </div>
+            <div className="flex items-center gap-2.5 rounded-full border border-white/25 bg-white/10 px-5 py-3 text-[15px] font-bold text-white shadow-sm backdrop-blur-md transition-transform hover:scale-105">
+              <ShieldCheck className="h-5 w-5 text-emerald-300" />
+              <span>ISO 17025 Certified</span>
+            </div>
+            <div className="flex items-center gap-2.5 rounded-full border border-white/25 bg-white/10 px-5 py-3 text-[15px] font-bold text-white shadow-sm backdrop-blur-md transition-transform hover:scale-105">
+              <Zap className="h-5 w-5 text-sky-300" />
+              <span>24H SLA Protocol</span>
+            </div>
+          </div>
+        </div>
+      </aside>
+
       <main className="relative isolate flex w-full flex-col items-center justify-center overflow-y-auto px-5 py-10 sm:px-10 lg:w-1/2">
         <PageBackdrop />
 
         <div className="w-full max-w-md">
-          <div className="rounded-2xl border border-transparent bg-surface p-6 shadow-card sm:p-8 dark:border-line/60">
-            <div className="flex items-center justify-between gap-4">
-              <h2 className="font-heading text-[30px] font-bold leading-tight text-ink">
+          <div className="rounded-2xl border border-transparent bg-surface p-6 pt-5 shadow-card sm:p-8 sm:pt-5 dark:border-line/60">
+            <div className="flex items-end justify-between gap-4">
+              <h2 className="font-heading text-[28px] font-bold leading-tight text-ink sm:text-[30px]">
                 Sign in
               </h2>
-              <span className="brand-plate shrink-0">
-                <img
-                  src="/anuvadini_new_logo 2.png"
-                  alt="Anuvadini Logo"
-                  width="512"
-                  height="288"
-                  className="h-11 w-36 object-cover"
-                />
-              </span>
+              <img
+                src="/imageFile1.png"
+                alt="IPC Emblem Logo"
+                width="103"
+                height="199"
+                className="h-20 w-auto shrink-0 object-contain sm:h-22"
+              />
             </div>
-            <p className="mt-1.5 text-[14.5px] text-ink-muted">
+            <p className="mt-1.5 text-[13.5px] text-ink-muted">
               Enter your credentials to continue to your workspace.
             </p>
 
@@ -343,62 +392,29 @@ export function LoginPage() {
             )}
           </div>
 
-          <p className="mt-6 text-center text-[12.5px] text-ink-muted">
-            © 2026 Integrated Processing Centre · Indian Pharmacopoeia
-            Commission · Powered by Anuvadini
-          </p>
+          <footer className="mt-6 flex flex-col items-center gap-2 text-center">
+            <p className="text-[12px] text-ink-muted">
+              © 2026 Integrated Processing Centre · Indian Pharmacopoeia
+              Commission
+            </p>
+            <div className="flex items-center gap-2.5">
+              <span className="text-[13.5px] font-semibold text-ink-soft">
+                Powered by
+              </span>
+              <span className="brand-plate">
+                <img
+                  src="/anuvadini_new_logo 2.png"
+                  alt="Anuvadini"
+                  width="512"
+                  height="288"
+                  className="h-11 w-36 object-cover"
+                />
+              </span>
+            </div>
+          </footer>
         </div>
       </main>
 
-      <aside className="relative hidden w-1/2 overflow-hidden bg-primary text-white lg:flex lg:flex-col lg:items-center lg:justify-start lg:pt-8 xl:pt-12">
-        <HeroBackdrop />
-
-        <div className="relative z-10 max-w-xl px-10 text-center lg:px-12">
-          <div className="mb-7 flex flex-col items-center justify-center gap-3">
-            <img
-              src="/imageFile1.png"
-              alt="IPC Emblem Logo"
-              width="103"
-              height="199"
-              className="h-22 w-auto object-contain drop-shadow-lg brightness-110 xl:h-24"
-            />
-            <div className="text-center leading-tight">
-              <div className="text-[15px] font-semibold tracking-wide text-white/95 sm:text-[16px]">
-                भारतीय भेषज संहिता आयोग
-              </div>
-              <div className="mt-1 font-heading text-[19px] font-extrabold uppercase tracking-wider text-white sm:text-[21px]">
-                Indian Pharmacopoeia Commission
-              </div>
-            </div>
-          </div>
-
-          <h1 className="mt-5 font-heading text-[36px] font-extrabold leading-[1.15] tracking-tight text-white xl:text-[42px]">
-            AI-powered IP Stakeholder’s{" "}
-            <span className="bg-linear-to-r from-sky-200 via-cyan-200 to-indigo-200 bg-clip-text text-transparent">
-              BRIDGETECH
-            </span>
-          </h1>
-
-          <p className="mx-auto mt-4 max-w-lg text-[15.5px] leading-relaxed text-white/85">
-            Indian Pharmacopoeia Commission — official AI-powered IP Stakeholder’s BRIDGETECH for handling technical enquiries, monograph reviews, reference standards, and automated dispatch operations.
-          </p>
-
-          <div className="mt-8 flex flex-wrap items-center justify-center gap-3.5">
-            <div className="flex items-center gap-2.5 rounded-full border border-white/20 bg-white/10 px-5 py-2.5 text-[14.5px] font-bold text-white/95 shadow-sm backdrop-blur-md transition-transform hover:scale-105">
-              <Sparkles className="h-5 w-5 text-amber-300" />
-              <span>IP 2026 Monographs</span>
-            </div>
-            <div className="flex items-center gap-2.5 rounded-full border border-white/20 bg-white/10 px-5 py-2.5 text-[14.5px] font-bold text-white/95 shadow-sm backdrop-blur-md transition-transform hover:scale-105">
-              <ShieldCheck className="h-5 w-5 text-emerald-300" />
-              <span>ISO 17025 Certified</span>
-            </div>
-            <div className="flex items-center gap-2.5 rounded-full border border-white/20 bg-white/10 px-5 py-2.5 text-[14.5px] font-bold text-white/95 shadow-sm backdrop-blur-md transition-transform hover:scale-105">
-              <Zap className="h-5 w-5 text-sky-300" />
-              <span>24H SLA Protocol</span>
-            </div>
-          </div>
-        </div>
-      </aside>
     </div>
   );
 }

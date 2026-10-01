@@ -228,7 +228,7 @@ nothing is sent. **A read does not** (§17, open items). Sign in to the right ac
 `nic:browser:discover` shows the signed-in address, masked, in the tab title. `NIC_EMAIL` also configures the IMAP/SMTP side
 (mechanism 1):
 
-- current development/test mailbox: `contact.ecoclubs-edu@gov.in` (temporary)
+- current Front Office mailbox (development and production): `saurabh.sahoo@ipc.gov.in`
 - future production mailbox: `lab.ipc@gov.in`
 
 Switching mailboxes is a configuration change (`NIC_EMAIL`) plus signing in to the other account in
@@ -919,7 +919,7 @@ With `NIC_BROWSER_MAILBOX=true` a BRIDGETECH account can read the live mailbox a
 
 ## 15. Production Considerations
 
-- **Mailbox switch** (`contact.ecoclubs-edu@gov.in` → `lab.ipc@gov.in`): change `NIC_EMAIL` for the
+- **Mailbox switch** (`saurabh.sahoo@ipc.gov.in` → `lab.ipc@gov.in`): change `NIC_EMAIL` for the
   IMAP/SMTP side, then sign in to the new account in the dedicated Chrome. No code change is needed
   for either mechanism. With `NIC_BROWSER_MAILBOX=true`, `NIC_EMAIL` is also the second Front
   Office's sign-in and the mailbox its stored messages are filed under: after the switch that
@@ -1337,8 +1337,8 @@ In `backend/.env.local` on the mailbox host:
 
 ```env
 NIC_BROWSER_MAILBOX=true
-NIC_EMAIL=contact.ecoclubs-edu@gov.in       # the mailbox, and the second Front Office's sign-in
-NIC_FRONT_OFFICE_NAME=Eco-Clubs Front Office
+NIC_EMAIL=saurabh.sahoo@ipc.gov.in          # the mailbox, and the second Front Office's sign-in
+NIC_FRONT_OFFICE_NAME=IPC Front Office
 NIC_BROWSER_TEST_RECIPIENT=<your test inquirer address>
 NIC_ALLOW_OUTBOUND=false                    # true only when real inquirers may be answered
 NIC_ALLOW_INTERNAL_FORWARD=false            # true also allows the forward to OFFICER_IN_CHARGE_EMAIL

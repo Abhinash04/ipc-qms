@@ -63,7 +63,7 @@ const headerRow = (label, addresses) =>
 function openMessage({
   address = 'anita.rao@example.invalid',
   name = 'Anita Rao',
-  to = ['contact.ecoclubs-edu@gov.in'],
+  to = ['saurabh.sahoo@ipc.gov.in'],
   cc = null,
   bcc = null,
   timestamp = 'Mon, 21 Sep 2026 11:19:09 AM +0530',
@@ -210,7 +210,7 @@ describe('reading the open message', () => {
 
     expect(extracted.fromAddress).toBe('anita.rao@example.invalid');
     expect(extracted.fromName).toBe('Anita Rao');
-    expect(extracted.to).toEqual(['contact.ecoclubs-edu@gov.in']);
+    expect(extracted.to).toEqual(['saurabh.sahoo@ipc.gov.in']);
   });
 
   it('reads the labelled To row, and leaves Cc empty when Zoho omits the row', () => {

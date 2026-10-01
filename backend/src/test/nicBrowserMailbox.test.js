@@ -110,7 +110,7 @@ beforeEach(() => {
   nicMailbox.resetSyncState();
   vi.stubEnv('NIC_BROWSER_MAILBOX', 'true');
   vi.stubEnv('NIC_EMAIL', NIC_ADDRESS);
-  vi.stubEnv('NIC_FRONT_OFFICE_NAME', 'Eco-Clubs Front Office');
+  vi.stubEnv('NIC_FRONT_OFFICE_NAME', 'IPC Front Office');
   vi.stubEnv('NIC_BROWSER_TEST_RECIPIENT', 'ravi@pharma.example');
   browser.sendMail = vi.fn(async () => ({ ok: true, providerMessageId: null }));
 });
@@ -122,7 +122,7 @@ afterEach(() => {
 
 describe('the second Front Office', () => {
   it('exists only when the NICeMail browser mailbox is enabled, and signs in as NIC_EMAIL', () => {
-    expect(nicFrontOfficeUser()).toMatchObject({ role: ROLES.FRONT_OFFICE, email: NIC_ADDRESS, name: 'Eco-Clubs Front Office' });
+    expect(nicFrontOfficeUser()).toMatchObject({ role: ROLES.FRONT_OFFICE, email: NIC_ADDRESS, name: 'IPC Front Office' });
     expect(findByEmail(NIC_ADDRESS)?.id).toBe('USR-0014');
 
     vi.stubEnv('NIC_BROWSER_MAILBOX', 'false');
@@ -345,7 +345,7 @@ describe('outbound mail follows the case mailbox', () => {
       sourceMailbox: nicCase,
     });
 
-    expect(sent).toMatchObject({ transport: 'nic-browser', from: `Eco-Clubs Front Office <${NIC_ADDRESS}>` });
+    expect(sent).toMatchObject({ transport: 'nic-browser', from: `IPC Front Office <${NIC_ADDRESS}>` });
     expect(browser.sendMail).toHaveBeenCalledTimes(1);
   });
 
@@ -365,7 +365,7 @@ describe('outbound mail follows the case mailbox', () => {
       sourceMailbox: nicCase,
     });
 
-    expect(sent).toMatchObject({ transport: 'nic-browser', from: `Eco-Clubs Front Office <${NIC_ADDRESS}>` });
+    expect(sent).toMatchObject({ transport: 'nic-browser', from: `IPC Front Office <${NIC_ADDRESS}>` });
     expect(browser.sendMail).toHaveBeenCalledTimes(1);
   });
 

@@ -842,9 +842,8 @@ The two-key interlock on outbound mail is deliberate: selecting the transport mu
 be enough to start mailing the public from a `.gov.in` address.
 
 **The mailbox address is not hardcoded anywhere.** Moving to production is a one-variable change:
-set `NIC_EMAIL=lab.ipc@gov.in` (and `NIC_TEST_RECIPIENT` to match). `contact.ecoclubs-edu@gov.in`
-appears in no executable source at all — only in a developer's own `backend/.env.local`, one test
-and the docs.
+set `NIC_EMAIL=lab.ipc@gov.in` (and `NIC_TEST_RECIPIENT` to match). `saurabh.sahoo@ipc.gov.in`, the current Front Office
+account, appears in no executable source at all — only in the env files, one test and the docs.
 
 > Grepping for `lab.ipc@gov.in` returns 18 hits inside `src/data/ipcKnowledge.json`. **Those are not
 > configuration.** They are IPC letterhead and FAQ text carried verbatim out of the source corpus by

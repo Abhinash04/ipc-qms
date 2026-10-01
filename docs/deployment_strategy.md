@@ -134,7 +134,7 @@ That makes it a **single-channel** design for NICeMail cases, which is what Sect
 
 ### 2.2 Changing the NICeMail account (test account → lab.ipc@gov.in)
 
-The Browser Agent is currently exercised with a test account (`contact.ecoclubs-edu@gov.in`). The address is **configuration, not code**. Production will use **`lab.ipc@gov.in`**. Everything that depends on the account:
+The Browser Agent currently runs on the Front Office account `saurabh.sahoo@ipc.gov.in`. The address is **configuration, not code**. Production will use **`lab.ipc@gov.in`**. Everything that depends on the account:
 
 | # | Item | What it controls | Action for production | Evidence |
 |---|---|---|---|---|
