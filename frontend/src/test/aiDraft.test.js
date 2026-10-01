@@ -5,9 +5,11 @@ import { findUserById } from '@/constants/mockUsers';
 import { FRONT_OFFICE_USER as FRONT_OFFICE } from '@/test/frontOfficeUser';
 import {
   assembleDraftEmail,
+  IPC_DISCLAIMER,
   IPC_SIGNATURE,
   NOT_ESTABLISHED_SENTENCE,
 } from '@/services/ai/draftComposer';
+import { draftResponse } from '@/services/ai/mockAiService';
 import { fakeCaseMail } from '@/test/fakeCaseMail';
 import { EXTERNAL_INQUIRER as INQUIRER } from '@/test/externalInquirer';
 
@@ -56,20 +58,29 @@ describe('assembleDraftEmail keeps identity out of the model’s hands', () => {
   const query = {
     queryId: 'QRY-2026-00001',
     subject: 'Monograph revision',
+    createdAt: '2026-09-10T08:00:00.000Z',
     inquirer: { name: 'Abhinash Pritiraj', email: 'a@example.com' },
   };
 
-  it('greets the real inquirer from query data', () => {
+  it('addresses and greets the real inquirer from query data', () => {
     const email = assembleDraftEmail({ query, draft: GEMMA_DRAFT });
-    expect(email).toContain('Dear Abhinash Pritiraj,');
+    expect(email).toContain('To,\nAbhinash Pritiraj <a@example.com>');
+    expect(email).toContain('Sir/Madam,\nGreetings from Indian Pharmacopoeia Commission (IPC)!');
   });
 
   it('ends with the constant IPC signature', () => {
     expect(assembleDraftEmail({ query, draft: GEMMA_DRAFT }).endsWith(IPC_SIGNATURE)).toBe(true);
   });
 
-  it('quotes the real query id as the reference', () => {
-    expect(assembleDraftEmail({ query, draft: GEMMA_DRAFT })).toContain('QRY-2026-00001');
+  it('cites the enquiry subject and date from query data, not from the model', () => {
+    const email = assembleDraftEmail({ query, draft: { ...GEMMA_DRAFT, subject: 'Model invented subject' } });
+    expect(email).toContain('Sub: Monograph revision -reg.');
+    expect(email).toContain('This is in reference to your email dated 10.09.2026 on the subject matter cited above.');
+    expect(email).not.toContain('Model invented subject');
+  });
+
+  it('closes with the standard disclaimer just above the signature', () => {
+    expect(assembleDraftEmail({ query, draft: GEMMA_DRAFT }).endsWith(`${IPC_DISCLAIMER}\n\n${IPC_SIGNATURE}`)).toBe(true);
   });
 
   it('never lets a model-supplied name reach the output', () => {
@@ -96,7 +107,9 @@ describe('assembleDraftEmail keeps identity out of the model’s hands', () => {
 
   it('falls back to a neutral salutation when the inquirer has no name', () => {
     const anonymous = { ...query, inquirer: { email: 'a@example.com' } };
-    expect(assembleDraftEmail({ query: anonymous, draft: GEMMA_DRAFT })).toContain('Dear Sir/Madam,');
+    const email = assembleDraftEmail({ query: anonymous, draft: GEMMA_DRAFT });
+    expect(email).toContain('To,\na@example.com');
+    expect(email).toContain('Sir/Madam,\nGreetings from Indian Pharmacopoeia Commission (IPC)!');
   });
 });
 
@@ -190,10 +203,10 @@ describe('the composed email has exactly one section per question', () => {
 
   it('preserves the email structure', () => {
     const text = email();
-    expect(text).toContain('Subject: Response regarding Clarification on submission documentation');
-    expect(text).toContain('Dear Abhinash Pritiraj,');
-    expect(text).toContain('reference QRY-2026-00005');
-    expect(text.endsWith(IPC_SIGNATURE)).toBe(true);
+    expect(text.startsWith('[FIRST DRAFT]')).toBe(true);
+    expect(text).toContain('Sub: Clarification on submission documentation and compliance requirements -reg.');
+    expect(text).toContain('To,\nAbhinash Pritiraj <a@example.com>');
+    expect(text.endsWith(`${IPC_DISCLAIMER}\n\n${IPC_SIGNATURE}`)).toBe(true);
   });
 
   it('carries no legacy unanswered block', () => {
@@ -322,9 +335,9 @@ describe('assembleDraftEmail renders one numbered section per question', () => {
 
   it('still greets the real inquirer and signs off constantly', () => {
     const email = assembleDraftEmail({ query, draft: SECTIONED });
-    expect(email).toContain('Dear Abhinash Pritiraj,');
-    expect(email.endsWith(IPC_SIGNATURE)).toBe(true);
-    expect(email).toContain('QRY-2026-00004');
+    expect(email).toContain('To,\nAbhinash Pritiraj <a@example.com>');
+    expect(email).toContain('Sub: Degradation products and excipient compatibility -reg.');
+    expect(email.endsWith(`${IPC_DISCLAIMER}\n\n${IPC_SIGNATURE}`)).toBe(true);
   });
 
   it('falls back to the not-established sentence when a section has no paragraphs', () => {
@@ -342,11 +355,63 @@ describe('assembleDraftEmail renders one numbered section per question', () => {
           sufficiency: 'NOT_ESTABLISHED',
           paragraphs: [],
         },
+        {
+          question: 2,
+          questionText: 'A second question?',
+          topic: 'Second topic',
+          sufficiency: 'NOT_ESTABLISHED',
+          paragraphs: [],
+        },
       ],
     };
     const email = assembleDraftEmail({ query, draft: long });
     expect(email).toContain('1. Short topic');
     expect(email).not.toContain('xxxxxxxxxx');
+  });
+});
+
+describe('the draft follows the IPC sample letters', () => {
+  const query = {
+    queryId: 'QRY-2026-00009',
+    subject: 'Re: Clarification Required on Lactose Monohydrate Monograph',
+    createdAt: '2026-09-10T08:00:00.000Z',
+    inquirer: { name: 'Ms. Pujan Mehta', email: 'Pujan_Mehta@intaspharma.com' },
+  };
+
+  it('lays out a single answer like the samples, with no numbered heading', () => {
+    const draft = {
+      answers: [
+        {
+          question: 1,
+          questionText: 'Are both tests required?',
+          topic: 'Loss on drying and water',
+          sufficiency: 'ANSWERED',
+          paragraphs: ['This is to inform you that both the tests have to be performed.'],
+          sources: [],
+        },
+      ],
+    };
+    expect(assembleDraftEmail({ query, draft })).toBe(
+      [
+        '[FIRST DRAFT]',
+        'To,\nMs. Pujan Mehta <Pujan_Mehta@intaspharma.com>',
+        'Sub: Clarification Required on Lactose Monohydrate Monograph -reg.',
+        'Madam,\nGreetings from Indian Pharmacopoeia Commission (IPC)!',
+        'This is in reference to your email dated 10.09.2026 on the subject matter cited above. This is to inform you that both the tests have to be performed.',
+        IPC_DISCLAIMER,
+        IPC_SIGNATURE,
+      ].join('\n\n'),
+    );
+  });
+
+  it('gives the offline fallback draft the same letterhead and closing', () => {
+    const text = draftResponse({ ...query, description: 'Are both loss on drying and water determination required?' });
+    expect(text).toContain('To,\nMs. Pujan Mehta <Pujan_Mehta@intaspharma.com>');
+    expect(text).toContain('Sub: Clarification Required on Lactose Monohydrate Monograph -reg.');
+    expect(text).toContain('Madam,\nGreetings from Indian Pharmacopoeia Commission (IPC)!');
+    expect(text).toContain('This is in reference to your email dated 10.09.2026 on the subject matter cited above.');
+    expect(text.endsWith(`${IPC_DISCLAIMER}\n\n${IPC_SIGNATURE}`)).toBe(true);
+    expect(text).not.toMatch(/^Dear /m);
   });
 });
 

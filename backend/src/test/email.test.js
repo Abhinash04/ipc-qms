@@ -159,7 +159,7 @@ describe('acknowledgement template', () => {
     expect(ack.from).toBe('Indian Pharmacopoeia Commission (IPC) <ipc-mock@example.com>');
     expect(ack.to).toEqual(['inquirer@test.invalid']);
     expect(ack.subject).toBe(`${ACKNOWLEDGEMENT_SUBJECT} [QRY-2026-00001]`);
-    expect(ack.body).toContain('Greetings from the Indian Pharmacopoeia Commission (IPC)!');
+    expect(ack.body).toContain('Greetings from Indian Pharmacopoeia Commission (IPC)!');
     expect(ack.body).toContain('This is an auto-generated email. Please do not reply to this message.');
   });
 

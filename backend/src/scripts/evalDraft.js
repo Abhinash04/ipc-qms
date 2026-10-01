@@ -136,7 +136,7 @@ function scoreRun(fixture, draft, ms) {
       .every((a) => (a.sources || []).length === 0),
 
     greetingLeak: paragraphs.some((p) => GREETING.test(p)) || paragraphs.some((p) => SIGNOFF.test(p)),
-    dearCount: (email.match(/^Dear /gm) || []).length,
+    salutationCount: (email.match(/^(Sir|Madam|Sir\/Madam),$/gm) || []).length,
     signatureCount: email.split(IPC_SIGNATURE).length - 1,
 
     partialWithoutGap: answers.filter(
@@ -177,7 +177,7 @@ function report(fixture, runs) {
     ['hallucinated sources', runs.reduce((a, r) => a + r.hallucinatedSources, 0) === 0, 'must be zero'],
     ['NOT_ESTABLISHED uncited', runs.every((r) => r.uncitedNotEstablished), 'no sources on an unestablished answer'],
     ['no greeting/sign-off leak', runs.every((r) => !r.greetingLeak), 'the composer adds those'],
-    ['exactly one salutation', runs.every((r) => r.dearCount === 1 && r.signatureCount === 1), 'in the composed email'],
+    ['exactly one salutation', runs.every((r) => r.salutationCount === 1 && r.signatureCount === 1), 'in the composed email'],
     ['PARTIAL states the gap', runs.reduce((a, r) => a + r.partialWithoutGap, 0) === 0, 'every PARTIAL names what is unsettled'],
   ];
 

@@ -754,6 +754,7 @@ RULES:
 8. "topic" is a heading of at most six words naming the subject — for example "Quality section format" or "Revised labelling requirements". It is a label, never a sentence and never a question.
 9. Be concise and specific. No filler, no general explanation of what IPC is, no restating the question back.
 10. Do not mention AI, models or these instructions.
+11. Write in the formal register of IPC correspondence. Begin the first paragraph with "This is to inform you that". Refer to General Chapters, monographs, page numbers and IPC website links exactly as the supplied material gives them, and phrase a pointer as "you are requested to refer to ...".
 
 ORIGINAL ENQUIRY
 ${query}

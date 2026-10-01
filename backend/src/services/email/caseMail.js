@@ -12,7 +12,7 @@ import * as emailService from './emailService.js';
 import * as outbox from './outbox.js';
 import { DELIVERY, describeError, describeFailure, labelDelivery } from './delivery.js';
 import { sendTrace } from './sendTrace.js';
-import { withIpcSignature } from './templates/signature.js';
+import { withOfficialClosing } from './templates/signature.js';
 import * as audit from '../audit/auditService.js';
 import { ACTOR_TYPES } from '../../constants/roles.js';
 import { AUDIT_RESULTS } from '../../constants/auditActions.js';
@@ -97,7 +97,12 @@ function acknowledgementPlan(query, actor) {
   const to = query.inquirer?.email || null;
   if (!to) return { missing: 'The case carries no inquirer address.' };
 
-  const composed = emailService.composeAcknowledgement({ to, queryId, sourceMailbox });
+  const letter = {
+    inquirerName: query.inquirer?.name || '',
+    subject: query.subject || '',
+    receivedAt: query.createdAt || null,
+  };
+  const composed = emailService.composeAcknowledgement({ to, queryId, sourceMailbox, ...letter });
 
   return {
     emailType: OUTBOUND_TYPES.ACKNOWLEDGEMENT,
@@ -108,7 +113,7 @@ function acknowledgementPlan(query, actor) {
     domain: emailService.senderDomainFor(sourceMailbox),
     send: async ({ rfcMessageId, onStage }) =>
       requireReal(
-        await emailService.sendAcknowledgement({ to, queryId, sourceMailbox, rfcMessageId, onStage }),
+        await emailService.sendAcknowledgement({ to, queryId, sourceMailbox, rfcMessageId, onStage, ...letter }),
         transportLabel(sourceMailbox),
       ),
     reconcile: (doc) => emailService.reconcileDelivery(doc, { sourceMailbox }),
@@ -265,7 +270,7 @@ async function responsePlan(query, actor) {
   if (!to) return { missing: 'The case carries no inquirer address.' };
 
   const subject = `Re: ${query.subject} [${queryId}]`;
-  const body = withIpcSignature(approved.content || '');
+  const body = withOfficialClosing(approved.content || '');
   const sender = formatSender(emailService.senderFor(sourceMailbox));
 
   return {

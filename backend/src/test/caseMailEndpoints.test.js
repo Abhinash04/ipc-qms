@@ -43,7 +43,7 @@ import { authHeader } from './helpers/auth.js';
 import { ROLES } from '../constants/roles.js';
 import * as emailService from '../services/email/emailService.js';
 import { QueryCase, ResponseVersion, EmailMessage, AuditEvent, OutboundEmail } from '../models/index.js';
-import { IPC_SIGNATURE } from '../services/email/templates/signature.js';
+import { IPC_DISCLAIMER, IPC_SIGNATURE } from '../services/email/templates/signature.js';
 
 const QUERY_ID = 'QRY-2026-00001';
 const INQUIRER = 'ravi@pharma.example';
@@ -148,6 +148,8 @@ describe('POST /emails/response — the Dispatch page retry', () => {
       to: INQUIRER,
       body: `The applicable limit is stated in the current monograph.
 
+${IPC_DISCLAIMER}
+
 ${IPC_SIGNATURE}`,
     });
 
@@ -164,6 +166,8 @@ ${IPC_SIGNATURE}`,
       to: INQUIRER,
       subject: `Re: Dissolution limits [${QUERY_ID}]`,
       body: `The applicable limit is stated in the current monograph.
+
+${IPC_DISCLAIMER}
 
 ${IPC_SIGNATURE}`,
     });

@@ -408,8 +408,8 @@ describe('AI is derived from the query, never a fixed template', () => {
     const draftB = s().getLatestVersion(second).content;
 
     expect(draftA).not.toBe(draftB);
-    expect(draftA).toContain(first);
-    expect(draftB).toContain(second);
+    expect(draftA).toContain('Sub: Clarification on monograph revision and impurity limits -reg.');
+    expect(draftB).toContain('Sub: Certificate reissue request -reg.');
     expect(draftA).toContain('AI-GENERATED FIRST DRAFT');
   });
 

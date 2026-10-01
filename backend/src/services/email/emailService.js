@@ -83,13 +83,16 @@ async function sendEmail(
   };
 }
 
-function composeAcknowledgement({ to, queryId, sourceMailbox = null }) {
+function composeAcknowledgement({ to, queryId, sourceMailbox = null, inquirerName, subject, receivedAt }) {
   const frontOffice = senderFor(sourceMailbox);
   return buildAcknowledgement({
     to,
     fromEmail: frontOffice?.email,
     fromName: frontOffice?.name,
     queryId,
+    inquirerName,
+    subject,
+    receivedAt,
   });
 }
 
@@ -101,8 +104,11 @@ async function sendAcknowledgement({
   sourceMailbox = null,
   rfcMessageId = null,
   onStage = null,
+  inquirerName,
+  subject,
+  receivedAt,
 }) {
-  const message = composeAcknowledgement({ to, queryId, sourceMailbox });
+  const message = composeAcknowledgement({ to, queryId, sourceMailbox, inquirerName, subject, receivedAt });
 
   return sendEmail(
     { ...message, timestamp, providerThreadId, messageIdHeader: rfcMessageId },

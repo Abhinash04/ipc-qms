@@ -1,7 +1,7 @@
 import { MOCK_USERS } from '@/constants/mockUsers';
 import { findDivisionById } from '@/constants/mockDivisions';
 import { ROLES } from '@/constants/roles';
-import { IPC_SIGNATURE } from '@/services/ai/draftComposer';
+import { IPC_DISCLAIMER, IPC_SIGNATURE, letterOpening, referenceSentence } from '@/services/ai/draftComposer';
 
 const TOPIC_DIVISIONS = {
   'monograph': 'DIV-003',
@@ -212,14 +212,11 @@ export function recommendTopOfficials(query, users = MOCK_USERS, openQueries = [
   }));
 }
 
-const SIGNATURE = IPC_SIGNATURE;
-
 export function draftResponse(query) {
   if (!query) return '';
 
   const keyPoints = extractKeyPoints(query);
   const topics = detectTopics(query);
-  const inquirer = query.inquirer?.name || 'Sir/Madam';
 
   const pointBlock = keyPoints.length
     ? keyPoints
@@ -227,23 +224,21 @@ export function draftResponse(query) {
         .join('\n\n')
     : '[Response required — the enquiry raises no itemised points; summarise the position here.]';
 
-  const topicLine = topics.length
-    ? `Your enquiry has been reviewed by the division responsible for ${topics.slice(0, 3).join(', ')}.`
-    : 'Your enquiry has been reviewed by the concerned division.';
+  const reviewedBy = topics.length
+    ? `the division responsible for ${topics.slice(0, 3).join(', ')}`
+    : 'the concerned division';
 
   return `[AI-GENERATED FIRST DRAFT — requires review and editing by the assigned official before it can proceed.]
 
-Dear ${inquirer},
+${letterOpening({ inquirer: query.inquirer || {}, subject: query.subject })}
 
-Thank you for your enquiry dated ${new Date(query.createdAt).toLocaleDateString()} regarding "${query.subject}".
-
-${topicLine} Our response to the points you raised follows.
+${referenceSentence(query.createdAt)} This is to inform you that your query has been examined by ${reviewedBy}, and the response to the points raised is as follows:
 
 ${pointBlock}
 
-Should you require any further clarification, please write back quoting reference ${query.queryId}.
+${IPC_DISCLAIMER}
 
-${SIGNATURE}`;
+${IPC_SIGNATURE}`;
 }
 
 export const mockAiService = { summarise, recommendAssignee, draftResponse, detectTopics, extractKeyPoints };
