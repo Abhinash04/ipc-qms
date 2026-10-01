@@ -380,9 +380,7 @@ export function LoginPage() {
           </h1>
 
           <p className="mx-auto mt-4 max-w-lg text-[15.5px] leading-relaxed text-white/85">
-            Indian Pharmacopoeia Commission (IPC QMS) — official AI-powered IP
-            Stakeholder’s BRIDGETECH for handling technical enquiries, monograph
-            reviews, reference standards, and automated dispatch operations.
+            Indian Pharmacopoeia Commission — official AI-powered IP Stakeholder’s BRIDGETECH for handling technical enquiries, monograph reviews, reference standards, and automated dispatch operations.
           </p>
 
           <div className="mt-8 flex flex-wrap items-center justify-center gap-3.5">
