@@ -41,8 +41,12 @@ export function LoginPage() {
   const [error, setError] = useState(null);
   const [devOpen, setDevOpen] = useState(false);
 
-  const nicFrontOfficeEmail = (import.meta.env.VITE_NIC_FRONT_OFFICE_EMAIL || "").trim();
-  const googleEnabled = Boolean((import.meta.env.VITE_GOOGLE_CLIENT_ID || "").trim());
+  const nicFrontOfficeEmail = (
+    import.meta.env.VITE_NIC_FRONT_OFFICE_EMAIL || ""
+  ).trim();
+  const googleEnabled = Boolean(
+    (import.meta.env.VITE_GOOGLE_CLIENT_ID || "").trim(),
+  );
   const isDark = resolved === "dark";
 
   const home = currentUser ? roleHome(currentUser.role) : null;
@@ -77,7 +81,8 @@ export function LoginPage() {
       navigate(roleHome(user.role), { replace: true });
     } catch (caught) {
       const message =
-        caught?.response?.data?.error || "Google sign-in failed. Please try again.";
+        caught?.response?.data?.error ||
+        "Google sign-in failed. Please try again.";
       setError(message);
       notify.error("Sign-in failed", message);
     } finally {
@@ -96,8 +101,7 @@ export function LoginPage() {
       notify.success(`Signed in as ${user.name}`);
       navigate(roleHome(user.role), { replace: true });
     } catch (caught) {
-      const message =
-        caught?.response?.data?.error || "Dev sign-in failed.";
+      const message = caught?.response?.data?.error || "Dev sign-in failed.";
       setError(message);
     } finally {
       setLoading(false);
@@ -112,7 +116,9 @@ export function LoginPage() {
         <div className="w-full max-w-md">
           <div className="rounded-2xl border border-transparent bg-surface p-6 shadow-card sm:p-8 dark:border-line/60">
             <div className="flex items-center justify-between gap-4">
-              <h2 className="font-heading text-[30px] font-bold leading-tight text-ink">Sign in</h2>
+              <h2 className="font-heading text-[30px] font-bold leading-tight text-ink">
+                Sign in
+              </h2>
               <span className="brand-plate shrink-0">
                 <img
                   src="/anuvadini_new_logo 2.png"
@@ -129,7 +135,10 @@ export function LoginPage() {
 
             <form onSubmit={submit} className="mt-7 space-y-5">
               <div>
-                <label htmlFor="login-email" className="mb-2 block text-[14px] font-medium text-ink-soft">
+                <label
+                  htmlFor="login-email"
+                  className="mb-2 block text-[14px] font-medium text-ink-soft"
+                >
                   Email
                 </label>
                 <div className="relative">
@@ -150,7 +159,10 @@ export function LoginPage() {
               </div>
 
               <div>
-                <label htmlFor="login-password" className="mb-2 block text-[14px] font-medium text-ink-soft">
+                <label
+                  htmlFor="login-password"
+                  className="mb-2 block text-[14px] font-medium text-ink-soft"
+                >
                   Password
                 </label>
                 <div className="relative">
@@ -169,11 +181,17 @@ export function LoginPage() {
                   />
                   <button
                     type="button"
-                    aria-label={showPassword ? "Hide password" : "Show password"}
+                    aria-label={
+                      showPassword ? "Hide password" : "Show password"
+                    }
                     onClick={() => setShowPassword(!showPassword)}
                     className="absolute inset-e-2 top-1/2 -translate-y-1/2 cursor-pointer p-2 text-ink-muted transition-colors hover:text-ink"
                   >
-                    {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                    {showPassword ? (
+                      <EyeOff className="h-5 w-5" />
+                    ) : (
+                      <Eye className="h-5 w-5" />
+                    )}
                   </button>
                 </div>
               </div>
@@ -199,7 +217,10 @@ export function LoginPage() {
                   </>
                 ) : (
                   <>
-                    <LogIn className="h-5 w-5 rtl:rotate-180" strokeWidth={2.2} />
+                    <LogIn
+                      className="h-5 w-5 rtl:rotate-180"
+                      strokeWidth={2.2}
+                    />
                     <span>Sign in</span>
                   </>
                 )}
@@ -213,7 +234,11 @@ export function LoginPage() {
                   or
                   <span className="h-px flex-1 bg-line" aria-hidden="true" />
                 </div>
-                <GoogleSignInButton onCredential={googleSubmit} onError={setError} dark={isDark} />
+                <GoogleSignInButton
+                  onCredential={googleSubmit}
+                  onError={setError}
+                  dark={isDark}
+                />
               </div>
             )}
 
@@ -305,7 +330,9 @@ export function LoginPage() {
                                 {user.role.replaceAll("_", " ")}
                               </span>
                             </div>
-                            <div className="truncate text-[12.5px] text-ink-muted">{user.email}</div>
+                            <div className="truncate text-[12.5px] text-ink-muted">
+                              {user.email}
+                            </div>
                           </div>
                         </button>
                       ))}
@@ -317,7 +344,8 @@ export function LoginPage() {
           </div>
 
           <p className="mt-6 text-center text-[12.5px] text-ink-muted">
-            © 2026 Integrated Processing Centre · Indian Pharmacopoeia Commission · Powered by Anuvadini
+            © 2026 Integrated Processing Centre · Indian Pharmacopoeia
+            Commission · Powered by Anuvadini
           </p>
         </div>
       </main>
@@ -345,14 +373,16 @@ export function LoginPage() {
           </div>
 
           <h1 className="mt-5 font-heading text-[36px] font-extrabold leading-[1.15] tracking-tight text-white xl:text-[42px]">
-            AI-powered IP Stakeholder’s {" "}
+            AI-powered IP Stakeholder’s{" "}
             <span className="bg-linear-to-r from-sky-200 via-cyan-200 to-indigo-200 bg-clip-text text-transparent">
               BRIDGETECH
             </span>
           </h1>
 
           <p className="mx-auto mt-4 max-w-lg text-[15.5px] leading-relaxed text-white/85">
-            Indian Pharmacopoeia Commission (IPC QMS) — official AI-powered IP Stakeholder’s BRIDGETECH for handling technical enquiries, monograph reviews, reference standards, and automated dispatch operations.
+            Indian Pharmacopoeia Commission (IPC QMS) — official AI-powered IP
+            Stakeholder’s BRIDGETECH for handling technical enquiries, monograph
+            reviews, reference standards, and automated dispatch operations.
           </p>
 
           <div className="mt-8 flex flex-wrap items-center justify-center gap-3.5">
