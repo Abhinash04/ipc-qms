@@ -20,8 +20,16 @@ export function NotificationsPage() {
   const paths = useRoutePaths();
   const notifications = useWorkflowStore((state) => state.notifications);
 
+  const getNotificationTimestamp = (notif) => {
+    if (!notif) return 0;
+    const iso = notif.at || notif.createdAt || notif.timestamp || notif.time;
+    if (!iso) return 0;
+    const ms = Date.parse(iso);
+    return Number.isNaN(ms) ? 0 : ms;
+  };
+
   const storeOrdered = [...notifications].sort(
-    (a, b) => new Date(b.at) - new Date(a.at),
+    (a, b) => getNotificationTimestamp(b) - getNotificationTimestamp(a),
   );
   const displayList = storeOrdered;
 

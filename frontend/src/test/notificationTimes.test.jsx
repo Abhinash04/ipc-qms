@@ -62,4 +62,26 @@ describe('notification times', () => {
     expect(screen.queryByText(/19 Aug 2026/)).toBeNull();
     expect(screen.queryByText(/Invalid Date/)).toBeNull();
   });
+
+  it('renders recent notifications above older notifications in the bell dropdown', () => {
+    useWorkflowStore.setState({
+      notifications: [
+        note('NOTIF-OLD', minutesAgo(2880), 'Two days old notification'),
+        note('NOTIF-NEW', minutesAgo(26), '26 minutes ago notification'),
+      ],
+    });
+    render(
+      <MemoryRouter>
+        <NotificationBell />
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /Notifications/ }));
+
+    const notifItems = screen.getAllByRole('button').filter((el) => el.getAttribute('tabindex') === '0');
+    expect(notifItems.length).toBe(2);
+    expect(notifItems[0]).toHaveTextContent('26 minutes ago notification');
+    expect(notifItems[1]).toHaveTextContent('Two days old notification');
+  });
 });
+

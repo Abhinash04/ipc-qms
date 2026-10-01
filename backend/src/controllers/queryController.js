@@ -122,7 +122,7 @@ async function loadAllQueries(req, res, next) {
       WorkflowStep.find(f.workflowSteps).limit(MAX_ROWS).lean(),
       Review.find(f.reviews).limit(MAX_ROWS).lean(),
       ResponseVersion.find(f.responseVersions).limit(MAX_ROWS).lean(),
-      Notification.find(f.notifications).limit(MAX_ROWS).lean(),
+      Notification.find(f.notifications).sort({ at: -1 }).limit(MAX_ROWS).lean(),
       EmailMessage.find(f.emailMessages).limit(MAX_ROWS).lean(),
       EmailThread.find(f.emailThreads).limit(MAX_ROWS).lean(),
       AuditEvent.find(f.auditEvents)

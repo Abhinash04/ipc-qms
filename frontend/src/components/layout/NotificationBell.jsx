@@ -44,11 +44,21 @@ export function NotificationBell() {
   const bellRef = useRef(null);
   const popoverRef = useRef(null);
 
-  const userNotifications = notifications.filter((n) =>
-    n.recipientUserId
-      ? n.recipientUserId === currentUser?.id
-      : n.recipientRole === currentUser?.role,
-  );
+  const getNotificationTimestamp = (notif) => {
+    if (!notif) return 0;
+    const iso = notif.at || notif.createdAt || notif.timestamp || notif.time;
+    if (!iso) return 0;
+    const ms = Date.parse(iso);
+    return Number.isNaN(ms) ? 0 : ms;
+  };
+
+  const userNotifications = notifications
+    .filter((n) =>
+      n.recipientUserId
+        ? n.recipientUserId === currentUser?.id
+        : n.recipientRole === currentUser?.role,
+    )
+    .sort((a, b) => getNotificationTimestamp(b) - getNotificationTimestamp(a));
   const count = userNotifications.length;
 
   useEffect(() => {

@@ -124,6 +124,40 @@ describe('the automatic transfer timer card', () => {
     expect(screen.getByText('AUTOMATIC')).toBeInTheDocument();
     expect(screen.getByText(/No action within the 2-minute action limit \(AI match 80%\)/)).toBeInTheDocument();
   });
+
+  it('shows only 3 transfer history items by default and expands when Show more is clicked', () => {
+    const historyItem = (n) => ({
+      fromAssigneeId: OFFICIAL_A.id,
+      toAssigneeId: OFFICIAL_B.id,
+      transferredAt: iso(NOW - n * 60000),
+      reason: `Transfer #${n}`,
+      transferType: 'AUTO_TRANSFER',
+    });
+
+    render(
+      <AutoTransferTimerCard
+        query={assigned({
+          currentAssigneeId: OFFICIAL_B.id,
+          autoTransferCount: 5,
+          transferHistory: [1, 2, 3, 4, 5].map(historyItem),
+        })}
+      />,
+    );
+
+    expect(screen.getByText('Transfer History (5)')).toBeInTheDocument();
+    expect(screen.getByText(/Show remaining 2/)).toBeInTheDocument();
+    expect(screen.getByText('Transfer #1')).toBeInTheDocument();
+    expect(screen.getByText('Transfer #3')).toBeInTheDocument();
+    expect(screen.queryByText('Transfer #4')).toBeNull();
+
+    act(() => {
+      screen.getByText(/Show remaining 2/).click();
+    });
+
+    expect(screen.getByText('Transfer #4')).toBeInTheDocument();
+    expect(screen.getByText('Transfer #5')).toBeInTheDocument();
+    expect(screen.getByText('Show less')).toBeInTheDocument();
+  });
 });
 
 describe('assigning and transferring from the browser', () => {
