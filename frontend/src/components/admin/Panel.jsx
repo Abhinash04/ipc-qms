@@ -1,7 +1,7 @@
 import { cn } from '@/utils/cn';
 
 export const PANEL_CLASS =
-  'rounded-2xl border border-transparent bg-surface shadow-card dark:border-line/60';
+  'rounded-2xl border border-transparent bg-surface shadow-card';
 
 export function Panel({ className, children, ...props }) {
   return (

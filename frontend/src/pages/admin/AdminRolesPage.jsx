@@ -39,7 +39,7 @@ function Cell({ granted }) {
 
 function Matrix({ caption, rows, label }) {
   return (
-    <section  data-slot="panel" className="rounded-2xl border border-transparent bg-card p-5 shadow-card dark:border-line/60">
+    <section  data-slot="panel" className="rounded-2xl border border-transparent bg-card p-5 shadow-card">
       <h2 className="font-heading text-[17px] font-bold text-slate-900">{caption}</h2>
       <p className="m-0 mb-3 mt-0.5 text-[12.5px] text-slate-500">{label}</p>
 

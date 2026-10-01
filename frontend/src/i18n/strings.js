@@ -19,7 +19,6 @@ export const STRINGS = {
 
     "navbar.search": "Search queries or pages…",
     "navbar.language": "Interface language (labels only)",
-    "navbar.theme": "Toggle dark mode",
     "navbar.settings": "Theme settings",
     "navbar.profile": "Profile",
     "navbar.notifications": "Notifications",
@@ -33,10 +32,6 @@ export const STRINGS = {
 
     "customizer.title": "Settings",
     "customizer.subtitle": "Personalise how the workspace looks",
-    "customizer.scheme": "Scheme",
-    "customizer.auto": "Auto",
-    "customizer.light": "Light",
-    "customizer.dark": "Dark",
     "customizer.preset": "Colour customizer",
     "customizer.direction": "Scheme direction",
     "customizer.sidebarColor": "Sidebar colour",
@@ -75,7 +70,6 @@ export const STRINGS = {
 
     "navbar.search": "प्रश्न या पृष्ठ खोजें…",
     "navbar.language": "इंटरफ़ेस भाषा (केवल लेबल)",
-    "navbar.theme": "डार्क मोड बदलें",
     "navbar.settings": "थीम सेटिंग्स",
     "navbar.profile": "प्रोफ़ाइल",
     "navbar.notifications": "सूचनाएँ",
@@ -89,10 +83,6 @@ export const STRINGS = {
 
     "customizer.title": "सेटिंग्स",
     "customizer.subtitle": "कार्यक्षेत्र का रूप अपने अनुसार बदलें",
-    "customizer.scheme": "रंग योजना",
-    "customizer.auto": "स्वचालित",
-    "customizer.light": "हल्का",
-    "customizer.dark": "गहरा",
     "customizer.preset": "रंग चयन",
     "customizer.direction": "दिशा",
     "customizer.sidebarColor": "साइडबार रंग",

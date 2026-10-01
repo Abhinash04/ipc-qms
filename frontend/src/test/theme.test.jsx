@@ -22,14 +22,12 @@ const OIC = findUserById('USR-0003');
 const root = document.documentElement;
 
 function mockSystemScheme(dark) {
-  const listeners = new Set();
   window.matchMedia = vi.fn().mockImplementation((query) => ({
     matches: query.includes('dark') ? dark : false,
     media: query,
-    addEventListener: (_, cb) => listeners.add(cb),
-    removeEventListener: (_, cb) => listeners.delete(cb),
+    addEventListener: () => {},
+    removeEventListener: () => {},
   }));
-  return listeners;
 }
 
 function Location() {
@@ -53,10 +51,9 @@ describe('the theme store', () => {
   it('ignores unknown or invalid saved values', () => {
     localStorage.setItem(
       THEME_STORAGE_KEY,
-      JSON.stringify({ state: { mode: 'neon', preset: 'teal', dir: 'sideways', sidebarBoxed: 'yes' } }),
+      JSON.stringify({ state: { preset: 'teal', dir: 'sideways', sidebarBoxed: 'yes' } }),
     );
     const saved = readSavedTheme();
-    expect(saved.mode).toBe(THEME_DEFAULTS.mode);
     expect(saved.preset).toBe('teal');
     expect(saved.dir).toBe(THEME_DEFAULTS.dir);
     expect(saved.sidebarBoxed).toBe(false);
@@ -71,10 +68,9 @@ describe('the theme store', () => {
 });
 
 describe('ThemeApplier mirrors the store onto <html>', () => {
-  it('applies the scheme, preset, sidebar, navbar and direction', () => {
+  it('applies the preset, sidebar, navbar and direction', () => {
     act(() => {
       const { setOption } = useThemeStore.getState();
-      setOption('mode', 'dark');
       setOption('preset', 'teal');
       setOption('sidebarColor', 'color');
       setOption('navbarStyle', 'glass');
@@ -82,23 +78,18 @@ describe('ThemeApplier mirrors the store onto <html>', () => {
     });
     render(<ThemeApplier />);
 
-    expect(root).toHaveClass('dark');
     expect(root.dataset.preset).toBe('teal');
     expect(root.dataset.sidebarColor).toBe('color');
     expect(root.dataset.navbar).toBe('glass');
     expect(root.dir).toBe('rtl');
   });
 
-  it('follows the operating system in auto mode', () => {
+  it('stays light even when the system prefers dark or an old dark choice is saved', () => {
     mockSystemScheme(true);
-    act(() => useThemeStore.getState().setOption('mode', 'auto'));
-    render(<ThemeApplier />);
-    expect(root).toHaveClass('dark');
-  });
-
-  it('stays light in auto mode when the system is light', () => {
-    mockSystemScheme(false);
-    act(() => useThemeStore.getState().setOption('mode', 'auto'));
+    localStorage.setItem(THEME_STORAGE_KEY, JSON.stringify({ state: { mode: 'dark' } }));
+    expect(readSavedTheme()).not.toHaveProperty('mode');
+    act(() => useThemeStore.getState().setOption('mode', 'dark'));
+    expect(useThemeStore.getState()).not.toHaveProperty('mode');
     render(<ThemeApplier />);
     expect(root).not.toHaveClass('dark');
   });
@@ -114,12 +105,17 @@ describe('the theme customizer', () => {
     );
   }
 
-  it('switches the scheme and colour preset', () => {
+  it('offers no light, dark or system scheme switch', () => {
     renderCustomizer();
 
-    fireEvent.click(within(screen.getByRole('radiogroup', { name: 'Scheme' })).getByRole('radio', { name: 'Dark' }));
-    expect(useThemeStore.getState().mode).toBe('dark');
-    expect(root).toHaveClass('dark');
+    expect(screen.queryByRole('radiogroup', { name: 'Scheme' })).not.toBeInTheDocument();
+    for (const name of ['Auto', 'Light']) {
+      expect(screen.queryByRole('radio', { name })).not.toBeInTheDocument();
+    }
+  });
+
+  it('switches the colour preset', () => {
+    renderCustomizer();
 
     fireEvent.click(screen.getByRole('radio', { name: 'teal colour' }));
     expect(root.dataset.preset).toBe('teal');
@@ -148,11 +144,11 @@ describe('the theme customizer', () => {
 
   it('resets everything to the defaults', () => {
     renderCustomizer();
-    fireEvent.click(within(screen.getByRole('radiogroup', { name: 'Scheme' })).getByRole('radio', { name: 'Dark' }));
+    fireEvent.click(screen.getByRole('radio', { name: 'teal colour' }));
     fireEvent.click(screen.getByRole('button', { name: 'Reset to defaults' }));
 
-    expect(useThemeStore.getState().mode).toBe(THEME_DEFAULTS.mode);
-    expect(root).not.toHaveClass('dark');
+    expect(useThemeStore.getState().preset).toBe(THEME_DEFAULTS.preset);
+    expect(root.dataset.preset).toBe(THEME_DEFAULTS.preset);
   });
 });
 

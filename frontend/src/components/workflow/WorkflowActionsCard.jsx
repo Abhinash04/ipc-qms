@@ -415,7 +415,7 @@ export function WorkflowActionsCard() {
   const clarificationActions = Object.keys(CLARIFICATION_REQUIRED_ACTIONS);
 
   return (
-    <div  data-slot="panel" className="bg-card rounded-2xl border border-transparent p-5 shadow-card select-none flex flex-col space-y-4 dark:border-line/60">
+    <div  data-slot="panel" className="bg-card rounded-2xl border border-transparent p-5 shadow-card select-none flex flex-col space-y-4">
       <div>
         <h2 className="font-heading text-[22px] font-bold text-slate-900 m-0">
           Available actions

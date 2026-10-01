@@ -33,6 +33,15 @@ function preloadKeyFonts() {
 
 export default defineConfig({
   plugins: [react(), tailwindcss(), preloadKeyFonts()],
+  build: {
+    rolldownOptions: {
+      output: {
+        codeSplitting: {
+          groups: [{ name: 'router', test: /node_modules[\\/]react-router/ }],
+        },
+      },
+    },
+  },
   resolve: {
     alias: {
       ...(globalThis.process?.env?.VITEST

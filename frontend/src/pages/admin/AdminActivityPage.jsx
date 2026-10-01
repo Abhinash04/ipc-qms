@@ -67,7 +67,7 @@ export function AdminActivityPage() {
         purpose="Every recorded system action, newest first. Filters are applied by the server."
       />
 
-      <div  data-slot="panel" className="rounded-2xl border border-transparent bg-card p-5 shadow-card dark:border-line/60">
+      <div  data-slot="panel" className="rounded-2xl border border-transparent bg-card p-5 shadow-card">
         <div className="mb-4 flex flex-wrap items-end gap-2.5">
           <label className="flex flex-col gap-1">
             <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Event</span>

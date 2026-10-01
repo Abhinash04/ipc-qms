@@ -15,7 +15,6 @@ import {
 
 import { ROUTE_PATHS, roleHome } from "@/constants/routePaths";
 import { useAuthStore } from "@/store/useAuthStore";
-import { useResolvedMode } from "@/components/theme/themeRuntime";
 import { MOCK_USERS } from "@/constants/mockUsers";
 import { HeroBackdrop } from "@/components/common/HeroBackdrop";
 import { PageBackdrop } from "@/components/common/PageBackdrop";
@@ -31,7 +30,6 @@ export function LoginPage() {
   const login = useAuthStore((state) => state.login);
   const devLogin = useAuthStore((state) => state.devLogin);
   const googleLogin = useAuthStore((state) => state.googleLogin);
-  const resolved = useResolvedMode();
   const navigate = useNavigate();
 
   const [email, setEmail] = useState("");
@@ -47,7 +45,6 @@ export function LoginPage() {
   const googleEnabled = Boolean(
     (import.meta.env.VITE_GOOGLE_CLIENT_ID || "").trim(),
   );
-  const isDark = resolved === "dark";
 
   const home = currentUser ? roleHome(currentUser.role) : null;
   if (home && home !== ROUTE_PATHS.LOGIN) return <Navigate to={home} replace />;
@@ -135,7 +132,7 @@ export function LoginPage() {
           <h1 className="mt-9 font-heading text-[40px] font-extrabold leading-[1.15] tracking-tight text-white xl:text-[46px]">
             <span className="block">AI-powered IP</span>{" "}
             <span className="block">Stakeholder’s</span>{" "}
-            <span className="block bg-linear-to-r from-[#bae6fd] via-[#a5f3fc] to-status-indigo-line bg-clip-text text-transparent">
+            <span className="block bg-linear-to-r from-sky-200 via-cyan-200 to-indigo-200 bg-clip-text text-transparent">
               BRIDGETECH
             </span>
           </h1>
@@ -165,7 +162,7 @@ export function LoginPage() {
         <PageBackdrop />
 
         <div className="w-full max-w-md">
-          <div className="rounded-2xl border border-transparent bg-surface p-6 pt-5 shadow-card sm:p-8 sm:pt-5 dark:border-line/60">
+          <div className="rounded-2xl border border-transparent bg-surface p-6 pt-5 shadow-card sm:p-8 sm:pt-5">
             <div className="flex items-end justify-between gap-4">
               <h2 className="font-heading text-[28px] font-bold leading-tight text-ink sm:text-[30px]">
                 Sign in
@@ -286,7 +283,6 @@ export function LoginPage() {
                 <GoogleSignInButton
                   onCredential={googleSubmit}
                   onError={setError}
-                  dark={isDark}
                 />
               </div>
             )}

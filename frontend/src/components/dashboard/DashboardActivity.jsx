@@ -40,7 +40,7 @@ export function DashboardActivity({ auditEvents = [] }) {
   return (
     <section
       aria-labelledby="dashboard-activity-title"
-      className="rounded-2xl border border-transparent bg-surface shadow-card dark:border-line/60"
+      className="rounded-2xl border border-transparent bg-surface shadow-card"
     >
       <div className="flex items-start justify-between gap-3 px-5 pt-5">
         <div>

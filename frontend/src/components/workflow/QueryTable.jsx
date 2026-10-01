@@ -353,7 +353,7 @@ export function QueryTable({
 
       <section
         aria-label={`${title || "Queries"} list`}
-        className="overflow-hidden rounded-2xl border border-transparent bg-surface shadow-card dark:border-line/60"
+        className="overflow-hidden rounded-2xl border border-transparent bg-surface shadow-card"
       >
         <div className="flex items-center justify-between gap-3 px-5 pt-5 pb-4">
           <h2 className="font-heading text-[17px] font-semibold text-ink">Records</h2>

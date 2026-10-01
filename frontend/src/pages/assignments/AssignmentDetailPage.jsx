@@ -48,10 +48,10 @@ export function AssignmentDetailPage() {
       <ActionError message={error} onDismiss={clearError} />
 
       {assignee && (
-        <Card className="border-emerald-200 bg-emerald-50/50 dark:bg-emerald-950/20">
+        <Card className="border-emerald-200 bg-emerald-50/50">
           <CardBody className="p-4 flex items-center justify-between">
             <div>
-              <p className="text-xs font-semibold text-emerald-800 dark:text-emerald-300">
+              <p className="text-xs font-semibold text-emerald-800">
                 Official Assigned
               </p>
               <p className="text-base font-bold text-foreground mt-0.5">

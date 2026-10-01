@@ -3,7 +3,6 @@ import { create } from "zustand";
 export const THEME_STORAGE_KEY = "qms.theme";
 
 export const THEME_OPTIONS = {
-  mode: ["auto", "light", "dark"],
   preset: ["hope", "indigo", "teal", "violet", "amber"],
   sidebarColor: ["default", "dark", "color", "transparent"],
   sidebarActive: ["rounded-one", "rounded-all", "pill-one", "pill-all"],
@@ -13,7 +12,6 @@ export const THEME_OPTIONS = {
 };
 
 export const THEME_DEFAULTS = {
-  mode: "light",
   preset: "hope",
   sidebarColor: "default",
   sidebarActive: "rounded-all",
@@ -61,16 +59,3 @@ export const useThemeStore = create((set) => ({
 }));
 
 useThemeStore.subscribe(writeSavedTheme);
-
-export function prefersDark() {
-  try {
-    return window.matchMedia?.("(prefers-color-scheme: dark)")?.matches === true;
-  } catch {
-    return false;
-  }
-}
-
-export function resolveMode(mode) {
-  if (mode === "auto") return prefersDark() ? "dark" : "light";
-  return mode === "dark" ? "dark" : "light";
-}

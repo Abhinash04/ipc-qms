@@ -25,7 +25,7 @@ export function useChartTheme() {
   const key = useAppliedThemeKey();
 
   return useMemo(() => {
-    const [mode, preset] = key.split("|");
+    const preset = key;
     let styles;
     try {
       styles = getComputedStyle(document.documentElement);
@@ -44,7 +44,6 @@ export function useChartTheme() {
       surface: readToken(styles, "--color-surface", FALLBACK.surface),
     };
     return {
-      mode,
       preset,
       ...tokens,
       series: [tokens.primary, tokens.info, ...CHART_SERIES.slice(1)],
@@ -63,7 +62,7 @@ export function baseOptions(theme) {
       parentHeightOffset: 0,
       animations: { enabled: true, speed: 500 },
     },
-    theme: { mode: theme.mode },
+    theme: { mode: "light" },
     grid: {
       borderColor: theme.line,
       strokeDashArray: 4,
@@ -75,7 +74,7 @@ export function baseOptions(theme) {
       fontSize: "12px",
       markers: { size: 5 },
     },
-    tooltip: { theme: theme.mode },
+    tooltip: { theme: "light" },
     states: { active: { filter: { type: "none" } } },
   };
 }

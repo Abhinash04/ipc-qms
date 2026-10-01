@@ -59,7 +59,7 @@ export function DashboardQueryList({
     <section
       data-slot="dashboard-query-list"
       aria-labelledby="dashboard-query-list-title"
-      className="bento-card flex flex-col rounded-2xl border border-transparent bg-surface shadow-card dark:border-line/60"
+      className="bento-card flex flex-col rounded-2xl border border-transparent bg-surface shadow-card"
     >
       <div className="flex flex-wrap items-start justify-between gap-3 px-5 pt-5 pb-4">
         <div className="flex min-w-0 items-center gap-3">

@@ -141,7 +141,7 @@ export function EmailThread({ messages = [] }) {
     });
 
   return (
-    <div  data-slot="panel" className="bg-card rounded-2xl border border-transparent p-5 shadow-card dark:border-line/60">
+    <div  data-slot="panel" className="bg-card rounded-2xl border border-transparent p-5 shadow-card">
       <ThreadHeader
         count={filteredMessages.length}
         filter={filter}

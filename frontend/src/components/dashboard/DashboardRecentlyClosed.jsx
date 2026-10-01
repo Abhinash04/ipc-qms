@@ -20,7 +20,7 @@ export function DashboardRecentlyClosed({ recentlyClosed }) {
   return (
     <section
       aria-labelledby="recently-closed-title"
-      className="rounded-2xl border border-transparent bg-surface shadow-card dark:border-line/60"
+      className="rounded-2xl border border-transparent bg-surface shadow-card"
     >
       <div className="flex items-center gap-3 px-5 pt-5">
         <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">

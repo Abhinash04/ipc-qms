@@ -46,7 +46,7 @@ export function PageHeader({
   const activeEmoji = titleData.emoji || greetingData.emoji;
 
   return (
-    <div className="relative mb-5 flex flex-col gap-3 overflow-hidden rounded-2xl border border-transparent bg-surface px-5 py-4 shadow-card sm:flex-row sm:items-center sm:justify-between sm:px-6 sm:py-5 dark:border-line/60">
+    <div className="relative mb-5 flex flex-col gap-3 overflow-hidden rounded-2xl border border-transparent bg-surface px-5 py-4 shadow-card sm:flex-row sm:items-center sm:justify-between sm:px-6 sm:py-5">
       <span aria-hidden="true" className="absolute inset-y-0 start-0 w-1 bg-primary" />
       <div className="flex items-center gap-3.5">
         {Icon && (

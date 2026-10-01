@@ -36,7 +36,7 @@ function googleClientId() {
   return (import.meta.env.VITE_GOOGLE_CLIENT_ID || "").trim();
 }
 
-export function GoogleSignInButton({ onCredential, onError, dark = false }) {
+export function GoogleSignInButton({ onCredential, onError }) {
   const container = useRef(null);
   const handlers = useRef({ onCredential, onError });
   const clientId = googleClientId();
@@ -63,7 +63,7 @@ export function GoogleSignInButton({ onCredential, onError, dark = false }) {
         container.current.replaceChildren();
         identity.renderButton(container.current, {
           type: "standard",
-          theme: dark ? "filled_black" : "outline",
+          theme: "outline",
           size: "large",
           text: "signin_with",
           shape: "rectangular",
@@ -78,7 +78,7 @@ export function GoogleSignInButton({ onCredential, onError, dark = false }) {
     return () => {
       cancelled = true;
     };
-  }, [clientId, dark]);
+  }, [clientId]);
 
   if (!clientId) return null;
 

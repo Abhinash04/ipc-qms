@@ -35,7 +35,7 @@ function CaseDetailsPanel({ query }) {
   ];
 
   return (
-    <div data-slot="panel" className="bg-card rounded-2xl border border-transparent p-5 shadow-card select-none dark:border-line/60">
+    <div data-slot="panel" className="bg-card rounded-2xl border border-transparent p-5 shadow-card select-none">
       <h2 className="font-heading text-[17px] font-bold text-slate-900 m-0 border-b border-slate-100 pb-2.5 mb-2.5">
         Case details
       </h2>
@@ -90,7 +90,7 @@ function DraftTabContent({ versions, latestVersion }) {
 
 function CaseWorkspaceTabs({ query, versions, latestVersion }) {
   return (
-    <div data-slot="panel" className="bg-card rounded-2xl border border-transparent overflow-hidden shadow-card p-5 dark:border-line/60">
+    <div data-slot="panel" className="bg-card rounded-2xl border border-transparent overflow-hidden shadow-card p-5">
       <Tabs defaultValue="draft">
         <div className="border-b border-slate-100 pb-3">
           <TabsList variant="line">
@@ -123,7 +123,7 @@ function CaseWorkspaceTabs({ query, versions, latestVersion }) {
 function CaseInsightPanels({ query, steps, audit, canAssign, currentUser, assignQuery }) {
   return (
     <>
-      <div data-slot="panel" className="bg-card rounded-2xl border border-transparent p-5 shadow-card dark:border-line/60">
+      <div data-slot="panel" className="bg-card rounded-2xl border border-transparent p-5 shadow-card">
         <AiSummaryCard
           variant="embedded"
           summary={query.aiSummary}
@@ -144,7 +144,7 @@ function CaseInsightPanels({ query, steps, audit, canAssign, currentUser, assign
       <CaseOfficialsCard query={query} steps={steps} audit={audit} />
 
       {canAssign && (
-        <div data-slot="panel" className="bg-card rounded-2xl border border-transparent p-5 shadow-card dark:border-line/60">
+        <div data-slot="panel" className="bg-card rounded-2xl border border-transparent p-5 shadow-card">
           <AiRecommendationCard
             variant="embedded"
             query={query}
@@ -226,7 +226,7 @@ export function QueryDetailPage() {
         <AutoTransferTimerCard query={query} />
       </div>
 
-      <div data-slot="panel" className="bg-card rounded-2xl border border-transparent p-5 shadow-card mb-5 dark:border-line/60">
+      <div data-slot="panel" className="bg-card rounded-2xl border border-transparent p-5 shadow-card mb-5">
         <h2 className="font-heading text-[19px] font-bold text-slate-900 mb-3 border-b border-slate-100 pb-2.5">
           Workflow progress
         </h2>

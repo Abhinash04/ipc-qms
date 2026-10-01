@@ -66,7 +66,7 @@ export function StatTile({
       className={cn(
         "bento-card group relative flex h-full select-none flex-col overflow-hidden rounded-2xl border-2 bg-surface p-4 shadow-card",
         "transition-[border-color,box-shadow,transform] duration-200 motion-reduce:transition-none",
-        selected ? "border-primary" : "border-transparent dark:border-line/60",
+        selected ? "border-primary" : "border-transparent",
         onClick &&
           "cursor-pointer outline-none hover:shadow-card-hover focus-visible:ring-2 focus-visible:ring-primary/50 motion-safe:hover:-translate-y-0.5",
         className,

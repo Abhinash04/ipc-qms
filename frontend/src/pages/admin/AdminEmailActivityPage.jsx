@@ -65,7 +65,7 @@ export function AdminEmailActivityPage() {
     },
   ];
 
-  const panel = 'rounded-2xl border border-transparent bg-card p-5 shadow-card dark:border-line/60';
+  const panel = 'rounded-2xl border border-transparent bg-card p-5 shadow-card';
 
   return (
     <div className="space-y-5">

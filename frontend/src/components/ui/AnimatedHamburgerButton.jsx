@@ -15,23 +15,23 @@ export const AnimatedHamburgerButton = ({ active, setActive, size = "sm", classN
         onClick={() => setActive((pv) => !pv)}
         aria-label={active ? "Close menu" : "Open menu"}
         aria-expanded={active}
-        className={`relative rounded-full bg-transparent transition-colors hover:bg-cream-card dark:hover:bg-surface-dark-elevated flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+        className={`relative rounded-full bg-transparent transition-colors hover:bg-cream-card flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
           isLg ? "h-20 w-20" : "h-10 w-10"
         } ${className}`}
       >
         <m.span
           variants={isLg ? VARIANTS_LG.top : VARIANTS_SM.top}
-          className={`absolute bg-ink dark:bg-on-dark ${isLg ? "h-1 w-10" : "h-0.5 w-5"}`}
+          className={`absolute bg-ink ${isLg ? "h-1 w-10" : "h-0.5 w-5"}`}
           style={{ y: "-50%", left: "50%", x: "-50%", top: "35%" }}
         />
         <m.span
           variants={isLg ? VARIANTS_LG.middle : VARIANTS_SM.middle}
-          className={`absolute bg-ink dark:bg-on-dark ${isLg ? "h-1 w-10" : "h-0.5 w-5"}`}
+          className={`absolute bg-ink ${isLg ? "h-1 w-10" : "h-0.5 w-5"}`}
           style={{ left: "50%", x: "-50%", top: "50%", y: "-50%" }}
         />
         <m.span
           variants={isLg ? VARIANTS_LG.bottom : VARIANTS_SM.bottom}
-          className={`absolute bg-ink dark:bg-on-dark ${isLg ? "h-1 w-5" : "h-0.5 w-2.5"}`}
+          className={`absolute bg-ink ${isLg ? "h-1 w-5" : "h-0.5 w-2.5"}`}
           style={{
             x: "-50%",
             y: "50%",

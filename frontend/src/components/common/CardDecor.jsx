@@ -15,7 +15,7 @@ export function CardDecor({ colorClass = "text-primary" }) {
       className={cn(
         "pointer-events-none absolute inset-0 overflow-hidden",
         "[mask-image:linear-gradient(to_right,transparent_30%,black_85%)] rtl:[mask-image:linear-gradient(to_left,transparent_30%,black_85%)]",
-        "[--band-k:1] dark:[--band-k:1.7]",
+        "[--band-k:1]",
         colorClass,
       )}
     >

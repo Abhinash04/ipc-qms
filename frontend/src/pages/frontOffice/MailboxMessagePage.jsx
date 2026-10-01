@@ -19,7 +19,7 @@ import {
 import { parseSender, formatFullDate } from "@/utils/mailboxFormat";
 import { cn } from "@/utils/cn";
 
-const CARD = "bg-card rounded-2xl border border-transparent p-5 shadow-card dark:border-line/60";
+const CARD = "bg-card rounded-2xl border border-transparent p-5 shadow-card";
 const CARD_TITLE = "font-heading text-[17px] font-bold text-slate-900 m-0";
 
 const BODY_FORMATS = [

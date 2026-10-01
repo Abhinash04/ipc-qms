@@ -34,7 +34,7 @@ export function AssignmentsListPage() {
 
       <section
         aria-label="Assigned officials"
-        className="overflow-hidden rounded-2xl border border-transparent bg-surface shadow-card dark:border-line/60"
+        className="overflow-hidden rounded-2xl border border-transparent bg-surface shadow-card"
       >
         <div className="overflow-x-auto">
           <table className="w-full min-w-[720px] text-start text-[14px]">

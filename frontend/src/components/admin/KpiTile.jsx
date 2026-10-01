@@ -55,7 +55,7 @@ export function KpiTile({
   );
 
   const shell =
-    'group relative flex flex-col overflow-hidden rounded-2xl border border-transparent bg-surface p-5 shadow-card transition-[box-shadow,transform] dark:border-line/60';
+    'group relative flex flex-col overflow-hidden rounded-2xl border border-transparent bg-surface p-5 shadow-card transition-[box-shadow,transform]';
 
   if (!to) return <div className={shell}>{body}</div>;
 

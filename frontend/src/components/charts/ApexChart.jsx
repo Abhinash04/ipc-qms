@@ -18,7 +18,7 @@ export function ApexChart({ type, series, options, height = 260, label, summary,
         <Suspense fallback={<Skeleton className="w-full" style={{ height }} />}>
           <div aria-hidden="true">
             <LazyChart
-              key={`${theme.mode}-${theme.preset}`}
+              key={theme.preset}
               type={type}
               series={series}
               options={merged}

@@ -1,5 +1,5 @@
 import { RadioGroup as RadioGroupPrimitive } from "radix-ui";
-import { Check, Monitor, Moon, RotateCcw, Sun } from "lucide-react";
+import { Check, RotateCcw } from "lucide-react";
 
 import {
   Sheet,
@@ -104,20 +104,6 @@ export function ThemeCustomizer({ open, onOpenChange }) {
         </SheetHeader>
 
         <div className="flex-1 overflow-y-auto">
-          <Section title={t("customizer.scheme")}>
-            <OptionGroup label={t("customizer.scheme")} value={theme.mode} onChange={(v) => set("mode", v)}>
-              <Option value="auto" label={t("customizer.auto")}>
-                <Monitor className="h-5 w-5" />
-              </Option>
-              <Option value="dark" label={t("customizer.dark")}>
-                <Moon className="h-5 w-5" />
-              </Option>
-              <Option value="light" label={t("customizer.light")}>
-                <Sun className="h-5 w-5" />
-              </Option>
-            </OptionGroup>
-          </Section>
-
           <Section title={t("customizer.preset")}>
             <RadioGroupPrimitive.Root
               aria-label={t("customizer.preset")}

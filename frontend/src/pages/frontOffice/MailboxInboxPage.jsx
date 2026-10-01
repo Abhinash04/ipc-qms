@@ -782,7 +782,7 @@ const FEED_SUBTITLE = {
 
 function MailboxFeedCard({ count, backend, deleteMessage, children }) {
   return (
-    <div className="rounded-2xl border border-transparent bg-surface p-6 shadow-card sm:p-7 dark:border-line/60">
+    <div className="rounded-2xl border border-transparent bg-surface p-6 shadow-card sm:p-7">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 mb-5 border-b border-slate-100/80">
         <div className="flex items-center gap-4">
           <div className="flex h-13 w-13 shrink-0 items-center justify-center rounded-xl bg-primary-50 text-primary">
