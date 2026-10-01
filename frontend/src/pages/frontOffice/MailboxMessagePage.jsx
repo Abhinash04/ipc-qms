@@ -8,6 +8,7 @@ import { EmptyState } from "@/components/common/EmptyState";
 import { StatusBadge } from "@/components/common/StatusBadge";
 import { AttachmentList } from "@/components/attachments/AttachmentList";
 import { MailHtmlFrame } from "@/components/email/MailHtmlFrame";
+import { MailCategoryDetails } from "@/components/email/MailCategoryBadge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useRoutePaths } from "@/hooks/useRoutePaths";
 import { buildPath } from "@/constants/routePaths";
@@ -15,7 +16,10 @@ import {
   fetchMailboxMessage,
   markMailboxMessageRead,
   mailboxAttachmentUrl,
+  setMailboxMessageCategory,
 } from "@/services/api/mailboxService";
+import { notify } from "@/services/notify";
+import { MAIL_CATEGORY_META } from "@/constants/mailCategories";
 import { parseSender, formatFullDate } from "@/utils/mailboxFormat";
 import { cn } from "@/utils/cn";
 
@@ -188,6 +192,40 @@ function MessageCaseCard({ message, paths }) {
   );
 }
 
+function MessageCategoryCard({ message, paths }) {
+  const queryClient = useQueryClient();
+  const correct = useMutation({
+    mutationFn: (category) => setMailboxMessageCategory(message.mailboxMessageId, category),
+    onSuccess: (_result, category) => {
+      queryClient.invalidateQueries({ queryKey: ["mailbox"] });
+      notify.success("Category updated", `Filed under ${MAIL_CATEGORY_META[category]?.label ?? category}.`);
+    },
+    onError: (failure) => {
+      notify.error(
+        "Could not change the category",
+        failure?.response?.data?.error || failure?.message || "Please try again.",
+      );
+    },
+  });
+
+  return (
+    <section className={CARD} aria-labelledby="message-category">
+      <h2 id="message-category" className={`${CARD_TITLE} border-b border-slate-100 pb-2.5 mb-3`}>
+        Category
+      </h2>
+      <MailCategoryDetails
+        triage={message.triage}
+        onCorrect={(category) => correct.mutate(category)}
+        correcting={correct.isPending}
+        caseHref={paths.QUERY_DETAIL ? (queryId) => buildPath(paths.QUERY_DETAIL, { queryId }) : null}
+        messageHref={(mailboxMessageId) =>
+          buildPath(paths.INBOX_DETAIL, { messageId: encodeURIComponent(mailboxMessageId) })
+        }
+      />
+    </section>
+  );
+}
+
 function MessageView({ message, paths }) {
   const attachments = message.attachments || [];
 
@@ -209,8 +247,9 @@ function MessageView({ message, paths }) {
         )}
       </div>
 
-      <div className="lg:sticky lg:top-6 self-start">
+      <div className="lg:sticky lg:top-6 self-start space-y-5">
         <MessageCaseCard message={message} paths={paths} />
+        <MessageCategoryCard message={message} paths={paths} />
       </div>
     </div>
   );

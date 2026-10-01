@@ -3,7 +3,7 @@ import browserConfig from '../../../config/browserConfig.js';
 import nicConfig from '../../../config/nicConfig.js';
 import { RULE_CLASSES, TRIAGE_VERDICTS } from '../../../models/MailboxTriage.js';
 
-const bare = (address) =>
+export const bare = (address) =>
   String(address || '')
     .trim()
     .replace(/^.*<([^>]*)>.*$/, '$1')
@@ -27,7 +27,7 @@ function headerValue(headers, name) {
 
 const hasHeader = (headers, name) => headerValue(headers, name).trim() !== '';
 
-const htmlText = (html) =>
+export const htmlText = (html) =>
   String(html || '')
     .replace(/<(script|style)[^>]*>[\s\S]*?<\/\1>/gi, ' ')
     .replace(/<[^>]*>/g, ' ')

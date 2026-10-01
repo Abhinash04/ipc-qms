@@ -9,6 +9,7 @@ export async function fetchMailboxMessages({
   recipient,
   unreadOnly = true,
   junkOnly = false,
+  category,
   q,
   limit,
   offset,
@@ -18,6 +19,7 @@ export async function fetchMailboxMessages({
       ...(recipient ? { recipient } : {}),
       unreadOnly: String(unreadOnly),
       ...(junkOnly ? { junkOnly: 'true' } : {}),
+      ...(category ? { category } : {}),
       ...(q ? { q } : {}),
       ...(limit ? { limit, offset: offset ?? 0 } : {}),
     },
@@ -80,6 +82,14 @@ export async function fetchMailboxDecisions() {
 export async function rescueMailboxMessage(mailboxMessageId) {
   const { data } = await axiosClient.post(
     `/mailbox/messages/${encodeURIComponent(mailboxMessageId)}/triage/rescue`,
+  );
+  return data;
+}
+
+export async function setMailboxMessageCategory(mailboxMessageId, category) {
+  const { data } = await axiosClient.post(
+    `/mailbox/messages/${encodeURIComponent(mailboxMessageId)}/category`,
+    { category },
   );
   return data;
 }

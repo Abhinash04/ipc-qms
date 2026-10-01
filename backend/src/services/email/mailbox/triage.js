@@ -1,5 +1,7 @@
 import { isConnected } from '../../../config/db.js';
 
+import { MailboxMessage } from '../../../models/MailboxMessage.js';
+import { CATEGORY_SOURCES, CATEGORY_VERSION } from '../../../constants/mailCategories.js';
 import {
   MailboxTriage,
   RULE_CLASSES,
@@ -7,6 +9,8 @@ import {
   TRIAGE_VERDICTS,
 } from '../../../models/MailboxTriage.js';
 import { classifyByRules } from './triageRules.js';
+import { categoryForRule } from './categoryHeuristics.js';
+import { contentHash, senderKey } from './mailFingerprint.js';
 
 const toPlain = (doc) => {
   if (!doc) return null;
@@ -31,8 +35,9 @@ async function recordRules(mailboxMessageId, message = {}, { source = null, now 
 
     const nowIso = now.toISOString();
     const isHard = result.ruleClass === RULE_CLASSES.HARD;
+    const ruled = isHard ? categoryForRule(result.rule) : null;
 
-    await MailboxTriage.updateOne(
+    const written = await MailboxTriage.updateOne(
       { mailboxMessageId },
       {
         $setOnInsert: {
@@ -53,11 +58,27 @@ async function recordRules(mailboxMessageId, message = {}, { source = null, now 
           from: message.from || '',
           subject: message.subject || '',
           receivedAt: message.receivedAt || null,
+          senderKey: senderKey(message.from),
+          contentHash: contentHash(message),
+          category: ruled?.category ?? null,
+          categoryConfidence: ruled?.confidence ?? 0,
+          categoryReason: ruled?.reason ?? '',
+          categorySource: ruled ? CATEGORY_SOURCES.RULES : null,
+          categorizedAt: ruled ? nowIso : null,
+          categoryVersion: ruled ? CATEGORY_VERSION : 0,
+          predictedCategory: ruled?.category ?? null,
+          predictedConfidence: ruled?.confidence ?? 0,
+          needsReview: false,
+          related: [],
           createdAt: nowIso,
         },
       },
       { upsert: true },
     );
+
+    if (ruled && written?.upsertedCount) {
+      await MailboxMessage.updateOne({ mailboxMessageId }, { $set: { mailCategory: ruled.category } });
+    }
 
     return { ...result, confidence: confidenceFor(result.ruleClass) };
   } catch (error) {

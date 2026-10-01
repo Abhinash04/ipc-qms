@@ -79,6 +79,16 @@ export async function toMessageViews(messages, { keepsReadState = false } = {}) 
           classifiedAt: triageRow.classifiedAt,
           rescuedAt: triageRow.rescuedAt,
           purgesAt: purgesAtFor(triageRow),
+          category: triageRow.category ?? null,
+          categoryConfidence: triageRow.categoryConfidence ?? 0,
+          categoryReason: triageRow.categoryReason ?? '',
+          categorySource: triageRow.categorySource ?? null,
+          categorizedAt: triageRow.categorizedAt ?? null,
+          predictedCategory: triageRow.predictedCategory ?? null,
+          predictedConfidence: triageRow.predictedConfidence ?? 0,
+          needsReview: Boolean(triageRow.needsReview),
+          related: triageRow.related ?? [],
+          categoryCorrectedAt: triageRow.categoryCorrectedAt ?? null,
         }
       : null;
 

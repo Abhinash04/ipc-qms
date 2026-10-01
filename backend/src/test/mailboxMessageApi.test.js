@@ -80,6 +80,7 @@ import { USERS, nicFrontOfficeUser } from '../constants/users.js';
 import { TEST_FRONT_OFFICE } from './helpers/auth.js';
 import * as nicMailbox from '../services/email/mailbox/nicBrowserMailbox.js';
 import * as attachmentStore from '../services/attachments/attachmentStore.js';
+import * as categorizer from '../services/email/mailbox/categorizer.js';
 
 const NIC_ADDRESS = 'nic-mailbox@test.invalid';
 const ATT_A = 'att_11111111-2222-3333-4444-555555555555';
@@ -395,5 +396,73 @@ describe('a NICeMail viewer', () => {
     expect(res.body).toMatchObject({ started: false, sync: { viewer: true, running: false } });
     expect(browser.readInbox).not.toHaveBeenCalled();
     expect(audits('SYNC_STARTED')).toEqual([]);
+  });
+});
+
+describe('email categories', () => {
+  const list = (query = '', user = nicUser()) => request(app).get(`/api/v1/mailbox/messages${query}`).set(cookieFor(user));
+  const correct = (id, body, user = nicUser()) =>
+    request(app).post(`/api/v1/mailbox/messages/${id}/category`).set(cookieFor(user)).send(body);
+  const officer = () => USERS.find((user) => user.role === ROLES.OFFICER_IN_CHARGE);
+
+  async function seeded() {
+    categorizer.resetCategorizer();
+    const rows = await seed();
+    await categorizer.idle();
+    return rows;
+  }
+
+  it('shows each message with its category and counts every category', async () => {
+    await seeded();
+
+    const res = await list();
+
+    expect(res.status).toBe(200);
+    expect(res.body.categoryCounts).toMatchObject({ OFFICIAL_QUERY: 1, OTHER: 1, UNCLASSIFIED: 0 });
+    const byId = Object.fromEntries(res.body.messages.map((message) => [message.subject, message.triage]));
+    expect(byId['Enquiry row-2']).toMatchObject({ category: 'OFFICIAL_QUERY', categorySource: 'fallback' });
+    expect(byId['Labelling query']).toMatchObject({ category: 'OTHER', needsReview: true });
+  });
+
+  it('filters by category', async () => {
+    await seeded();
+
+    const res = await list('?category=OFFICIAL_QUERY&limit=50');
+
+    expect(res.body.messages.map((message) => message.subject)).toEqual(['Enquiry row-2']);
+    expect(res.body).toMatchObject({ total: 1 });
+  });
+
+  it('refuses a category it does not know', async () => {
+    expect((await list('?category=SPAM')).status).toBe(400);
+  });
+
+  it('lets the Front Officer correct a category, and nothing else happens to the message', async () => {
+    const { older } = await seeded();
+
+    const res = await correct(older.mailboxMessageId, { category: 'EVENT_INVITATION' });
+
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ corrected: true, triage: { category: 'EVENT_INVITATION', categorySource: 'human' } });
+    const after = (await list('?category=EVENT_INVITATION')).body.messages;
+    expect(after.map((message) => message.mailboxMessageId)).toEqual([older.mailboxMessageId]);
+    expect(after[0]).toMatchObject({ status: 'NEW', linkedCase: null, ingested: false });
+    expect(db.rows('QueryCase')).toEqual([]);
+    expect(db.rows('MailboxDecision')).toEqual([]);
+    expect(browser.sendMail).not.toHaveBeenCalled();
+  });
+
+  it('refuses an unknown category and an unknown message', async () => {
+    const { older } = await seeded();
+
+    expect((await correct(older.mailboxMessageId, { category: 'SPAM' })).status).toBe(400);
+    expect((await correct(older.mailboxMessageId, {})).status).toBe(400);
+    expect((await correct('NICB-nope', { category: 'OTHER' })).status).toBe(404);
+  });
+
+  it('is for the Front Office only', async () => {
+    const { older } = await seeded();
+
+    expect((await correct(older.mailboxMessageId, { category: 'OTHER' }, officer())).status).toBe(403);
   });
 });

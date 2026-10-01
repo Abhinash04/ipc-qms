@@ -24,6 +24,7 @@ const defaultRecipient = () => identityForRole(IDENTITY_ROLES.FRONT_OFFICE)?.ema
 import * as mailbox from '../services/email/mailbox/index.js';
 import * as decisions from '../services/email/mailbox/decisions.js';
 import * as triage from '../services/email/mailbox/triage.js';
+import * as categorizer from '../services/email/mailbox/categorizer.js';
 import * as accept from '../services/email/mailbox/acceptMessage.js';
 import * as health from '../services/email/mailbox/health.js';
 import { matchesSearch, toMessageViews } from '../services/email/mailbox/messageView.js';
@@ -74,11 +75,14 @@ function mailboxUnavailable(error, { source, label }) {
 
 const newestFirst = (a, b) => String(b.receivedAt ?? '').localeCompare(String(a.receivedAt ?? ''));
 
-async function listPage(box, { unreadOnly, junkOnly, q, limit, offset }) {
+async function listPage(box, { unreadOnly, junkOnly, q, category, limit, offset }) {
   if (box.own) {
-    const messages = await box.store.list(box.address, { unreadOnly, junkOnly, q, limit, offset });
-    const total = limit ? await box.store.count(box.address, { unreadOnly, junkOnly, q }) : messages.length;
-    return { messages, total };
+    const [messages, categoryCounts] = await Promise.all([
+      box.store.list(box.address, { unreadOnly, junkOnly, q, category, limit, offset }),
+      box.store.categoryCounts(box.address, { unreadOnly, junkOnly, q }),
+    ]);
+    const total = limit ? await box.store.count(box.address, { unreadOnly, junkOnly, q, category }) : messages.length;
+    return { messages, total, categoryCounts };
   }
 
   const all = (await box.store.list(box.address, { unreadOnly })).filter((message) => matchesSearch(message, q));
@@ -91,8 +95,8 @@ async function listMessages(req, res, next) {
 
   try {
     box = await resolveMailbox(req);
-    const { unreadOnly, junkOnly, q, limit, offset } = req.validatedQuery;
-    const { messages, total } = await listPage(box, { unreadOnly, junkOnly, q, limit, offset });
+    const { unreadOnly, junkOnly, q, category, limit, offset } = req.validatedQuery;
+    const { messages, total, categoryCounts } = await listPage(box, { unreadOnly, junkOnly, q, category, limit, offset });
 
     health.recordSuccess({ source: box.source, address: box.address });
 
@@ -102,6 +106,7 @@ async function listMessages(req, res, next) {
       ...described,
       messages: await toMessageViews(messages, { keepsReadState: Boolean(box.own) }),
       ...(limit ? { total, limit, offset } : {}),
+      ...(categoryCounts ? { categoryCounts } : {}),
       sync: described.sync ?? health.snapshot(),
     });
   } catch (error) {
@@ -188,6 +193,24 @@ async function rescueMessage(req, res, next) {
     return res.status(HTTP_STATUS.OK).json({ rescued: true, triage: row });
   } catch (error) {
     return next(error);
+  }
+}
+
+async function setMessageCategory(req, res, next) {
+  if (!requireDb(next)) return undefined;
+  let box;
+  try {
+    box = await resolveMailbox(req);
+    const message = await box.store.get?.(box.address, req.params.messageId);
+    if (!message) return messageNotFound(res, req.params.messageId);
+
+    const row = await categorizer.correctCategory(message, req.body.category, {
+      userId: req.user?.id ?? null,
+      role: req.user?.role ?? null,
+    });
+    return res.status(HTTP_STATUS.OK).json({ corrected: true, triage: row });
+  } catch (error) {
+    return next(mailboxError(box, error));
   }
 }
 
@@ -383,4 +406,5 @@ export {
   markRead,
   syncMailbox,
   rescueMessage,
+  setMessageCategory,
 };

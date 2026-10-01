@@ -142,6 +142,7 @@ async function main() {
 
   console.log('Result:');
   console.log(`  classified           ${result.classified}`);
+  console.log(`  categorised          ${result.categorized}`);
   console.log(`  scanned              ${result.scanned}`);
   console.log(`  ${dryRun ? 'would purge         ' : 'purged              '} ${result.purged}`);
   console.log(`  attachments removed  ${result.attachmentsRemoved}`);

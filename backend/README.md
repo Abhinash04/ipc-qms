@@ -563,9 +563,10 @@ Triage runs in two stages. **Deterministic rules** run on the intake path
 a delivery-status notification, or a `mailer-daemon`/`postmaster` sender is `hard` junk — provably
 machine-generated, and purgeable. Anything a person might plausibly have sent — a `no-reply` sender,
 an out-of-office subject, a bulk header, an empty body — is `soft`: recorded as junk so it sorts,
-but sent on to the model, which decides. **One Gemma call** then settles the soft cases, from inside
-the hourly sweep rather than on intake: a 12-second call per message inside a 30-second sync loop
-would wreck the inbox, and there it is rate-limited to one small batch an hour.
+but sent on to the model, which decides. **One Gemma call** then settles the soft cases. It never
+runs inside the sync loop — a 12-second call per message inside a 30-second sync would wreck the
+inbox — but in the background straight after a sync stores new mail, and in the hourly sweep for
+anything left over.
 
 **Nothing is deleted.** The sweep strips `body`, `bodyHtml` and `attachments`, unlinks the
 attachment bytes from disk, and sets `purgedAt` — leaving the id stub, because that stub is what
@@ -638,6 +639,62 @@ message's own `receivedAt`, so every backfilled row gets a full fresh window how
 > Only the NICeMail browser mailbox stores rows, so it is the only purgeable source
 > (`PURGEABLE_SOURCES`). Under `MAILBOX_SOURCE=nic` the inbox is a live, read-only IMAP view of a
 > remote account and nothing is stored in Mongo at all.
+
+### Email categories
+
+The same Gemma call that settles the junk verdict also files every message under one category, so
+the Front Office can tell enquiries from everything else at a glance. The categories live in one
+registry, `constants/mailCategories.js` (mirrored in the frontend, and checked by
+`enumParity.test.js`): **Official Queries, Events and Invitations, System Notifications,
+Advertisements and Promotions, Duplicate or Similar Emails, Other / Unclassified.** Adding a category
+means one entry on each side; the prompt, the schema enum, the tabs and the badge follow.
+
+A category is a **label, never an action**. Nothing is registered, rejected, deleted or forwarded
+because of it, and it never makes a message purgeable — the purge still reads only the verdict. The
+model's verdict is also forced to GENUINE when it files the message as a query, an event or a
+duplicate, so the category can only ever reduce purging.
+
+How a message is filed (`services/email/mailbox/categorizer.js`):
+
+1. **Hard rules** decide on intake with no model call: a bounce, a mail daemon or our own mail
+   looping back is a System Notification; a bulk mailing with an unsubscribe header is an
+   Advertisement.
+2. **History**, deterministic and bounded (`mailHistory.js`, a 30-day window, the last 200 cases):
+   an identical message from the same sender is pinned as a Duplicate of the first; a case number
+   in the subject or body, a NICeMail thread shared with a case, or the inquirer's own subject again
+   links the message to that case as a follow-up; a near-identical message from the same sender, or
+   a close match to another inquirer's case, is linked. The links, how this sender's earlier mail
+   was filed, and any Front Office correction for this sender go to the model as context. Only an
+   exact re-send is pinned — whether a follow-up merely chases (Duplicate) or adds something new
+   (Official Query) is the model's call. Nothing is merged.
+3. **Gemma** returns the category with a confidence and a short reason. Below 0.6 the message is
+   filed under Other and flagged *Needs review*, keeping the model's guess for display.
+4. **Keyword fallback** (`categoryHeuristics.js`) when the model is unreachable or answers outside
+   the registry. A message whose verdict is still pending is retried on the existing `attempts`
+   schedule, and the model's answer replaces the fallback when it arrives.
+
+New mail is categorised straight after the sync that stored it, in the background — the sync never
+waits for Gemma and a failure there never stops a sync. The hourly sweep drains everything else,
+up to four batches of `MAILBOX_TRIAGE_BATCH` an hour: mail stored before categories existed, and
+every machine-filed row again whenever `CATEGORY_VERSION` is raised. One in-process queue serialises
+both paths, so a message is never sent to the model twice by overlapping runs.
+
+Mail stored before triage existed at all gets a **category-only** row from the sweep (verdict
+GENUINE, verdict check marked done), so backfilling categories can never make old mail purgeable.
+Run `npm run mailbox:purge -- --backfill` first if those rows should be judged by the rules instead.
+
+The result is kept on the `MailboxTriage` row (`category`, `categoryConfidence`, `categoryReason`,
+`categorySource`, `predictedCategory`, `needsReview`, `related`) and copied to
+`MailboxMessage.mailCategory`, which is what the feed filters and counts on.
+
+- `GET /mailbox/messages?category=EVENT_INVITATION` filters (`UNCLASSIFIED` lists mail not filed
+  yet), and the response carries `categoryCounts` for the tabs.
+- `POST /mailbox/messages/:id/category` `{ "category": "OFFICIAL_QUERY" }` is the Front Office
+  correction. It keeps the prediction, is never overwritten by a later run, writes an
+  `EMAIL_CLASSIFIED` audit row, and — when the new category is a query, an event or a duplicate —
+  rescues the message from the junk purge exactly as *Not junk* does.
+
+> `npm run triage:eval` now also checks the category of each fixture.
 
 ### Resetting the workflow state
 

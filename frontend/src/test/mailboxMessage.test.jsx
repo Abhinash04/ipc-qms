@@ -6,12 +6,13 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MailboxMessagePage } from '@/pages/frontOffice/MailboxMessagePage';
 import { useAuthStore } from '@/store/useAuthStore';
 import { FRONT_OFFICE_USER as FRONT_OFFICE } from '@/test/frontOfficeUser';
-import { fetchMailboxMessage, markMailboxMessageRead } from '@/services/api/mailboxService';
+import { fetchMailboxMessage, markMailboxMessageRead, setMailboxMessageCategory } from '@/services/api/mailboxService';
 
 vi.mock('@/services/api/mailboxService', async (importOriginal) => ({
   ...(await importOriginal()),
   fetchMailboxMessage: vi.fn(),
   markMailboxMessageRead: vi.fn(),
+  setMailboxMessageCategory: vi.fn(),
 }));
 
 
@@ -246,5 +247,60 @@ describe('a message that cannot be shown', () => {
     renderMessage();
 
     expect(await screen.findByRole('alert')).toHaveTextContent('MongoDB is not connected');
+  });
+});
+
+describe('the category card', () => {
+  const triage = {
+    verdict: 'GENUINE',
+    category: 'DUPLICATE',
+    categoryConfidence: 0.99,
+    categoryReason: 'identical to an earlier email from the same sender',
+    categorySource: 'history',
+    predictedCategory: 'DUPLICATE',
+    predictedConfidence: 0.99,
+    needsReview: false,
+    related: [{ kind: 'EXACT_DUPLICATE', mailboxMessageId: 'MSG-00000', queryId: 'QRY-2026-00003', score: 1 }],
+  };
+
+  it('explains the category and links the earlier email and its case', async () => {
+    fetchMailboxMessage.mockResolvedValue({ ...MESSAGE, triage });
+    renderMessage();
+
+    const card = (await screen.findByRole('heading', { name: 'Category' })).closest('section');
+    expect(card).toHaveTextContent('Duplicate or Similar Emails');
+    expect(card).toHaveTextContent('Confidence 99% · Mail history');
+    expect(card).toHaveTextContent('Identical to an earlier email');
+    expect(screen.getByRole('link', { name: '(open)' })).toHaveAttribute('href', '/front-officer/inbox/MSG-00000');
+  });
+
+  it('records a correction', async () => {
+    fetchMailboxMessage.mockResolvedValue({ ...MESSAGE, triage });
+    setMailboxMessageCategory.mockResolvedValue({ corrected: true });
+    renderMessage();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Move to Official Queries' }));
+
+    await waitFor(() => expect(setMailboxMessageCategory).toHaveBeenCalledWith('MSG-00001', 'OFFICIAL_QUERY'));
+  });
+
+  it('shows a corrected category as corrected, with the prediction it replaced', async () => {
+    fetchMailboxMessage.mockResolvedValue({
+      ...MESSAGE,
+      triage: { ...triage, category: 'OFFICIAL_QUERY', categorySource: 'human', related: [] },
+    });
+    renderMessage();
+
+    const card = (await screen.findByRole('heading', { name: 'Category' })).closest('section');
+    expect(card).toHaveTextContent('Corrected');
+    expect(card).toHaveTextContent('Corrected by the Front Office');
+    expect(card).toHaveTextContent('AI had predicted Duplicate or Similar Emails (99%)');
+  });
+
+  it('says plainly when the message has not been classified yet', async () => {
+    renderMessage();
+
+    const card = (await screen.findByRole('heading', { name: 'Category' })).closest('section');
+    expect(card).toHaveTextContent('Not classified yet');
   });
 });

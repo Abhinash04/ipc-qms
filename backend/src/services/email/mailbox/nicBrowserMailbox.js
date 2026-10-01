@@ -10,6 +10,8 @@ import { pending as browserPending } from '../nic/browser/session.js';
 import { normaliseAddress } from './address.js';
 import { searchFilter } from './messageView.js';
 import * as triage from './triage.js';
+import * as categorizer from './categorizer.js';
+import { MAIL_CATEGORIES, UNCLASSIFIED } from '../../../constants/mailCategories.js';
 
 export const SOURCE = 'nic-browser';
 
@@ -125,6 +127,12 @@ async function sync(address = browserConfig.mailboxAddress, { reader = readInbox
       const out = await reader({ max: browserConfig.syncMax, skip, retry: new Set(retryIds()), onMessage });
       for (const message of Array.isArray(out) ? out : out?.messages ?? []) await onMessage(message);
 
+      try {
+        categorizer.kick(storedIds.map(mailboxMessageId));
+      } catch (error) {
+        console.warn(`[qms] categoriser: could not start for new mail: ${error.message}`);
+      }
+
       const failures = out?.failures ?? [];
       for (const { providerMessageId } of failures) {
         attempts.set(providerMessageId, (attempts.get(providerMessageId) || 0) + 1);
@@ -207,18 +215,19 @@ function resetSyncState() {
 
 const scope = (recipient) => ({ to: normaliseAddress(recipient), source: SOURCE, removedAt: null });
 
-async function listFilter(recipient, { unreadOnly = false, junkOnly = false, q } = {}) {
+async function listFilter(recipient, { unreadOnly = false, junkOnly = false, q, category } = {}) {
   const filter = { ...scope(recipient), ...searchFilter(q) };
   if (unreadOnly) filter.ingested = false;
   if (junkOnly) filter.mailboxMessageId = { $in: await triage.junkMessageIds() };
+  if (category) filter.mailCategory = category === UNCLASSIFIED ? null : category;
   return filter;
 }
 
-async function list(recipient, { unreadOnly = false, junkOnly = false, q, limit, offset = 0 } = {}) {
+async function list(recipient, { unreadOnly = false, junkOnly = false, q, category, limit, offset = 0 } = {}) {
   if (!isConnected()) throw unavailable();
   syncIfDue(recipient);
 
-  let query = MailboxMessage.find(await listFilter(recipient, { unreadOnly, junkOnly, q }))
+  let query = MailboxMessage.find(await listFilter(recipient, { unreadOnly, junkOnly, q, category }))
     .select('-bodyHtml')
     .sort({ receivedAt: -1, mailboxMessageId: -1 });
   if (limit) query = query.skip(offset).limit(limit);
@@ -229,6 +238,17 @@ async function list(recipient, { unreadOnly = false, junkOnly = false, q, limit,
 async function count(recipient, options = {}) {
   if (!isConnected()) throw unavailable();
   return MailboxMessage.countDocuments(await listFilter(recipient, options));
+}
+
+async function categoryCounts(recipient, { category: _category, ...options } = {}) {
+  if (!isConnected()) throw unavailable();
+  const rows = await MailboxMessage.find(await listFilter(recipient, options)).select('mailCategory').lean();
+  const counts = Object.fromEntries([...Object.values(MAIL_CATEGORIES), UNCLASSIFIED].map((key) => [key, 0]));
+  for (const row of rows) {
+    const key = row.mailCategory && row.mailCategory in counts ? row.mailCategory : UNCLASSIFIED;
+    counts[key] += 1;
+  }
+  return counts;
 }
 
 async function get(recipient, id) {
@@ -308,6 +328,7 @@ export {
   deliver,
   list,
   count,
+  categoryCounts,
   get,
   markRead,
   requestSync,

@@ -16,6 +16,7 @@ import {
   deleteMailboxMessage,
   markMessageIngested,
   rescueMailboxMessage,
+  setMailboxMessageCategory,
   sendAcknowledgement,
   forwardQuery,
   syncMailbox,
@@ -24,6 +25,7 @@ import { fakeAcceptEndpoint } from '@/test/fakeAcceptEndpoint';
 
 vi.mock('@/services/api/mailboxService', () => ({
   rescueMailboxMessage: vi.fn().mockResolvedValue({ rescued: true }),
+  setMailboxMessageCategory: vi.fn().mockResolvedValue({ corrected: true }),
   fetchEmailConfig: vi.fn().mockResolvedValue({}),
   fetchMailboxMessages: vi.fn(),
   fetchMailboxMessage: vi.fn().mockResolvedValue(null),
@@ -1011,5 +1013,121 @@ describe('the Junk view', () => {
 
     await waitFor(() => expect(failed).toHaveBeenCalled());
     expect(failed.mock.calls[0][1].description).toMatch(/Mailbox unavailable/);
+  });
+});
+
+describe('email categories in the feed', () => {
+  const COUNTS = {
+    OFFICIAL_QUERY: 4,
+    EVENT_INVITATION: 2,
+    SYSTEM_NOTIFICATION: 1,
+    ADVERTISEMENT: 3,
+    DUPLICATE: 1,
+    OTHER: 0,
+    UNCLASSIFIED: 1,
+  };
+
+  const triaged = (n, subject, triage) => ({ ...message(n, subject), triage: { verdict: 'GENUINE', ...triage } });
+
+  beforeEach(() => {
+    fetchMailboxMessages.mockResolvedValue({
+      backend: 'nic-browser',
+      categoryCounts: COUNTS,
+      messages: [
+        triaged(1, 'Assay of metformin', {
+          category: 'OFFICIAL_QUERY',
+          categoryConfidence: 0.91,
+          categoryReason: 'asks about an IP assay',
+          categorySource: 'gemma',
+          predictedCategory: 'OFFICIAL_QUERY',
+          predictedConfidence: 0.91,
+          needsReview: false,
+          related: [{ kind: 'FOLLOW_UP', queryId: 'QRY-2026-00012', mailboxMessageId: null, score: null }],
+        }),
+        triaged(2, 'Hello there', {
+          category: 'OTHER',
+          categoryConfidence: 0.4,
+          categorySource: 'gemma',
+          predictedCategory: 'EVENT_INVITATION',
+          predictedConfidence: 0.4,
+          needsReview: true,
+          related: [],
+        }),
+        message(3, 'Not yet looked at'),
+      ],
+    });
+  });
+
+  it('shows a category badge on every row, and says when one is not classified yet', async () => {
+    renderInbox();
+    await screen.findByText('Assay of metformin');
+
+    expect(screen.getByRole('button', { name: 'Category: Official Queries. Show details' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Category: Other / Unclassified, needs review. Show details' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Category: Not classified yet. Show details' })).toBeInTheDocument();
+  });
+
+  it('offers a tab per category with its count, and filters the feed by it', async () => {
+    renderInbox();
+    await screen.findByText('Assay of metformin');
+
+    const tabs = screen.getByRole('group', { name: 'Filter by category' });
+    expect(tabs).toHaveTextContent('All12');
+    expect(screen.getByRole('button', { name: /^Events\s*2$/ })).toHaveAttribute('aria-pressed', 'false');
+
+    fireEvent.click(screen.getByRole('button', { name: /^Events\s*2$/ }));
+
+    await waitFor(() =>
+      expect(fetchMailboxMessages).toHaveBeenLastCalledWith(expect.objectContaining({ category: 'EVENT_INVITATION', offset: 0 })),
+    );
+    expect(screen.getByRole('button', { name: /^Events\s*2$/ })).toHaveAttribute('aria-pressed', 'true');
+
+    fireEvent.click(screen.getByRole('button', { name: /^All\s*12$/ }));
+    await waitFor(() => expect(fetchMailboxMessages).toHaveBeenLastCalledWith(expect.objectContaining({ category: undefined })));
+  });
+
+  it('hides the category tabs for a mailbox that is not categorised', async () => {
+    fetchMailboxMessages.mockResolvedValue({ backend: 'mongo', messages: [message(1, 'Plain one')] });
+    renderInbox();
+    await screen.findByText('Plain one');
+
+    expect(screen.queryByRole('group', { name: 'Filter by category' })).toBeNull();
+  });
+
+  it('shows the AI prediction, its confidence, its reason and the linked case', async () => {
+    renderInbox();
+    fireEvent.click(await screen.findByRole('button', { name: 'Category: Official Queries. Show details' }));
+
+    expect(await screen.findByText('Confidence 91% · AI (Gemma)')).toBeInTheDocument();
+    expect(screen.getByText('“asks about an IP assay”')).toBeInTheDocument();
+    expect(screen.getByText(/Follow-up on/)).toHaveTextContent('Follow-up on QRY-2026-00012');
+  });
+
+  it('shows what the AI suggested when it was unsure', async () => {
+    renderInbox();
+    fireEvent.click(await screen.findByRole('button', { name: /Other \/ Unclassified, needs review/ }));
+
+    expect(await screen.findByText('Needs review')).toBeInTheDocument();
+    expect(screen.getByText('AI suggested Events and Invitations (40%)')).toBeInTheDocument();
+  });
+
+  it('lets the Front Officer correct a category without accepting, rejecting or opening the message', async () => {
+    renderInbox();
+    fireEvent.click(await screen.findByRole('button', { name: /Other \/ Unclassified, needs review/ }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Move to Events and Invitations' }));
+
+    await waitFor(() => expect(setMailboxMessageCategory).toHaveBeenCalledWith('MSG-00002', 'EVENT_INVITATION'));
+    expect(recordMailboxDecision).not.toHaveBeenCalled();
+    expect(acceptMailboxMessage).not.toHaveBeenCalled();
+    expect(useWorkflowStore.getState().queries).toHaveLength(0);
+    await waitFor(() => expect(fetchMailboxMessages.mock.calls.length).toBeGreaterThan(1));
+  });
+
+  it('does not offer the category it is already in', async () => {
+    renderInbox();
+    fireEvent.click(await screen.findByRole('button', { name: 'Category: Official Queries. Show details' }));
+
+    await screen.findByRole('button', { name: 'Move to Events and Invitations' });
+    expect(screen.queryByRole('button', { name: 'Move to Official Queries' })).toBeNull();
   });
 });

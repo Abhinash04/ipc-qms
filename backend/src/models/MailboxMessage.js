@@ -28,11 +28,14 @@ const mailboxMessageSchema = new mongoose.Schema(
     readAt: { type: String, default: null },
     readByUserId: { type: String, default: null },
     createdAt: { type: String, default: null },
+    mailCategory: { type: String, default: null },
   },
   { versionKey: false },
 );
 
 mailboxMessageSchema.index({ to: 1, source: 1, removedAt: 1, receivedAt: -1, mailboxMessageId: -1 });
+
+mailboxMessageSchema.index({ to: 1, source: 1, removedAt: 1, mailCategory: 1, receivedAt: -1 });
 
 mailboxMessageSchema.index(
   { providerMessageId: 1 },

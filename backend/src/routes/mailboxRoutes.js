@@ -9,6 +9,7 @@ import {
   mailboxDecisionSchema,
   acceptMessageSchema,
   listMessagesQuerySchema,
+  mailCategorySchema,
 } from '../validators/mailboxSchemas.js';
 import {
   listMessages,
@@ -24,6 +25,7 @@ import {
   markRead,
   syncMailbox,
   rescueMessage,
+  setMessageCategory,
 } from '../controllers/mailboxController.js';
 
 const router = express.Router();
@@ -53,6 +55,14 @@ router.post(
   verifyToken,
   verifyRole(FRONT_OFFICE_ONLY),
   rescueMessage,
+);
+
+router.post(
+  '/mailbox/messages/:messageId/category',
+  verifyToken,
+  verifyRole(FRONT_OFFICE_ONLY),
+  validateBody(mailCategorySchema),
+  setMessageCategory,
 );
 
 router.post('/mailbox/sync', verifyToken, verifyRole(FRONT_OFFICE_ONLY), syncMailbox);

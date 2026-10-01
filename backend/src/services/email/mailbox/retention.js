@@ -3,13 +3,13 @@ import { isConnected, isSharedDatabase } from '../../../config/db.js';
 import browserConfig from '../../../config/browserConfig.js';
 import { MailboxMessage } from '../../../models/MailboxMessage.js';
 import { MailboxDecision } from '../../../models/MailboxDecision.js';
-import { MailboxTriage, RULE_CLASSES, TRIAGE_CLASSIFIERS, TRIAGE_VERDICTS } from '../../../models/MailboxTriage.js';
+import { MailboxTriage, TRIAGE_VERDICTS } from '../../../models/MailboxTriage.js';
 import { QueryCase } from '../../../models/QueryCase.js';
 import * as attachmentStore from '../../attachments/attachmentStore.js';
 import * as audit from '../../audit/auditService.js';
 import { AUDIT_ACTIONS, AUDIT_RESULTS } from '../../../constants/auditActions.js';
 import { ACTOR_TYPES } from '../../../constants/roles.js';
-import { classifyMail } from '../../ai/gemmaService.js';
+import { backfillMissingRows, categorizeBacklog, classifyCandidateFilter } from './categorizer.js';
 import { MAIL_STATUS, toMessageViews } from './messageView.js';
 
 export const PURGEABLE_SOURCES = ['nic-browser'];
@@ -17,10 +17,6 @@ export const PURGEABLE_SOURCES = ['nic-browser'];
 const SWEEP_INTERVAL_MS = 60 * 60 * 1000;
 
 const RETENTION_GRACE_MS = 2 * 60 * 60 * 1000;
-
-const MAX_TRIAGE_ATTEMPTS = 12;
-
-const CLASSIFY_CONCURRENCY = 4;
 
 let timer = null;
 let firstPass = null;
@@ -58,113 +54,7 @@ export function purgeMessageFilter(ids) {
   };
 }
 
-export function classifyCandidateFilter() {
-  return {
-    gemmaAt: null,
-    rescuedAt: null,
-    purgedAt: null,
-    ruleClass: { $in: [RULE_CLASSES.NONE, RULE_CLASSES.SOFT] },
-    attempts: { $lt: MAX_TRIAGE_ATTEMPTS },
-  };
-}
-
-async function mapWithLimit(items, limit, fn) {
-  const results = new Array(items.length);
-  let next = 0;
-  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
-    while (next < items.length) {
-      const index = next++;
-      results[index] = await fn(items[index], index);
-    }
-  });
-  await Promise.all(workers);
-  return results;
-}
-
-export async function classifyPending({ now = Date.now(), limit = env.MAILBOX_TRIAGE_BATCH, dryRun = false } = {}) {
-  if (!isConnected() || !env.GEMMA_API_URL) return { classified: 0, junk: 0 };
-
-  const rows = await MailboxTriage.find(classifyCandidateFilter())
-    .select('mailboxMessageId from subject reason rule ruleClass attempts')
-    .sort({ classifiedAt: 1 })
-    .limit(limit)
-    .lean();
-  if (!rows.length) return { classified: 0, junk: 0 };
-
-  const messages = await MailboxMessage.find({
-    mailboxMessageId: { $in: rows.map((row) => row.mailboxMessageId) },
-  })
-    .select('mailboxMessageId from subject body attachments')
-    .lean();
-  const bodies = new Map(messages.map((message) => [message.mailboxMessageId, message]));
-
-  let junk = 0;
-  let classified = 0;
-
-  await mapWithLimit(rows, CLASSIFY_CONCURRENCY, async (row) => {
-    const message = bodies.get(row.mailboxMessageId);
-    if (!message) {
-      if (!dryRun) {
-        await MailboxTriage.updateOne(
-          { mailboxMessageId: row.mailboxMessageId },
-          { $set: { gemmaAt: new Date(now).toISOString(), classifier: TRIAGE_CLASSIFIERS.EXHAUSTED } },
-        );
-      }
-      return;
-    }
-
-    const verdict = await classifyMail({
-      from: message.from,
-      subject: message.subject,
-      body: message.body,
-      attachments: message.attachments,
-      signals: row.reason ? [row.reason] : [],
-    });
-
-    classified += 1;
-    if (verdict.verdict === TRIAGE_VERDICTS.JUNK && verdict.confidence > 0) junk += 1;
-    if (dryRun) return;
-
-    const nowIso = new Date(now).toISOString();
-    const attempts = (row.attempts || 0) + 1;
-    const answered = verdict.aiGenerated;
-    const exhausted = !answered && attempts >= MAX_TRIAGE_ATTEMPTS;
-
-    await MailboxTriage.updateOne(
-      { mailboxMessageId: row.mailboxMessageId, rescuedAt: null },
-      {
-        $set: {
-          verdict: verdict.verdict,
-          confidence: verdict.confidence,
-          reason: verdict.reason || row.reason || '',
-          attempts,
-          classifier: answered
-            ? TRIAGE_CLASSIFIERS.GEMMA
-            : exhausted
-              ? TRIAGE_CLASSIFIERS.EXHAUSTED
-              : TRIAGE_CLASSIFIERS.FALLBACK,
-          ...(answered || exhausted ? { gemmaAt: nowIso } : {}),
-        },
-      },
-    );
-
-    if (verdict.verdict === TRIAGE_VERDICTS.JUNK && verdict.confidence > 0) {
-      await audit.record({
-        action: AUDIT_ACTIONS.EMAIL_CLASSIFIED,
-        actorType: ACTOR_TYPES.SYSTEM,
-        messageId: row.mailboxMessageId,
-        details: {
-          verdict: verdict.verdict,
-          confidence: verdict.confidence,
-          reason: verdict.reason,
-          classifier: TRIAGE_CLASSIFIERS.GEMMA,
-        },
-      });
-    }
-  });
-
-  return { classified, junk };
-}
+export { classifyCandidateFilter };
 
 export async function findPurgeable({
   now = Date.now(),
@@ -275,6 +165,7 @@ export async function sweepOnce({
   const result = {
     scanned: 0,
     classified: 0,
+    categorized: 0,
     purged: 0,
     attachmentsRemoved: 0,
     skipped: { accepted: 0, linkedCase: 0, notEligible: 0 },
@@ -287,8 +178,10 @@ export async function sweepOnce({
 
   try {
     if (classify) {
-      const classified = await classifyPending({ now, dryRun });
+      if (!dryRun) await backfillMissingRows({ sources: PURGEABLE_SOURCES, now });
+      const classified = await categorizeBacklog({ now, dryRun });
       result.classified = classified.classified;
+      result.categorized = classified.categorized;
     }
 
     if (!purge) return { ...result, durationMs: Date.now() - started };

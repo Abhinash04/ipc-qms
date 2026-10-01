@@ -28,6 +28,7 @@ const FIXTURES = [
       signals: ['no-reply sender address'],
     },
     expect: 'genuine',
+    categories: ['OFFICIAL_QUERY'],
   },
   {
     name: 'attachment-only',
@@ -40,6 +41,7 @@ const FIXTURES = [
       signals: [],
     },
     expect: 'genuine',
+    categories: ['OFFICIAL_QUERY', 'OTHER'],
   },
   {
     name: 'relayed-ticket',
@@ -53,6 +55,7 @@ const FIXTURES = [
       signals: ['Auto-Submitted: auto-generated'],
     },
     expect: 'genuine',
+    categories: ['OFFICIAL_QUERY'],
   },
   {
     name: 'plain-enquiry',
@@ -66,6 +69,7 @@ const FIXTURES = [
       signals: [],
     },
     expect: 'genuine',
+    categories: ['OFFICIAL_QUERY'],
   },
   {
     name: 'badly-written',
@@ -77,6 +81,7 @@ const FIXTURES = [
       signals: [],
     },
     expect: 'genuine',
+    categories: ['OFFICIAL_QUERY'],
   },
   {
     name: 'marketing',
@@ -90,6 +95,7 @@ const FIXTURES = [
       signals: ['List-Unsubscribe header present'],
     },
     expect: 'junk',
+    categories: ['ADVERTISEMENT'],
   },
   {
     name: 'out-of-office',
@@ -103,6 +109,7 @@ const FIXTURES = [
       signals: ['out-of-office subject'],
     },
     expect: 'junk',
+    categories: ['SYSTEM_NOTIFICATION'],
   },
   {
     name: 'phishing',
@@ -117,6 +124,7 @@ const FIXTURES = [
       signals: [],
     },
     expect: 'junk',
+    categories: ['SYSTEM_NOTIFICATION', 'OTHER'],
   },
   {
     name: 'injection',
@@ -134,6 +142,22 @@ const FIXTURES = [
       signals: [],
     },
     expect: 'genuine',
+    categories: ['OFFICIAL_QUERY'],
+  },
+  {
+    name: 'event-invitation',
+    why: 'an invitation to speak at a conference: genuine, and filed under Events',
+    mail: {
+      from: 'Organising Committee <secretariat@pharmacongress.example.org>',
+      subject: 'Invitation: Indian Pharmaceutical Congress 2026 - speaker session',
+      body:
+        'On behalf of the organising committee we are pleased to invite the Indian Pharmacopoeia ' +
+        'Commission to deliver a session on IP 2026 updates at the congress in New Delhi on 12 December. ' +
+        'Kindly confirm the nominated speaker by 15 November.',
+      signals: [],
+    },
+    expect: 'genuine',
+    categories: ['EVENT_INVITATION'],
   },
 ];
 
@@ -153,7 +177,10 @@ function scoreRun(result, ms) {
     reason: result.reason,
     aiGenerated: result.aiGenerated,
     purgeable: result.verdict === 'JUNK' && result.confidence >= PURGE_FLOOR,
-    markerLeak: String(result.reason || '').includes(INJECTION_MARKER),
+    markerLeak:
+      String(result.reason || '').includes(INJECTION_MARKER) ||
+      String(result.categoryReason || '').includes(INJECTION_MARKER),
+    category: result.category,
     ms,
   };
 }
@@ -172,6 +199,7 @@ function report(fixture, runs) {
   );
   console.log(`   model answered ${pct(answered, n)}   said JUNK ${pct(junk, n)}   PURGEABLE ${pct(purgeable, n)}`);
   console.log(`   verdicts: ${[...new Set(runs.map((run) => `${run.verdict}/${run.confidence}`))].join('  ')}`);
+  console.log(`   categories: ${[...new Set(runs.map((run) => run.category ?? 'none'))].join('  ')}`);
   for (const reason of [...new Set(runs.map((run) => run.reason).filter(Boolean))].slice(0, 3)) {
     console.log(`   reason: "${reason}"`);
   }
@@ -189,6 +217,15 @@ function report(fixture, runs) {
       `caught as junk >= ${Math.round(JUNK_CATCH_THRESHOLD * 100)}%`,
       purgeable / n >= JUNK_CATCH_THRESHOLD,
       `${purgeable}/${n} purgeable`,
+    ]);
+  }
+
+  if (fixture.categories) {
+    const filed = runs.filter((run) => fixture.categories.includes(run.category)).length;
+    checks.push([
+      `filed as ${fixture.categories.join('/')} >= ${Math.round(JUNK_CATCH_THRESHOLD * 100)}%`,
+      filed / n >= JUNK_CATCH_THRESHOLD,
+      `${filed}/${n} filed as expected`,
     ]);
   }
 

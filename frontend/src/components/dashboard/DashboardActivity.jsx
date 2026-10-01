@@ -75,7 +75,7 @@ export function DashboardActivity({ auditEvents = [] }) {
               return (
                 <li key={event.auditId || stableKey(event)} className="relative ps-6 pb-5 last:pb-0">
                   <span
-                    className={`absolute -start-[9px] top-0.5 flex h-4 w-4 items-center justify-center rounded-full border-2 bg-surface ${badge.dot}`}
+                    className={`absolute -inset-s-2.25 top-0.5 flex h-4 w-4 items-center justify-center rounded-full border-2 bg-surface ${badge.dot}`}
                     aria-hidden="true"
                   />
                   <div className="flex items-center justify-between gap-2">
