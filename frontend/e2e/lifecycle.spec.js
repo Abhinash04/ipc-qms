@@ -97,7 +97,6 @@ test('an enquiry runs the full lifecycle and closes only once the answer was sen
 
   const { queryId } = registered;
 
-  // ── Assignment ────────────────────────────────────────────────────────────
   await assign(page, queryId);
 
   const assigned = await theCase();
@@ -105,7 +104,6 @@ test('an enquiry runs the full lifecycle and closes only once the answer was sen
   expect(assigned.assignmentDecision.assigneeId).toBe(ASSIGNED_OFFICIAL_USER.id);
   expect(assigned.businessStatus).toBe('IN_PROGRESS');
 
-  // ── Drafting ──────────────────────────────────────────────────────────────
   await draftAndSubmit(page, queryId);
 
   const [draft] = await readResponseVersions({ queryId });
@@ -123,14 +121,12 @@ test('an enquiry runs the full lifecycle and closes only once the answer was sen
   expect(openReview.stepType).toBe('REVIEW');
   expect(openReview.assignedUserId).toBe(REVIEWER_USER.id);
 
-  // ── Review ────────────────────────────────────────────────────────────────
   await review(page, queryId);
 
   const [decision] = await readReviews({ queryId });
   expect(decision.decision).toBe('APPROVED');
   expect(decision.reviewerId).toBe(REVIEWER_USER.id);
   expect(decision.version).toBe('v1');
-  // The reviewer's words reached the database, bound to the draft they judged.
   expect(decision.comment).toBe(REVIEW_COMMENT);
   expect(decision.responseId).toBe(draft.responseId);
 
@@ -138,7 +134,6 @@ test('an enquiry runs the full lifecycle and closes only once the answer was sen
     (await readWorkflowSteps({ queryId, stepType: 'REVIEW' }))[0].status,
   ).toBe('COMPLETED');
 
-  // ── Final approval, and the answer ────────────────────────────────────────
   await signInAs(page, OFFICER_IN_CHARGE_USER.email);
   await page.goto(approvalPath(queryId));
   await page.getByRole('button', { name: 'Approve', exact: true }).click();

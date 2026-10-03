@@ -95,7 +95,6 @@ export function AutoTransferTimerCard({ query }) {
       data-slot="panel"
       className="bg-white rounded-[20px] border border-[#E6EAF2] p-5 sm:p-6 shadow-[0_4px_20px_-2px_rgba(99,102,241,0.06)] select-none space-y-4 text-slate-800"
     >
-      {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#E6EAF2] pb-4">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 text-white flex items-center justify-center shadow-xs shrink-0">
@@ -120,9 +119,7 @@ export function AutoTransferTimerCard({ query }) {
         )}
       </div>
 
-      {/* Information Cards Row */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
-        {/* Card 1: Assigned Officer */}
         <div className="bg-blue-100/70 border border-blue-200/80 p-3.5 rounded-2xl flex items-center gap-3 transition-all hover:bg-blue-100/90">
           <div className="w-9 h-9 rounded-full bg-blue-200/80 text-blue-700 flex items-center justify-center shrink-0">
             <User className="h-4.5 w-4.5" strokeWidth={2.2} />
@@ -137,7 +134,6 @@ export function AutoTransferTimerCard({ query }) {
           </div>
         </div>
 
-        {/* Card 2: Assignment Time */}
         <div className="bg-purple-100/70 border border-purple-200/80 p-3.5 rounded-2xl flex items-center gap-3 transition-all hover:bg-purple-100/90">
           <div className="w-9 h-9 rounded-full bg-purple-200/80 text-purple-700 flex items-center justify-center shrink-0">
             <Calendar className="h-4.5 w-4.5" strokeWidth={2.2} />
@@ -152,7 +148,6 @@ export function AutoTransferTimerCard({ query }) {
           </div>
         </div>
 
-        {/* Card 3: Action Deadline */}
         <div className="bg-sky-100/70 border border-sky-200/80 p-3.5 rounded-2xl flex items-center gap-3 transition-all hover:bg-sky-100/90">
           <div className="w-9 h-9 rounded-full bg-sky-200/80 text-sky-700 flex items-center justify-center shrink-0">
             <Clock className="h-4.5 w-4.5" strokeWidth={2.2} />
@@ -167,7 +162,6 @@ export function AutoTransferTimerCard({ query }) {
           </div>
         </div>
 
-        {/* Card 4: Remaining Time */}
         <div className="bg-amber-100/70 border border-amber-200/80 p-3.5 rounded-2xl flex items-center gap-3 transition-all hover:bg-amber-100/90">
           <div className="w-9 h-9 rounded-full bg-amber-200/80 text-amber-700 flex items-center justify-center shrink-0">
             <Hourglass className="h-4.5 w-4.5" strokeWidth={2.2} />
@@ -191,7 +185,6 @@ export function AutoTransferTimerCard({ query }) {
         </div>
       </div>
 
-      {/* Auto Transfer Status Bar */}
       <div className="rounded-2xl border border-[#E6EAF2] bg-slate-50/70 p-3 px-4 flex flex-wrap items-center justify-between gap-3 text-xs">
         <div className="flex flex-wrap items-center gap-2.5">
           <div className="w-7 h-7 rounded-full bg-blue-100/60 text-blue-600 flex items-center justify-center shrink-0">
@@ -230,7 +223,6 @@ export function AutoTransferTimerCard({ query }) {
         </div>
       </div>
 
-      {/* Warning / Information Alert */}
       {failed && (
         <div
           role="alert"
@@ -246,7 +238,6 @@ export function AutoTransferTimerCard({ query }) {
         </div>
       )}
 
-      {/* Transfer History Table */}
       {transferHistory.length > 0 && (
         <div className="pt-3 border-t border-[#E6EAF2]">
           <h3 className="text-xs font-bold text-slate-600 uppercase tracking-wider mb-2.5 flex items-center gap-2 m-0">

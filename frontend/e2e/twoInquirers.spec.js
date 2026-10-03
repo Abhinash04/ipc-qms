@@ -134,37 +134,31 @@ test('two inquirers, one mailbox: two cases that never touch each other', async 
   const a = first.queryId;
   const b = second.queryId;
 
-  // ── Interleaved from here ─────────────────────────────────────────────────
   await assign(page, a);
   await assign(page, b);
 
   await draftAndSubmit(page, a);
   await draftAndSubmit(page, b);
 
-  // A reaches review and waits there while B is carried all the way out.
   await review(page, a);
   expect(await stateOf(a)).toBe('PENDING_FINAL_APPROVAL');
 
   await review(page, b);
   await approveAndClose(page, b);
 
-  // Closing B changed nothing about A: still approved, still unanswered.
   expect(await stateOf(a)).toBe('PENDING_FINAL_APPROVAL');
   expect(await mailOf(a, 'OUTGOING_RESPONSE')).toHaveLength(0);
 
   await approveAndClose(page, a);
 
-  // ── Both answered, once each, to the right person ─────────────────────────
   await expectAnsweredOnce(a, ABHINASH, SHEKHAR);
   await expectAnsweredOnce(b, SHEKHAR, ABHINASH);
 
-  // Each answer carries its own case's approved draft, not the other's.
   const [answerToFirst] = await mailOf(a, 'OUTGOING_RESPONSE');
   const [answerToSecond] = await mailOf(b, 'OUTGOING_RESPONSE');
   expect(answerToFirst.body).not.toBe(answerToSecond.body);
   expect(answerToFirst.subject).toContain(ABHINASH.subject);
   expect(answerToSecond.subject).toContain(SHEKHAR.subject);
 
-  // Nothing was created beyond the two cases.
   expect(await readQueryCases()).toHaveLength(2);
 });

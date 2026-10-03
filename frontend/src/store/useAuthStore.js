@@ -39,7 +39,7 @@ export const useAuthStore = create((set) => ({
   logout: async () => {
     try {
       await authService.logout();
-    } catch { /* noop */ }
+    } catch {}
 
     set({ currentUser: null, authReady: true });
     useWorkflowStore.getState().resetHydration();
