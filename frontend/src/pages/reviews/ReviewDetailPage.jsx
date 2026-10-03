@@ -17,10 +17,11 @@ import { useRoutePaths } from '@/hooks/useRoutePaths';
 import { useWorkflowAction } from '@/hooks/useWorkflowAction';
 import { ActionError } from '@/components/workflow/ActionError';
 import { AddReviewLevelField } from '@/components/workflow/AddReviewLevelField';
+import { PreviousReviewCycles } from '@/components/workflow/PreviousReviewCycles';
 
 export function ReviewDetailPage() {
   const paths = useRoutePaths();
-  const { queryId, query, steps, reviews, versions, latestVersion, audit, messages, currentUser, can, resolving } =
+  const { queryId, query, steps, stepHistory, reviews, versions, latestVersion, audit, messages, currentUser, can, resolving } =
     useQueryCase();
   const { run, error, clearError } = useWorkflowAction();
   const addReviewLevel = useWorkflowStore((state) => state.addReviewLevel);
@@ -185,6 +186,8 @@ export function ReviewDetailPage() {
               </p>
             </CardBody>
           </Card>
+
+          <PreviousReviewCycles steps={stepHistory} />
         </div>
       </div>
     </div>

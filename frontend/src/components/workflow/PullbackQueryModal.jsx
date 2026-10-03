@@ -12,13 +12,14 @@ import { notify } from '@/services/notify';
 import {
   PREDEFINED_PULLBACK_REASONS,
   STAGE_LABELS,
-  getValidPullbackStages,
+  getPullbackTargets,
 } from '@/constants/pullbackRules';
 import { RotateCcw, AlertTriangle, AlertCircle, HelpCircle } from 'lucide-react';
 
 export function PullbackQueryModal({ query, isOpen, onClose, currentUser }) {
   const pullBackQuery = useWorkflowStore((state) => state.pullBackQuery);
   const auditEvents = useWorkflowStore((state) => state.auditEvents);
+  const workflowSteps = useWorkflowStore((state) => state.workflowSteps);
 
   const [selectedStage, setSelectedStage] = useState('');
   const [selectedReason, setSelectedReason] = useState(PREDEFINED_PULLBACK_REASONS[0]);
@@ -27,13 +28,14 @@ export function PullbackQueryModal({ query, isOpen, onClose, currentUser }) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState(null);
 
-  const validStages = getValidPullbackStages(query, auditEvents);
+  const targets = getPullbackTargets(query, auditEvents, workflowSteps);
 
-  const stage = selectedStage || validStages[0] || '';
+  const target = targets.find((entry) => entry.key === selectedStage) || targets[0] || null;
+  const stage = target?.stage || '';
 
   if (!query) return null;
 
-  const handleNextOrConfirm = () => {
+  const handleNextOrConfirm = async () => {
     setErrorMessage(null);
 
     if (!stage) {
@@ -58,10 +60,12 @@ export function PullbackQueryModal({ query, isOpen, onClose, currentUser }) {
 
     setIsSubmitting(true);
     try {
-      pullBackQuery(query.queryId, stage, selectedReason, customRemarks, currentUser);
+      await pullBackQuery(query.queryId, stage, selectedReason, customRemarks, currentUser, {
+        reviewStepId: target.reviewStepId,
+      });
       notify.success(
         'Query Pulled Back Successfully',
-        `Query ${query.queryId} has been pulled back to ${STAGE_LABELS[stage] || stage}.`,
+        `Query ${query.queryId} has been pulled back to ${target.label}.`,
       );
       handleClose();
     } catch (err) {
@@ -129,20 +133,20 @@ export function PullbackQueryModal({ query, isOpen, onClose, currentUser }) {
                 Pull Back To <span className="text-rose-500">*</span>
               </label>
 
-              {validStages.length === 0 ? (
+              {targets.length === 0 ? (
                 <div className="p-3.5 rounded-2xl border border-slate-200 bg-slate-50 text-sm font-medium text-slate-500">
                   No previous workflow stages recorded in history for this query.
                 </div>
               ) : (
                 <select
                   id="pullback-target-stage"
-                  value={stage}
+                  value={target?.key || ''}
                   onChange={(e) => setSelectedStage(e.target.value)}
                   className="w-full py-2.5 px-3.5 text-sm font-bold text-slate-800 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 transition-colors cursor-pointer"
                 >
-                  {validStages.map((stg) => (
-                    <option key={stg} value={stg}>
-                      {STAGE_LABELS[stg] || stg}
+                  {targets.map((entry) => (
+                    <option key={entry.key} value={entry.key}>
+                      {entry.label}
                     </option>
                   ))}
                 </select>
@@ -210,7 +214,7 @@ export function PullbackQueryModal({ query, isOpen, onClose, currentUser }) {
                     Pull Back To:
                   </span>
                   <span className="font-semibold text-amber-700">
-                    {STAGE_LABELS[stage] || stage}
+                    {target?.label}
                   </span>
                 </div>
                 <div className="flex justify-between py-1">
@@ -237,7 +241,7 @@ export function PullbackQueryModal({ query, isOpen, onClose, currentUser }) {
             <div className="rounded-2xl border border-amber-200 bg-amber-50 p-3 text-xs font-semibold text-amber-900 flex items-start gap-2">
               <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
               <span>
-                Warning: This action will move the query back to the selected stage and may require further processing by the respective department or official.
+                Warning: This action will move the query back to the selected stage and may require further processing by the respective department or official. The current review chain is closed and kept as history; a new review cycle starts from the selected stage.
               </span>
             </div>
           </div>
@@ -282,7 +286,7 @@ export function PullbackQueryModal({ query, isOpen, onClose, currentUser }) {
               <button
                 type="button"
                 onClick={handleNextOrConfirm}
-                disabled={!stage || validStages.length === 0}
+                disabled={!stage || targets.length === 0}
                 className="px-5 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-600/90 text-white font-bold text-sm shadow-md shadow-amber-500/20 transition-colors cursor-pointer disabled:opacity-50"
               >
                 Continue to Pullback

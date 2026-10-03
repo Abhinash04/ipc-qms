@@ -160,6 +160,20 @@ ${IPC_SIGNATURE}` }),
     expect(step.status).toBe('COMPLETED');
   });
 
+  it('completes only the steps of the current review cycle, leaving pulled-back history as it was', async () => {
+    await QueryCase.updateOne({ queryId: QUERY_ID }, { $set: { reviewCycle: 1, currentWorkflowStepId: 'STEP-00010' } });
+    await WorkflowStep.updateOne({ stepId: 'STEP-00004' }, { $set: { status: 'SUPERSEDED' } });
+    await WorkflowStep.create({ stepId: 'STEP-00003', queryId: QUERY_ID, stepType: 'REVIEW', sequence: 3, status: 'PENDING' });
+    await WorkflowStep.create({ stepId: 'STEP-00010', queryId: QUERY_ID, stepType: 'FINAL_APPROVAL', sequence: 1000, status: 'IN_PROGRESS', cycle: 1 });
+
+    expect((await approve()).status).toBe(200);
+
+    const status = async (stepId) => (await WorkflowStep.findOne({ stepId }).lean()).status;
+    expect(await status('STEP-00010')).toBe('COMPLETED');
+    expect(await status('STEP-00004')).toBe('SUPERSEDED');
+    expect(await status('STEP-00003')).toBe('PENDING');
+  });
+
   it('moves the case revision on for the approval, the dispatch and the close', async () => {
     await approve();
 

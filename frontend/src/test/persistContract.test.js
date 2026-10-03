@@ -43,6 +43,23 @@ vi.mock('@/services/api/queryCaseService', () => ({
   checkQueriesEmpty: vi.fn(async () => true),
   resetQueries: vi.fn(async () => ({ success: true })),
   grantFinalApproval: vi.fn(async (queryId) => ({ queryId, approved: true })),
+  pullBackQuery: vi.fn(async (queryId, { targetStage }) => {
+    const { useWorkflowStore: store } = await import('@/store/useWorkflowStore');
+    store.setState((state) => ({
+      queries: state.queries.map((q) =>
+        q.queryId === queryId
+          ? {
+              ...q,
+              workflowState: targetStage,
+              currentAssigneeId: targetStage === 'PENDING_ASSIGNMENT' ? null : q.currentAssigneeId,
+              currentWorkflowStepId: null,
+              reviewCycle: (q.reviewCycle ?? 0) + 1,
+            }
+          : q,
+      ),
+    }));
+    return { success: true, queryId, targetStage };
+  }),
   persistQueryTransition: vi.fn(async (delta) => {
     captured.push(delta);
     return { success: true };
@@ -201,9 +218,9 @@ describe('every transition names its audit event', () => {
     const queryId = await caseAwaitingReview();
     s().approveReview(queryId, 'Reads correctly against the monograph.', REVIEWER);
     s().rejectFinalApproval(queryId, 'Cites the superseded revision.', OIC);
-    s().pullBackQuery(queryId, WORKFLOW_STATE.ASSIGNED, 'Handing the case over.', '', ADMIN);
+    await s().pullBackQuery(queryId, WORKFLOW_STATE.ASSIGNED, 'Handing the case over.', '', ADMIN);
     s().transferQuery(queryId, 'USR-0010', 'Monograph expertise sits elsewhere.', OFFICIAL);
-    s().pullBackQuery(queryId, WORKFLOW_STATE.PENDING_ASSIGNMENT, 'Reassigning the case.', '', ADMIN);
+    await s().pullBackQuery(queryId, WORKFLOW_STATE.PENDING_ASSIGNMENT, 'Reassigning the case.', '', ADMIN);
     await settled();
 
     expect(captured.length).toBeGreaterThan(10);
@@ -225,8 +242,23 @@ describe('every transition names its audit event', () => {
         AUDIT_EVENT.REVIEW_COMPLETED,
         AUDIT_EVENT.FINAL_APPROVAL_REJECTED,
         AUDIT_EVENT.QUERY_TRANSFERRED,
-        AUDIT_EVENT.QUERY_PULLED_BACK,
       ]),
+    );
+  });
+
+  it('sends a pull back to the server, never as a client delta', async () => {
+    const queryId = await caseAwaitingReview();
+    await settled();
+    const before = captured.length;
+
+    await s().pullBackQuery(queryId, WORKFLOW_STATE.DRAFTING, 'Requires correction', 'Re-check.', ADMIN);
+    await settled();
+
+    expect(captured.slice(before).map((d) => d.auditEvent?.event)).not.toContain(AUDIT_EVENT.QUERY_PULLED_BACK);
+    expect(queryCaseService.pullBackQuery).toHaveBeenLastCalledWith(
+      queryId,
+      { targetStage: WORKFLOW_STATE.DRAFTING, reviewStepId: null, reason: 'Requires correction', remarks: 'Re-check.' },
+      ADMIN,
     );
   });
 
@@ -469,9 +501,9 @@ describe('the server would accept every delta the store emits', () => {
     const queryId = await caseAwaitingReview();
     s().approveReview(queryId, 'Reads correctly against the monograph.', REVIEWER);
     s().rejectFinalApproval(queryId, 'Cites the superseded revision.', OIC);
-    s().pullBackQuery(queryId, WORKFLOW_STATE.ASSIGNED, 'Handing the case over.', '', ADMIN);
+    await s().pullBackQuery(queryId, WORKFLOW_STATE.ASSIGNED, 'Handing the case over.', '', ADMIN);
     s().transferQuery(queryId, 'USR-0010', 'Expertise sits elsewhere.', OFFICIAL);
-    s().pullBackQuery(queryId, WORKFLOW_STATE.PENDING_ASSIGNMENT, 'Reassigning.', '', ADMIN);
+    await s().pullBackQuery(queryId, WORKFLOW_STATE.PENDING_ASSIGNMENT, 'Reassigning.', '', ADMIN);
     await settled();
 
     assertEveryDeltaParses();

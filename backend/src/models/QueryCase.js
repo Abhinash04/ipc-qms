@@ -35,6 +35,7 @@ const queryCaseSchema = new mongoose.Schema(
     autoTransferRanking: { type: Array, default: [] },
     autoTransferHeldIds: { type: Array, default: [] },
     revision: { type: Number, default: 0 },
+    reviewCycle: { type: Number, default: 0 },
   },
   { versionKey: false },
 );

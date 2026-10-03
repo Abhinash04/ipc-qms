@@ -8,6 +8,7 @@ import {
   isCaseAssignee,
 } from "@/constants/workflowRules";
 import { findUserById } from "@/constants/mockUsers";
+import { activeSteps, historicalSteps } from "@/constants/reviewCycle";
 
 export function useQueryCase() {
   const params = useParams();
@@ -40,13 +41,9 @@ export function useQueryCase() {
 
   const resolving = missing && checkedId !== queryId;
 
-  const steps = useMemo(
-    () =>
-      allSteps
-        .filter((s) => s.queryId === queryId)
-        .sort((a, b) => a.sequence - b.sequence),
-    [allSteps, queryId],
-  );
+  const steps = useMemo(() => activeSteps(allSteps, query), [allSteps, query]);
+
+  const stepHistory = useMemo(() => historicalSteps(allSteps, query), [allSteps, query]);
 
   const versions = useMemo(
     () => allVersions.filter((v) => v.queryId === queryId),
@@ -97,6 +94,7 @@ export function useQueryCase() {
       queryId,
       query,
       steps,
+      stepHistory,
       reviews,
       versions,
       latestVersion,
@@ -112,6 +110,7 @@ export function useQueryCase() {
       queryId,
       query,
       steps,
+      stepHistory,
       reviews,
       versions,
       latestVersion,

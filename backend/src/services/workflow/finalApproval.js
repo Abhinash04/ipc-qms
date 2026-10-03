@@ -4,6 +4,7 @@ import { OUTCOMES } from '../email/outbox.js';
 import * as audit from '../audit/auditService.js';
 import { ACTOR_TYPES } from '../../constants/roles.js';
 import { NEEDS_APPROVAL, ALREADY_APPROVED } from '../../constants/workflowStates.js';
+import { cycleFilter } from './pullbackPlan.js';
 
 const record = (actor, event) => ({
   action: event,
@@ -70,7 +71,7 @@ export async function grantFinalApproval({ queryId, actor, comment = '' }) {
     );
 
     await WorkflowStep.updateMany(
-      { queryId, status: { $ne: 'COMPLETED' } },
+      { queryId, cycle: cycleFilter(query.reviewCycle ?? 0), status: { $ne: 'COMPLETED' } },
       { $set: { status: 'COMPLETED', completedAt: now() } },
     );
 

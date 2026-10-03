@@ -125,8 +125,24 @@ describe('/api/v1/queries/persist — the client contract', () => {
       sourceMailboxMessageId: 'msg-abc123',
       aiSummary: { text: 'A summary.' },
       assignmentDecision: { recommended: 'USR-0004' },
-      pullbackHistory: [],
     });
+  });
+
+  it('drops the pull-back history and review cycle, which only the server writes', () => {
+    const parsed = persistTransitionSchema.parse({
+      query: { queryId: 'QRY-2026-00001', pullbackHistory: [{ toStage: 'RECEIVED' }], reviewCycle: 9 },
+    });
+
+    expect(parsed.query).not.toHaveProperty('pullbackHistory');
+    expect(parsed.query).not.toHaveProperty('reviewCycle');
+  });
+
+  it('keeps the review cycle a workflow step belongs to', () => {
+    const parsed = persistTransitionSchema.parse({
+      upsertSteps: [{ stepId: 'STEP-00001', queryId: 'QRY-2026-00001', cycle: 2, carriedOver: true, supersededAt: null }],
+    });
+
+    expect(parsed.upsertSteps[0]).toMatchObject({ cycle: 2, carriedOver: true, supersededAt: null });
   });
 
   it('accepts a review raised from final approval, which has no step', () => {

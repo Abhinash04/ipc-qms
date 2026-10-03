@@ -9,6 +9,7 @@ const trimmed = (label) =>
 
 export const pullbackSchema = z.object({
   targetStage: trimmed('targetStage').pipe(z.enum(ALL_WORKFLOW_STATES)),
+  reviewStepId: z.string().trim().min(1).nullable().optional(),
   reason: trimmed('reason'),
   remarks: z
     .string()

@@ -11,11 +11,15 @@ const workflowStepSchema = new mongoose.Schema(
     createdAt: { type: String, default: () => new Date().toISOString() },
     startedAt: { type: String, default: null },
     completedAt: { type: String, default: null },
+    cycle: { type: Number, default: 0 },
+    carriedOver: { type: Boolean, default: false },
+    supersededAt: { type: String, default: null },
   },
   { versionKey: false },
 );
 
 workflowStepSchema.index({ queryId: 1, sequence: 1 });
+workflowStepSchema.index({ queryId: 1, cycle: 1 });
 workflowStepSchema.index({ assignedUserId: 1 });
 
 const WorkflowStep =

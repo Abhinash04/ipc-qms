@@ -27,7 +27,6 @@ const queryCaseSchema = z.object({
   sourceMailboxMessageId: nullableStr,
   aiSummary: nullableObj,
   assignmentDecision: nullableObj,
-  pullbackHistory: arr,
 });
 
 const workflowStepSchema = z.object({
@@ -40,6 +39,9 @@ const workflowStepSchema = z.object({
   createdAt: optStr,
   startedAt: nullableStr,
   completedAt: nullableStr,
+  cycle: z.number().int().nonnegative().optional(),
+  carriedOver: z.boolean().optional(),
+  supersededAt: nullableStr,
 });
 
 const reviewSchema = z.object({

@@ -11,6 +11,7 @@ import { FRONT_OFFICE_USER as FRONT_OFFICE } from '@/test/frontOfficeUser';
 import { WORKFLOW_STATE, AUDIT_EVENT, BUSINESS_STATUS } from '@/constants/statusEnums';
 import { getValidPullbackStages } from '@/constants/pullbackRules';
 import { fakeCaseMail } from '@/test/fakeCaseMail';
+import { fakeFinalApprovalEndpoint } from '@/test/fakeFinalApprovalEndpoint';
 
 vi.mock('@/services/api/healthService', () => ({
   fetchHealth: vi.fn().mockResolvedValue({ status: 'healthy' }),
@@ -78,11 +79,11 @@ describe('Admin Pullback Query Functionality Unit & Integration Tests', () => {
   });
 
   describe('Store-level pullBackQuery validation and state updates', () => {
-    it('successfully pulls back query to a previous valid stage for Admin', () => {
+    it('successfully pulls back query to a previous valid stage for Admin', async () => {
       const initialQuery = s().getQuery(queryId);
       expect(initialQuery.workflowState).toBe(WORKFLOW_STATE.ASSIGNED);
 
-      const result = s().pullBackQuery(
+      const result = await s().pullBackQuery(
         queryId,
         WORKFLOW_STATE.PENDING_ASSIGNMENT,
         'Incorrect assignment',
@@ -146,7 +147,7 @@ describe('Admin Pullback Query Functionality Unit & Integration Tests', () => {
       }).toThrow(/Cannot pull back a query to its current workflow stage/);
     });
 
-    it('reopens a closed query when pulled back by Admin', () => {
+    it('refuses to reopen a query once it is closed — the response has already gone out', () => {
       s().applyTransition({
         queryId,
         actor: ADMIN,
@@ -155,21 +156,16 @@ describe('Admin Pullback Query Functionality Unit & Integration Tests', () => {
         details: 'Test query closed.',
       });
 
-      const closedQuery = s().getQuery(queryId);
-      expect(closedQuery.workflowState).toBe(WORKFLOW_STATE.CLOSED);
-      expect(closedQuery.businessStatus).toBe(BUSINESS_STATUS.CLOSED);
-
-      s().pullBackQuery(
-        queryId,
-        WORKFLOW_STATE.UNDER_REVIEW,
-        'Requires correction',
-        'Reopening closed query for technical revision.',
-        REGULAR_ADMIN,
-      );
-
-      const reopenedQuery = s().getQuery(queryId);
-      expect(reopenedQuery.workflowState).toBe(WORKFLOW_STATE.UNDER_REVIEW);
-      expect(reopenedQuery.businessStatus).toBe(BUSINESS_STATUS.IN_PROGRESS);
+      expect(() =>
+        s().pullBackQuery(
+          queryId,
+          WORKFLOW_STATE.DRAFTING,
+          'Requires correction',
+          'Reopening closed query for technical revision.',
+          REGULAR_ADMIN,
+        ),
+      ).toThrow(/cannot be pulled back once it has been finally approved or dispatched/);
+      expect(s().getQuery(queryId).workflowState).toBe(WORKFLOW_STATE.CLOSED);
     });
 
     it('derives valid pullback target stages based on actual query history', () => {
@@ -222,5 +218,76 @@ describe('Admin Pullback Query Functionality Unit & Integration Tests', () => {
 
       unmount();
     });
+  });
+});
+
+describe('the pull back dialog across a review cycle', () => {
+  const AMIT = findUserById('USR-0005');
+  const KAVITA = findUserById('USR-0006');
+
+  async function toFinalApproval() {
+    await setupAssignedQuery();
+    s().saveDraftVersion(queryId, 'Response v1', OFFICIAL_A);
+    s().addReviewLevel(queryId, AMIT.id, OFFICIAL_A);
+    s().addReviewLevel(queryId, KAVITA.id, OFFICIAL_A);
+    s().submitForReview(queryId, OFFICIAL_A);
+    s().approveReview(queryId, 'ok', AMIT);
+    s().approveReview(queryId, 'ok', KAVITA);
+  }
+
+  it('offers each review level as a target, and resumes review at the one chosen', async () => {
+    await toFinalApproval();
+    const { unmount } = renderAs(ADMIN, `/super-admin/queries/${queryId}`);
+
+    fireEvent.click(screen.getByRole('button', { name: /Pullback Query/i }));
+    const select = screen.getByLabelText(/Pull Back To/i);
+    const options = [...select.querySelectorAll('option')].map((option) => option.textContent);
+    expect(options).toEqual([
+      'IPC Mailbox / Intake',
+      'Front Officer Validation / Registration',
+      'Forwarded to Officer-in-Charge',
+      'Assigned to Official',
+      'Drafting Response',
+      'Review / Action — Reviewer I (Amit Mehta)',
+      'Review / Action — Reviewer II (Kavita Rao)',
+    ]);
+
+    const level = [...select.querySelectorAll('option')].find((option) => option.textContent.includes('Reviewer II'));
+    fireEvent.change(select, { target: { value: level.value } });
+    fireEvent.click(screen.getByRole('button', { name: /Continue to Pullback/i }));
+    expect(screen.getByText('Review / Action — Reviewer II (Kavita Rao)')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Confirm Pullback/i }));
+
+    await waitFor(() => expect(s().getQuery(queryId).workflowState).toBe(WORKFLOW_STATE.UNDER_REVIEW));
+    expect(s().getCurrentStep(queryId)).toMatchObject({ assignedUserId: KAVITA.id, status: 'IN_PROGRESS' });
+    unmount();
+  });
+
+  it('no longer offers pull back once the query is closed', async () => {
+    await toFinalApproval();
+    await s().grantFinalApproval(queryId, OIC, fakeFinalApprovalEndpoint());
+
+    const { unmount } = renderAs(ADMIN, `/super-admin/queries/${queryId}`);
+
+    expect(screen.queryByRole('button', { name: /Pullback Query/i })).toBeNull();
+    unmount();
+  });
+
+  it('shows the official an empty review chain, with the old one as history only', async () => {
+    await toFinalApproval();
+    await s().pullBackQuery(queryId, WORKFLOW_STATE.DRAFTING, 'Requires correction', '', ADMIN);
+
+    const { unmount } = renderAs(OFFICIAL_A, `/assigned-official/drafting/${queryId}`);
+
+    expect(
+      screen.getByText('No reviewer chosen yet — the draft cannot be submitted until you add one.'),
+    ).toBeInTheDocument();
+    expect(screen.getByText('Add Reviewer I')).toBeInTheDocument();
+    const history = screen.getByRole('region', { name: 'Review cycle 1' });
+    expect(history).toHaveTextContent('Reviewer I');
+    expect(history).toHaveTextContent('Amit Mehta');
+    expect(history).toHaveTextContent('Reviewer II');
+    expect(history).toHaveTextContent('Kavita Rao');
+    unmount();
   });
 });

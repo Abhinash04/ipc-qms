@@ -1,3 +1,5 @@
+import { PullbackError, planPullback } from '../../../backend/src/services/workflow/pullbackPlan.js';
+import { findUserById } from '@/constants/mockUsers';
 
 const empty = () => ({
   queries: [],
@@ -67,6 +69,74 @@ export async function persistQueryTransition(delta = {}) {
   if (counters) state.counters = clone(counters);
 
   return { success: true };
+}
+
+const pad = (n) => String(n).padStart(5, '0');
+
+const stepNumber = (stepId) => Number(/^STEP-(\d+)$/.exec(stepId || '')?.[1] ?? 0);
+
+const refusal = (status, code, error) => Object.assign(new Error(error), { response: { status, data: { error, code } } });
+
+export async function pullBackQuery(queryId, body = {}, actor = null) {
+  const query = state.queries.find((q) => q.queryId === queryId);
+  if (!query) throw refusal(404, 'NOT_FOUND', `No query case ${queryId}`);
+
+  let plan;
+  try {
+    plan = planPullback({
+      query,
+      steps: state.workflowSteps.filter((step) => step.queryId === queryId),
+      ...body,
+      actor,
+      now: Date.now(),
+      findUser: findUserById,
+    });
+  } catch (error) {
+    if (error instanceof PullbackError) throw refusal(error.status, error.code, error.message);
+    throw error;
+  }
+
+  let next = Math.max(state.counters?.STEP || 0, ...state.workflowSteps.map((step) => stepNumber(step.stepId)));
+  const newSteps = plan.newSteps.map((step) => ({ ...step, stepId: `STEP-${pad((next += 1))}` }));
+  state.counters = { ...(state.counters || {}), STEP: next };
+
+  const superseded = new Set(plan.supersededStepIds);
+  state.workflowSteps = [
+    ...state.workflowSteps.map((step) =>
+      step.queryId === queryId && superseded.has(step.stepId)
+        ? { ...step, status: 'SUPERSEDED', supersededAt: plan.patch.updatedAt }
+        : step,
+    ),
+    ...clone(newSteps),
+  ];
+
+  const currentWorkflowStepId = plan.currentIndex >= 0 ? newSteps[plan.currentIndex].stepId : null;
+  upsert(state.queries, 'queryId', {
+    ...query,
+    ...plan.patch,
+    ...(plan.clock?.set || {}),
+    currentWorkflowStepId,
+    pullbackHistory: [...(query.pullbackHistory || []), plan.history],
+    revision: (query.revision ?? 0) + 1,
+  });
+  upsert(state.notifications, 'notificationId', plan.notification);
+  state.auditEvents.push({
+    auditId: `AUD-${queryId}-PB-${plan.history.toCycle}`,
+    queryId,
+    event: 'QUERY_PULLED_BACK',
+    actor: actor?.role ?? null,
+    at: plan.patch.updatedAt,
+    details: plan.auditDetails,
+  });
+
+  return {
+    success: true,
+    queryId,
+    targetStage: body.targetStage,
+    reviewLevel: plan.reviewLevel,
+    reviewCycle: plan.patch.reviewCycle,
+    currentWorkflowStepId,
+  };
 }
 
 export async function grantFinalApproval(queryId) {

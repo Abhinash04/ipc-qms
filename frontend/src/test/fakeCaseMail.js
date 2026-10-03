@@ -65,6 +65,8 @@ export function installFakeCaseMail(mailboxService, options) {
   return caseMail;
 }
 
+const FORWARDABLE = [WORKFLOW_STATE.RECEIVED, WORKFLOW_STATE.FRONT_OFFICE_VERIFICATION];
+
 export function fakeCaseMail({ acknowledgement = {}, forward = {}, response = {} } = {}) {
   const plans = {
     [EMAIL_TYPE.ACKNOWLEDGEMENT]: acknowledgement,
@@ -117,8 +119,23 @@ export function fakeCaseMail({ acknowledgement = {}, forward = {}, response = {}
       throw httpError({ outcome, error: plan.error || DEFAULT_REASONS[outcome] });
     }
 
+    const forwarded = async () => {
+      if (emailType !== EMAIL_TYPE.FORWARD || !FORWARDABLE.includes(query.workflowState)) return;
+      await persistQueryTransition({
+        query: { ...query, workflowState: WORKFLOW_STATE.PENDING_ASSIGNMENT, updatedAt: at },
+        notification: {
+          notificationId: `NOTIF-${queryId}-FWD`,
+          queryId,
+          recipientRole: 'OFFICER_IN_CHARGE',
+          message: `${queryId} is awaiting assignment.`,
+          at,
+        },
+      });
+    };
+
     const already = snapshot.emailMessages.some((m) => m.queryId === queryId && m.emailType === emailType);
     if (already) {
+      await forwarded();
       return { queryId, emailType, outcome: 'ALREADY_SENT', transport: 'mock' };
     }
 
@@ -181,18 +198,7 @@ export function fakeCaseMail({ acknowledgement = {}, forward = {}, response = {}
       updatedAt: at,
     });
 
-    if (emailType === EMAIL_TYPE.FORWARD && query.workflowState === WORKFLOW_STATE.FRONT_OFFICE_VERIFICATION) {
-      await persistQueryTransition({
-        query: { ...query, workflowState: WORKFLOW_STATE.PENDING_ASSIGNMENT, updatedAt: at },
-        notification: {
-          notificationId: `NOTIF-${queryId}-FWD`,
-          queryId,
-          recipientRole: 'OFFICER_IN_CHARGE',
-          message: `${queryId} is awaiting assignment.`,
-          at,
-        },
-      });
-    }
+    await forwarded();
 
     if (emailType === EMAIL_TYPE.OUTGOING_RESPONSE) {
       await persistQueryTransition({

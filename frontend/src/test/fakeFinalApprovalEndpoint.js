@@ -10,6 +10,7 @@ import {
 import { MOCK_USERS } from '@/constants/mockUsers';
 import { FRONT_OFFICE_USER } from '@/test/frontOfficeUser';
 import { ROLES } from '@/constants/roles';
+import { cycleOfQuery, cycleOfStep } from '@/constants/reviewCycle';
 
 const pad = (n) => String(n).padStart(5, '0');
 
@@ -70,7 +71,7 @@ export function fakeFinalApprovalEndpoint({ send = defaultSend, actor } = {}) {
           { ...approvedVersion, status: RESPONSE_STATUS.FINAL_APPROVED, approvedAt: at() },
         ],
         upsertSteps: snapshot.workflowSteps
-          .filter((step) => step.queryId === queryId && step.status !== 'COMPLETED')
+          .filter((step) => step.queryId === queryId && cycleOfStep(step) === cycleOfQuery(query) && step.status !== 'COMPLETED')
           .map((step) => ({ ...step, status: 'COMPLETED', completedAt: at() })),
         auditEvent: {
           auditId: auditId(),

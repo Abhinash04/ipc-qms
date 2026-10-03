@@ -262,7 +262,7 @@ describe('a pulled back query updates workflow progress and displays a pullback 
     await s().generateAiDraft(queryId, OFFICIAL);
 
     const ADMIN_USER = findUserById('USR-0008');
-    s().pullBackQuery(
+    await s().pullBackQuery(
       queryId,
       WORKFLOW_STATE.PENDING_ASSIGNMENT,
       'Incorrect assignment',

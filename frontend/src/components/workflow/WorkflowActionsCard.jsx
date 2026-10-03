@@ -64,13 +64,12 @@ function deriveCaseActions({ query, currentStep, currentUser, can, paths }) {
     currentStep.assignedUserId === currentUser?.id;
 
   const role = currentUser?.role;
-  const isAdminRole = role === ROLES.ADMIN || role === ROLES.SUPER_ADMIN;
   const isCurrentAssignee =
     query.currentAssigneeId === currentUser?.id || role === ROLES.SUPER_ADMIN;
 
   const canForward = can(WORKFLOW_ACTION.FORWARD);
   const canTransfer = can(WORKFLOW_ACTION.TRANSFER) && isCurrentAssignee;
-  const canPullback = isAdminRole || can(WORKFLOW_ACTION.PULLBACK);
+  const canPullback = can(WORKFLOW_ACTION.PULLBACK);
 
   const links = buildActionLinks(can, paths, ownsCurrentStep);
 

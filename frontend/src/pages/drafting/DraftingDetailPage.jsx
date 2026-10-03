@@ -17,6 +17,7 @@ import { useRoutePaths } from '@/hooks/useRoutePaths';
 import { useWorkflowAction } from '@/hooks/useWorkflowAction';
 import { ActionError } from '@/components/workflow/ActionError';
 import { AddReviewLevelField } from '@/components/workflow/AddReviewLevelField';
+import { PreviousReviewCycles } from '@/components/workflow/PreviousReviewCycles';
 
 const levelName = reviewLevelName;
 
@@ -272,7 +273,7 @@ function VersionHistoryCard({ versions }) {
 
 export function DraftingDetailPage() {
   const paths = useRoutePaths();
-  const { queryId, query, versions, latestVersion, reviews, steps, currentUser, can, resolving } =
+  const { queryId, query, versions, latestVersion, reviews, steps, stepHistory, currentUser, can, resolving } =
     useQueryCase();
   const { run, running, error, clearError } = useWorkflowAction();
   const generateAiDraft = useWorkflowStore((state) => state.generateAiDraft);
@@ -352,6 +353,8 @@ export function DraftingDetailPage() {
               setNewReviewer('');
             }}
           />
+
+          <PreviousReviewCycles steps={stepHistory} />
 
           <VersionHistoryCard versions={versions} />
         </div>

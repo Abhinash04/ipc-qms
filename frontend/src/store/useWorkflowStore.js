@@ -35,7 +35,16 @@ import {
 import {
   grantFinalApproval as approveOnServer,
   resolveOutboundEmail as resolveOutboundOnServer,
+  pullBackQuery as pullBackOnServer,
 } from '@/services/api/queryCaseService';
+import {
+  PULLBACK_RANK,
+  activeSteps,
+  cycleOfQuery,
+  cycleOfStep,
+  isPullbackSource,
+  reviewLevelTargets,
+} from '@/constants/reviewCycle';
 import { fetchGemmaAiSummary, fetchGemmaAiDraft } from '@/services/api/aiService';
 import { assembleDraftEmail } from '@/services/ai/draftComposer';
 import { notify, beginBatch, endBatch } from '@/services/notify';
@@ -176,13 +185,18 @@ function assertOwnsStep(step, actor, action) {
 const officerInChargeId = () =>
   MOCK_USERS.find((u) => u.role === ROLES.OFFICER_IN_CHARGE)?.id || null;
 
-function reopenReviewCycle(steps, queryId) {
+function reopenReviewCycle(steps, query) {
+  const cycle = cycleOfQuery(query);
   return steps.map((step) =>
-    step.queryId === queryId && (step.stepType === 'REVIEW' || step.stepType === 'FINAL_APPROVAL')
+    step.queryId === query?.queryId &&
+    cycleOfStep(step) === cycle &&
+    (step.stepType === 'REVIEW' || step.stepType === 'FINAL_APPROVAL')
       ? { ...step, status: 'PENDING', startedAt: null, completedAt: null }
       : step,
   );
 }
+
+const queryIn = (base, queryId) => base.queries.find((q) => q.queryId === queryId);
 
 function computeTransition(state, { queryId, event, actor, patch = {}, details, actorLabel, notify, mutate }) {
   if (!event) {
@@ -243,7 +257,8 @@ function computeTransition(state, { queryId, event, actor, patch = {}, details, 
 }
 
 async function persistDelta(prev, next, queryId, auditEvent, notification, baseRevision) {
-  const prevStepIds = byQuery(prev.workflowSteps, queryId).map((s) => s.stepId);
+  const prevSteps = new Map(byQuery(prev.workflowSteps, queryId).map((s) => [s.stepId, s]));
+  const prevStepIds = [...prevSteps.keys()];
   const nextSteps = byQuery(next.workflowSteps, queryId);
   const nextStepIds = new Set(nextSteps.map((s) => s.stepId));
 
@@ -270,7 +285,7 @@ async function persistDelta(prev, next, queryId, auditEvent, notification, baseR
     auditEvent,
     notification,
     counters: next.counters,
-    upsertSteps: nextSteps,
+    upsertSteps: nextSteps.filter((s) => prevSteps.get(s.stepId) !== s),
     deleteStepIds: prevStepIds.filter((id) => !nextStepIds.has(id)),
     addReviews: byQuery(next.reviews, queryId).filter((r) => !prevReviewIds.has(r.reviewId)),
     addVersions,
@@ -308,6 +323,13 @@ function sendFailure(error) {
 
 const approvalsInFlight = new Map();
 
+const pullbacksInFlight = new Map();
+
+function serverRefusal(error) {
+  const message = error?.response?.data?.error;
+  return message ? Object.assign(new Error(message), { code: error.response.data.code ?? null, cause: error }) : error;
+}
+
 const SERVER_COLLECTIONS = [
   'queries',
   'workflowSteps',
@@ -334,10 +356,7 @@ export const useWorkflowStore = create((set, get) => ({
   getOutbound: (queryId, emailType) =>
     get().outboundEmails.find((row) => row.queryId === queryId && row.emailType === emailType) || null,
 
-  getSteps: (queryId) =>
-    get()
-      .workflowSteps.filter((s) => s.queryId === queryId)
-      .sort((a, b) => a.sequence - b.sequence),
+  getSteps: (queryId) => activeSteps(get().workflowSteps, get().getQuery(queryId)),
 
   getCurrentStep: (queryId) => {
     const query = get().getQuery(queryId);
@@ -821,6 +840,7 @@ export const useWorkflowStore = create((set, get) => ({
     let stepCounter = state.counters.STEP || 0;
     const newSteps = [];
     const timestamp = now();
+    const cycle = cycleOfQuery(state.getQuery(queryId));
 
     if (!steps.some((s) => s.stepType === 'DRAFT')) {
       const draftMint = mintId({ STEP: stepCounter }, 'STEP');
@@ -832,6 +852,7 @@ export const useWorkflowStore = create((set, get) => ({
         sequence: 1,
         assignedUserId: state.getQuery(queryId)?.currentAssigneeId || null,
         status: 'COMPLETED',
+        cycle,
         createdAt: timestamp,
         startedAt: timestamp,
         completedAt: timestamp,
@@ -848,6 +869,7 @@ export const useWorkflowStore = create((set, get) => ({
         sequence: 1000,
         assignedUserId: officerInChargeId(),
         status: 'PENDING',
+        cycle,
         createdAt: timestamp,
         startedAt: null,
         completedAt: null,
@@ -910,6 +932,7 @@ export const useWorkflowStore = create((set, get) => ({
             sequence,
             assignedUserId: reviewerId,
             status: 'PENDING',
+            cycle: cycleOfQuery(state.getQuery(queryId)),
             createdAt: timestamp,
             startedAt: null,
             completedAt: null,
@@ -922,7 +945,7 @@ export const useWorkflowStore = create((set, get) => ({
   deleteReviewLevel: (queryId, stepId, actor) => {
     assertCan(get(), WORKFLOW_ACTION.DELETE_REVIEW_LEVEL, queryId, actor);
     const state = get();
-    const step = state.workflowSteps.find((s) => s.stepId === stepId && s.queryId === queryId);
+    const step = state.getSteps(queryId).find((s) => s.stepId === stepId);
     if (!step || step.stepType !== 'REVIEW' || step.status !== 'PENDING') {
       return { ok: false, reason: 'Only a PENDING review level can be deleted.' };
     }
@@ -1046,7 +1069,7 @@ export const useWorkflowStore = create((set, get) => ({
             at: timestamp,
           },
         ],
-        workflowSteps: reopenReviewCycle(base.workflowSteps, queryId),
+        workflowSteps: reopenReviewCycle(base.workflowSteps, queryIn(base, queryId)),
       }),
     });
   },
@@ -1092,7 +1115,7 @@ export const useWorkflowStore = create((set, get) => ({
         message: `${queryId} was rejected at final approval.`,
       },
       mutate: (base) => ({
-        workflowSteps: reopenReviewCycle(base.workflowSteps, queryId),
+        workflowSteps: reopenReviewCycle(base.workflowSteps, queryIn(base, queryId)),
       }),
     });
   },
@@ -1137,7 +1160,7 @@ export const useWorkflowStore = create((set, get) => ({
             at: timestamp,
           },
         ],
-        workflowSteps: reopenReviewCycle(base.workflowSteps, queryId),
+        workflowSteps: reopenReviewCycle(base.workflowSteps, queryIn(base, queryId)),
       }),
     });
   },
@@ -1230,19 +1253,35 @@ export const useWorkflowStore = create((set, get) => ({
     return { queryId, transferredTo: newName, success: true };
   },
 
-  pullBackQuery: (queryId, targetStage, reason, remarks = '', actor) => {
+  pullBackQuery: (queryId, targetStage, reason, remarks = '', actor, { reviewStepId = null } = {}, pull = pullBackOnServer) => {
     if (actor?.role !== ROLES.ADMIN && actor?.role !== ROLES.SUPER_ADMIN) {
       throw new Error('You do not have permission to pull back this query.');
     }
 
-    const query = assertCan(get(), WORKFLOW_ACTION.PULLBACK, queryId, actor);
+    const query = get().getQuery(queryId);
+    if (!query) throw new Error(`PULLBACK: query ${queryId} does not exist`);
+
+    if (!isPullbackSource(query.workflowState)) {
+      throw new Error(
+        `${queryId} is ${query.workflowState} — a query cannot be pulled back once it has been finally approved or dispatched.`,
+      );
+    }
 
     if (!targetStage) {
       throw new Error('A target stage must be selected for pullback.');
     }
 
-    if (targetStage === query.workflowState) {
+    const reReview = targetStage === WORKFLOW_STATE.UNDER_REVIEW;
+    if (targetStage === query.workflowState && !reReview) {
       throw new Error('Cannot pull back a query to its current workflow stage.');
+    }
+
+    if (!(targetStage in PULLBACK_RANK) || (!reReview && PULLBACK_RANK[targetStage] >= PULLBACK_RANK[query.workflowState])) {
+      throw new Error(`${queryId} can only be pulled back to an earlier stage than ${query.workflowState}.`);
+    }
+
+    if (reReview && !reviewLevelTargets(query, get().workflowSteps).some((step) => step.stepId === reviewStepId)) {
+      throw new Error('Choose an earlier review level to return the query to.');
     }
 
     const trimmedReason = String(reason || '').trim();
@@ -1250,74 +1289,27 @@ export const useWorkflowStore = create((set, get) => ({
       throw new Error('A reason for pullback is required.');
     }
 
-    const trimmedRemarks = String(remarks || '').trim();
-    const prevStage = query.workflowState;
-    const actorLabelStr = actorName(actor);
-    const prevAssignee = findUserById(query.currentAssigneeId);
-    const timestamp = now();
+    const running = pullbacksInFlight.get(queryId);
+    if (running) return running;
 
-    const PRE_ASSIGNMENT_STAGES = [
-      WORKFLOW_STATE.RECEIVED,
-      WORKFLOW_STATE.FRONT_OFFICE_VERIFICATION,
-      WORKFLOW_STATE.PENDING_ASSIGNMENT,
-    ];
+    const work = (async () => {
+      await writesSettled();
+      try {
+        const result = await pull(
+          queryId,
+          { targetStage, reviewStepId: reReview ? reviewStepId : null, reason: trimmedReason, remarks: String(remarks || '').trim() },
+          actor,
+        );
+        return { ...result, queryId, prevStage: query.workflowState, targetStage, success: true };
+      } catch (error) {
+        throw serverRefusal(error);
+      } finally {
+        await get().refreshFromServer();
+      }
+    })().finally(() => pullbacksInFlight.delete(queryId));
 
-    const isPreAssignment = PRE_ASSIGNMENT_STAGES.includes(targetStage);
-    const newAssigneeId = isPreAssignment ? null : query.currentAssigneeId;
-
-    const pullbackRecord = {
-      fromStage: prevStage,
-      toStage: targetStage,
-      pulledBackBy: actor?.id || 'ADMIN',
-      pulledBackByName: actorLabelStr,
-      reason: trimmedReason,
-      remarks: trimmedRemarks,
-      previousAssignee: prevAssignee?.name || query.currentAssigneeId || 'Unassigned',
-      newAssignee: isPreAssignment ? 'Unassigned' : (prevAssignee?.name || query.currentAssigneeId || 'Unassigned'),
-      pulledBackAt: timestamp,
-    };
-
-    const auditDetails = `From: ${prevStage} | Pulled Back To: ${targetStage} | Pulled Back By: ${actorLabelStr} | Reason: ${trimmedReason}${trimmedRemarks ? ` | Remarks: ${trimmedRemarks}` : ''}`;
-
-    let recipientRole = 'OFFICER_IN_CHARGE';
-    if (targetStage === WORKFLOW_STATE.RECEIVED || targetStage === WORKFLOW_STATE.FRONT_OFFICE_VERIFICATION) {
-      recipientRole = 'FRONT_OFFICE';
-    } else if (targetStage === WORKFLOW_STATE.ASSIGNED || targetStage === WORKFLOW_STATE.DRAFTING || targetStage === WORKFLOW_STATE.RETURNED_FOR_REVISION) {
-      recipientRole = 'ASSIGNED_OFFICIAL';
-    } else if (targetStage === WORKFLOW_STATE.UNDER_REVIEW) {
-      recipientRole = 'REVIEWER';
-    }
-
-    get().applyTransition({
-      queryId,
-      actor,
-      event: AUDIT_EVENT.QUERY_PULLED_BACK,
-      patch: {
-        workflowState: targetStage,
-        currentAssigneeId: newAssigneeId,
-      },
-      details: auditDetails,
-      notify: {
-        recipientRole,
-        message: `Query ${queryId} was pulled back from ${prevStage} to ${targetStage} by ${actorLabelStr}. Reason: ${trimmedReason}`,
-      },
-      mutate: (base) => {
-        const existingQuery = base.queries.find((q) => q.queryId === queryId);
-        const existingHistory = existingQuery?.pullbackHistory || [];
-        return {
-          queries: base.queries.map((q) =>
-            q.queryId === queryId
-              ? {
-                  ...q,
-                  pullbackHistory: [...existingHistory, pullbackRecord],
-                }
-              : q
-          ),
-        };
-      },
-    });
-
-    return { queryId, prevStage, targetStage, success: true };
+    pullbacksInFlight.set(queryId, work);
+    return work;
   },
 
   hydrate: async () => {

@@ -22,7 +22,6 @@ import {
 } from '../models/index.js';
 import { isConnected } from '../config/db.js';
 
-const canPullBack = (role) => roleCanPerform(role, WORKFLOW_ACTION.PULLBACK);
 const permits = (role, actions) =>
   Array.isArray(actions) && actions.some((action) => roleCanPerform(role, action));
 const REVIEW_LEVEL_STATES = [
@@ -69,7 +68,7 @@ export function protectedValueViolations(user, body, stored = {}) {
         const required = STATE_REQUIRES_ACTION[query.workflowState];
         if (required === null) {
           if (!everything) violations.push('query.workflowState');
-        } else if (!permits(role, required) && !canPullBack(role)) {
+        } else if (!permits(role, required)) {
           violations.push('query.workflowState');
         }
       }
@@ -107,7 +106,7 @@ async function storedStateFor(body) {
     .filter(Boolean);
 
   const [query, versions] = await Promise.all([
-    queryId ? QueryCase.findOne({ queryId }).select('workflowState currentAssigneeId revision').lean() : null,
+    queryId ? QueryCase.findOne({ queryId }).select('workflowState currentAssigneeId revision reviewCycle').lean() : null,
     responseIds.length
       ? ResponseVersion.find({ responseId: { $in: responseIds } }).select('responseId status').lean()
       : [],
@@ -169,8 +168,11 @@ async function reviewLevelDeletionRefused(user, body, storedQuery) {
   if (!storedQuery || !REVIEW_LEVEL_STATES.includes(storedQuery.workflowState)) return true;
   if (user.role !== ROLES.SUPER_ADMIN && storedQuery.currentAssigneeId !== user.id) return true;
 
-  const steps = await WorkflowStep.find({ stepId: { $in: stepIds } }).select('stepType status').lean();
-  return steps.some((step) => step.stepType !== 'REVIEW' || step.status !== 'PENDING');
+  const cycle = storedQuery.reviewCycle ?? 0;
+  const steps = await WorkflowStep.find({ stepId: { $in: stepIds } }).select('stepType status cycle').lean();
+  return steps.some(
+    (step) => step.stepType !== 'REVIEW' || step.status !== 'PENDING' || (step.cycle ?? 0) !== cycle,
+  );
 }
 
 function deny(req, res, message, { fields = [], queryIds = [] } = {}) {

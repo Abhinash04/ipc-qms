@@ -64,8 +64,9 @@ describe('changing a workflow state', () => {
     expect(check(ROLES.ASSIGNED_OFFICIAL, moveTo('DRAFTING'))).toEqual([]);
   });
 
-  it('lets pullback re-point a case to any earlier stage', () => {
-    expect(check(ROLES.ADMIN, moveTo('DRAFTING'))).toEqual([]);
+  it('never lets pullback re-point a case through a delta — the pull-back endpoint does that', () => {
+    expect(check(ROLES.ADMIN, moveTo('DRAFTING'))).toContain('query.workflowState');
+    expect(check(ROLES.ADMIN, moveTo('READY_FOR_DISPATCH'))).toContain('query.workflowState');
   });
 
   it('refuses a state the server does not recognise', () => {

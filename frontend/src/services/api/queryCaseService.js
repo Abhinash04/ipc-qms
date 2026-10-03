@@ -23,6 +23,16 @@ export async function grantFinalApproval(queryId, { comment } = {}) {
   return data;
 }
 
+export async function pullBackQuery(queryId, { targetStage, reviewStepId = null, reason, remarks = '' }) {
+  const { data } = await axiosClient.post(`/queries/${encodeURIComponent(queryId)}/pullback`, {
+    targetStage,
+    ...(reviewStepId ? { reviewStepId } : {}),
+    reason,
+    remarks,
+  });
+  return data;
+}
+
 export async function resolveOutboundEmail(queryId, { emailType, outcome }) {
   const { data } = await axiosClient.post(
     `/queries/${encodeURIComponent(queryId)}/outbound/resolve`,

@@ -1,4 +1,7 @@
 import { WORKFLOW_STATE } from './statusEnums';
+import { findUserById } from './mockUsers';
+import { PULLBACK_RANK, activeSteps, isPullbackSource, reviewLevelTargets } from './reviewCycle';
+import { reviewLevelName } from './queryLifecycle';
 
 export const PREDEFINED_PULLBACK_REASONS = [
   'Incorrect assignment',
@@ -39,7 +42,7 @@ const STAGE_ORDER = [
 ];
 
 export function getValidPullbackStages(query, auditEvents = []) {
-  if (!query) return [];
+  if (!query || !isPullbackSource(query.workflowState)) return [];
 
   const queryAudits = auditEvents.filter((a) => a.queryId === query.queryId);
   const reachedStates = new Set();
@@ -68,10 +71,42 @@ export function getValidPullbackStages(query, auditEvents = []) {
   }
 
   reachedStates.delete(query.workflowState);
+  const rank = PULLBACK_RANK[query.workflowState];
 
-  return Array.from(reachedStates).sort((a, b) => {
-    const idxA = STAGE_ORDER.indexOf(a);
-    const idxB = STAGE_ORDER.indexOf(b);
-    return (idxA >= 0 ? idxA : 99) - (idxB >= 0 ? idxB : 99);
+  return Array.from(reachedStates)
+    .filter((stage) => stage in PULLBACK_RANK && PULLBACK_RANK[stage] < rank)
+    .sort((a, b) => {
+      const idxA = STAGE_ORDER.indexOf(a);
+      const idxB = STAGE_ORDER.indexOf(b);
+      return (idxA >= 0 ? idxA : 99) - (idxB >= 0 ? idxB : 99);
+    });
+}
+
+export const pullbackTargetKey = (stage, reviewStepId = null) => (reviewStepId ? `${stage}:${reviewStepId}` : stage);
+
+export function getPullbackTargets(query, auditEvents = [], steps = []) {
+  if (!query) return [];
+
+  const stages = getValidPullbackStages(query, auditEvents)
+    .filter((stage) => stage !== WORKFLOW_STATE.UNDER_REVIEW)
+    .map((stage) => ({
+      key: pullbackTargetKey(stage),
+      stage,
+      reviewStepId: null,
+      label: STAGE_LABELS[stage] || stage,
+    }));
+
+  const chain = activeSteps(steps, query).filter((step) => step.stepType === 'REVIEW');
+  const levels = reviewLevelTargets(query, steps).map((step) => {
+    const level = reviewLevelName(chain.findIndex((entry) => entry.stepId === step.stepId));
+    const reviewer = findUserById(step.assignedUserId)?.name || step.assignedUserId;
+    return {
+      key: pullbackTargetKey(WORKFLOW_STATE.UNDER_REVIEW, step.stepId),
+      stage: WORKFLOW_STATE.UNDER_REVIEW,
+      reviewStepId: step.stepId,
+      label: `${STAGE_LABELS[WORKFLOW_STATE.UNDER_REVIEW]} — ${level} (${reviewer})`,
+    };
   });
+
+  return [...stages, ...levels];
 }

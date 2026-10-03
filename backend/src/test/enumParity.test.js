@@ -13,6 +13,8 @@ import { MAIL_CATEGORIES, RELATION_KINDS, UNCLASSIFIED, REGISTERED, CATEGORY_SOU
 import * as clientEnums from '../../../frontend/src/constants/statusEnums.js';
 import { ROLES as CLIENT_ROLES } from '../../../frontend/src/constants/roles.js';
 import * as clientCategories from '../../../frontend/src/constants/mailCategories.js';
+import * as clientCycle from '../../../frontend/src/constants/reviewCycle.js';
+import { PULLBACK_RANK, STEP_STATUS } from '../services/workflow/pullbackPlan.js';
 
 describe('workflow vocabulary parity with the client', () => {
   it.each([
@@ -48,5 +50,12 @@ describe('mail category parity with the client', () => {
   it('gives every category and every source a label in the client', () => {
     expect(Object.keys(clientCategories.MAIL_CATEGORY_META).sort()).toEqual(Object.values(MAIL_CATEGORIES).sort());
     expect(Object.keys(clientCategories.CATEGORY_SOURCE_LABEL).sort()).toEqual(Object.values(CATEGORY_SOURCES).sort());
+  });
+});
+
+describe('pull back rule parity with the client', () => {
+  it('ranks the same stages and names the same step statuses on both sides', () => {
+    expect(PULLBACK_RANK).toEqual(clientCycle.PULLBACK_RANK);
+    expect(STEP_STATUS).toEqual(clientCycle.STEP_STATUS);
   });
 });
