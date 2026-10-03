@@ -2,7 +2,7 @@
 
 ## 1.1 Purpose
 
-This document specifies the requirements for the **AI-powered IP Stakeholder’s BRIDGETECH** being
+This document specifies the requirements for the **AI-powered IP Stakeholders’ BRIDGETECH** being
 built for the IPC client. It covers the full lifecycle of an incoming query — from receipt
 through registration, assignment, drafting, dynamic review, final approval, response dispatch,
 and closure.
@@ -36,16 +36,16 @@ client sign-off in
 
 ## 1.4 Terminology
 
-| Term | Meaning |
-| --- | --- |
-| Query | A single inquiry received from an inquirer, tracked as one case through the system. |
-| Business Status | The coarse, client-facing lifecycle summary of a query (OPEN / IN_PROGRESS / CLOSED). |
-| Workflow State | The fine-grained internal step a query is currently at (see [05-workflow-and-state-machine.md](./05-workflow-and-state-machine.md)). |
-| Workflow Step | One instance in a query's dynamic review/approval chain (see [architecture/workflow-engine.md](../architecture/workflow-engine.md)). |
-| OIC | Officer-in-Charge — assigns queries and grants final approval. |
-| Assigned Official | The official responsible for drafting the response. |
-| Reviewer | A user assigned to one review level in a query's workflow. |
-| Dispatch | The act of sending the approved response back to the inquirer. |
+| Term              | Meaning                                                                                                                              |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| Query             | A single inquiry received from an inquirer, tracked as one case through the system.                                                  |
+| Business Status   | The coarse, client-facing lifecycle summary of a query (OPEN / IN_PROGRESS / CLOSED).                                                |
+| Workflow State    | The fine-grained internal step a query is currently at (see [05-workflow-and-state-machine.md](./05-workflow-and-state-machine.md)). |
+| Workflow Step     | One instance in a query's dynamic review/approval chain (see [architecture/workflow-engine.md](../architecture/workflow-engine.md)). |
+| OIC               | Officer-in-Charge — assigns queries and grants final approval.                                                                       |
+| Assigned Official | The official responsible for drafting the response.                                                                                  |
+| Reviewer          | A user assigned to one review level in a query's workflow.                                                                           |
+| Dispatch          | The act of sending the approved response back to the inquirer.                                                                       |
 
 ## 1.5 Assumptions
 

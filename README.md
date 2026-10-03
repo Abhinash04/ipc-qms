@@ -1,4 +1,4 @@
-# AI-powered IP Stakeholder’s BRIDGETECH
+# AI-powered IP Stakeholders’ BRIDGETECH
 
 ## Purpose
 
@@ -82,7 +82,7 @@ Admin and Super Admin see every case, because the job requires it; an Assigned O
 see only the cases they are party to; any other role sees none. All three guards answer 503 rather
 than passing when the store is unreachable.
 
-**The remaining gap:** the workflow *state* half of `canPerform` is still enforced on the client —
+**The remaining gap:** the workflow _state_ half of `canPerform` is still enforced on the client —
 the server validates the shape of a transition, who may attempt it and that the caller is party to
 the case, but not whether the case was in a state that allowed it. See
 [docs/HANDOFF.md](docs/HANDOFF.md) for the full status table.
@@ -153,14 +153,14 @@ or `QMS_PASSWORD_<USER_ID>`; outside production one `QMS_SEED_PASSWORD` still op
 unless `QMS_ALLOW_SHARED_PASSWORD=false`. The accounts, their roles and their landing dashboards are
 listed in [docs/auth.md](docs/auth.md):
 
-| Role | Email |
-|---|---|
-| SUPER_ADMIN | `admin@ipc.example` |
-| ADMIN | `suresh.gupta@ipc.example` |
-| FRONT_OFFICE | the value of `NIC_EMAIL` (only with `NIC_BROWSER_MAILBOX=true`; password sign-in only) |
-| OFFICER_IN_CHARGE | `edutr.zairza@ipc.example` |
-| ASSIGNED_OFFICIAL | `neha.singh@ipc.example` |
-| REVIEWER | `amit.mehta@ipc.example` |
+| Role              | Email                                                                                  |
+| ----------------- | -------------------------------------------------------------------------------------- |
+| SUPER_ADMIN       | `admin@ipc.example`                                                                    |
+| ADMIN             | `suresh.gupta@ipc.example`                                                             |
+| FRONT_OFFICE      | the value of `NIC_EMAIL` (only with `NIC_BROWSER_MAILBOX=true`; password sign-in only) |
+| OFFICER_IN_CHARGE | `edutr.zairza@ipc.example`                                                             |
+| ASSIGNED_OFFICIAL | `neha.singh@ipc.example`                                                               |
+| REVIEWER          | `amit.mehta@ipc.example`                                                               |
 
 > **An inquirer has no account, and there is no `INQUIRER` role.** Inquirers are external: a member
 > of the public emails the Front Office mailbox from their own mail client, is read off the `From`
@@ -289,7 +289,7 @@ The `[qms] MongoDB connection lost — retrying` line printed just before
 - **Network Access → Add IP Address:** one `/32` entry per developer, commented with their name.
   Use a temporary entry for a home or mobile IP that changes. Never add `0.0.0.0/0`.
 - **Database Access:** one user per developer, `readWrite` on `query_management_system` only.
-- Optionally invite developers to the Atlas project as *Project Network Access Manager*, so they can
+- Optionally invite developers to the Atlas project as _Project Network Access Manager_, so they can
   add their own current IP when it changes.
 
 **Rules:**
@@ -323,15 +323,15 @@ The `[qms] MongoDB connection lost — retrying` line printed just before
 The full reference — every variable, where it is required, its default and whether it is a secret —
 is **[docs/ENVIRONMENT.md](docs/ENVIRONMENT.md)**. This section only says which file is used where.
 
-| File | Tracked | Used by |
-|---|---|---|
-| `backend/.env.example` | yes | the template: the variables a deployment sets, without comments or working secrets — `JWT_SECRET` is empty, so a fresh copy refuses to start until it is set |
-| `backend/.env.local` | no | a developer's backend, mailbox host or teammate |
-| `backend/.env.production` | no | the production VM's backend, selected only when `NODE_ENV=production` is set in the real environment |
-| `backend/.env.e2e` | yes | the Playwright suite, which loads it alone through `ENV_FILE`; credential-free, with its own test-only `JWT_SECRET` |
-| `frontend/.env.example` | yes | the frontend template |
-| `frontend/.env.local` | no | a developer's Vite server |
-| Render dashboard | — | the production frontend build: `VITE_API_BASE_URL=/api/v1` and `NODE_VERSION=22`, nothing secret |
+| File                      | Tracked | Used by                                                                                                                                                      |
+| ------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `backend/.env.example`    | yes     | the template: the variables a deployment sets, without comments or working secrets — `JWT_SECRET` is empty, so a fresh copy refuses to start until it is set |
+| `backend/.env.local`      | no      | a developer's backend, mailbox host or teammate                                                                                                              |
+| `backend/.env.production` | no      | the production VM's backend, selected only when `NODE_ENV=production` is set in the real environment                                                         |
+| `backend/.env.e2e`        | yes     | the Playwright suite, which loads it alone through `ENV_FILE`; credential-free, with its own test-only `JWT_SECRET`                                          |
+| `frontend/.env.example`   | yes     | the frontend template                                                                                                                                        |
+| `frontend/.env.local`     | no      | a developer's Vite server                                                                                                                                    |
+| Render dashboard          | —       | the production frontend build: `VITE_API_BASE_URL=/api/v1` and `NODE_VERSION=22`, nothing secret                                                             |
 
 **The backend loads exactly one file**, resolved against `backend/` whatever the working directory:
 `ENV_FILE` if it is set (a missing file stops the backend), otherwise `.env.production` when

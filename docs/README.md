@@ -1,6 +1,6 @@
 # BRIDGETECH Documentation
 
-Documentation for the AI-powered IP Stakeholder’s BRIDGETECH, built for an IPC client.
+Documentation for the AI-powered IP Stakeholders’ BRIDGETECH, built for an IPC client.
 
 **New here?** Start with [HANDOFF.md](./HANDOFF.md) — status at a glance, how to run it, what is
 real versus mock, known gaps, and what to do next.
@@ -37,8 +37,8 @@ design system).
 
 ## SRS (`srs/`)
 
-The software requirements specification, in reading order. These files define *what the system must
-do*; where they describe implementation status, defer to the READMEs.
+The software requirements specification, in reading order. These files define _what the system must
+do_; where they describe implementation status, defer to the READMEs.
 
 1. [Introduction](./srs/01-introduction.md)
 2. [System Overview](./srs/02-system-overview.md)

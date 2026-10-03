@@ -33,12 +33,12 @@ policy exception first.
 
 Run of `npm run nic:preflight` from a developer machine on 2026-09-09:
 
-| Endpoint | Result |
-|---|---|
+| Endpoint                | Result                                                              |
+| ----------------------- | ------------------------------------------------------------------- |
 | `imap.mgovcloud.in:993` | ✅ `* OK svwall.zoho.com IMAP4 Server (Zoho Mail IMAP4rev1 Server)` |
-| `smtp.mgovcloud.in:465` | ✅ `220 mx.mgovcloud.in SMTP Server ready` |
-| `imap.mail.gov.in:993` | ✗ `ECONNRESET` |
-| `smtp.mail.gov.in:465` | ✗ timed out |
+| `smtp.mgovcloud.in:465` | ✅ `220 mx.mgovcloud.in SMTP Server ready`                          |
+| `imap.mail.gov.in:993`  | ✗ `ECONNRESET`                                                      |
+| `smtp.mail.gov.in:465`  | ✗ timed out                                                         |
 
 Two things follow:
 
@@ -56,10 +56,10 @@ Two things follow:
 
 Sign in at <https://mail.gov.in> and observe the login sequence.
 
-| What you see | Platform | Verdict |
-|---|---|---|
-| Prompts for **Kavach** OTP; branding says `email.gov.in` | Legacy + Kavach | ⛔ **Stop.** IMAP needs `password + rotating OTP`. A server cannot supply it. Escalate to NIC for migration or exception. |
-| Prompts **SMS OTP**, then offers **Gov OneAuth** enrolment; settings look like NICeMail | NICeMail (Zoho) | ✅ Proceed to Step 2. |
+| What you see                                                                            | Platform        | Verdict                                                                                                                   |
+| --------------------------------------------------------------------------------------- | --------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| Prompts for **Kavach** OTP; branding says `email.gov.in`                                | Legacy + Kavach | ⛔ **Stop.** IMAP needs `password + rotating OTP`. A server cannot supply it. Escalate to NIC for migration or exception. |
+| Prompts **SMS OTP**, then offers **Gov OneAuth** enrolment; settings look like NICeMail | NICeMail (Zoho) | ✅ Proceed to Step 2.                                                                                                     |
 
 ## Step 2 — Enable IMAP on the account
 
@@ -68,11 +68,11 @@ Webmail → **Settings → Mail Accounts → IMAP Access** → enable.
 If the option is missing or greyed out, the organisation's baseline policy is blocking
 it. NIC's own documentation is explicit:
 
-> *"By default, accounts are given access over web only (https://mail.gov.in), and if
-> users want access over POP/IMAP, they must send requests to support@gov.in."*
+> _"By default, accounts are given access over web only (https://mail.gov.in), and if
+> users want access over POP/IMAP, they must send requests to support@gov.in."_
 
-> *"As per the Baseline policy, IMAP access is restricted to all Governement
-> Organisations. You need to get the approval from the NIC Email Division…"*
+> _"As per the Baseline policy, IMAP access is restricted to all Governement
+> Organisations. You need to get the approval from the NIC Email Division…"_
 
 Use the request template at the bottom of this file.
 
@@ -109,13 +109,13 @@ leaks to shell history and `ps`), and is redacted from any server error it print
 
 ### Reading the verdict
 
-| Output | Meaning | Next step |
-|---|---|---|
-| `PREFLIGHT PASSED` | Unattended IMAP+SMTP works. Records the winning endpoint pair and `UIDVALIDITY`. | Gate met — remaining items below, then Phase 1. |
-| `BLOCKED` | Server wants a rotating OTP (Kavach). | **Project blocked.** Migration or exception required. |
-| `NOT ENABLED` | IMAP/SMTP off, or barred by org policy. | Step 2, then the NIC request. |
-| `CREDENTIAL REJECTED` | Usually the webmail password was used instead of an app password. | Step 3. |
-| No endpoint reachable | Firewall, or IMAP/SMTP restricted to NICNET. | Ask NIC to allowlist the host's public IP. |
+| Output                | Meaning                                                                          | Next step                                             |
+| --------------------- | -------------------------------------------------------------------------------- | ----------------------------------------------------- |
+| `PREFLIGHT PASSED`    | Unattended IMAP+SMTP works. Records the winning endpoint pair and `UIDVALIDITY`. | Gate met — remaining items below, then Phase 1.       |
+| `BLOCKED`             | Server wants a rotating OTP (Kavach).                                            | **Project blocked.** Migration or exception required. |
+| `NOT ENABLED`         | IMAP/SMTP off, or barred by org policy.                                          | Step 2, then the NIC request.                         |
+| `CREDENTIAL REJECTED` | Usually the webmail password was used instead of an app password.                | Step 3.                                               |
+| No endpoint reachable | Firewall, or IMAP/SMTP restricted to NICNET.                                     | Ask NIC to allowlist the host's public IP.            |
 
 ---
 
@@ -142,7 +142,7 @@ Ranked, per the plan §7:
    DPAPI/Credential Manager, or the cloud provider's secret manager.
 2. **Acceptable** — Vault / KMS-encrypted secret fetched at boot, held only in memory.
 3. **Minimum viable** — root-owned `0600` file **outside the repo**, referenced by
-   `NIC_APP_PASSWORD_FILE`. Config stores the *path*, never the value.
+   `NIC_APP_PASSWORD_FILE`. Config stores the _path_, never the value.
 4. **Prohibited** — source, committed `.env`, `.env.example`, frontend code, Docker image
    layers, CI logs, shell commands, screenshots, or this repository in any form.
 
@@ -161,7 +161,7 @@ Send to `support@gov.in`, copying your Delegated Administrator.
 > Respected Sir/Madam,
 >
 > We are integrating the official mailbox `contact.ecoclubs-edu@gov.in` with an internal
-> departmental application (AI-powered IP Stakeholder’s BRIDGETECH) so that official correspondence
+> departmental application (AI-powered IP Stakeholders’ BRIDGETECH) so that official correspondence
 > is handled through NIC eMail rather than a third-party provider, in line with the
 > E-mail Policy of the Government of India.
 >

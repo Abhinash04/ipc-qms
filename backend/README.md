@@ -1,6 +1,6 @@
 # BRIDGETECH Backend
 
-Node.js + Express 5 API for the AI-powered IP Stakeholder’s BRIDGETECH. **JavaScript only, ES Modules
+Node.js + Express 5 API for the AI-powered IP Stakeholders’ BRIDGETECH. **JavaScript only, ES Modules
 throughout** (`"type": "module"`) — no TypeScript, no CommonJS.
 
 ## What is implemented
@@ -49,18 +49,18 @@ npm run lint     # eslint
 
 Operational scripts:
 
-| Script | Purpose |
-|---|---|
-| `npm run db:provision` | Create the collections and indexes at `DATABASE_URL` (or `--uri`) and insert the development identities; writes no cases, and is safe to repeat. `--dry-run` reports only; `--truncate` also clears workflow data and needs `--force` on a shared database. See [Shared development database](../README.md#shared-development-database-mongodb-atlas). |
-| `npm run db:reset` | Clear the workflow state from MongoDB, keeping `users`. Refuses a shared database without `--force`. See [Resetting the workflow state](#resetting-the-workflow-state). |
-| `npm run mailbox:purge` | Triage inbound mail and strip the content of junk past the retention window. `--dry-run` first — it destroys content. Refuses a shared database without `--force`. See [Junk triage and retention](#junk-triage-and-retention). |
-| `npm run cleanup:awaiting` | Discard every NICeMail message still awaiting validation (no accept/reject decision, no Query Case, not flagged junk): strips its content and attachments like the retention purge, keeps the id stub so a sync cannot bring it back, and writes an `EMAIL_PURGED` audit row with reason `awaiting-discarded`. Independent of the scheduled 42-hour sweep. `--dry-run` lists what would go; `--limit=N` caps the run. Refuses a shared database or `NODE_ENV=production` without `--force`. |
-| `npm run triage:eval` | Score the triage prompt against a fixture set on the live Gemma endpoint. Fails if any genuine fixture is judged destroyable. Not part of `npm test`. |
-| `npm run ingest:ipc` | Rebuild `src/data/ipcKnowledge.json` from `docs/markdown/`. See [AI grounding](#ai-grounding-layer). |
-| `npm run nic:preflight` | Read-only NICeMail IMAP/SMTP reachability + auth probe. Never marks mail read. |
-| `npm run nic:verify` | Live three-level NICeMail verification (read, send, receipt). Sends exactly one message, only to `NIC_TEST_RECIPIENT`. |
-| `npm run nic:browser:discover` | Read-only inspection of the NICeMail session over CDP: which document holds the mailbox, how the selector registry resolves, the mail rows, and a diagnosis. Flags after `--`: `--json`, `--rows=N`, `--show-addresses`, `--agent-tab`. |
-| `npm run nic:browser:calibrate` | Calibrates the NICeMail compose form in the agent's own background tab. It opens one draft, checks From, tries recipient, subject and body entry, visits Sent and Drafts, then discards the draft. **It never presses Send.** Flags after `--`: `--attach` (also attaches a small generated PDF), `--show-addresses`. |
+| Script                          | Purpose                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `npm run db:provision`          | Create the collections and indexes at `DATABASE_URL` (or `--uri`) and insert the development identities; writes no cases, and is safe to repeat. `--dry-run` reports only; `--truncate` also clears workflow data and needs `--force` on a shared database. See [Shared development database](../README.md#shared-development-database-mongodb-atlas).                                                                                                                                      |
+| `npm run db:reset`              | Clear the workflow state from MongoDB, keeping `users`. Refuses a shared database without `--force`. See [Resetting the workflow state](#resetting-the-workflow-state).                                                                                                                                                                                                                                                                                                                     |
+| `npm run mailbox:purge`         | Triage inbound mail and strip the content of junk past the retention window. `--dry-run` first — it destroys content. Refuses a shared database without `--force`. See [Junk triage and retention](#junk-triage-and-retention).                                                                                                                                                                                                                                                             |
+| `npm run cleanup:awaiting`      | Discard every NICeMail message still awaiting validation (no accept/reject decision, no Query Case, not flagged junk): strips its content and attachments like the retention purge, keeps the id stub so a sync cannot bring it back, and writes an `EMAIL_PURGED` audit row with reason `awaiting-discarded`. Independent of the scheduled 42-hour sweep. `--dry-run` lists what would go; `--limit=N` caps the run. Refuses a shared database or `NODE_ENV=production` without `--force`. |
+| `npm run triage:eval`           | Score the triage prompt against a fixture set on the live Gemma endpoint. Fails if any genuine fixture is judged destroyable. Not part of `npm test`.                                                                                                                                                                                                                                                                                                                                       |
+| `npm run ingest:ipc`            | Rebuild `src/data/ipcKnowledge.json` from `docs/markdown/`. See [AI grounding](#ai-grounding-layer).                                                                                                                                                                                                                                                                                                                                                                                        |
+| `npm run nic:preflight`         | Read-only NICeMail IMAP/SMTP reachability + auth probe. Never marks mail read.                                                                                                                                                                                                                                                                                                                                                                                                              |
+| `npm run nic:verify`            | Live three-level NICeMail verification (read, send, receipt). Sends exactly one message, only to `NIC_TEST_RECIPIENT`.                                                                                                                                                                                                                                                                                                                                                                      |
+| `npm run nic:browser:discover`  | Read-only inspection of the NICeMail session over CDP: which document holds the mailbox, how the selector registry resolves, the mail rows, and a diagnosis. Flags after `--`: `--json`, `--rows=N`, `--show-addresses`, `--agent-tab`.                                                                                                                                                                                                                                                     |
+| `npm run nic:browser:calibrate` | Calibrates the NICeMail compose form in the agent's own background tab. It opens one draft, checks From, tries recipient, subject and body entry, visits Sent and Drafts, then discards the draft. **It never presses Send.** Flags after `--`: `--attach` (also attaches a small generated PDF), `--show-addresses`.                                                                                                                                                                       |
 
 Three further live-probe scripts have **no npm alias** and must be run directly:
 `node src/scripts/testGemmaLive.js`, `testRecommendationLive.js`, `testDraftLive.js`. They call the
@@ -110,12 +110,13 @@ All routes are mounted under `/api/v1`. Authentication is applied **per route**,
 which answers 404 unless `NODE_ENV=development`. Everything else requires a valid session cookie.
 
 ### Auth
-| Method | Path | Guards |
-|---|---|---|
-| POST | `/auth/login` | public |
-| POST | `/auth/logout` | public — must still clear a cookie whose token already expired |
-| POST | `/auth/dev-login` | public, but answers 404 unless `NODE_ENV=development` — signs in a seeded account by email with **no password**; refuses the NICeMail Front Office with 403 |
-| GET | `/auth/me` | `verifyToken` |
+
+| Method | Path              | Guards                                                                                                                                                      |
+| ------ | ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| POST   | `/auth/login`     | public                                                                                                                                                      |
+| POST   | `/auth/logout`    | public — must still clear a cookie whose token already expired                                                                                              |
+| POST   | `/auth/dev-login` | public, but answers 404 unless `NODE_ENV=development` — signs in a seeded account by email with **no password**; refuses the NICeMail Front Office with 403 |
+| GET    | `/auth/me`        | `verifyToken`                                                                                                                                               |
 
 `/auth/dev-login` refuses the NICeMail Front Office because that account's inbox is a live
 government mailbox and its session can make the browser agent send; the refusal is audited as
@@ -124,12 +125,13 @@ still signs in there without a password whenever `NODE_ENV=development` — see
 [What is NOT enforced yet](#what-is-not-enforced-yet).
 
 ### Emails
-| Method | Path | Guards |
-|---|---|---|
-| GET | `/emails/config` | `verifyToken` |
-| POST | `/emails/acknowledgement` | `verifyRole(FRONT_OFFICE, SUPER_ADMIN)` |
-| POST | `/emails/forward` | `verifyAction(FORWARD)` |
-| POST | `/emails/response` | `verifyAction(DISPATCH)` — the Front Office **retry** path; the normal send happens inside `POST /queries/:queryId/final-approval` |
+
+| Method | Path                      | Guards                                                                                                                             |
+| ------ | ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| GET    | `/emails/config`          | `verifyToken`                                                                                                                      |
+| POST   | `/emails/acknowledgement` | `verifyRole(FRONT_OFFICE, SUPER_ADMIN)`                                                                                            |
+| POST   | `/emails/forward`         | `verifyAction(FORWARD)`                                                                                                            |
+| POST   | `/emails/response`        | `verifyAction(DISPATCH)` — the Front Office **retry** path; the normal send happens inside `POST /queries/:queryId/final-approval` |
 
 `/emails/acknowledgement` and `/emails/response` are the case page's and Dispatch page's retry
 buttons. Both send through the mailbox the case came from, read from the **stored** case by `queryId`
@@ -142,20 +144,21 @@ answers **504** with the Sent-folder warning and `unconfirmed: true` — the one
 endpoints that must not be retried blindly.
 
 ### Mailbox
-| Method | Path | Guards |
-|---|---|---|
-| GET | `/mailbox/messages` | `verifyRole(FRONT_OFFICE, SUPER_ADMIN)` + `validateQuery` |
-| GET | `/mailbox/messages/:messageId` | `verifyRole(FRONT_OFFICE, SUPER_ADMIN)` |
-| GET | `/mailbox/messages/:messageId/attachments/:attachmentId` | `verifyRole(FRONT_OFFICE, SUPER_ADMIN)` |
-| POST | `/mailbox/messages/:messageId/read` | `verifyRole(FRONT_OFFICE, SUPER_ADMIN)` |
-| POST | `/mailbox/sync` | `verifyRole(FRONT_OFFICE, SUPER_ADMIN)` |
-| POST | `/mailbox/messages/:messageId/accept` | `verifyRole(FRONT_OFFICE, SUPER_ADMIN)` + `validateBody` |
-| POST | `/mailbox/messages/:messageId/decision` | `verifyRole(FRONT_OFFICE, SUPER_ADMIN)` + `validateBody` |
-| GET | `/mailbox/decisions` | `verifyRole(FRONT_OFFICE, SUPER_ADMIN)` |
-| POST | `/mailbox/messages/:messageId/ingested` | `verifyRole(FRONT_OFFICE, SUPER_ADMIN)` |
-| DELETE | `/mailbox/messages/:messageId` | `verifyRole(FRONT_OFFICE, SUPER_ADMIN)` |
-| POST | `/mailbox/receive` | `verifyRole(SUPER_ADMIN)` |
-| DELETE | `/mailbox` | `verifyRole(SUPER_ADMIN)` + `refuseDestructive` |
+
+| Method | Path                                                     | Guards                                                    |
+| ------ | -------------------------------------------------------- | --------------------------------------------------------- |
+| GET    | `/mailbox/messages`                                      | `verifyRole(FRONT_OFFICE, SUPER_ADMIN)` + `validateQuery` |
+| GET    | `/mailbox/messages/:messageId`                           | `verifyRole(FRONT_OFFICE, SUPER_ADMIN)`                   |
+| GET    | `/mailbox/messages/:messageId/attachments/:attachmentId` | `verifyRole(FRONT_OFFICE, SUPER_ADMIN)`                   |
+| POST   | `/mailbox/messages/:messageId/read`                      | `verifyRole(FRONT_OFFICE, SUPER_ADMIN)`                   |
+| POST   | `/mailbox/sync`                                          | `verifyRole(FRONT_OFFICE, SUPER_ADMIN)`                   |
+| POST   | `/mailbox/messages/:messageId/accept`                    | `verifyRole(FRONT_OFFICE, SUPER_ADMIN)` + `validateBody`  |
+| POST   | `/mailbox/messages/:messageId/decision`                  | `verifyRole(FRONT_OFFICE, SUPER_ADMIN)` + `validateBody`  |
+| GET    | `/mailbox/decisions`                                     | `verifyRole(FRONT_OFFICE, SUPER_ADMIN)`                   |
+| POST   | `/mailbox/messages/:messageId/ingested`                  | `verifyRole(FRONT_OFFICE, SUPER_ADMIN)`                   |
+| DELETE | `/mailbox/messages/:messageId`                           | `verifyRole(FRONT_OFFICE, SUPER_ADMIN)`                   |
+| POST   | `/mailbox/receive`                                       | `verifyRole(SUPER_ADMIN)`                                 |
+| DELETE | `/mailbox`                                               | `verifyRole(SUPER_ADMIN)` + `refuseDestructive`           |
 
 The two `SUPER_ADMIN` routes are destructive/injection utilities, and both refuse outright (409) when
 `NODE_ENV=production`; `DELETE /mailbox` also refuses when `DATABASE_URL` points at a shared
@@ -242,11 +245,11 @@ with the case.
 The stored object is
 `{ text, keyPoints, topics, aiGenerated, fallback, status, generatedAt, error }`, with `status` one of:
 
-| `status` | Means |
-|---|---|
-| `GENERATED` | The model answered. |
-| `FALLBACK` | It did not — unset URL, timeout, non-2xx — and `generateSummary`'s deterministic stand-in was used. An ordinary outcome, recorded as a success with `fallback: true` in the audit `aiMetadata`, not an error. |
-| `FAILED` | The call itself threw. Nothing usable; `result: failure` and the reason are audited, and the step is named in `errors`. |
+| `status`    | Means                                                                                                                                                                                                         |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GENERATED` | The model answered.                                                                                                                                                                                           |
+| `FALLBACK`  | It did not — unset URL, timeout, non-2xx — and `generateSummary`'s deterministic stand-in was used. An ordinary outcome, recorded as a success with `fallback: true` in the audit `aiMetadata`, not an error. |
+| `FAILED`    | The call itself threw. Nothing usable; `result: failure` and the reason are audited, and the step is named in `errors`.                                                                                       |
 
 There is deliberately no `aiSummaryStatus` or `aiSummaryGeneratedAt` field on the case — the
 provenance rides inside the object it describes. Pressing ✓ again re-attempts **only** a `FAILED`
@@ -265,7 +268,7 @@ receive different numbers.
 **Safe to retry.** There are no cross-document transactions on a standalone MongoDB, so instead every
 step checks for its own artefact before acting — the decision, the inbound `EmailMessage`, an
 `ACKNOWLEDGEMENT` message, a `FORWARD` message. Pressing ✓ again re-attempts only what did not
-complete: no second case, no second acknowledgement, no second forward. The guard is the *recorded*
+complete: no second case, no second acknowledgement, no second forward. The guard is the _recorded_
 send, so an unconfirmed acknowledgement — never recorded — is sent again. The case is written with a
 real `create`, not an upsert, so a duplicate id is rejected by the unique index rather than silently
 overwriting a live case; and `EmailMessage.sourceMessageId` carries a unique **partial** index, so
@@ -284,57 +287,61 @@ same inbox cannot produce two cases for one email. The actor is taken from the s
 from the body, and both accept and reject are audited as `EMAIL_CLASSIFIED`.
 
 ### AI
-| Method | Path | Guards |
-|---|---|---|
-| POST | `/ai/summary` | `verifyToken` only |
-| POST | `/ai/recommend` | `verifyToken` only |
-| POST | `/ai/draft` | `verifyToken` only |
+
+| Method | Path            | Guards             |
+| ------ | --------------- | ------------------ |
+| POST   | `/ai/summary`   | `verifyToken` only |
+| POST   | `/ai/recommend` | `verifyToken` only |
+| POST   | `/ai/draft`     | `verifyToken` only |
 
 Any signed-in role may call these; there is no role gate.
 
 ### Attachments
-| Method | Path | Guards |
-|---|---|---|
-| POST | `/attachments` | `verifyToken`, `authorizeAttachmentAccess`, multer (memory storage) |
-| GET | `/attachments/:id/meta` | `verifyToken`, `authorizeAttachmentAccess` |
-| GET | `/attachments/:id` | `verifyToken`, `authorizeAttachmentAccess` |
+
+| Method | Path                    | Guards                                                              |
+| ------ | ----------------------- | ------------------------------------------------------------------- |
+| POST   | `/attachments`          | `verifyToken`, `authorizeAttachmentAccess`, multer (memory storage) |
+| GET    | `/attachments/:id/meta` | `verifyToken`, `authorizeAttachmentAccess`                          |
+| GET    | `/attachments/:id`      | `verifyToken`, `authorizeAttachmentAccess`                          |
 
 ### NIC
-| Method | Path | Guards |
-|---|---|---|
-| GET | `/nic/status` | `verifyRole(FRONT_OFFICE, SUPER_ADMIN)` |
-| POST | `/nic/read` | `verifyRole(FRONT_OFFICE, SUPER_ADMIN)` |
-| POST | `/nic/send` | `verifyRole(FRONT_OFFICE, SUPER_ADMIN)` |
+
+| Method | Path          | Guards                                  |
+| ------ | ------------- | --------------------------------------- |
+| GET    | `/nic/status` | `verifyRole(FRONT_OFFICE, SUPER_ADMIN)` |
+| POST   | `/nic/read`   | `verifyRole(FRONT_OFFICE, SUPER_ADMIN)` |
+| POST   | `/nic/send`   | `verifyRole(FRONT_OFFICE, SUPER_ADMIN)` |
 
 NIC endpoints return HTTP 200 even on failure, carrying `{ ok: false, stage, error }` so the caller
-can tell *where* it failed (connect / authenticate / open_mailbox / fetch / submit).
+can tell _where_ it failed (connect / authenticate / open_mailbox / fetch / submit).
 
 ### Audit
-| Method | Path | Guards |
-|---|---|---|
-| GET | `/audit` | `verifyRole(ADMIN, SUPER_ADMIN)` |
-| GET | `/audit/summary` | `verifyRole(ADMIN, SUPER_ADMIN)` |
-| GET | `/audit/query/:queryId` | `verifyRole(ADMIN, SUPER_ADMIN)` |
+
+| Method | Path                    | Guards                           |
+| ------ | ----------------------- | -------------------------------- |
+| GET    | `/audit`                | `verifyRole(ADMIN, SUPER_ADMIN)` |
+| GET    | `/audit/summary`        | `verifyRole(ADMIN, SUPER_ADMIN)` |
+| GET    | `/audit/query/:queryId` | `verifyRole(ADMIN, SUPER_ADMIN)` |
 
 `GET /audit/summary` passes a caller's `from`/`to` through to its `overall` half, so it can answer
 for any time window; the `today` half always overrides `from`.
 
 ### Queries — the workflow-state sync API
 
-| Method | Path | Guards |
-|---|---|---|
-| GET | `/queries` | `verifyToken` |
-| GET | `/queries/is-empty` | `verifyToken` |
-| POST | `/queries/persist` | `verifyToken` + `validateBody(persistTransitionSchema)` |
-| POST | `/queries/:queryId/final-approval` | `verifyToken` + `verifyAction(FINAL_APPROVE)` + `validateBody(finalApprovalSchema)` |
-| POST | `/queries/reset` | `verifyToken` + `verifyRole(SUPER_ADMIN)` + `refuseDestructive` + `validateBody(resetQueryStateSchema)` |
+| Method | Path                               | Guards                                                                                                  |
+| ------ | ---------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| GET    | `/queries`                         | `verifyToken`                                                                                           |
+| GET    | `/queries/is-empty`                | `verifyToken`                                                                                           |
+| POST   | `/queries/persist`                 | `verifyToken` + `validateBody(persistTransitionSchema)`                                                 |
+| POST   | `/queries/:queryId/final-approval` | `verifyToken` + `verifyAction(FINAL_APPROVE)` + `validateBody(finalApprovalSchema)`                     |
+| POST   | `/queries/reset`                   | `verifyToken` + `verifyRole(SUPER_ADMIN)` + `refuseDestructive` + `validateBody(resetQueryStateSchema)` |
 
 This is a delta-sync API, not a REST resource: the client hydrates the whole workflow store from
 `GET /queries` and posts one delta per committed transition. Every signed-in role uses both, which
 is why neither carries a role allow-list — the guard that belongs there is per-case ownership, and
 that is not yet server-side.
 
-`POST /queries/:queryId/final-approval` is the exception in this router: it is an *operation*, not a
+`POST /queries/:queryId/final-approval` is the exception in this router: it is an _operation_, not a
 state mirror, and it is described under [Final approval](#final-approval) below.
 
 Five things are enforced:
@@ -394,9 +401,9 @@ Every route answers `503` — not `500` — when MongoDB is not connected.
 
 ### Final approval
 
-| Method | Path | Guards |
-|---|---|---|
-| POST | `/queries/:queryId/final-approval` | `verifyToken` + `verifyAction(FINAL_APPROVE)` + `validateBody(finalApprovalSchema)` |
+| Method | Path                               | Guards                                                                              |
+| ------ | ---------------------------------- | ----------------------------------------------------------------------------------- |
+| POST   | `/queries/:queryId/final-approval` | `verifyToken` + `verifyAction(FINAL_APPROVE)` + `validateBody(finalApprovalSchema)` |
 
 One call that does both halves (`services/workflow/finalApproval.js`): record the
 Officer-in-Charge's approval, email the approved response to the inquirer, close the case. The audit
@@ -452,9 +459,9 @@ Ordering is the point:
 
 ### Pullback
 
-| Method | Path | Guards |
-|---|---|---|
-| POST | `/queries/:queryId/pullback` | `verifyToken` + `verifyAction(PULLBACK)` + `validateBody(pullbackSchema)` |
+| Method | Path                         | Guards                                                                    |
+| ------ | ---------------------------- | ------------------------------------------------------------------------- |
+| POST   | `/queries/:queryId/pullback` | `verifyToken` + `verifyAction(PULLBACK)` + `validateBody(pullbackSchema)` |
 
 Grants come from `ROLE_ACTIONS` (ADMIN and SUPER_ADMIN), so a refusal is audited like every other
 `verifyAction` denial. The handler updates `workflowState` and writes a `QUERY_PULLED_BACK` audit
@@ -480,13 +487,13 @@ mode. Error text passes through a redaction that drops the credentials from any 
 The distinction matters because the degradation is uneven ("Without" means `DATABASE_URL` is
 unset):
 
-| Subsystem | With Mongo | Without |
-|---|---|---|
-| **Query Cases + workflow** | 8 collections | **no fallback — `/queries/*` answers 503** |
-| Mailbox | `MailboxMessage` collection | in-process `Map`, cleared on restart — except the NICeMail browser mailbox, which answers 503 |
-| Audit trail | `auditevents` collection | bounded 5,000-event buffer, `durable: false` |
-| Attachments | disk (unaffected) | disk (unaffected) |
-| Sessions | stateless JWT (unaffected) | stateless JWT (unaffected) |
+| Subsystem                  | With Mongo                  | Without                                                                                       |
+| -------------------------- | --------------------------- | --------------------------------------------------------------------------------------------- |
+| **Query Cases + workflow** | 8 collections               | **no fallback — `/queries/*` answers 503**                                                    |
+| Mailbox                    | `MailboxMessage` collection | in-process `Map`, cleared on restart — except the NICeMail browser mailbox, which answers 503 |
+| Audit trail                | `auditevents` collection    | bounded 5,000-event buffer, `durable: false`                                                  |
+| Attachments                | disk (unaffected)           | disk (unaffected)                                                                             |
+| Sessions                   | stateless JWT (unaffected)  | stateless JWT (unaffected)                                                                    |
 
 Nothing degrades silently: `mailbox.describe()` and `auditService.describe()` report their backend
 and durability, the admin console surfaces "in-memory — not durable", and a failed write-through
@@ -513,28 +520,28 @@ defined.
 
 Note that `EmailMessage.sourceMessageId` is a **partial** unique index
 (`partialFilterExpression: { sourceMessageId: { $type: 'string' } }`), not `sparse: true`. Sparse
-excludes documents where the field is *absent*, but the field has `default: null`, so Mongoose
+excludes documents where the field is _absent_, but the field has `default: null`, so Mongoose
 writes an explicit null on every acknowledgement, forward and response — and sparse indexed all of
 them. The partial filter is the constraint actually intended: unique among records that came from an
 incoming message, ignored by those that did not.
 
 **Models** (`src/models/`, 14 across 13 files):
 
-| Model | Holds |
-|---|---|
-| `QueryCase` | the case: subject, inquirer, priority, `workflowState`, assignee, attachments, the stored `aiSummary`, and `sourceMailbox` — the mailbox the enquiry arrived in, set by the server at accept and stripped from every `/queries/persist` write |
-| `WorkflowStep` | one step per review level; compound index on `{queryId, sequence}` |
-| `Review` | a reviewer's decision: `comment` (singular — the plural was never populated), plus `responseId`/`version` tying it to the draft it judged. `stepId` and `reviewerId` are nullable, because a return-for-revision from final approval has no review step open |
-| `ResponseVersion` | successive drafts, with AI provenance in `aiMetadata`, `source` and `aiGenerated`; `status` is the final-approval lock `saveDraftVersion` enforces, with `approvedAt` alongside it |
-| `Notification` | per-role / per-user notifications |
-| `EmailMessage`, `EmailThread` | the case's email record |
-| `AuditEvent` | 14 fields, indexed on timestamp/actorType/actorId/auditId/action/queryId/messageId. `action` is deliberately *not* an enum so a new action never fails to record; `auditId` is indexed but **not unique**, because the counter behind it lives in a browser |
-| `MailboxMessage` + `Counter` | the ingest mailbox and the numeric `MSG-00001` sequence. Also holds the NICeMail browser mailbox's messages: `source: 'nic-browser'`, a `providerMessageId` under a unique partial index, and `removedAt`, which hides a deleted message so the next sync cannot bring it back. Additive, insert-only and not backfilled: `toAddresses` (the To header; `to` stays the mailbox), `providerThreadId`, `bodyHtml` (null over 1,000,000 chars), `providerUnread`, `receivedAtSource` (`message`/`sync`), the BRIDGETECH read state `readAt`/`readByUserId`, and `createdAt`. Compound index `{to, source, removedAt, receivedAt: -1, mailboxMessageId: -1}` for the inbox list |
-| `MailboxDecision` | the Front Officer's accept/reject on one incoming message |
-| `MailboxTriage` | the machine's verdict on one incoming message — `GENUINE`/`JUNK`, a confidence, which rule or the model decided, and `classifiedAt`, which is the retention clock. Also `rescuedAt` (a person said "not junk": terminal) and `purgedAt`, the sweep's watermark |
-| `OutboundEmail` | one row per case email — `dispatchKey` = `"${emailType}:${queryId}"`, **unique**. `status` is `SENDING`/`SENT`/`FAILED`/`UNCERTAIN`, with `claimToken`, `leaseExpiresAt`, `attempts`, `recipients`, `rfcMessageId`, `lastError`, `resolvedBy` and a capped `history`. The unique key is the idempotency guard: see *One email per case* below |
-| `User` | seeded directory; written on connect, **not yet read for authentication** |
-| `QueryCounter` | the workflow store's id counters, held as an object |
+| Model                         | Holds                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| ----------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `QueryCase`                   | the case: subject, inquirer, priority, `workflowState`, assignee, attachments, the stored `aiSummary`, and `sourceMailbox` — the mailbox the enquiry arrived in, set by the server at accept and stripped from every `/queries/persist` write                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| `WorkflowStep`                | one step per review level; compound index on `{queryId, sequence}`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| `Review`                      | a reviewer's decision: `comment` (singular — the plural was never populated), plus `responseId`/`version` tying it to the draft it judged. `stepId` and `reviewerId` are nullable, because a return-for-revision from final approval has no review step open                                                                                                                                                                                                                                                                                                                                                                                                                |
+| `ResponseVersion`             | successive drafts, with AI provenance in `aiMetadata`, `source` and `aiGenerated`; `status` is the final-approval lock `saveDraftVersion` enforces, with `approvedAt` alongside it                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| `Notification`                | per-role / per-user notifications                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| `EmailMessage`, `EmailThread` | the case's email record                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| `AuditEvent`                  | 14 fields, indexed on timestamp/actorType/actorId/auditId/action/queryId/messageId. `action` is deliberately _not_ an enum so a new action never fails to record; `auditId` is indexed but **not unique**, because the counter behind it lives in a browser                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| `MailboxMessage` + `Counter`  | the ingest mailbox and the numeric `MSG-00001` sequence. Also holds the NICeMail browser mailbox's messages: `source: 'nic-browser'`, a `providerMessageId` under a unique partial index, and `removedAt`, which hides a deleted message so the next sync cannot bring it back. Additive, insert-only and not backfilled: `toAddresses` (the To header; `to` stays the mailbox), `providerThreadId`, `bodyHtml` (null over 1,000,000 chars), `providerUnread`, `receivedAtSource` (`message`/`sync`), the BRIDGETECH read state `readAt`/`readByUserId`, and `createdAt`. Compound index `{to, source, removedAt, receivedAt: -1, mailboxMessageId: -1}` for the inbox list |
+| `MailboxDecision`             | the Front Officer's accept/reject on one incoming message                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| `MailboxTriage`               | the machine's verdict on one incoming message — `GENUINE`/`JUNK`, a confidence, which rule or the model decided, and `classifiedAt`, which is the retention clock. Also `rescuedAt` (a person said "not junk": terminal) and `purgedAt`, the sweep's watermark                                                                                                                                                                                                                                                                                                                                                                                                              |
+| `OutboundEmail`               | one row per case email — `dispatchKey` = `"${emailType}:${queryId}"`, **unique**. `status` is `SENDING`/`SENT`/`FAILED`/`UNCERTAIN`, with `claimToken`, `leaseExpiresAt`, `attempts`, `recipients`, `rfcMessageId`, `lastError`, `resolvedBy` and a capped `history`. The unique key is the idempotency guard: see _One email per case_ below                                                                                                                                                                                                                                                                                                                               |
+| `User`                        | seeded directory; written on connect, **not yet read for authentication**                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| `QueryCounter`                | the workflow store's id counters, held as an object                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 
 > `QueryCounter` exists because `Counter.value` is a `Number` incremented with `$inc`, while the
 > workflow store keeps a whole map (`{QRY, THREAD, MSG, …}`). Writing that object into the numeric
@@ -602,7 +609,7 @@ Five things make a wrong verdict survivable:
   answer.
 
 > **The prompt is evaluated, not assumed.** `npm run triage:eval` scores the classifier against a
-> fixture set on the live endpoint and fails the run if any *genuine* fixture comes back purgeable
+> fixture set on the live endpoint and fails the run if any _genuine_ fixture comes back purgeable
 > even once. It was written because the first version of this prompt destroyed real mail: a CDSCO
 > circular from a `noreply@` address came back JUNK at 0.95 three times out of three, a relayed
 > ticket once in three, and a "please see attached" enquiry three times out of three.
@@ -633,7 +640,7 @@ npm run triage:eval -- --runs 5 --fixture circular-noreply
 ```
 
 Rows stored before this existed have no verdict, so they are not purgeable and **no migration is
-required**. `--backfill` judges them on the rules alone and stamps `classifiedAt` as *now*, not the
+required**. `--backfill` judges them on the rules alone and stamps `classifiedAt` as _now_, not the
 message's own `receivedAt`, so every backfilled row gets a full fresh window however old the mail is.
 
 > Only the NICeMail browser mailbox stores rows, so it is the only purgeable source
@@ -668,7 +675,7 @@ How a message is filed (`services/email/mailbox/categorizer.js`):
    exact re-send is pinned — whether a follow-up merely chases (Duplicate) or adds something new
    (Official Query) is the model's call. Nothing is merged.
 3. **Gemma** returns the category with a confidence and a short reason. Below 0.6 the message is
-   filed under Other and flagged *Needs review*, keeping the model's guess for display.
+   filed under Other and flagged _Needs review_, keeping the model's guess for display.
 4. **Keyword fallback** (`categoryHeuristics.js`) when the model is unreachable or answers outside
    the registry. A message whose verdict is still pending is retried on the existing `attempts`
    schedule, and the model's answer replaces the fallback when it arrives.
@@ -692,7 +699,7 @@ The result is kept on the `MailboxTriage` row (`category`, `categoryConfidence`,
 - `POST /mailbox/messages/:id/category` `{ "category": "OFFICIAL_QUERY" }` is the Front Office
   correction. It keeps the prediction, is never overwritten by a later run, writes an
   `EMAIL_CLASSIFIED` audit row, and — when the new category is a query, an event or a duplicate —
-  rescues the message from the junk purge exactly as *Not junk* does.
+  rescues the message from the junk purge exactly as _Not junk_ does.
 
 > `npm run triage:eval` now also checks the category of each fixture.
 
@@ -746,10 +753,10 @@ A case remembers the mailbox its enquiry **arrived** in — `sourceMailbox`, `{ 
 written by the server at intake and never by a client. `emailService.transportFor(sourceMailbox)`
 reads it:
 
-| `sourceMailbox.source` | Channel | Sender |
-|---|---|---|
-| `nic-browser` | `transports/nicBrowserTransport.js` — the operator's signed-in Chrome session | the NICeMail Front Office (`senderFor`) |
-| anything else, or null | `getTransport(EMAIL_TRANSPORT)` — `nic` or `mock` | `FRONT_OFFICE_*` |
+| `sourceMailbox.source` | Channel                                                                       | Sender                                  |
+| ---------------------- | ----------------------------------------------------------------------------- | --------------------------------------- |
+| `nic-browser`          | `transports/nicBrowserTransport.js` — the operator's signed-in Chrome session | the NICeMail Front Office (`senderFor`) |
+| anything else, or null | `getTransport(EMAIL_TRANSPORT)` — `nic` or `mock`                             | `FRONT_OFFICE_*`                        |
 
 **All three** of a case's emails follow that rule: the acknowledgement, the final response **and the
 forward to the Officer-in-Charge**. The forward used to stay on `EMAIL_TRANSPORT` regardless,
@@ -817,7 +824,7 @@ Two rules, and everything else follows from them.
 case: the acknowledgement and the final response go to `inquirer.email`, set at intake from the
 `From` header and write-once thereafter; the forward goes to the configured Officer-in-Charge; the
 body of a response is the `FINAL_APPROVED` `ResponseVersion`; the route is `transportFor
-(sourceMailbox)`. A caller names *which case* — never who is written to or what they are told. The
+(sourceMailbox)`. A caller names _which case_ — never who is written to or what they are told. The
 three `/emails/*` endpoints therefore take `{ queryId }` and ignore a body `to`.
 
 **The claim is atomic.** `outbox.dispatchOnce` inserts an `OutboundEmail` row keyed on a unique
@@ -889,11 +896,11 @@ variables and `NIC_MAILBOX`. Code lives in `services/email/nic/{nicImap,nicSmtp,
 
 Three surfaces use it:
 
-| Surface | Purpose | Recipient limit |
-|---|---|---|
-| `EMAIL_TRANSPORT=nic`, `MAILBOX_SOURCE=nic` | the production mail path (`transports/nicTransport.js`, `mailbox/nicInboxReader.js`) | confined to `NIC_TEST_RECIPIENT` **until `NIC_ALLOW_OUTBOUND=true`** |
-| `POST /api/v1/nic/{read,send}` | operator diagnostics | always `NIC_TEST_RECIPIENT` only |
-| `npm run nic:verify`, `npm run nic:preflight` | verification CLIs | always `NIC_TEST_RECIPIENT` only |
+| Surface                                       | Purpose                                                                              | Recipient limit                                                      |
+| --------------------------------------------- | ------------------------------------------------------------------------------------ | -------------------------------------------------------------------- |
+| `EMAIL_TRANSPORT=nic`, `MAILBOX_SOURCE=nic`   | the production mail path (`transports/nicTransport.js`, `mailbox/nicInboxReader.js`) | confined to `NIC_TEST_RECIPIENT` **until `NIC_ALLOW_OUTBOUND=true`** |
+| `POST /api/v1/nic/{read,send}`                | operator diagnostics                                                                 | always `NIC_TEST_RECIPIENT` only                                     |
+| `npm run nic:verify`, `npm run nic:preflight` | verification CLIs                                                                    | always `NIC_TEST_RECIPIENT` only                                     |
 
 The two-key interlock on outbound mail is deliberate: selecting the transport must not, on its own,
 be enough to start mailing the public from a `.gov.in` address.
@@ -1070,11 +1077,11 @@ ours to decide, and the application never reads them directly. Consequences, sta
 **What ingestion skips, and why it is recorded rather than silent.** `EXCLUDED_DOCS` in the manifest
 carries a written reason for every exclusion, and the run prints them:
 
-| Document | Treatment | Reason |
-|---|---|---|
-| `File240.md` | excluded from retrieval | Amendment List-1 to IP 2014, a superseded edition, and 32 of its 91 headings are bare page numbers with the drug name orphaned into the previous block |
-| `2. Notice on Use of Authentic IP…` | excluded from retrieval | byte duplicate of the unprefixed file |
-| `EWG-list.md` | partially ingested | member rosters and Commission Members stripped as personal data with no inquiry value; group names retained |
+| Document                            | Treatment               | Reason                                                                                                                                                 |
+| ----------------------------------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `File240.md`                        | excluded from retrieval | Amendment List-1 to IP 2014, a superseded edition, and 32 of its 91 headings are bare page numbers with the drug name orphaned into the previous block |
+| `2. Notice on Use of Authentic IP…` | excluded from retrieval | byte duplicate of the unprefixed file                                                                                                                  |
+| `EWG-list.md`                       | partially ingested      | member rosters and Commission Members stripped as personal data with no inquiry value; group names retained                                            |
 
 Excluded documents are **not deleted** — they stay in the corpus for historical reference. Exclusion
 is a retrieval decision, not an archival one. This is why the run reports `22 documents` and
@@ -1118,7 +1125,7 @@ second channel.
 
 With `EMAIL_TRANSPORT=nic` or `MAILBOX_SOURCE=nic` — and so always in production, where `nic` is the
 only transport accepted — boot requires `NIC_EMAIL`, `NIC_IMAP_HOST` and `NIC_SMTP_HOST` (nothing
-connects to them at boot, and boot needs no app password). NIC configuration is otherwise *not*
+connects to them at boot, and boot needs no app password). NIC configuration is otherwise _not_
 asserted at boot — a deployment that only uses the diagnostic `/nic/*` endpoints starts normally,
 and NIC errors surface per-request as a `stage: 'config'` failure. The **browser agent** itself — Chrome, CDP, a signed-in tab — is never asserted at boot
 under any configuration and cannot prevent the server starting; the only boot checks it brings are
@@ -1140,7 +1147,7 @@ relative value means the same directory however the process was launched.
 
 The file never overrides a variable already set in the environment. Every npm script that reads
 configuration, and the live Gemma checks in `src/scripts/`, load through the same module;
-`nic:preflight` reads no file. Relative paths *inside* the file are another matter:
+`nic:preflight` reads no file. Relative paths _inside_ the file are another matter:
 `ATTACHMENT_DIR` resolves against `backend/`, but `QMS_PASSWORDS_FILE`, `NIC_APP_PASSWORD_FILE` and
 `NIC_BROWSER_ARTIFACT_DIR` resolve against the working directory, so use absolute paths on a server.
 
@@ -1167,13 +1174,13 @@ The hosting layout — the frontend as a Render Static Site that rewrites `/api/
 
 What `NODE_ENV=production` changes, beyond the usual:
 
-| | Effect |
-|---|---|
-| `DATABASE_URL` | unset is now a **startup failure**, not a degraded start (unreachable already is in every environment) |
-| `trust proxy` | enabled (one hop), so `secure` cookies and rate-limit keys use the real client address. Behind Render's rewrite **and** the VM's own proxy there are two hops, and one hop keys the rate limiters on a Render address shared by every user — check `req.ip` at first deploy; the follow-up is `app.set('trust proxy', 2)` |
-| Error bodies | 5xx returns a generic message; stacks never leave the process |
-| morgan | `combined` format rather than `dev` |
-| Session cookie | `Secure` is set automatically — the deployment must therefore be HTTPS |
+|                | Effect                                                                                                                                                                                                                                                                                                                    |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `DATABASE_URL` | unset is now a **startup failure**, not a degraded start (unreachable already is in every environment)                                                                                                                                                                                                                    |
+| `trust proxy`  | enabled (one hop), so `secure` cookies and rate-limit keys use the real client address. Behind Render's rewrite **and** the VM's own proxy there are two hops, and one hop keys the rate limiters on a Render address shared by every user — check `req.ip` at first deploy; the follow-up is `app.set('trust proxy', 2)` |
+| Error bodies   | 5xx returns a generic message; stacks never leave the process                                                                                                                                                                                                                                                             |
+| morgan         | `combined` format rather than `dev`                                                                                                                                                                                                                                                                                       |
+| Session cookie | `Secure` is set automatically — the deployment must therefore be HTTPS                                                                                                                                                                                                                                                    |
 
 Also required:
 
@@ -1193,30 +1200,30 @@ Also required:
 
 ## Troubleshooting
 
-| Symptom | Cause | Fix |
-|---|---|---|
-| `ERR_MODULE_NOT_FOUND: Cannot find package '…'` at startup | `node_modules` is older than `package.json` | `npm install` (or `npm ci`) in `backend/` |
-| `DATABASE_URL is required when NODE_ENV=production` | no database configured | set `DATABASE_URL`; the server will not start without it in production |
-| `MongoDB is unreachable at DATABASE_URL` | server down, wrong host or password, firewall; on Atlas, this machine's IP missing from the access list. The `MongoDB connection lost — retrying` line before it is not a retry: startup stops | `npm run db:check` names the failing step; on Atlas, check your database user and add your IP |
-| `MongoDB is unreachable at DATABASE_URL: querySrv ECONNREFUSED _mongodb._tcp.…` (or `ETIMEOUT`) | the DNS SRV lookup failed on this machine: Node's DNS servers (VPN, DNS filter, router, placeholder IPv6 DNS) refuse it. Atlas never saw a connection | set the adapter DNS to `1.1.1.1`/`8.8.8.8` and `ipconfig /flushdns`, or use the standard `mongodb://` string `npm run db:check` prints |
-| `DATABASE_URL must be a mongodb:// or mongodb+srv:// URI that names its database` | the URI has no `/<database>` path | add `/query_management_system` before the `?` |
-| `/queries/*` returns 503 | MongoDB not connected: `DATABASE_URL` unset in development, or the connection lost mid-run | set it and restart. A loss mid-run (an Atlas primary election) recovers by itself |
-| Reset or `DELETE /mailbox` answers 409 `… refused when DATABASE_URL points at a shared database` | intended: destructive routes are refused on a shared database | use a local MongoDB to start clean |
-| Browser reports a CORS failure | `CLIENT_URL` does not match the frontend's actual origin | set it exactly; `http://localhost:5173` ≠ `http://127.0.0.1:5173` |
-| 401 on every API call after sign-in | cookie not being sent | check `SESSION_COOKIE_SAMESITE`, and that the frontend uses `withCredentials` (it does by default) |
-| `nic:verify` → `Invalid credentials` / `535` | webmail password used instead of an app password | generate one at webmail → Security → App Passwords |
-| `nic:preflight` → `mail.gov.in` times out | those endpoints are not reachable from outside NICNET | use the `mgovcloud.in` pair, which is what `.env.example` configures |
-| `nic:browser:discover` → `Chrome is not available … (CDP endpoint answered HTTP 404)` (diagnosis `NO_CDP`); a sync → "not a Chrome DevTools endpoint" | another browser holds port 9222 | close it, or set `NIC_CDP_ENDPOINT` to a free port |
-| An agent or tool attached to the operator's NICeMail tab sees no mail rows, only `zmbtn__<hash>`-style classes | that tab is the Zoho Workplace shell; the mailbox is a cross-origin iframe with its own CDP target. `nic:browser:discover` reports it as `MAILBOX_IN_OOPIF` | nothing to fix for the BRIDGETECH agent, which opens `NIC_WEBMAIL_APP_URL` in a tab of its own — [runbook §13](../docs/NIC_BROWSER_AGENT.md#why-an-agent-cannot-see-the-nicemail-elements) |
-| A NICeMail acknowledgement or response fails (HTTP 503/504, or the case page's notice) | the error ends in `[stage: <step>; cause: …; seen: …]`: the step the browser agent stopped at, what it ran into, and what the page showed. The backend log has every step as `ACK …` / `RESPONSE …` lines | a failure before `click_send` sent nothing and can be retried once the cause is fixed; from `click_send` on it is unconfirmed — check the NICeMail Sent folder first — [§13](../docs/NIC_BROWSER_AGENT.md#13-troubleshooting), [§17](../docs/NIC_BROWSER_AGENT.md#17-two-front-office-mailboxes) |
-| A NICeMail case's acknowledgement or response fails with `… has never been calibrated against the live NICeMail …` | the key it names is in `UNCALIBRATED`; the agent refuses it before touching the page, and nothing is sent. A backend started before 2026-09-22 still has every compose key there | restart the backend; for a key still uncalibrated, calibrate it live — [§17](../docs/NIC_BROWSER_AGENT.md#calibrating-the-selectors) |
-| IPC Mailbox shows **The mailbox could not be read** | the last sync failed; `sync.stage` or `sync.error` says why | fix what the stage names — [runbook §13](../docs/NIC_BROWSER_AGENT.md#13-troubleshooting). For a name-resolution failure, see the DNS row below |
-| A send "may have been sent but did not confirm it in time" | the mailbox was asked to send and never confirmed; the dispatch is recorded `UNCERTAIN` | check the sending mailbox's **Sent** folder, then answer *It was sent* / *It was not sent* on the case or Dispatch page. **Do not retry first** — that is how a second copy reaches the inquirer |
-| `getaddrinfo ENOTFOUND <mail host>` in the log, poll answers 503 | the machine's DNS resolver is failing intermittently — environmental, not a code defect | `nslookup` that host and `ping 8.8.8.8`. The app keeps the last listing on screen, backs off, and audits one `SYNC_FAILED` plus a `SYNC_RECOVERED` when it clears. A send that failed this way is classified `NOT_SENT` and is safe to retry |
-| Gemma falls back to the deterministic draft | `GEMMA_API_URL` empty (intended in tests and E2E), or the host unreachable | `GET /health` reports `ai: { configured, lastSuccessAt, lastFailureAt, lastError }`; the log names the real cause (`fetch failed (ENOTFOUND …)`), not a silent fallback |
-| Backend refuses to start: `NIC_EMAIL must differ from FRONT_OFFICE_EMAIL …` / `NIC_EMAIL is required …` | `NIC_BROWSER_MAILBOX=true` with a missing or shared address | set `NIC_EMAIL` to the NICeMail mailbox, distinct from `FRONT_OFFICE_EMAIL` |
-| Backend refuses to start: `No sign-in credential configured for: …` | an account has neither an entry in `QMS_PASSWORDS_FILE` nor a `QMS_PASSWORD_<ID>` | add it. The message names every account and the variable that would supply it |
-| A NICeMail send is refused with a message about the allowed recipient | the outbound interlock is closed and the address is not the test recipient | intended. For the forward to the Officer-in-Charge, set `NIC_ALLOW_INTERNAL_FORWARD=true`; to mail anyone, `NIC_ALLOW_OUTBOUND=true` |
+| Symptom                                                                                                                                               | Cause                                                                                                                                                                                                     | Fix                                                                                                                                                                                                                                                                                              |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `ERR_MODULE_NOT_FOUND: Cannot find package '…'` at startup                                                                                            | `node_modules` is older than `package.json`                                                                                                                                                               | `npm install` (or `npm ci`) in `backend/`                                                                                                                                                                                                                                                        |
+| `DATABASE_URL is required when NODE_ENV=production`                                                                                                   | no database configured                                                                                                                                                                                    | set `DATABASE_URL`; the server will not start without it in production                                                                                                                                                                                                                           |
+| `MongoDB is unreachable at DATABASE_URL`                                                                                                              | server down, wrong host or password, firewall; on Atlas, this machine's IP missing from the access list. The `MongoDB connection lost — retrying` line before it is not a retry: startup stops            | `npm run db:check` names the failing step; on Atlas, check your database user and add your IP                                                                                                                                                                                                    |
+| `MongoDB is unreachable at DATABASE_URL: querySrv ECONNREFUSED _mongodb._tcp.…` (or `ETIMEOUT`)                                                       | the DNS SRV lookup failed on this machine: Node's DNS servers (VPN, DNS filter, router, placeholder IPv6 DNS) refuse it. Atlas never saw a connection                                                     | set the adapter DNS to `1.1.1.1`/`8.8.8.8` and `ipconfig /flushdns`, or use the standard `mongodb://` string `npm run db:check` prints                                                                                                                                                           |
+| `DATABASE_URL must be a mongodb:// or mongodb+srv:// URI that names its database`                                                                     | the URI has no `/<database>` path                                                                                                                                                                         | add `/query_management_system` before the `?`                                                                                                                                                                                                                                                    |
+| `/queries/*` returns 503                                                                                                                              | MongoDB not connected: `DATABASE_URL` unset in development, or the connection lost mid-run                                                                                                                | set it and restart. A loss mid-run (an Atlas primary election) recovers by itself                                                                                                                                                                                                                |
+| Reset or `DELETE /mailbox` answers 409 `… refused when DATABASE_URL points at a shared database`                                                      | intended: destructive routes are refused on a shared database                                                                                                                                             | use a local MongoDB to start clean                                                                                                                                                                                                                                                               |
+| Browser reports a CORS failure                                                                                                                        | `CLIENT_URL` does not match the frontend's actual origin                                                                                                                                                  | set it exactly; `http://localhost:5173` ≠ `http://127.0.0.1:5173`                                                                                                                                                                                                                                |
+| 401 on every API call after sign-in                                                                                                                   | cookie not being sent                                                                                                                                                                                     | check `SESSION_COOKIE_SAMESITE`, and that the frontend uses `withCredentials` (it does by default)                                                                                                                                                                                               |
+| `nic:verify` → `Invalid credentials` / `535`                                                                                                          | webmail password used instead of an app password                                                                                                                                                          | generate one at webmail → Security → App Passwords                                                                                                                                                                                                                                               |
+| `nic:preflight` → `mail.gov.in` times out                                                                                                             | those endpoints are not reachable from outside NICNET                                                                                                                                                     | use the `mgovcloud.in` pair, which is what `.env.example` configures                                                                                                                                                                                                                             |
+| `nic:browser:discover` → `Chrome is not available … (CDP endpoint answered HTTP 404)` (diagnosis `NO_CDP`); a sync → "not a Chrome DevTools endpoint" | another browser holds port 9222                                                                                                                                                                           | close it, or set `NIC_CDP_ENDPOINT` to a free port                                                                                                                                                                                                                                               |
+| An agent or tool attached to the operator's NICeMail tab sees no mail rows, only `zmbtn__<hash>`-style classes                                        | that tab is the Zoho Workplace shell; the mailbox is a cross-origin iframe with its own CDP target. `nic:browser:discover` reports it as `MAILBOX_IN_OOPIF`                                               | nothing to fix for the BRIDGETECH agent, which opens `NIC_WEBMAIL_APP_URL` in a tab of its own — [runbook §13](../docs/NIC_BROWSER_AGENT.md#why-an-agent-cannot-see-the-nicemail-elements)                                                                                                       |
+| A NICeMail acknowledgement or response fails (HTTP 503/504, or the case page's notice)                                                                | the error ends in `[stage: <step>; cause: …; seen: …]`: the step the browser agent stopped at, what it ran into, and what the page showed. The backend log has every step as `ACK …` / `RESPONSE …` lines | a failure before `click_send` sent nothing and can be retried once the cause is fixed; from `click_send` on it is unconfirmed — check the NICeMail Sent folder first — [§13](../docs/NIC_BROWSER_AGENT.md#13-troubleshooting), [§17](../docs/NIC_BROWSER_AGENT.md#17-two-front-office-mailboxes) |
+| A NICeMail case's acknowledgement or response fails with `… has never been calibrated against the live NICeMail …`                                    | the key it names is in `UNCALIBRATED`; the agent refuses it before touching the page, and nothing is sent. A backend started before 2026-09-22 still has every compose key there                          | restart the backend; for a key still uncalibrated, calibrate it live — [§17](../docs/NIC_BROWSER_AGENT.md#calibrating-the-selectors)                                                                                                                                                             |
+| IPC Mailbox shows **The mailbox could not be read**                                                                                                   | the last sync failed; `sync.stage` or `sync.error` says why                                                                                                                                               | fix what the stage names — [runbook §13](../docs/NIC_BROWSER_AGENT.md#13-troubleshooting). For a name-resolution failure, see the DNS row below                                                                                                                                                  |
+| A send "may have been sent but did not confirm it in time"                                                                                            | the mailbox was asked to send and never confirmed; the dispatch is recorded `UNCERTAIN`                                                                                                                   | check the sending mailbox's **Sent** folder, then answer _It was sent_ / _It was not sent_ on the case or Dispatch page. **Do not retry first** — that is how a second copy reaches the inquirer                                                                                                 |
+| `getaddrinfo ENOTFOUND <mail host>` in the log, poll answers 503                                                                                      | the machine's DNS resolver is failing intermittently — environmental, not a code defect                                                                                                                   | `nslookup` that host and `ping 8.8.8.8`. The app keeps the last listing on screen, backs off, and audits one `SYNC_FAILED` plus a `SYNC_RECOVERED` when it clears. A send that failed this way is classified `NOT_SENT` and is safe to retry                                                     |
+| Gemma falls back to the deterministic draft                                                                                                           | `GEMMA_API_URL` empty (intended in tests and E2E), or the host unreachable                                                                                                                                | `GET /health` reports `ai: { configured, lastSuccessAt, lastFailureAt, lastError }`; the log names the real cause (`fetch failed (ENOTFOUND …)`), not a silent fallback                                                                                                                          |
+| Backend refuses to start: `NIC_EMAIL must differ from FRONT_OFFICE_EMAIL …` / `NIC_EMAIL is required …`                                               | `NIC_BROWSER_MAILBOX=true` with a missing or shared address                                                                                                                                               | set `NIC_EMAIL` to the NICeMail mailbox, distinct from `FRONT_OFFICE_EMAIL`                                                                                                                                                                                                                      |
+| Backend refuses to start: `No sign-in credential configured for: …`                                                                                   | an account has neither an entry in `QMS_PASSWORDS_FILE` nor a `QMS_PASSWORD_<ID>`                                                                                                                         | add it. The message names every account and the variable that would supply it                                                                                                                                                                                                                    |
+| A NICeMail send is refused with a message about the allowed recipient                                                                                 | the outbound interlock is closed and the address is not the test recipient                                                                                                                                | intended. For the forward to the Officer-in-Charge, set `NIC_ALLOW_INTERNAL_FORWARD=true`; to mail anyone, `NIC_ALLOW_OUTBOUND=true`                                                                                                                                                             |
 
 ## Tests
 
@@ -1331,7 +1338,7 @@ Both guards fail closed with **401** if `req.user` is absent, so a route mis-wir
 1. **Workflow-state authorization.** `verifyAction` enforces the role half of the frontend's
    `canPerform(role, action, state)`. The `ACTION_VALID_STATES` half is still client-side, so a
    permitted role is not blocked from acting on a case in the wrong state. `POST /queries/persist`
-   validates the *shape* of a transition, not its legality.
+   validates the _shape_ of a transition, not its legality.
 2. **Token revocation.** Tokens are stateless; logout clears the cookie but a copied token
    stays valid until it expires (`SESSION_TTL_SECONDS`, default 8h).
 3. **Real user provisioning.** Accounts are seeded from `src/constants/users.js`. Each has its own

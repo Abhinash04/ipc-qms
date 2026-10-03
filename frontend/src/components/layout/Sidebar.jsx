@@ -161,7 +161,7 @@ export function SidebarContent({ open, collapsed = !open, onNavigate, onToggle }
                 BRIDGETECH
               </div>
               <div className="truncate text-[11px] text-side-muted">
-                AI-powered IP Stakeholder’s
+                AI-powered IP Stakeholders’
               </div>
             </div>
           </div>

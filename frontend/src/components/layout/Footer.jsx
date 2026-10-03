@@ -12,7 +12,7 @@ export function Footer() {
           <span className="cursor-default hover:text-primary">{t("footer.terms")}</span>
         </nav>
         <p className="flex items-center gap-1.5 text-center">
-          © {year} AI-powered IP Stakeholder’s BRIDGETECH
+          © {year} AI-powered IP Stakeholders’ BRIDGETECH
         </p>
       </div>
     </footer>

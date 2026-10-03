@@ -55,7 +55,7 @@ export async function send_nicemail({
     text:
       body ||
       [
-        'This is an automated connectivity test from the AI-powered IP Stakeholder’s BRIDGETECH backend.',
+        'This is an automated connectivity test from the AI-powered IP Stakeholders’ BRIDGETECH backend.',
         '',
         `Sent at: ${stamp}`,
         'No action is required.',

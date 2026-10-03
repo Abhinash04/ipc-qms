@@ -131,14 +131,14 @@ export function LoginPage() {
 
           <h1 className="mt-9 font-heading text-[40px] font-extrabold leading-[1.15] tracking-tight text-white xl:text-[46px]">
             <span className="block">AI-powered IP</span>{" "}
-            <span className="block">Stakeholder’s</span>{" "}
+            <span className="block">Stakeholders’</span>{" "}
             <span className="block bg-linear-to-r from-sky-200 via-cyan-200 to-indigo-200 bg-clip-text text-transparent">
               BRIDGETECH
             </span>
           </h1>
 
           <p className="mx-auto mt-6 max-w-lg text-[15.5px] leading-relaxed text-white/90">
-            Indian Pharmacopoeia Commission — official AI-powered IP Stakeholder’s BRIDGETECH for handling technical enquiries, monograph reviews, reference standards, and automated dispatch operations.
+            Indian Pharmacopoeia Commission — official AI-powered IP Stakeholders’ BRIDGETECH for handling technical enquiries, monograph reviews, reference standards, and automated dispatch operations.
           </p>
 
           <div className="mx-auto mt-8 flex max-w-lg flex-wrap items-center justify-center gap-3.5">

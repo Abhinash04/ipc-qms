@@ -1,6 +1,6 @@
 # BRIDGETECH Frontend
 
-React 19 + Vite 8 single-page app for the AI-powered IP Stakeholder’s BRIDGETECH. **JavaScript only** — no
+React 19 + Vite 8 single-page app for the AI-powered IP Stakeholders’ BRIDGETECH. **JavaScript only** — no
 TypeScript. Path alias `@` → `./src` (set in both `vite.config.js` and `jsconfig.json`).
 
 ## Setup
@@ -11,17 +11,17 @@ cp .env.example .env.local
 npm run dev        # http://localhost:5173
 ```
 
-| Script | Purpose |
-|---|---|
-| `npm run dev` | Vite dev server |
-| `npm run build` | Production build |
+| Script                | Purpose                                                                              |
+| --------------------- | ------------------------------------------------------------------------------------ |
+| `npm run dev`         | Vite dev server                                                                      |
+| `npm run build`       | Production build                                                                     |
 | `npm run build:check` | Production build, then enforce the bundle budget (`scripts/check-bundle-budget.mjs`) |
-| `npm run preview` | Serve the build |
-| `npm run lint` | ESLint |
-| `npm test` | Vitest, 42 test files (760 tests) |
-| `npm run test:watch` | Vitest watch mode |
-| `npm run test:e2e` | Playwright, specs in `e2e/` — same as `npx playwright test`. See below |
-| `npm run doctor` | React Doctor locally (the same check CI runs) |
+| `npm run preview`     | Serve the build                                                                      |
+| `npm run lint`        | ESLint                                                                               |
+| `npm test`            | Vitest, 42 test files (760 tests)                                                    |
+| `npm run test:watch`  | Vitest watch mode                                                                    |
+| `npm run test:e2e`    | Playwright, specs in `e2e/` — same as `npx playwright test`. See below               |
+| `npm run doctor`      | React Doctor locally (the same check CI runs)                                        |
 
 **End-to-end tests.** `playwright.config.js` starts both servers itself and drives a real Chromium
 against them. Unlike the Vitest suite it needs a **local MongoDB on `127.0.0.1:27017`** — it uses its
@@ -73,18 +73,18 @@ raced ahead of the cookie check, every call 401'd on a first visit, and the stor
 to its local seed and never reloaded. Signing out clears the store (`resetHydration`) so the next
 account does not inherit the previous one's cases.
 
-`NotificationHost` mounts *outside* the router so the login page gets toasts too, but *inside* the
+`NotificationHost` mounts _outside_ the router so the login page gets toasts too, but _inside_ the
 gate so seeded history is never replayed as a burst of notifications.
 
 ## Routing and RBAC
 
 Routes are **generated from the permission table**, not hand-listed. Three files:
 
-| File | Role |
-|---|---|
+| File                         | Role                                                                                      |
+| ---------------------------- | ----------------------------------------------------------------------------------------- |
 | `constants/routeSections.js` | 28 section keys; each maps to a URL `segment`, `label`, icon, and an optional `nav: true` |
-| `constants/permissions.js` | `ROLE_SECTIONS` (role → granted sections) and `ROLE_SLUG` (role → URL slug) |
-| `constants/routePaths.js` | Composes the two into `/<slug>/<segment>`, frozen per role in `PATHS_BY_ROLE` |
+| `constants/permissions.js`   | `ROLE_SECTIONS` (role → granted sections) and `ROLE_SLUG` (role → URL slug)               |
+| `constants/routePaths.js`    | Composes the two into `/<slug>/<segment>`, frozen per role in `PATHS_BY_ROLE`             |
 
 `routes/roleRoutes.js` flat-maps every role over its granted sections; `AppRoutes.jsx` renders one
 `<Route>` per entry. **A section a role does not hold has no route at all** — it is absent, not
@@ -92,21 +92,21 @@ hidden. That yields ~75 generated routes plus `/` (redirect to the role's dashbo
 
 Every authenticated URL is `/<role-slug>/<section>`:
 
-| Role | Slug | Landing page |
-|---|---|---|
-| `SUPER_ADMIN` | `super-admin` | `/super-admin/dashboard` |
-| `ADMIN` | `admin` | `/admin/dashboard` |
-| `FRONT_OFFICE` | `front-officer` | `/front-officer/dashboard` |
+| Role                | Slug                | Landing page                   |
+| ------------------- | ------------------- | ------------------------------ |
+| `SUPER_ADMIN`       | `super-admin`       | `/super-admin/dashboard`       |
+| `ADMIN`             | `admin`             | `/admin/dashboard`             |
+| `FRONT_OFFICE`      | `front-officer`     | `/front-officer/dashboard`     |
 | `OFFICER_IN_CHARGE` | `officer-in-charge` | `/officer-in-charge/dashboard` |
 | `ASSIGNED_OFFICIAL` | `assigned-official` | `/assigned-official/dashboard` |
-| `REVIEWER` | `reviewer` | `/reviewer/dashboard` |
+| `REVIEWER`          | `reviewer`          | `/reviewer/dashboard`          |
 
 `ProtectedRoute` waits for `authReady`, redirects to `/login` when signed out, then checks
 `isRouteAllowedForRole(role, pathname)` and renders an inline "Access restricted" panel on failure.
 Its `segmentMatches` compares path-part counts and treats `:param` parts as wildcards, so a list
 path can never satisfy a detail path.
 
-Navigation comes from the *same* table — `constants/navigation.js` filters sections carrying
+Navigation comes from the _same_ table — `constants/navigation.js` filters sections carrying
 `nav: true` and intersects with the role's grants. Sidebar and mobile nav share it; there is no
 second nav list.
 
@@ -119,7 +119,7 @@ second nav list.
 Two Zustand stores. **Neither uses `persist`.**
 
 **`store/useAuthStore.js`** — `currentUser`, `authReady`. The session lives in an httpOnly cookie
-the server sets; it is deliberately *not* mirrored into `localStorage`. `hydrate()` asks
+the server sets; it is deliberately _not_ mirrored into `localStorage`. `hydrate()` asks
 `GET /auth/me` at boot. A 401 from any non-`/auth/*` endpoint clears the session and raises a
 "session expired" toast, via a handler registered with the axios client (registering rather than
 importing avoids a store↔client cycle).
@@ -138,7 +138,7 @@ and applies a `mutate()` patch for other collections.
 Because it is the only writer, the audit trail is complete by construction — which is what the
 toast layer subscribes to (below), and why a failed action produces no notification.
 
-Permissions are enforced *in the store*, not only in the UI: `assertCan` throws unless
+Permissions are enforced _in the store_, not only in the UI: `assertCan` throws unless
 `canPerform(role, action, workflowState)` allows it, and `assertOwnsStep` stops a reviewer acting on
 another reviewer's level.
 
@@ -155,7 +155,7 @@ approval, emails the approved response to the inquirer and closes the case; the 
 name instead of after a round trip, and the server enforces `FINAL_APPROVE` independently.
 
 It used to record the approval here and then call `dispatchResponse` with a null actor, on the
-theory that an automatic send is "the system acting". The null actor skipped only *this store's*
+theory that an automatic send is "the system acting". The null actor skipped only _this store's_
 permission check: the request still went out on the approving officer's session, against the
 Front-Office-only `POST /emails/response`, so every approval ended in a **403** with the case
 stranded at `READY_FOR_DISPATCH` and the inquirer never answered.
@@ -172,7 +172,7 @@ warning in the error banner.
 
 Approving and answering are one click but two outcomes, and the second can fail on its own, so
 `ApprovalDetailPage` reads `dispatched` and `alreadyDispatched` off the response and raises
-*"Approved, but the inquirer was not emailed: …"* when neither is true. The approval stands either
+_"Approved, but the inquirer was not emailed: …"_ when neither is true. The approval stands either
 way; the case waits at `READY_FOR_DISPATCH` for the retry.
 
 ### Persistence — the server, via `/api/v1/queries`
@@ -202,7 +202,7 @@ write-through is reported rather than swallowed:
   schema — a bug, not something a user can retry their way out of — read as an unactionable "changes
   were not saved". The toast now carries the field paths (paths only, never values, since a delta
   carries case content) — so a rejection like `addReviews.0.stepId`, which used to 400 every
-  return-for-revision from final approval, names itself. Note the limit: Zod *strips* an undeclared
+  return-for-revision from final approval, names itself. Note the limit: Zod _strips_ an undeclared
   key rather than rejecting it, so a field the schema never learned is lost without any 400 at all.
 
 What else crosses the wire: authentication, emails (send/forward/acknowledge/ingest/delete),
@@ -225,8 +225,8 @@ Teammates write to the same database, so the store reloads in the background. Th
 - **Ordered.** Writes and reads share one queue in `queryState.js`, and `loadAll` fetches again if a
   write was queued behind its read, so a reload never undoes an optimistic change still in flight.
 - **Missing cases.** A case this tab has not loaded — a teammate's new case, reached from a
-  notification — triggers one reload from `useQueryCase`. The detail pages show *Loading case…*
-  until it lands, then the case or *Query not found*.
+  notification — triggers one reload from `useQueryCase`. The detail pages show _Loading case…_
+  until it lands, then the case or _Query not found_.
 
 **Conflicts.** Every delta carries `baseRevision`, the case `revision` its change was built on
 (`computeTransition` stamps the local copy with that plus one). The server answers **409** with a
@@ -234,10 +234,10 @@ code. A `STALE_CASE`, or an `ID_COLLISION` caught by the checks that run before 
 nothing; a collision that only the unique index catches can leave the case row and some of its
 records written, and the reload that follows shows what was saved.
 
-| Code | Meaning | Toast, after a quiet reload |
-|---|---|---|
-| `STALE_CASE` | a teammate changed the case first | *QRY-… was changed by someone else* — "Showing the latest; redo your last step." |
-| `ID_COLLISION` | an id this tab minted from its counters already belongs to another case | *QRY-… clashed with a teammate's change* — "Record ids were reused; the latest is shown — please retry." |
+| Code           | Meaning                                                                 | Toast, after a quiet reload                                                                              |
+| -------------- | ----------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| `STALE_CASE`   | a teammate changed the case first                                       | _QRY-… was changed by someone else_ — "Showing the latest; redo your last step."                         |
+| `ID_COLLISION` | an id this tab minted from its counters already belongs to another case | _QRY-… clashed with a teammate's change_ — "Record ids were reused; the latest is shown — please retry." |
 
 After any failed write, later writes for that case built before the next reload are dropped rather
 than sent, so a queued step cannot land on top of a teammate's change. The five server actions above
@@ -249,15 +249,15 @@ own write look stale.
 Arriving mail creates nothing. `pages/frontOffice/MailboxInboxPage.jsx` lists what is waiting, and
 each undecided row carries two circular icon buttons:
 
-| Control | What it does |
-|---|---|
+| Control      | What it does                                                                                                                                                                                                                                                                                                                                  |
+| ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | ✓ **Accept** | `acceptMailboxMessage` — one `POST /mailbox/messages/:messageId/accept`. The server registers the Query Case, mints its id, stores the sender as the inquirer, summarises the enquiry onto `aiSummary`, acknowledges that sender, **and forwards to the Officer-in-Charge** with that same summary, landing the case in `PENDING_ASSIGNMENT`. |
-| ✕ **Reject** | records the decision and nothing else: no case, no Case ID, no acknowledgement. The message stays listed, marked *Rejected*. |
+| ✕ **Reject** | records the decision and nothing else: no case, no Case ID, no acknowledgement. The message stays listed, marked _Rejected_.                                                                                                                                                                                                                  |
 
 Both confirm first, and both are final — the server keeps the first decision on a message and
 ignores any later one. With teammates on one database the controls follow the polled list: a row
 someone else decided loses them on the next list refresh (every 15 s while auto-refresh is on). A ✗
-on a message already decided warns *Already decided by someone else* and changes nothing; a ✓ on a
+on a message already decided warns _Already decided by someone else_ and changes nothing; a ✓ on a
 message already rejected is refused with a 409, and the toast gives the server's reason.
 
 **Accepting mints nothing in the browser.** The whole sequence runs server-side, and
@@ -319,17 +319,17 @@ in the mailbox; a second validate step asked the Front Officer to judge the same
 
 All modules share `services/api/axiosClient.js` (`withCredentials: true` for the session cookie).
 
-| Module | Endpoints |
-|---|---|
-| `authService.js` | `POST /auth/login`, `POST /auth/logout`, `GET /auth/me` |
-| `mailboxService.js` | `/emails/config`, `/emails/enquiry`, `/emails/acknowledgement`, `/emails/forward`, `/emails/response`, `/mailbox/*`: `GET /mailbox/messages` (`q`; `limit`/`offset` add `total`; `unreadOnly` means awaiting validation, not `isRead`), `GET /mailbox/messages/:messageId` (adds `bodyHtml`), `POST /mailbox/messages/:messageId/read` (BRIDGETECH-local), `POST /mailbox/sync` (NICeMail, 202), plus `mailboxAttachmentUrl()` for `/mailbox/messages/:messageId/attachments/:attachmentId` |
-| `attachmentService.js` | `POST /attachments`, `GET /attachments/:id/meta`, plus `attachmentUrl()` |
-| `adminService.js` | `GET /audit`, `/audit/summary`, `/audit/query/:queryId` |
-| `aiService.js` | `POST /ai/summary`, `/ai/draft`, `/ai/recommend` |
-| `healthService.js` | `GET /health` |
+| Module                 | Endpoints                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `authService.js`       | `POST /auth/login`, `POST /auth/logout`, `GET /auth/me`                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| `mailboxService.js`    | `/emails/config`, `/emails/enquiry`, `/emails/acknowledgement`, `/emails/forward`, `/emails/response`, `/mailbox/*`: `GET /mailbox/messages` (`q`; `limit`/`offset` add `total`; `unreadOnly` means awaiting validation, not `isRead`), `GET /mailbox/messages/:messageId` (adds `bodyHtml`), `POST /mailbox/messages/:messageId/read` (BRIDGETECH-local), `POST /mailbox/sync` (NICeMail, 202), plus `mailboxAttachmentUrl()` for `/mailbox/messages/:messageId/attachments/:attachmentId` |
+| `attachmentService.js` | `POST /attachments`, `GET /attachments/:id/meta`, plus `attachmentUrl()`                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| `adminService.js`      | `GET /audit`, `/audit/summary`, `/audit/query/:queryId`                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| `aiService.js`         | `POST /ai/summary`, `/ai/draft`, `/ai/recommend`                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| `healthService.js`     | `GET /health`                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 
 The interceptor toasts only **no-response** failures (offline / server down), under a fixed toast id
-so a page issuing several requests raises one toast. HTTP error *responses* are left to the call
+so a page issuing several requests raises one toast. HTTP error _responses_ are left to the call
 sites, which name the operation. The module writes nothing to `console` by design — the test setup
 fails any test that produces console output.
 
@@ -349,7 +349,7 @@ actually committed**, so an action that threw produces none. It re-baselines whe
 
 `constants/toastEvents.js` maps 11 audit events to toasts and lists 8 deliberately-silent ones with
 a per-event reason. Toasts are transient feedback only — **the audit trail remains the persistent
-record**, and nothing is ever toasted *instead of* being audited.
+record**, and nothing is ever toasted _instead of_ being audited.
 
 ## Attachments
 
@@ -357,7 +357,7 @@ record**, and nothing is ever toasted *instead of* being audited.
 15 MB total, 10 files. Client validation is pre-flight UX only — **the backend is the authority**.
 
 `AttachmentPicker` collects files with inline per-file errors; `ComposeEnquiryPage` uploads them
-*before* sending so a failed upload aborts the send rather than registering a case with missing
+_before_ sending so a failed upload aborts the send rather than registering a case with missing
 files, reporting progress through a live toast. `AttachmentViewerDialog` previews images, video,
 audio, PDF and text inline, falling back to download; it re-checks metadata on open and reports
 "no longer available" rather than showing a broken frame. `AttachmentList` also renders legacy
@@ -473,7 +473,7 @@ it is what caught `AUDIT_EVENT.QUERY_PULLEDBACK`, a misspelling that had every p
 audit event per transition; `notifications.test.jsx` proves a toast follows a committed transition
 rather than a click; `outboundIdempotency.test.jsx` covers the send UX — Approve disabled while its
 request is open, concurrent approvals collapsed into one, `ALREADY_SENT` reported as a closed case
-rather than a failure, and an unconfirmed send offering *It was sent* / *It was not sent* in place
+rather than a failure, and an unconfirmed send offering _It was sent_ / _It was not sent_ in place
 of a retry; `mailboxAutoSync.test.jsx` covers the polling toasts — one per outage rather than one
 per poll, the 1–2–5-minute backoff, the recovery notice, and a waiting count announced only when
 it grows.
@@ -498,7 +498,7 @@ that shell. Credentials come from the per-account fixture, and the file carries 
 
 The specs share one database and each wipes it first, so the config runs one worker, no parallelism
 and no retries. Playwright starts both servers itself and **refuses to adopt one it did not start**:
-a backend already listening on `:5000` fails the run with *"http://localhost:5000 is already used"*.
+a backend already listening on `:5000` fails the run with _"http://localhost:5000 is already used"_.
 That is deliberate — a backend left over from a development session is typically pointed at the real
 database and a real mailbox, and adopting it would run the suite against both. Stop it and re-run.
 
@@ -512,11 +512,11 @@ one that points anywhere else.
 
 Four specs:
 
-| Spec | What it holds down |
-|---|---|
-| `lifecycle.spec.js` | One enquiry from arrival to closure, through the screens each role uses, asserted against MongoDB at every stage; plus a failed send that leaves the case open and the retry that closes it. |
-| `mailboxAccept.spec.js` | The intake gate: accept, reject, and the same message decided twice. |
-| `twoInquirers.spec.js` | **Two external inquirers, one mailbox.** Both accepted, both carried to closure **interleaved**, and each answered exactly once at their own address — neither seeing anything of the other's. |
+| Spec                          | What it holds down                                                                                                                                                                                       |
+| ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `lifecycle.spec.js`           | One enquiry from arrival to closure, through the screens each role uses, asserted against MongoDB at every stage; plus a failed send that leaves the case open and the retry that closes it.             |
+| `mailboxAccept.spec.js`       | The intake gate: accept, reject, and the same message decided twice.                                                                                                                                     |
+| `twoInquirers.spec.js`        | **Two external inquirers, one mailbox.** Both accepted, both carried to closure **interleaved**, and each answered exactly once at their own address — neither seeing anything of the other's.           |
 | `dispatchIdempotency.spec.js` | **One answer per case, however hard it is asked for.** Approve held open and clicked four times; three approvals fired at the API at once; a blocked delivery, its failure, and a retry that sends once. |
 
 The shared stage steps live in `e2e/helpers/workflow.js`, so a spec says what it is testing rather
