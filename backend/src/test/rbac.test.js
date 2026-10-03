@@ -94,11 +94,11 @@ describe('workflow-action authorization mirrors the frontend table', () => {
     }
   });
 
-  it('permits PULLBACK for Admin and Super Admin only', () => {
+  it('permits PULLBACK for the Front Office, the OIC, Admin and Super Admin only', () => {
     expect(roleCanPerform(ROLES.ADMIN, WORKFLOW_ACTION.PULLBACK)).toBe(true);
     expect(roleCanPerform(ROLES.SUPER_ADMIN, WORKFLOW_ACTION.PULLBACK)).toBe(true);
-    expect(roleCanPerform(ROLES.FRONT_OFFICE, WORKFLOW_ACTION.PULLBACK)).toBe(false);
-    expect(roleCanPerform(ROLES.OFFICER_IN_CHARGE, WORKFLOW_ACTION.PULLBACK)).toBe(false);
+    expect(roleCanPerform(ROLES.FRONT_OFFICE, WORKFLOW_ACTION.PULLBACK)).toBe(true);
+    expect(roleCanPerform(ROLES.OFFICER_IN_CHARGE, WORKFLOW_ACTION.PULLBACK)).toBe(true);
     expect(roleCanPerform(ROLES.ASSIGNED_OFFICIAL, WORKFLOW_ACTION.PULLBACK)).toBe(false);
     expect(roleCanPerform(ROLES.REVIEWER, WORKFLOW_ACTION.PULLBACK)).toBe(false);
   });

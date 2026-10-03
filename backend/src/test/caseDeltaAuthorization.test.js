@@ -67,6 +67,21 @@ describe('changing a workflow state', () => {
   it('never lets pullback re-point a case through a delta — the pull-back endpoint does that', () => {
     expect(check(ROLES.ADMIN, moveTo('DRAFTING'))).toContain('query.workflowState');
     expect(check(ROLES.ADMIN, moveTo('READY_FOR_DISPATCH'))).toContain('query.workflowState');
+    expect(check(ROLES.FRONT_OFFICE, moveTo('DRAFTING'))).toContain('query.workflowState');
+    expect(check(ROLES.OFFICER_IN_CHARGE, moveTo('DRAFTING'))).toContain('query.workflowState');
+  });
+
+  it('gives no role the dead PULLED_BACK state, now that more roles hold PULLBACK', () => {
+    for (const role of [ROLES.FRONT_OFFICE, ROLES.OFFICER_IN_CHARGE, ROLES.ADMIN, ROLES.SUPER_ADMIN]) {
+      expect(check(role, moveTo('PULLED_BACK'))).toContain('query.workflowState');
+    }
+  });
+
+  it('never lets holding PULLBACK change an assignee through a delta', () => {
+    const body = { query: { queryId: CASE_ID, currentAssigneeId: 'USR-0010' } };
+    for (const role of [ROLES.FRONT_OFFICE, ROLES.ADMIN]) {
+      expect(check(role, body)).toContain('query.currentAssigneeId');
+    }
   });
 
   it('refuses a state the server does not recognise', () => {

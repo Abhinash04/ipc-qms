@@ -1330,10 +1330,6 @@ export const useWorkflowStore = create((set, get) => ({
   },
 
   pullBackQuery: (queryId, targetStage, reason, remarks = '', actor, { reviewStepId = null } = {}, pull = pullBackOnServer) => {
-    if (actor?.role !== ROLES.ADMIN && actor?.role !== ROLES.SUPER_ADMIN) {
-      throw new Error('You do not have permission to pull back this query.');
-    }
-
     const query = get().getQuery(queryId);
     if (!query) throw new Error(`PULLBACK: query ${queryId} does not exist`);
 
@@ -1341,6 +1337,10 @@ export const useWorkflowStore = create((set, get) => ({
       throw new Error(
         `${queryId} is ${query.workflowState} — a query cannot be pulled back once it has been finally approved or dispatched.`,
       );
+    }
+
+    if (!canPerform(actor?.role, WORKFLOW_ACTION.PULLBACK, query.workflowState)) {
+      throw new Error('You do not have permission to pull back this query.');
     }
 
     if (!targetStage) {

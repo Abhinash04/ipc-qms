@@ -239,6 +239,7 @@ export function planPullback({
     toCycle,
     pulledBackBy: actor?.id || null,
     pulledBackByName: actorLabel,
+    pulledBackByRole: actor?.role ?? null,
     reason: trimmedReason,
     remarks: trimmedRemarks,
     previousAssigneeId: query.currentAssigneeId ?? null,
@@ -249,7 +250,7 @@ export function planPullback({
   };
 
   const auditDetails =
-    `From: ${fromStage} | Pulled Back To: ${target} | Pulled Back By: ${actorLabel} | Reason: ${trimmedReason}` +
+    `From: ${fromStage} | Pulled Back To: ${target} | Pulled Back By: ${actorLabel}${actor?.role ? ` (${actor.role})` : ''} | Reason: ${trimmedReason}` +
     (trimmedRemarks ? ` | Remarks: ${trimmedRemarks}` : '') +
     ` | Assignee: ${history.previousAssignee} → ${history.newAssignee}` +
     ` | Review cycle: ${fromCycle} → ${toCycle}`;

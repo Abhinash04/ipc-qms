@@ -320,7 +320,7 @@ describe('what the pull back dialog offers, and what it refuses', () => {
 
   it('refuses a role that may not pull back', async () => {
     await advanceTo(DRAFTING);
-    for (const actor of [OIC, NEHA, AMIT]) {
+    for (const actor of [NEHA, AMIT]) {
       expect(() => pullBack({ stage: ASSIGNED, reviewStepId: null }, actor)).toThrow(/do not have permission/);
     }
   });
@@ -370,5 +370,34 @@ describe('a full new cycle after every pull back', () => {
 
     await s().grantFinalApproval(queryId, OIC, fakeFinalApprovalEndpoint());
     expect(query().workflowState).toBe(CLOSED);
+  });
+});
+
+describe('the Front Officer and the OIC pull back too', () => {
+  it('the Front Officer returns a query from final approval for reassignment, and it completes a new cycle', async () => {
+    await advanceTo(PENDING_FINAL_APPROVAL);
+
+    await pullBack({ stage: PENDING_ASSIGNMENT, reviewStepId: null }, FRONT_OFFICE);
+
+    expect(query()).toMatchObject({ workflowState: PENDING_ASSIGNMENT, currentAssigneeId: null, reviewCycle: 1 });
+    expect(query().pullbackHistory.at(-1)).toMatchObject({ pulledBackByRole: FRONT_OFFICE.role, toCycle: 1 });
+    s().assignQuery(queryId, NEHA.id, OIC);
+    await advanceTo(PENDING_FINAL_APPROVAL);
+    expect(chain().map((row) => row.assignedUserId)).toEqual([AMIT.id, KAVITA.id]);
+    await s().grantFinalApproval(queryId, OIC, fakeFinalApprovalEndpoint());
+    expect(query().workflowState).toBe(CLOSED);
+  });
+
+  it('the OIC resumes review at Reviewer II, and the same reviewer approves again', async () => {
+    await advanceTo(PENDING_FINAL_APPROVAL);
+    const level = targetsNow().find((target) => target.reviewStepId && describeTarget(target) === 'Reviewer II');
+
+    await pullBack(level, OIC);
+
+    expect(current()).toMatchObject({ assignedUserId: KAVITA.id, status: 'IN_PROGRESS', cycle: 1 });
+    const audit = s().getAudit(queryId).find((a) => a.event === AUDIT_EVENT.QUERY_PULLED_BACK);
+    expect(audit.details).toContain(`(${OIC.role})`);
+    s().approveReview(queryId, 'Fine.', KAVITA);
+    expect(query().workflowState).toBe(PENDING_FINAL_APPROVAL);
   });
 });

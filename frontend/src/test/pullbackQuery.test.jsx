@@ -113,26 +113,28 @@ describe('Admin Pullback Query Functionality Unit & Integration Tests', () => {
       expect(pullbackAudit.details).toContain('Reason: Incorrect assignment');
     });
 
-    it('refuses pullback when invoked by a non-admin role (e.g. Assigned Official / OIC)', () => {
-      expect(() => {
-        s().pullBackQuery(
-          queryId,
-          WORKFLOW_STATE.PENDING_ASSIGNMENT,
-          'Unauthorized pullback attempt',
-          '',
-          OFFICIAL_A,
-        );
-      }).toThrow(/do not have permission to pull back this query/);
+    it('refuses pullback when invoked by the Assigned Official or a Reviewer', () => {
+      for (const actor of [OFFICIAL_A, findUserById('USR-0005')]) {
+        expect(() =>
+          s().pullBackQuery(queryId, WORKFLOW_STATE.PENDING_ASSIGNMENT, 'Unauthorized pullback attempt', '', actor),
+        ).toThrow(/do not have permission to pull back this query/);
+      }
+      expect(s().getQuery(queryId).workflowState).toBe(WORKFLOW_STATE.ASSIGNED);
+    });
 
-      expect(() => {
-        s().pullBackQuery(
-          queryId,
-          WORKFLOW_STATE.PENDING_ASSIGNMENT,
-          'Unauthorized pullback attempt',
-          '',
-          OIC,
-        );
-      }).toThrow(/do not have permission to pull back this query/);
+    it.each([
+      ['the Front Officer', () => FRONT_OFFICE],
+      ['the OIC', () => OIC],
+    ])('lets %s pull back and records their role', async (_label, actorOf) => {
+      const actor = actorOf();
+
+      await s().pullBackQuery(queryId, WORKFLOW_STATE.PENDING_ASSIGNMENT, 'Incorrect assignment', '', actor);
+
+      const updated = s().getQuery(queryId);
+      expect(updated).toMatchObject({ workflowState: WORKFLOW_STATE.PENDING_ASSIGNMENT, currentAssigneeId: null });
+      expect(updated.pullbackHistory.at(-1)).toMatchObject({ pulledBackBy: actor.id, pulledBackByRole: actor.role });
+      const pullbackAudit = s().getAudit(queryId).find((a) => a.event === AUDIT_EVENT.QUERY_PULLED_BACK);
+      expect(pullbackAudit.details).toContain(`(${actor.role})`);
     });
 
     it('refuses pullback when target stage is identical to current workflow stage', () => {
@@ -208,6 +210,29 @@ describe('Admin Pullback Query Functionality Unit & Integration Tests', () => {
         expect(updated.workflowState).not.toBe(WORKFLOW_STATE.ASSIGNED);
       });
 
+      unmount();
+    });
+
+    it.each([
+      ['the Front Officer', () => FRONT_OFFICE, '/front-officer/queries/'],
+      ['the OIC', () => OIC, '/officer-in-charge/queries/'],
+    ])('renders "Pullback Query" for %s on their case page', (_label, userOf, base) => {
+      const { unmount } = renderAs(userOf(), `${base}${queryId}`);
+
+      expect(screen.getByRole('button', { name: /Pullback Query/i })).toBeInTheDocument();
+
+      unmount();
+    });
+
+    it('lets the Front Officer complete the pull back dialog', async () => {
+      const { unmount } = renderAs(FRONT_OFFICE, `/front-officer/queries/${queryId}`);
+
+      fireEvent.click(screen.getByRole('button', { name: /Pullback Query/i }));
+      fireEvent.click(screen.getByRole('button', { name: /Continue to Pullback/i }));
+      fireEvent.click(screen.getByRole('button', { name: /Confirm Pullback/i }));
+
+      await waitFor(() => expect(s().getQuery(queryId).workflowState).not.toBe(WORKFLOW_STATE.ASSIGNED));
+      expect(s().getQuery(queryId).pullbackHistory.at(-1)).toMatchObject({ pulledBackByRole: FRONT_OFFICE.role });
       unmount();
     });
 

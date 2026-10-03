@@ -496,3 +496,74 @@ describe('client deltas after a pull back', () => {
     expect(stored().pullbackHistory).toHaveLength(1);
   });
 });
+
+describe('who may pull back', () => {
+  const pull = (role, body) =>
+    request(app).post(`/api/v1/queries/${QUERY_ID}/pullback`).set(authHeader(role)).send(body);
+
+  const ACTORS = {
+    [ROLES.FRONT_OFFICE]: 'USR-TEST-FO',
+    [ROLES.OFFICER_IN_CHARGE]: OIC,
+    [ROLES.ADMIN]: 'USR-0007',
+    [ROLES.SUPER_ADMIN]: 'USR-0008',
+  };
+
+  it.each(Object.keys(ACTORS))('lets the %s pull back to a reviewer level, and records who did it', async (role) => {
+    await seed('PENDING_FINAL_APPROVAL (two reviewers)');
+    const before = { versions: db.rows('ResponseVersion'), reviews: db.rows('Review') };
+
+    const res = await pull(role, { targetStage: 'UNDER_REVIEW', reviewStepId: 'STEP-00003', reason: 'Requires additional review' });
+
+    expect(res.status).toBe(200);
+    expect(stored()).toMatchObject({ workflowState: 'UNDER_REVIEW', reviewCycle: 1, currentAssigneeId: NEHA });
+    expect(stored().pullbackHistory).toEqual([
+      expect.objectContaining({
+        pulledBackBy: ACTORS[role],
+        pulledBackByRole: role,
+        fromStage: 'PENDING_FINAL_APPROVAL',
+        toStage: 'UNDER_REVIEW',
+        toReviewLevel: 'Reviewer II',
+        pulledBackAt: expect.any(String),
+      }),
+    ]);
+    const [event] = db.rows('AuditEvent').filter((row) => row.action === 'QUERY_PULLED_BACK');
+    expect(event).toMatchObject({ actorId: ACTORS[role], actorRole: role, timestamp: expect.any(String) });
+    expect(event.details).toContain('From: PENDING_FINAL_APPROVAL | Pulled Back To: UNDER_REVIEW (Reviewer II)');
+    expect(event.details).toContain(`(${role}) | Reason: Requires additional review`);
+    expect(db.rows('ResponseVersion')).toEqual(before.versions);
+    expect(db.rows('Review')).toEqual(before.reviews);
+  });
+
+  it.each(Object.keys(ACTORS))('lets the %s send a query back for reassignment', async (role) => {
+    await seed('UNDER_REVIEW@Reviewer II');
+
+    const res = await pull(role, { targetStage: 'PENDING_ASSIGNMENT', reason: 'Query needs to be reassigned' });
+
+    expect(res.status).toBe(200);
+    expect(stored()).toMatchObject({ workflowState: 'PENDING_ASSIGNMENT', currentAssigneeId: null, currentWorkflowStepId: null });
+    expect(cycleSteps(1)).toEqual([]);
+  });
+
+  it.each([ROLES.ASSIGNED_OFFICIAL, ROLES.REVIEWER])('refuses the %s, changes nothing, and records the denial', async (role) => {
+    await seed('PENDING_FINAL_APPROVAL (two reviewers)');
+    const before = { query: stored(), steps: steps() };
+
+    const res = await pull(role, { targetStage: 'PENDING_ASSIGNMENT', reason: 'x' });
+
+    expect(res.status).toBe(403);
+    expect(stored()).toEqual(before.query);
+    expect(steps()).toEqual(before.steps);
+    expect(db.rows('AuditEvent').map((row) => row.action)).toEqual(['AUTHORIZATION_DENIED']);
+  });
+
+  it('still refuses the new roles once the query is closed', async () => {
+    await seed('PENDING_FINAL_APPROVAL (two reviewers)');
+    await QueryCase.updateOne({ queryId: QUERY_ID }, { $set: { workflowState: 'CLOSED' } });
+
+    for (const role of [ROLES.FRONT_OFFICE, ROLES.OFFICER_IN_CHARGE]) {
+      const res = await pull(role, { targetStage: 'DRAFTING', reason: 'x' });
+      expect(res.status).toBe(409);
+      expect(res.body.code).toBe('PULLBACK_NOT_ALLOWED');
+    }
+  });
+});

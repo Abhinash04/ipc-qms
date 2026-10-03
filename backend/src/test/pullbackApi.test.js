@@ -14,7 +14,7 @@ describe('POST /api/v1/queries/:queryId/pullback', () => {
   });
 
   it('returns 403 for a role that may not perform PULLBACK', async () => {
-    for (const role of [ROLES.OFFICER_IN_CHARGE, ROLES.ASSIGNED_OFFICIAL, ROLES.REVIEWER]) {
+    for (const role of [ROLES.ASSIGNED_OFFICIAL, ROLES.REVIEWER]) {
       const res = await request(app).post(PATH).set(authHeader(role)).send(VALID);
       expect(res.status).toBe(403);
       expect(res.body.error).toContain('PULLBACK');
@@ -36,7 +36,7 @@ describe('POST /api/v1/queries/:queryId/pullback', () => {
   });
 
   it('returns 503 rather than a fabricated success when storage is unavailable', async () => {
-    for (const role of [ROLES.ADMIN, ROLES.SUPER_ADMIN]) {
+    for (const role of [ROLES.FRONT_OFFICE, ROLES.OFFICER_IN_CHARGE, ROLES.ADMIN, ROLES.SUPER_ADMIN]) {
       const res = await request(app).post(PATH).set(authHeader(role)).send(VALID);
       expect(res.status).toBe(503);
       expect(res.body.success).toBeUndefined();
