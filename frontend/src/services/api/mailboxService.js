@@ -8,7 +8,6 @@ export async function fetchEmailConfig() {
 export async function fetchMailboxMessages({
   recipient,
   unreadOnly = true,
-  junkOnly = false,
   category,
   q,
   limit,
@@ -18,7 +17,6 @@ export async function fetchMailboxMessages({
     params: {
       ...(recipient ? { recipient } : {}),
       unreadOnly: String(unreadOnly),
-      ...(junkOnly ? { junkOnly: 'true' } : {}),
       ...(category ? { category } : {}),
       ...(q ? { q } : {}),
       ...(limit ? { limit, offset: offset ?? 0 } : {}),

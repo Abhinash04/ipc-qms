@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { DECISIONS } from '../models/MailboxDecision.js';
-import { MAIL_CATEGORIES, UNCLASSIFIED } from '../constants/mailCategories.js';
+import { MAIL_CATEGORIES, REGISTERED, UNCLASSIFIED } from '../constants/mailCategories.js';
 
 export const mailboxDecisionSchema = z.object({
   decision: z.enum([DECISIONS.ACCEPTED, DECISIONS.REJECTED]),
@@ -33,7 +33,7 @@ export const listMessagesQuerySchema = z.object({
     .refine((value) => [...value].every((char) => char.charCodeAt(0) >= 32), 'contains a control character')
     .optional()
     .transform((value) => value || undefined),
-  category: z.enum([...Object.values(MAIL_CATEGORIES), UNCLASSIFIED]).optional(),
+  category: z.enum([...Object.values(MAIL_CATEGORIES), UNCLASSIFIED, REGISTERED]).optional(),
   limit: z.coerce.number().int().min(1).max(200).optional(),
   offset: z.coerce.number().int().min(0).default(0),
 });

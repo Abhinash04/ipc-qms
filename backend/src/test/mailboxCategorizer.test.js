@@ -41,7 +41,7 @@ import * as nicMailbox from '../services/email/mailbox/nicBrowserMailbox.js';
 import * as categorizer from '../services/email/mailbox/categorizer.js';
 import { toMessageViews } from '../services/email/mailbox/messageView.js';
 import { purgeCandidateFilter } from '../services/email/mailbox/retention.js';
-import { CATEGORY_VERSION, MAIL_CATEGORIES, RELATION_KINDS, UNCLASSIFIED } from '../constants/mailCategories.js';
+import { CATEGORY_VERSION, MAIL_CATEGORIES, REGISTERED, RELATION_KINDS, UNCLASSIFIED } from '../constants/mailCategories.js';
 
 const NIC_ADDRESS = 'nic-mailbox@test.invalid';
 const ORIGINAL_URL = env.GEMMA_API_URL;
@@ -325,6 +325,33 @@ describe('storing and reading categories', () => {
       [UNCLASSIFIED]: 0,
     });
     expect(await nicMailbox.count(NIC_ADDRESS, { category: MAIL_CATEGORIES.OFFICIAL_QUERY })).toBe(1);
+  });
+
+  it('moves registered mail out of its AI category into Registered', async () => {
+    await db.model('QueryCase').create({ queryId: 'QRY-2026-00001', sourceMailboxMessageId: byProvider('v-1').mailboxMessageId });
+
+    expect(await nicMailbox.categoryCounts(NIC_ADDRESS, {})).toMatchObject({
+      OFFICIAL_QUERY: 0,
+      EVENT_INVITATION: 1,
+      [REGISTERED]: 1,
+    });
+    const registered = await nicMailbox.list(NIC_ADDRESS, { category: REGISTERED });
+    expect(registered.map((message) => message.subject)).toEqual(['Dissolution limits']);
+    expect(await nicMailbox.list(NIC_ADDRESS, { category: MAIL_CATEGORIES.OFFICIAL_QUERY })).toEqual([]);
+    expect(await nicMailbox.count(NIC_ADDRESS, { category: REGISTERED })).toBe(1);
+  });
+
+  it('counts an accepted decision as registered even before its case is read back', async () => {
+    await db.model('MailboxDecision').create({
+      mailboxMessageId: byProvider('v-2').mailboxMessageId,
+      decision: 'ACCEPTED',
+      queryId: 'QRY-2026-00002',
+    });
+
+    expect(await nicMailbox.categoryCounts(NIC_ADDRESS, {})).toMatchObject({ EVENT_INVITATION: 0, [REGISTERED]: 1 });
+    expect((await nicMailbox.list(NIC_ADDRESS, { category: REGISTERED })).map((m) => m.subject)).toEqual([
+      'Conference on standards',
+    ]);
   });
 
   it('lists mail not yet classified on its own', async () => {

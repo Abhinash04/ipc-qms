@@ -418,7 +418,7 @@ describe('email categories', () => {
     const res = await list();
 
     expect(res.status).toBe(200);
-    expect(res.body.categoryCounts).toMatchObject({ OFFICIAL_QUERY: 1, OTHER: 1, UNCLASSIFIED: 0 });
+    expect(res.body.categoryCounts).toMatchObject({ OFFICIAL_QUERY: 1, OTHER: 1, UNCLASSIFIED: 0, REGISTERED: 0 });
     const byId = Object.fromEntries(res.body.messages.map((message) => [message.subject, message.triage]));
     expect(byId['Enquiry row-2']).toMatchObject({ category: 'OFFICIAL_QUERY', categorySource: 'fallback' });
     expect(byId['Labelling query']).toMatchObject({ category: 'OTHER', needsReview: true });
@@ -431,6 +431,15 @@ describe('email categories', () => {
 
     expect(res.body.messages.map((message) => message.subject)).toEqual(['Enquiry row-2']);
     expect(res.body).toMatchObject({ total: 1 });
+  });
+
+  it('accepts Registered as a filter', async () => {
+    await seeded();
+
+    const res = await list('?category=REGISTERED&limit=50');
+
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ messages: [], total: 0 });
   });
 
   it('refuses a category it does not know', async () => {

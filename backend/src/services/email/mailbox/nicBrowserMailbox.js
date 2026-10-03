@@ -1,5 +1,7 @@
 import { createHash } from 'crypto';
 import { MailboxMessage } from '../../../models/MailboxMessage.js';
+import { MailboxDecision, DECISIONS } from '../../../models/MailboxDecision.js';
+import { QueryCase } from '../../../models/QueryCase.js';
 import { isConnected } from '../../../config/db.js';
 import browserConfig from '../../../config/browserConfig.js';
 import { AUDIT_ACTIONS, AUDIT_RESULTS } from '../../../constants/auditActions.js';
@@ -11,7 +13,7 @@ import { normaliseAddress } from './address.js';
 import { searchFilter } from './messageView.js';
 import * as triage from './triage.js';
 import * as categorizer from './categorizer.js';
-import { MAIL_CATEGORIES, UNCLASSIFIED } from '../../../constants/mailCategories.js';
+import { MAIL_CATEGORIES, REGISTERED, UNCLASSIFIED } from '../../../constants/mailCategories.js';
 
 export const SOURCE = 'nic-browser';
 
@@ -215,11 +217,28 @@ function resetSyncState() {
 
 const scope = (recipient) => ({ to: normaliseAddress(recipient), source: SOURCE, removedAt: null });
 
+const MAIL_CATEGORY_KEYS = Object.fromEntries(Object.values(MAIL_CATEGORIES).map((key) => [key, true]));
+
+async function registeredMessageIds() {
+  const [cased, accepted] = await Promise.all([
+    QueryCase.distinct('sourceMailboxMessageId', { sourceMailboxMessageId: { $ne: null } }),
+    MailboxDecision.distinct('mailboxMessageId', { decision: DECISIONS.ACCEPTED }),
+  ]);
+  return [...new Set([...cased, ...accepted])];
+}
+
 async function listFilter(recipient, { unreadOnly = false, junkOnly = false, q, category } = {}) {
   const filter = { ...scope(recipient), ...searchFilter(q) };
+  const ids = [];
   if (unreadOnly) filter.ingested = false;
-  if (junkOnly) filter.mailboxMessageId = { $in: await triage.junkMessageIds() };
-  if (category) filter.mailCategory = category === UNCLASSIFIED ? null : category;
+  if (junkOnly) ids.push({ mailboxMessageId: { $in: await triage.junkMessageIds() } });
+  if (category === REGISTERED) {
+    ids.push({ mailboxMessageId: { $in: await registeredMessageIds() } });
+  } else if (category) {
+    filter.mailCategory = category === UNCLASSIFIED ? null : category;
+    ids.push({ mailboxMessageId: { $nin: await registeredMessageIds() } });
+  }
+  if (ids.length) filter.$and = ids;
   return filter;
 }
 
@@ -242,10 +261,15 @@ async function count(recipient, options = {}) {
 
 async function categoryCounts(recipient, { category: _category, ...options } = {}) {
   if (!isConnected()) throw unavailable();
-  const rows = await MailboxMessage.find(await listFilter(recipient, options)).select('mailCategory').lean();
-  const counts = Object.fromEntries([...Object.values(MAIL_CATEGORIES), UNCLASSIFIED].map((key) => [key, 0]));
+  const [rows, registered] = await Promise.all([
+    MailboxMessage.find(await listFilter(recipient, options)).select('mailboxMessageId mailCategory').lean(),
+    registeredMessageIds(),
+  ]);
+  const isRegistered = new Set(registered);
+  const counts = Object.fromEntries([...Object.values(MAIL_CATEGORIES), UNCLASSIFIED, REGISTERED].map((key) => [key, 0]));
   for (const row of rows) {
-    const key = row.mailCategory && row.mailCategory in counts ? row.mailCategory : UNCLASSIFIED;
+    const category = row.mailCategory && row.mailCategory in MAIL_CATEGORY_KEYS ? row.mailCategory : UNCLASSIFIED;
+    const key = isRegistered.has(row.mailboxMessageId) ? REGISTERED : category;
     counts[key] += 1;
   }
   return counts;

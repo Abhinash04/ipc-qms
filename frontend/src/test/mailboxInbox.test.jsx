@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { act, render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { act, cleanup, render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes, useParams } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
@@ -608,20 +608,15 @@ describe('finding mail', () => {
     expect(screen.queryByText('No Mail in the IPC Mailbox')).toBeNull();
   });
 
-  it('narrows to mail awaiting validation', async () => {
+  it('shows every message, with no All mail / Awaiting / Junk filter', async () => {
     renderInbox();
     await screen.findByText('Keep this one');
+
     expect(fetchMailboxMessages).toHaveBeenLastCalledWith(expect.objectContaining({ unreadOnly: false }));
-
-    fireEvent.click(screen.getByRole('button', { name: 'Awaiting' }));
-
-    expect(screen.getByRole('button', { name: 'Awaiting' })).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByRole('button', { name: 'All mail' })).toHaveAttribute('aria-pressed', 'false');
-    await waitFor(() =>
-      expect(fetchMailboxMessages).toHaveBeenLastCalledWith(
-        expect.objectContaining({ unreadOnly: true, offset: 0 }),
-      ),
-    );
+    expect(fetchMailboxMessages.mock.calls.at(-1)[0]).not.toHaveProperty('junkOnly');
+    for (const name of ['All mail', 'Awaiting', 'Junk']) {
+      expect(screen.queryByRole('button', { name })).toBeNull();
+    }
   });
 
   it('pages through the list 50 at a time', async () => {
@@ -882,7 +877,7 @@ describe('Sync now', () => {
   });
 });
 
-describe('the Junk view', () => {
+describe('junk mail in the feed', () => {
   const hoursFromNow = (n) => new Date(Date.now() + n * 3600000).toISOString();
 
   const junkMessage = (n, subject, over = {}) => ({
@@ -898,42 +893,6 @@ describe('the Junk view', () => {
       purgesAt: hoursFromNow(12),
       ...over,
     },
-  });
-
-  it('asks the server for junk only, and starts at the first page', async () => {
-    fetchMailboxMessages.mockResolvedValue({ messages: [junkMessage(9, 'Half price reagents')] });
-    renderInbox();
-    await screen.findByText('Half price reagents');
-
-    fireEvent.click(screen.getByRole('button', { name: 'Junk' }));
-
-    expect(screen.getByRole('button', { name: 'Junk' })).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByRole('button', { name: 'All mail' })).toHaveAttribute('aria-pressed', 'false');
-    await waitFor(() =>
-      expect(fetchMailboxMessages).toHaveBeenLastCalledWith(
-        expect.objectContaining({ junkOnly: true, unreadOnly: false, offset: 0 }),
-      ),
-    );
-  });
-
-  it('never asks for Awaiting and Junk at once, since that pair is always empty', async () => {
-    fetchMailboxMessages.mockResolvedValue({ messages: [junkMessage(9, 'Half price reagents')] });
-    renderInbox();
-    await screen.findByText('Half price reagents');
-
-    fireEvent.click(screen.getByRole('button', { name: 'Awaiting' }));
-    await waitFor(() =>
-      expect(fetchMailboxMessages).toHaveBeenLastCalledWith(
-        expect.objectContaining({ unreadOnly: true, junkOnly: false }),
-      ),
-    );
-
-    fireEvent.click(screen.getByRole('button', { name: 'Junk' }));
-    await waitFor(() =>
-      expect(fetchMailboxMessages).toHaveBeenLastCalledWith(
-        expect.objectContaining({ unreadOnly: false, junkOnly: true }),
-      ),
-    );
   });
 
   it('warns how long is left before the content is destroyed', async () => {
@@ -1025,6 +984,7 @@ describe('email categories in the feed', () => {
     DUPLICATE: 1,
     OTHER: 0,
     UNCLASSIFIED: 1,
+    REGISTERED: 2,
   };
 
   const triaged = (n, subject, triage) => ({ ...message(n, subject), triage: { verdict: 'GENUINE', ...triage } });
@@ -1067,26 +1027,68 @@ describe('email categories in the feed', () => {
     expect(screen.getByRole('button', { name: 'Category: Not classified yet. Show details' })).toBeInTheDocument();
   });
 
-  it('offers a tab per category with its count, and filters the feed by it', async () => {
+  it('offers a card per category with its count, and filters the feed by it', async () => {
     renderInbox();
     await screen.findByText('Assay of metformin');
 
-    const tabs = screen.getByRole('group', { name: 'Filter by category' });
-    expect(tabs).toHaveTextContent('All12');
-    expect(screen.getByRole('button', { name: /^Events\s*2$/ })).toHaveAttribute('aria-pressed', 'false');
+    const cards = screen.getByRole('group', { name: 'Filter by category' });
+    expect(within(cards).getAllByRole('button')).toHaveLength(8);
+    expect(screen.getByRole('button', { name: 'All, 14 messages' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: 'Events, 2 messages' })).toHaveAttribute('aria-pressed', 'false');
 
-    fireEvent.click(screen.getByRole('button', { name: /^Events\s*2$/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Events, 2 messages' }));
 
     await waitFor(() =>
       expect(fetchMailboxMessages).toHaveBeenLastCalledWith(expect.objectContaining({ category: 'EVENT_INVITATION', offset: 0 })),
     );
-    expect(screen.getByRole('button', { name: /^Events\s*2$/ })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: 'Events, 2 messages' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: 'All, 14 messages' })).toHaveAttribute('aria-pressed', 'false');
 
-    fireEvent.click(screen.getByRole('button', { name: /^All\s*12$/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'All, 14 messages' }));
     await waitFor(() => expect(fetchMailboxMessages).toHaveBeenLastCalledWith(expect.objectContaining({ category: undefined })));
   });
 
-  it('hides the category tabs for a mailbox that is not categorised', async () => {
+  it('offers Registered queries as its own bucket', async () => {
+    renderInbox();
+    await screen.findByText('Assay of metformin');
+
+    const registered = screen.getByRole('button', { name: 'Registered queries, 2 messages' });
+    expect(registered).toHaveAccessibleDescription('Accepted, with a Query ID');
+    fireEvent.click(registered);
+
+    await waitFor(() =>
+      expect(fetchMailboxMessages).toHaveBeenLastCalledWith(expect.objectContaining({ category: 'REGISTERED', offset: 0 })),
+    );
+  });
+
+  it('describes each category card', async () => {
+    renderInbox();
+    await screen.findByText('Assay of metformin');
+
+    expect(screen.getByRole('button', { name: 'Official queries, 4 messages' })).toHaveAccessibleDescription(
+      'Queries, RTIs and official notices',
+    );
+    expect(screen.getByRole('button', { name: 'Other, 0 messages' })).toHaveAccessibleDescription('Fits no other category');
+    expect(screen.getByRole('button', { name: 'System, 1 message' })).toBeInTheDocument();
+  });
+
+  it('says how many messages are still being classified, and only when there are some', async () => {
+    renderInbox();
+    await screen.findByText('Assay of metformin');
+    expect(screen.getByText('1 being classified')).toBeInTheDocument();
+
+    fetchMailboxMessages.mockResolvedValue({
+      backend: 'nic-browser',
+      categoryCounts: { ...COUNTS, UNCLASSIFIED: 0 },
+      messages: [message(1, 'All sorted')],
+    });
+    cleanup();
+    renderInbox();
+    await screen.findByText('All sorted');
+    expect(screen.queryByText(/being classified/)).toBeNull();
+  });
+
+  it('hides the category cards for a mailbox that is not categorised', async () => {
     fetchMailboxMessages.mockResolvedValue({ backend: 'mongo', messages: [message(1, 'Plain one')] });
     renderInbox();
     await screen.findByText('Plain one');

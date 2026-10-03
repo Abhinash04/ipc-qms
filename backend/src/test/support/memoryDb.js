@@ -64,9 +64,11 @@ function matchesCondition(actual, condition) {
 }
 
 const matches = (row, filter = {}) =>
-  Object.entries(filter).every(([path, condition]) =>
-    path === '$or' ? condition.some((branch) => matches(row, branch)) : matchesCondition(read(row, path), condition),
-  );
+  Object.entries(filter).every(([path, condition]) => {
+    if (path === '$or') return condition.some((branch) => matches(row, branch));
+    if (path === '$and') return condition.every((branch) => matches(row, branch));
+    return matchesCondition(read(row, path), condition);
+  });
 
 function applyUpdate(doc, update, inserted) {
   const ops = isOperatorObject(update) ? update : { $set: update };

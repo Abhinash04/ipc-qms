@@ -8,7 +8,7 @@ import {
 } from '../constants/workflowStates.js';
 import { CLIENT_AUDIT_EVENTS } from '../constants/auditActions.js';
 import { ROLES } from '../constants/roles.js';
-import { MAIL_CATEGORIES, RELATION_KINDS, UNCLASSIFIED, CATEGORY_SOURCES } from '../constants/mailCategories.js';
+import { MAIL_CATEGORIES, RELATION_KINDS, UNCLASSIFIED, REGISTERED, CATEGORY_SOURCES } from '../constants/mailCategories.js';
 
 import * as clientEnums from '../../../frontend/src/constants/statusEnums.js';
 import { ROLES as CLIENT_ROLES } from '../../../frontend/src/constants/roles.js';
@@ -42,6 +42,7 @@ describe('mail category parity with the client', () => {
     expect(MAIL_CATEGORIES).toEqual(clientCategories.MAIL_CATEGORIES);
     expect(RELATION_KINDS).toEqual(clientCategories.RELATION_KINDS);
     expect(UNCLASSIFIED).toBe(clientCategories.UNCLASSIFIED);
+    expect(REGISTERED).toBe(clientCategories.REGISTERED);
   });
 
   it('gives every category and every source a label in the client', () => {

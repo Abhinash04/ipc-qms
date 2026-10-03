@@ -34,6 +34,7 @@ import {
 } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 import { MailCategoryBadge } from "@/components/email/MailCategoryBadge";
+import { ALL_CATEGORIES, MailCategoryCards } from "@/components/email/MailCategoryCards";
 import {
   useMailboxIngestion,
   notifyMailboxCheck,
@@ -57,21 +58,13 @@ import {
 import { buildPath } from "@/constants/routePaths";
 import { useAuthStore } from "@/store/useAuthStore";
 import { ROLE_SLUG } from "@/constants/permissions";
-import { CATEGORY_ORDER, MAIL_CATEGORY_META } from "@/constants/mailCategories";
+import { MAIL_CATEGORY_META } from "@/constants/mailCategories";
 import { cn } from "@/utils/cn";
 
 const AUTO_REFRESH_MS = 15000;
 const SYNC_POLL_MS = 3000;
 const PAGE_SIZE = 50;
 const SEARCH_DEBOUNCE_MS = 300;
-
-const MAIL_VIEWS = [
-  { value: "all", label: "All mail", awaiting: false, junkOnly: false },
-  { value: "awaiting", label: "Awaiting", awaiting: true, junkOnly: false },
-  { value: "junk", label: "Junk", awaiting: false, junkOnly: true },
-];
-
-const viewByValue = (value) => MAIL_VIEWS.find((entry) => entry.value === value) || MAIL_VIEWS[0];
 
 function describePurge(purgesAt, now = Date.now()) {
   if (!purgesAt) return null;
@@ -243,7 +236,7 @@ function InboxActions({
   );
 }
 
-function InboxToolbar({ search, onSearchChange, view, onViewChange }) {
+function InboxToolbar({ search, onSearchChange }) {
   return (
     <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-5">
       <div role="search" className="relative flex-1">
@@ -265,80 +258,6 @@ function InboxToolbar({ search, onSearchChange, view, onViewChange }) {
         />
       </div>
 
-      <div
-        role="group"
-        aria-label="Filter mail"
-        className="flex self-start sm:self-auto bg-slate-100/80 p-1 rounded-xl shrink-0"
-      >
-        {MAIL_VIEWS.map((entry) => (
-          <button
-            key={entry.value}
-            type="button"
-            aria-pressed={view === entry.value}
-            onClick={() => onViewChange(entry.value)}
-            className={cn(
-              "px-3 py-1.5 text-[12px] font-bold rounded-lg transition-colors cursor-pointer",
-              view === entry.value
-                ? "bg-card text-slate-800 shadow-sm"
-                : "text-slate-500 hover:text-slate-700",
-            )}
-          >
-            {entry.label}
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-const ALL_CATEGORIES = "all";
-
-function CategoryTabs({ category, counts, onCategoryChange }) {
-  const total = Object.values(counts).reduce((sum, value) => sum + value, 0);
-  const tabs = [
-    { value: ALL_CATEGORIES, label: "All", count: total, icon: null },
-    ...CATEGORY_ORDER.map((key) => ({
-      value: key,
-      label: MAIL_CATEGORY_META[key].tab,
-      count: counts[key] ?? 0,
-      icon: MAIL_CATEGORY_META[key].icon,
-    })),
-  ];
-
-  return (
-    <div
-      role="group"
-      aria-label="Filter by category"
-      className="-mx-1 mb-5 flex gap-1.5 overflow-x-auto px-1 pb-1"
-    >
-      {tabs.map(({ value, label, count, icon: Icon }) => {
-        const active = category === value;
-        return (
-          <button
-            key={value}
-            type="button"
-            aria-pressed={active}
-            onClick={() => onCategoryChange(value)}
-            className={cn(
-              "inline-flex shrink-0 cursor-pointer items-center gap-1.5 rounded-full border px-3 py-1.5 text-[12px] font-bold transition-colors",
-              active
-                ? "border-primary bg-primary-50 text-primary-700"
-                : "border-slate-200 bg-card text-slate-500 hover:border-primary-300 hover:text-slate-700",
-            )}
-          >
-            {Icon && <Icon className="h-3.5 w-3.5" aria-hidden="true" />}
-            {label}
-            <span
-              className={cn(
-                "rounded-full px-1.5 text-[10.5px]",
-                active ? "bg-primary text-white" : "bg-slate-100 text-slate-500",
-              )}
-            >
-              {count}
-            </span>
-          </button>
-        );
-      })}
     </div>
   );
 }
@@ -903,20 +822,17 @@ export function MailboxInboxPage() {
   const [confirming, setConfirming] = useState(null);
   const [deciding, setDeciding] = useState(false);
   const [search, setSearch] = useState("");
-  const [view, setView] = useState("all");
   const [category, setCategory] = useState(ALL_CATEGORIES);
-  const current = viewByValue(view);
   const [offset, setOffset] = useState(0);
   const q = useDebouncedValue(search.trim(), SEARCH_DEBOUNCE_MS);
 
   const queryClient = useQueryClient();
 
   const inbox = useQuery({
-    queryKey: ["mailbox", "list", { q, view, category, offset }],
+    queryKey: ["mailbox", "list", { q, category, offset }],
     queryFn: () =>
       fetchMailboxMessages({
-        unreadOnly: current.awaiting,
-        junkOnly: current.junkOnly,
+        unreadOnly: false,
         category: category === ALL_CATEGORIES ? undefined : category,
         q,
         limit: PAGE_SIZE,
@@ -1073,17 +989,12 @@ export function MailboxInboxPage() {
     setOffset(0);
   };
 
-  const onViewChange = (value) => {
-    setView(value);
-    setOffset(0);
-  };
-
   const onCategoryChange = (value) => {
     setCategory(value);
     setOffset(0);
   };
 
-  const filtered = Boolean(q) || view !== "all" || category !== ALL_CATEGORIES;
+  const filtered = Boolean(q) || category !== ALL_CATEGORIES;
 
   const getQueryDetailPath = (queryId) => {
     if (paths.QUERY_DETAIL) {
@@ -1137,15 +1048,13 @@ export function MailboxInboxPage() {
         <InboxToolbar
           search={search}
           onSearchChange={onSearchChange}
-          view={view}
-          onViewChange={onViewChange}
         />
 
         {inbox.data?.categoryCounts && (
-          <CategoryTabs
-            category={category}
+          <MailCategoryCards
+            value={category}
             counts={inbox.data.categoryCounts}
-            onCategoryChange={onCategoryChange}
+            onChange={onCategoryChange}
           />
         )}
 

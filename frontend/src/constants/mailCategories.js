@@ -1,4 +1,4 @@
-import { BellRing, CalendarDays, CircleHelp, Copy, FileQuestionMark, Megaphone } from 'lucide-react';
+import { BellRing, CalendarDays, CircleHelp, Copy, FileCheck2, FileQuestionMark, Megaphone } from 'lucide-react';
 
 export const MAIL_CATEGORIES = Object.freeze({
   OFFICIAL_QUERY: 'OFFICIAL_QUERY',
@@ -11,34 +11,52 @@ export const MAIL_CATEGORIES = Object.freeze({
 
 export const UNCLASSIFIED = 'UNCLASSIFIED';
 
+export const REGISTERED = 'REGISTERED';
+
+export const REGISTERED_META = Object.freeze({
+  label: 'Registered Queries',
+  tab: 'Registered queries',
+  icon: FileCheck2,
+  tone: 'blue',
+  description: 'Accepted, with a Query ID',
+});
+
 export const MAIL_CATEGORY_META = Object.freeze({
   [MAIL_CATEGORIES.OFFICIAL_QUERY]: {
     label: 'Official Queries',
     short: 'Official query',
     tab: 'Official queries',
     icon: FileQuestionMark,
-    variant: 'status-blue',
+    variant: 'status-green',
+    tone: 'green',
+    description: 'Queries, RTIs and official notices',
   },
   [MAIL_CATEGORIES.EVENT_INVITATION]: {
     label: 'Events and Invitations',
     short: 'Event',
     tab: 'Events',
     icon: CalendarDays,
-    variant: 'status-purple',
+    variant: 'status-amber',
+    tone: 'amber',
+    description: 'Conferences and invitations',
   },
   [MAIL_CATEGORIES.SYSTEM_NOTIFICATION]: {
     label: 'System Notifications',
     short: 'System',
     tab: 'System',
     icon: BellRing,
-    variant: 'status-gray',
+    variant: 'status-purple',
+    tone: 'purple',
+    description: 'Alerts, bounces and auto-replies',
   },
   [MAIL_CATEGORIES.ADVERTISEMENT]: {
     label: 'Advertisements and Promotions',
     short: 'Advertisement',
     tab: 'Advertisements',
     icon: Megaphone,
-    variant: 'status-orange',
+    variant: 'status-red',
+    tone: 'red',
+    description: 'Promotions and unsolicited offers',
   },
   [MAIL_CATEGORIES.DUPLICATE]: {
     label: 'Duplicate or Similar Emails',
@@ -46,6 +64,8 @@ export const MAIL_CATEGORY_META = Object.freeze({
     tab: 'Duplicates',
     icon: Copy,
     variant: 'status-indigo',
+    tone: 'indigo',
+    description: 'Repeats of an earlier email',
   },
   [MAIL_CATEGORIES.OTHER]: {
     label: 'Other / Unclassified',
@@ -53,6 +73,8 @@ export const MAIL_CATEGORY_META = Object.freeze({
     tab: 'Other',
     icon: CircleHelp,
     variant: 'status-gray',
+    tone: 'gray',
+    description: 'Fits no other category',
   },
 });
 

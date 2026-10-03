@@ -60,6 +60,8 @@ export const RELATION_KINDS = Object.freeze({
 
 export const UNCLASSIFIED = 'UNCLASSIFIED';
 
+export const REGISTERED = 'REGISTERED';
+
 export const CATEGORY_VERSION = 1;
 
 export const CATEGORY_CONFIDENCE_FLOOR = 0.6;
