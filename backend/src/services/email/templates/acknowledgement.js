@@ -1,12 +1,13 @@
-import { IPC_SIGNATURE, letterOpening, referenceSentence } from './signature.js';
+import { IPC_GREETING, IPC_SIGNATURE, referenceSentence, salutationFor } from './signature.js';
 
 const SUBJECT = 'Acknowledgement of Query Received – Indian Pharmacopoeia Commission';
 
 const AUTO_NOTICE = 'This is an auto-generated email. Please do not reply to this message.';
 
-function acknowledgementBody({ to = '', inquirerName = '', subject = '', receivedAt = null } = {}) {
+function acknowledgementBody({ inquirerName = '', receivedAt = null } = {}) {
   return [
-    letterOpening({ inquirer: { name: inquirerName, email: to }, subject }),
+    `${salutationFor(inquirerName)}
+${IPC_GREETING}`,
     `${referenceSentence(receivedAt)} This is to acknowledge that your query has been duly received and forwarded to the concerned division for examination.`,
     'The matter is currently under consideration, and an appropriate response will be provided to you at the earliest. We appreciate your patience and understanding.',
     IPC_SIGNATURE,
@@ -16,7 +17,7 @@ function acknowledgementBody({ to = '', inquirerName = '', subject = '', receive
 
 const BODY = acknowledgementBody();
 
-function buildAcknowledgement({ to, fromEmail, fromName, queryId, inquirerName, subject, receivedAt }) {
+function buildAcknowledgement({ to, fromEmail, fromName, queryId, inquirerName, receivedAt }) {
   if (!to) throw new Error('buildAcknowledgement: "to" is required');
   if (!fromEmail) throw new Error('buildAcknowledgement: "fromEmail" is required');
 
@@ -24,7 +25,7 @@ function buildAcknowledgement({ to, fromEmail, fromName, queryId, inquirerName, 
     from: fromName ? `${fromName} <${fromEmail}>` : fromEmail,
     to: [to],
     subject: queryId ? `${SUBJECT} [${queryId}]` : SUBJECT,
-    body: acknowledgementBody({ to, inquirerName, subject, receivedAt }),
+    body: acknowledgementBody({ inquirerName, receivedAt }),
   };
 }
 

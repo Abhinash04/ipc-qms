@@ -41,25 +41,6 @@ describe('the IPC house style', () => {
     expect(letter.salutationFor(name)).toBe(salutation);
   });
 
-  it('addresses the inquirer by name and email, with the firm only when it is known', () => {
-    expect(letter.addressBlock({ name: 'Ms. Pujan Mehta', email: 'Pujan_Mehta@intaspharma.com' })).toBe(
-      'To,\nMs. Pujan Mehta <Pujan_Mehta@intaspharma.com>',
-    );
-    expect(
-      letter.addressBlock({ name: 'Mr. Dibakar Banerjee', email: 'd.banerjee@emceepharma.com', organization: 'Emcee Pharmaceuticals Pvt. Ltd.' }),
-    ).toBe('To,\nMr. Dibakar Banerjee <d.banerjee@emceepharma.com>\nM/s Emcee Pharmaceuticals Pvt. Ltd.');
-    expect(letter.addressBlock({ name: 'a@b.example', email: 'a@b.example' })).toBe('To,\na@b.example');
-  });
-
-  it.each([
-    ['Clarification Required on Lactose Monohydrate Monograph', 'Sub: Clarification Required on Lactose Monohydrate Monograph -reg.'],
-    ['Re: Fwd: 2.5.3. Weight Variation of IP 2026', 'Sub: 2.5.3. Weight Variation of IP 2026 -reg.'],
-    ['Water for Injection: Microbial Testing – reg.', 'Sub: Water for Injection: Microbial Testing -reg.'],
-    ['', 'Sub: Your query -reg.'],
-  ])('writes the subject %j as %j', (subject, line) => {
-    expect(letter.subjectLine(subject)).toBe(line);
-  });
-
   it('dates the reference as DD.MM.YYYY in Indian time, or leaves the date out', () => {
     expect(letter.referenceSentence('2026-09-10T08:00:00.000Z')).toBe(
       'This is in reference to your email dated 10.09.2026 on the subject matter cited above.',
@@ -87,11 +68,11 @@ describe('the acknowledgement', () => {
     receivedAt: '2026-09-10T08:00:00.000Z',
   });
 
-  it('opens like the sample letters', () => {
+  it('opens with the salutation, without an address block or a subject line', () => {
+    expect(ack.body).not.toMatch(/^To,|^Sub:/m);
+    expect(ack.body).not.toContain('pujan@intas.example');
     expect(ack.body.startsWith(
-      'To,\nMs. Pujan Mehta <pujan@intas.example>\n\n' +
-        'Sub: Clarification Required on Lactose Monohydrate Monograph -reg.\n\n' +
-        'Madam,\nGreetings from Indian Pharmacopoeia Commission (IPC)!\n\n' +
+      'Madam,\nGreetings from Indian Pharmacopoeia Commission (IPC)!\n\n' +
         'This is in reference to your email dated 10.09.2026 on the subject matter cited above. ' +
         'This is to acknowledge that your query has been duly received and forwarded to the concerned division for examination.',
     )).toBe(true);

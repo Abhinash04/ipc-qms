@@ -20,27 +20,6 @@ export function salutationFor(name) {
   return 'Sir/Madam,';
 }
 
-export function addressBlock({ name, email, organization } = {}) {
-  const cleanName = String(name || '').trim();
-  const cleanEmail = String(email || '').trim();
-  const lines = ['To,'];
-  if (cleanName && cleanEmail && cleanName.toLowerCase() !== cleanEmail.toLowerCase()) {
-    lines.push(`${cleanName} <${cleanEmail}>`);
-  } else if (cleanEmail || cleanName) {
-    lines.push(cleanEmail || cleanName);
-  }
-  const org = String(organization || '').trim();
-  if (org) lines.push(/^m\/s\b/i.test(org) ? org : `M/s ${org}`);
-  return lines.join('\n');
-}
-
-export function subjectLine(subject) {
-  let text = String(subject || '').trim();
-  while (/^(re|fwd?|fw)\s*:\s*/i.test(text)) text = text.replace(/^(re|fwd?|fw)\s*:\s*/i, '');
-  text = text.replace(/\s*[-–—]\s*reg\.?\s*$/i, '').trim();
-  return `Sub: ${text || 'Your query'} -reg.`;
-}
-
 const LETTER_DATE = new Intl.DateTimeFormat('en-GB', {
   timeZone: 'Asia/Kolkata',
   day: '2-digit',
@@ -61,10 +40,6 @@ export function referenceSentence(receivedAt) {
   return date
     ? `This is in reference to your email dated ${date} on the subject matter cited above.`
     : 'This is in reference to your email on the subject matter cited above.';
-}
-
-export function letterOpening({ inquirer = {}, subject = '' } = {}) {
-  return [addressBlock(inquirer), subjectLine(subject), `${salutationFor(inquirer.name)}\n${IPC_GREETING}`].join('\n\n');
 }
 
 const SIGN_OFF =
