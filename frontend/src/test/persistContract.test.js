@@ -367,7 +367,7 @@ describe('the final-approval lock survives the trip', () => {
     await settled();
 
     const approved = s().getLatestVersion(queryId);
-    expect(approved.status).toBe(RESPONSE_STATUS.DRAFT);
+    expect(approved.status).toBe(RESPONSE_STATUS.SUBMITTED);
 
     queryCaseService.fetchAllQueries.mockResolvedValueOnce(
       serverSnapshot({

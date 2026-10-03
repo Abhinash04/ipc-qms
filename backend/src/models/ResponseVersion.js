@@ -14,6 +14,10 @@ const responseVersionSchema = new mongoose.Schema(
     source: { type: String, default: null },
     aiGenerated: { type: Boolean, default: false },
     approvedAt: { type: String, default: null },
+    submittedAt: { type: String, default: null },
+    submittedBy: { type: String, default: null },
+    changeSummary: { type: String, default: null },
+    respondsToReviewId: { type: String, default: null },
   },
   { versionKey: false },
 );

@@ -18,10 +18,13 @@ import { useWorkflowAction } from '@/hooks/useWorkflowAction';
 import { ActionError } from '@/components/workflow/ActionError';
 import { AddReviewLevelField } from '@/components/workflow/AddReviewLevelField';
 import { PreviousReviewCycles } from '@/components/workflow/PreviousReviewCycles';
+import { ResubmissionCard } from '@/components/workflow/ResubmissionCard';
+import { DECISION_LABEL, DECISION_VARIANT, isSendBack, requesterRole } from '@/constants/reviewRounds';
+import { formatDateTime } from '@/utils/dateTime';
 
 export function ReviewDetailPage() {
   const paths = useRoutePaths();
-  const { queryId, query, steps, stepHistory, reviews, versions, latestVersion, audit, messages, currentUser, can, resolving } =
+  const { queryId, query, steps, stepHistory, currentStep, reviews, versions, latestVersion, audit, messages, currentUser, can, resolving } =
     useQueryCase();
   const { run, error, clearError } = useWorkflowAction();
   const addReviewLevel = useWorkflowStore((state) => state.addReviewLevel);
@@ -33,6 +36,8 @@ export function ReviewDetailPage() {
   if (!query) return <EmptyState title={resolving ? 'Loading case…' : 'Query not found'} />;
 
   const reviewSteps = steps.filter((s) => s.stepType === 'REVIEW');
+  const roundOf = (review) =>
+    1 + reviews.filter((r) => isSendBack(r) && String(r.at) < String(review.at)).length;
 
   const handleDelete = (stepId) => {
     const result = deleteReviewLevel(queryId, stepId, currentUser);
@@ -65,6 +70,15 @@ export function ReviewDetailPage() {
             </CardBody>
           </Card>
 
+          <ResubmissionCard
+            query={query}
+            reviews={reviews}
+            versions={versions}
+            steps={[...steps, ...(stepHistory || [])]}
+            latestVersion={latestVersion}
+            currentStep={currentStep}
+          />
+
           <Card>
             <CardHeader>
               <h2 className="text-sm font-semibold text-foreground">Draft under review</h2>
@@ -94,18 +108,22 @@ export function ReviewDetailPage() {
                 {reviews.map((r) => (
                   <div key={r.reviewId} className="border-b border-border pb-3 text-sm last:border-0 last:pb-0">
                     <div className="flex items-center gap-2">
-                      <Badge variant={r.decision === 'APPROVED' ? 'status-green' : 'status-orange'}>
-                        {r.decision.replace(/_/g, ' ')}
+                      <Badge variant={DECISION_VARIANT[r.decision] || 'status-gray'}>
+                        {DECISION_LABEL[r.decision] || r.decision}
                       </Badge>
                       <span className="text-foreground">{findUserById(r.reviewerId)?.name || 'Unknown'}</span>
+                      <span className="text-xs text-muted-foreground">
+                        {requesterRole(r, [...steps, ...(stepHistory || [])])}
+                      </span>
                       {r.version && (
                         <Badge variant="outline" title="The response version this decision was made against">
                           {r.version}
                         </Badge>
                       )}
-                      <span className="text-xs text-muted-foreground">
-                        {new Date(r.at).toLocaleString()}
-                      </span>
+                      <Badge variant="outline" title="Review round — a new round starts after each change request">
+                        Round {roundOf(r)}
+                      </Badge>
+                      <span className="text-xs text-muted-foreground">{formatDateTime(r.at)}</span>
                     </div>
                     {r.comment && <p className="mt-1 text-muted-foreground">{r.comment}</p>}
                   </div>

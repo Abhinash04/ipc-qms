@@ -16,6 +16,9 @@ import { findUserById } from "@/constants/mockUsers";
 import { useRoutePaths } from "@/hooks/useRoutePaths";
 import { useWorkflowAction } from "@/hooks/useWorkflowAction";
 import { ActionError } from "@/components/workflow/ActionError";
+import { ResubmissionCard } from "@/components/workflow/ResubmissionCard";
+import { DECISION_LABEL, DECISION_VARIANT, requesterRole } from "@/constants/reviewRounds";
+import { formatDateTime } from "@/utils/dateTime";
 import { notify } from "@/services/notify";
 
 export function ApprovalDetailPage() {
@@ -24,6 +27,8 @@ export function ApprovalDetailPage() {
     queryId,
     query,
     steps,
+    stepHistory,
+    currentStep,
     reviews,
     versions,
     latestVersion,
@@ -44,10 +49,12 @@ export function ApprovalDetailPage() {
     (state) => state.returnForRevisionFromApproval,
   );
   const [comment, setComment] = useState("");
+  const [confirmingReject, setConfirmingReject] = useState(false);
 
   if (!query) return <EmptyState title={resolving ? "Loading case…" : "Query not found"} />;
 
   const canApprove = can(WORKFLOW_ACTION.FINAL_APPROVE);
+  const requesting = comment.length > 0;
 
   return (
     <div>
@@ -64,6 +71,15 @@ export function ApprovalDetailPage() {
       <ActionError message={error} onDismiss={clearError} />
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="space-y-6 lg:col-span-2">
+          <ResubmissionCard
+            query={query}
+            reviews={reviews}
+            versions={versions}
+            steps={[...steps, ...(stepHistory || [])]}
+            latestVersion={latestVersion}
+            currentStep={currentStep}
+          />
+
           <Card>
             <CardHeader>
               <h2 className="text-sm font-semibold text-foreground">
@@ -86,17 +102,15 @@ export function ApprovalDetailPage() {
                   {reviews.map((r) => (
                     <div key={r.reviewId} className="text-sm">
                       <div className="flex items-center gap-2">
-                        <Badge
-                          variant={
-                            r.decision === "APPROVED"
-                              ? "status-green"
-                              : "status-orange"
-                          }
-                        >
-                          {r.decision.replace(/_/g, " ")}
+                        <Badge variant={DECISION_VARIANT[r.decision] || "status-gray"}>
+                          {DECISION_LABEL[r.decision] || r.decision}
                         </Badge>
                         <span className="text-foreground">
                           {findUserById(r.reviewerId)?.name || "Unknown"}
+                        </span>
+                        <span className="text-xs text-muted-foreground">
+                          {requesterRole(r, [...steps, ...(stepHistory || [])])}
+                          {r.version ? ` · ${r.version}` : ""} · {formatDateTime(r.at)}
                         </span>
                       </div>
                       {r.comment && (
@@ -146,25 +160,27 @@ export function ApprovalDetailPage() {
                 <>
                   <div className="space-y-1.5">
                     <Label htmlFor="approval-comment">
-                      Comments (optional)
+                      Changes or reason
                     </Label>
                     <Textarea
                       id="approval-comment"
                       value={comment}
                       onChange={(e) => setComment(e.target.value)}
+                      placeholder="Describe what must change, or why it is rejected — leave empty to approve"
                       rows={3}
                     />
                   </div>
                   <Button
                     className="w-full"
-                    disabled={running}
+                    disabled={running || requesting}
+                    title={requesting ? "Clear the text to approve" : undefined}
                     onClick={() =>
                       run(async () => {
                         const result = await grantFinalApproval(
                           queryId,
                           currentUser,
                           undefined,
-                          { comment },
+                          {},
                         );
                         setComment("");
 
@@ -195,8 +211,7 @@ export function ApprovalDetailPage() {
                     {running ? "Approving and sending…" : "Approve"}
                   </Button>
                   <Button
-                    variant="secondary"
-                    className="w-full"
+                    className="w-full bg-status-orange-fg text-white hover:bg-status-orange-fg/90 focus-visible:ring-status-orange-fg/30"
                     disabled={running || !comment.trim()}
                     onClick={() => {
                       run(() =>
@@ -208,23 +223,44 @@ export function ApprovalDetailPage() {
                     Return for revision
                   </Button>
                   <p className="text-xs text-muted-foreground">
-                    A comment is required. Returning restarts the full review
-                    cycle — the revised response passes Reviewer-I and
-                    Reviewer-II again before returning here.
+                    {requesting
+                      ? "Approve is disabled while changes are written — clear the box to approve instead."
+                      : "Approve if nothing needs to change. Returning needs a description of the changes and restarts the full review cycle before it comes back here."}
                   </p>
-                  <Button
-                    variant="destructive"
-                    className="w-full"
-                    disabled={running}
-                    onClick={() => {
-                      run(() =>
-                        rejectFinalApproval(queryId, comment, currentUser),
-                      );
-                      setComment("");
-                    }}
-                  >
-                    Reject
-                  </Button>
+                  {confirmingReject ? (
+                    <div className="space-y-2 rounded-md border border-status-red-line bg-status-red-bg p-3">
+                      <p className="text-sm font-medium text-status-red-fg">
+                        Reject {latestVersion?.version || "this response"}? The reason is recorded and sent back to the assigned official.
+                      </p>
+                      <div className="flex gap-2">
+                        <Button
+                          variant="destructive"
+                          className="flex-1"
+                          disabled={running || !comment.trim()}
+                          onClick={() => {
+                            run(() => rejectFinalApproval(queryId, comment, currentUser));
+                            setComment("");
+                            setConfirmingReject(false);
+                          }}
+                        >
+                          Confirm rejection
+                        </Button>
+                        <Button variant="outline" className="flex-1" onClick={() => setConfirmingReject(false)}>
+                          Cancel
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <Button
+                      variant="destructive"
+                      className="w-full"
+                      disabled={running || !comment.trim()}
+                      title={comment.trim() ? undefined : "Write the reason for rejecting first"}
+                      onClick={() => setConfirmingReject(true)}
+                    >
+                      Reject
+                    </Button>
+                  )}
                   <p className="text-xs text-muted-foreground">
                     Whether the OIC may directly edit the response at this stage
                     is a client clarification item — editing is not offered

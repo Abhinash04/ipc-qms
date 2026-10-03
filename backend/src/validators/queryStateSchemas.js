@@ -53,6 +53,8 @@ const reviewSchema = z.object({
   comment: nullableStr,
   responseId: nullableStr,
   version: nullableStr,
+  reviewerRole: nullableStr,
+  workflowState: nullableStr,
   at: optStr,
 });
 
@@ -69,6 +71,10 @@ const responseVersionSchema = z.object({
   source: nullableStr,
   aiGenerated: z.boolean().optional(),
   approvedAt: nullableStr,
+  submittedAt: nullableStr,
+  submittedBy: nullableStr,
+  changeSummary: z.string().max(2000).nullable().optional(),
+  respondsToReviewId: nullableStr,
 });
 
 const notificationSchema = z.object({

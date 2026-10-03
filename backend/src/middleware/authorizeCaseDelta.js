@@ -3,6 +3,7 @@ import { roleCanPerform, WORKFLOW_ACTION } from '../constants/workflowActions.js
 import {
   STATE_REQUIRES_ACTION,
   VERSION_STATUS_REQUIRES_ACTION,
+  REVIEW_DECISION_REQUIRES_ACTION,
   ASSIGNEE_REQUIRES_ACTION,
 } from '../constants/protectedFields.js';
 import { WORKFLOW_STATE } from '../constants/workflowStates.js';
@@ -94,6 +95,11 @@ export function protectedValueViolations(user, body, stored = {}) {
     } else if (required !== null && !permits(role, required)) {
       violations.push('upsertVersions.status');
     }
+  }
+
+  for (const review of body?.addReviews || []) {
+    const required = REVIEW_DECISION_REQUIRES_ACTION[review?.decision];
+    if (!required || !permits(role, required)) violations.push('addReviews.decision');
   }
 
   return [...new Set(violations)];

@@ -64,6 +64,8 @@ const toClientAuditEvent = (row) => ({
   auditId: row.auditId ?? String(row._id),
   event: row.action,
   actor: row.actorRole ?? null,
+  actorId: row.actorId ?? null,
+  actorRole: row.actorRole ?? null,
   at: row.timestamp,
   queryId: row.queryId ?? null,
   details: row.details ?? null,
@@ -314,7 +316,7 @@ async function persistTransition(req, res, next) {
       ops.push(
         Review.findOneAndUpdate(
           { reviewId: review.reviewId, queryId: review.queryId },
-          { $set: review },
+          { $set: { ...review, reviewerRole: req.user?.role ?? null } },
           { upsert: true },
         ),
       );

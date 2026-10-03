@@ -1,11 +1,28 @@
-import { AUDIT_EVENT, WORKFLOW_STATE } from './statusEnums';
+import { AUDIT_EVENT, SERVER_EVENTS, WORKFLOW_STATE } from './statusEnums';
 import { EMAIL_TYPE } from './emailModel';
 import { findUserById } from './mockUsers';
 import { STAGE_LABELS } from './pullbackRules';
+import { ROLE_LABELS } from './roles';
 
 export const LEVEL_NAMES = ['Reviewer I', 'Reviewer II', 'Reviewer III'];
 
 export const reviewLevelName = (index) => LEVEL_NAMES[index] || `Reviewer ${index + 1}`;
+
+export const SEND_BACK_DECISIONS = Object.freeze(['CHANGES_REQUESTED', 'REJECTED']);
+export const isSendBack = (review) => SEND_BACK_DECISIONS.includes(review?.decision);
+
+const byTime = (a, b) => String(a.at).localeCompare(String(b.at));
+const latest = (rows) => rows.filter((row) => row?.at).sort(byTime).at(-1) || null;
+
+function auditActor(entry, fallbackRole) {
+  const user = entry?.actorId ? findUserById(entry.actorId) : null;
+  const roleCode = entry?.actorRole || (ROLE_LABELS[entry?.actor] ? entry.actor : null);
+  const name = user?.name || (entry?.actor && !ROLE_LABELS[entry.actor] ? entry.actor : null);
+  return { actor: name, role: ROLE_LABELS[roleCode] || fallbackRole || null };
+}
+
+const fromAudit = (entry, action, fallbackRole) =>
+  entry ? { ...auditActor(entry, fallbackRole), action, at: entry.at } : null;
 
 export const STAGE_STATUS = {
   COMPLETE: 'COMPLETE',
@@ -42,7 +59,7 @@ export function buildLifecycle({
   const reviewSteps = steps.filter((s) => s.stepType === 'REVIEW');
   const finalStep = steps.find((s) => s.stepType === 'FINAL_APPROVAL');
   const wasReturned = query.workflowState === WORKFLOW_STATE.RETURNED_FOR_REVISION;
-  const latestReturn = [...reviews].reverse().find((r) => r.decision === 'CHANGES_REQUESTED');
+  const latestReturn = [...reviews].sort(byTime).reverse().find(isSendBack);
 
   const latestPullback = query.pullbackHistory?.length
     ? query.pullbackHistory[query.pullbackHistory.length - 1]
@@ -54,12 +71,63 @@ export function buildLifecycle({
 
   let returnNote =
     wasReturned && latestReturn
-      ? `Returned for revision — ${findUserById(latestReturn.reviewerId)?.name || 'a reviewer'} requested changes`
+      ? latestReturn.decision === 'REJECTED'
+        ? `Rejected at final approval by ${findUserById(latestReturn.reviewerId)?.name || 'the Officer-in-Charge'}`
+        : `Returned for revision — ${findUserById(latestReturn.reviewerId)?.name || 'a reviewer'} requested changes`
       : null;
 
   if (latestPullback) {
     const fromStageName = STAGE_LABELS[latestPullback.fromStage] || latestPullback.fromStage;
     returnNote = `↩ Pulled back from ${fromStageName} by ${latestPullback.pulledBackByName} (${latestPullback.reason})`;
+  }
+
+  const lastOf = (...events) => latest(audit.filter((entry) => events.includes(entry.event)));
+  const assigneeName = findUserById(query.currentAssigneeId)?.name || 'an official';
+  const latestVersion =
+    [...versions].sort((a, b) => String(a.createdAt || '').localeCompare(String(b.createdAt || ''))).at(-1) || null;
+
+  const received = lastOf(AUDIT_EVENT.QUERY_RECEIVED);
+  const verified = lastOf(AUDIT_EVENT.QUERY_REGISTERED, AUDIT_EVENT.ACKNOWLEDGEMENT_SENT);
+  const forwarded = lastOf(AUDIT_EVENT.QUERY_FORWARDED);
+  const assigned = lastOf(AUDIT_EVENT.QUERY_ASSIGNED, AUDIT_EVENT.QUERY_TRANSFERRED, SERVER_EVENTS.QUERY_AUTO_TRANSFERRED);
+  const dispatched = lastOf(AUDIT_EVENT.RESPONSE_DISPATCHED);
+
+  let assignedActivity = null;
+  if (assigned?.event === SERVER_EVENTS.QUERY_AUTO_TRANSFERRED) {
+    assignedActivity = {
+      actor: 'BRIDGETECH',
+      role: 'Automatic transfer',
+      action: `Transferred the query to ${assigneeName} after the action deadline passed`,
+      at: assigned.at,
+    };
+  } else if (assigned) {
+    const transferred = assigned.event === AUDIT_EVENT.QUERY_TRANSFERRED;
+    assignedActivity = fromAudit(
+      assigned,
+      `${transferred ? 'Transferred' : 'Assigned'} the query to ${assigneeName}`,
+      transferred ? ROLE_LABELS.ASSIGNED_OFFICIAL : ROLE_LABELS.OFFICER_IN_CHARGE,
+    );
+  }
+
+  let draftActivity = null;
+  if (latestVersion?.submittedAt) {
+    draftActivity = {
+      actor: findUserById(latestVersion.submittedBy)?.name || latestVersion.createdBy || null,
+      role: ROLE_LABELS.ASSIGNED_OFFICIAL,
+      action: latestVersion.respondsToReviewId
+        ? `Resubmitted ${latestVersion.version} for review after it was sent back`
+        : `Submitted ${latestVersion.version} for review`,
+      version: latestVersion.version,
+      at: latestVersion.submittedAt,
+    };
+  } else if (latestVersion) {
+    draftActivity = {
+      actor: latestVersion.createdBy || null,
+      role: ROLE_LABELS.ASSIGNED_OFFICIAL,
+      action: latestVersion.aiGenerated ? `Generated AI draft ${latestVersion.version}` : `Saved ${latestVersion.version}`,
+      version: latestVersion.version,
+      at: latestVersion.createdAt,
+    };
   }
 
   const raw = [
@@ -68,24 +136,37 @@ export function buildLifecycle({
       label: 'Enquiry submitted',
       actor: query.inquirer?.name || null,
       at: at(AUDIT_EVENT.QUERY_RECEIVED) || query.createdAt,
+      activity: {
+        actor: query.inquirer?.name || null,
+        role: 'External inquirer',
+        action: 'Sent the enquiry by email',
+        at: received?.at || query.createdAt,
+      },
     },
     {
       key: STAGE.VERIFIED,
       label: 'Verified & acknowledged',
       actor: 'Front Office',
       at: at(AUDIT_EVENT.QUERY_REGISTERED) || emailAt(EMAIL_TYPE.ACKNOWLEDGEMENT),
+      activity: fromAudit(
+        verified,
+        verified?.event === AUDIT_EVENT.ACKNOWLEDGEMENT_SENT ? 'Acknowledged the inquirer by email' : 'Registered the query',
+        ROLE_LABELS.FRONT_OFFICE,
+      ),
     },
     {
       key: STAGE.FORWARDED,
       label: 'Forwarded to Officer-in-Charge',
       actor: 'Front Office',
       at: at(AUDIT_EVENT.QUERY_FORWARDED),
+      activity: fromAudit(forwarded, 'Forwarded the query to the Officer-in-Charge', ROLE_LABELS.FRONT_OFFICE),
     },
     {
       key: STAGE.ASSIGNED,
       label: 'Assigned to an official',
       actor: findUserById(query.currentAssigneeId)?.name || null,
       at: at(AUDIT_EVENT.QUERY_ASSIGNED),
+      activity: assignedActivity,
     },
     {
       key: STAGE.DRAFTED,
@@ -93,6 +174,7 @@ export function buildLifecycle({
       actor: findUserById(query.currentAssigneeId)?.name || null,
       at: at(AUDIT_EVENT.DRAFT_GENERATED),
       note: returnNote,
+      activity: draftActivity,
     },
   ];
 
@@ -104,14 +186,78 @@ export function buildLifecycle({
     });
   } else {
     reviewSteps.forEach((step, index) => {
+      const level = reviewLevelName(index);
+      const reviewer = findUserById(step.assignedUserId)?.name || null;
+      const decision = latest(reviews.filter((r) => r.stepId === step.stepId));
+      const next = index + 1 < reviewSteps.length ? reviewLevelName(index + 1) : 'the Officer-in-Charge';
+      const reviewed = decision?.version || 'the response';
       raw.push({
         key: `${STAGE.REVIEW}-${step.stepId}`,
-        label: reviewLevelName(index),
-        actor: findUserById(step.assignedUserId)?.name || null,
+        label: level,
+        actor: reviewer,
         at: step.completedAt,
+        activity: decision
+          ? {
+              actor: findUserById(decision.reviewerId)?.name || reviewer,
+              role: level,
+              action:
+                decision.decision === 'APPROVED'
+                  ? `Approved ${reviewed} and forwarded it to ${next}`
+                  : `Requested changes on ${reviewed}`,
+              version: decision.version || null,
+              at: decision.at,
+            }
+          : {
+              actor: reviewer,
+              role: level,
+              action: step.status === 'IN_PROGRESS' ? 'Reviewing now' : 'Not started yet',
+              pending: true,
+            },
       });
     });
   }
+
+  const oicDecision = latest(reviews.filter((r) => !r.stepId && isSendBack(r)));
+  const granted = lastOf(AUDIT_EVENT.FINAL_APPROVAL_GRANTED);
+  const approvedVersion = versions.find((v) => v.status === 'FINAL_APPROVED')?.version || null;
+  let finalActivity = null;
+  if (granted && (!oicDecision || String(granted.at) > String(oicDecision.at))) {
+    finalActivity = {
+      ...fromAudit(granted, 'Approved the response for dispatch', ROLE_LABELS.OFFICER_IN_CHARGE),
+      version: approvedVersion,
+    };
+  } else if (oicDecision) {
+    const sentBack = oicDecision.version || 'the response';
+    finalActivity = {
+      actor: findUserById(oicDecision.reviewerId)?.name || null,
+      role: ROLE_LABELS.OFFICER_IN_CHARGE,
+      action: oicDecision.decision === 'REJECTED' ? `Rejected ${sentBack}` : `Returned ${sentBack} for revision`,
+      version: oicDecision.version || null,
+      at: oicDecision.at,
+    };
+  }
+  if (!finalActivity) {
+    finalActivity = {
+      actor: findUserById(finalStep?.assignedUserId)?.name || null,
+      role: ROLE_LABELS.OFFICER_IN_CHARGE,
+      action:
+        query.workflowState === WORKFLOW_STATE.PENDING_FINAL_APPROVAL ? 'Awaiting the final approval decision' : 'Not started yet',
+      pending: true,
+    };
+  }
+
+  let dispatchActivity = null;
+  if (dispatched?.actorId) {
+    dispatchActivity = fromAudit(dispatched, 'Emailed the approved response to the inquirer', ROLE_LABELS.FRONT_OFFICE);
+  } else if (dispatched) {
+    dispatchActivity = {
+      actor: 'BRIDGETECH',
+      role: 'Sent automatically on approval',
+      action: 'Emailed the approved response to the inquirer',
+      at: dispatched.at,
+    };
+  }
+  const outgoingAt = emailAt(EMAIL_TYPE.OUTGOING_RESPONSE);
 
   raw.push(
     {
@@ -119,18 +265,23 @@ export function buildLifecycle({
       label: 'Final approval',
       actor: findUserById(finalStep?.assignedUserId)?.name || 'Officer-in-Charge',
       at: at(AUDIT_EVENT.FINAL_APPROVAL_GRANTED),
+      activity: finalActivity,
     },
     {
       key: STAGE.DISPATCHED,
       label: 'Response dispatched',
       actor: 'Front Office',
       at: at(AUDIT_EVENT.RESPONSE_DISPATCHED),
+      activity: dispatchActivity,
     },
     {
       key: STAGE.DELIVERED,
       label: 'Inquirer received response',
       actor: query.inquirer?.name || null,
-      at: emailAt(EMAIL_TYPE.OUTGOING_RESPONSE),
+      at: outgoingAt,
+      activity: outgoingAt
+        ? { actor: query.inquirer?.name || null, role: 'External inquirer', action: 'Response emailed to the inquirer', at: outgoingAt }
+        : null,
     },
   );
 

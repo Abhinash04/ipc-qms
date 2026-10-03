@@ -137,7 +137,7 @@ describe('End-to-end reviewer flow and role dashboard reactivity', () => {
     const requestBtn = screen.getByRole('button', { name: 'Request changes' });
     expect(requestBtn).toBeDisabled();
 
-    const commentBox = screen.getByPlaceholderText(/Add a comment for the assigned official/);
+    const commentBox = screen.getByPlaceholderText(/Describe the changes the officer must make/);
     fireEvent.change(commentBox, { target: { value: 'Please update testing limits according to revised monograph.' } });
     expect(requestBtn).toBeEnabled();
 

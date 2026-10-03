@@ -9,6 +9,8 @@ import { fakeFinalApprovalEndpoint } from '@/test/fakeFinalApprovalEndpoint';
 import { fakeCaseMail } from '@/test/fakeCaseMail';
 import { EXTERNAL_INQUIRER as INQUIRER } from '@/test/externalInquirer';
 
+const CHANGES_NOTE = 'Revised as requested.';
+
 vi.mock('@/services/api/mailboxService');
 
 const s = () => useWorkflowStore.getState();
@@ -123,7 +125,7 @@ describe('review levels expand from the real steps', () => {
     for (const reviewer of reviewers) {
       s().addReviewLevel(queryId, reviewer.id, OFFICIAL);
     }
-    s().submitForReview(queryId, OFFICIAL);
+    s().submitForReview(queryId, OFFICIAL, { changeSummary: CHANGES_NOTE });
     return queryId;
   }
 
@@ -183,7 +185,7 @@ describe('a returned revision sends the rail back to the assigned official', () 
     await s().generateAiDraft(queryId, OFFICIAL);
     s().addReviewLevel(queryId, REVIEWER_A.id, OFFICIAL);
     s().addReviewLevel(queryId, REVIEWER_B.id, OFFICIAL);
-    s().submitForReview(queryId, OFFICIAL);
+    s().submitForReview(queryId, OFFICIAL, { changeSummary: CHANGES_NOTE });
     return queryId;
   }
 
@@ -221,7 +223,7 @@ describe('a returned revision sends the rail back to the assigned official', () 
 
     s().requestRevision(queryId, 'Round 1', REVIEWER_A);
     s().saveDraftVersion(queryId, 'v2 text', OFFICIAL, 'Revision after review');
-    s().submitForReview(queryId, OFFICIAL);
+    s().submitForReview(queryId, OFFICIAL, { changeSummary: CHANGES_NOTE });
     s().approveReview(queryId, 'ok', REVIEWER_A);
     s().requestRevision(queryId, 'Round 2', REVIEWER_B);
     s().saveDraftVersion(queryId, 'v3 text', OFFICIAL, 'Revision after review');
@@ -240,7 +242,7 @@ describe('a closed query reads as fully complete', () => {
     await s().generateAiDraft(queryId, OFFICIAL);
     s().addReviewLevel(queryId, REVIEWER_A.id, OFFICIAL);
     s().addReviewLevel(queryId, REVIEWER_B.id, OFFICIAL);
-    s().submitForReview(queryId, OFFICIAL);
+    s().submitForReview(queryId, OFFICIAL, { changeSummary: CHANGES_NOTE });
     s().approveReview(queryId, 'ok', REVIEWER_A);
     s().approveReview(queryId, 'ok', REVIEWER_B);
     await s().grantFinalApproval(queryId, OIC, finalApproval());

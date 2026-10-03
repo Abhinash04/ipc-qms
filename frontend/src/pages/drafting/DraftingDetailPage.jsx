@@ -13,6 +13,8 @@ import { WORKFLOW_ACTION } from '@/constants/workflowRules';
 import { WORKFLOW_STATE } from '@/constants/statusEnums';
 import { findUserById } from '@/constants/mockUsers';
 import { reviewLevelName } from '@/constants/queryLifecycle';
+import { pendingChangeRequest, requesterRole } from '@/constants/reviewRounds';
+import { formatDateTime } from '@/utils/dateTime';
 import { useRoutePaths } from '@/hooks/useRoutePaths';
 import { useWorkflowAction } from '@/hooks/useWorkflowAction';
 import { ActionError } from '@/components/workflow/ActionError';
@@ -27,19 +29,53 @@ function reviewStatusVariant(status) {
   return 'status-gray';
 }
 
-function ReturnedForRevisionNotice({ review }) {
+function ReturnedForRevisionNotice({ review, steps }) {
+  const rejected = review.decision === 'REJECTED';
+  const who = findUserById(review.reviewerId)?.name || 'A reviewer';
   return (
-    <div className="mb-6 rounded-md border border-status-orange-line bg-status-orange-bg px-4 py-3 text-sm text-status-orange-fg">
-      <p className="font-medium">Returned for revision</p>
-      <p className="mt-0.5">{review.comment || 'No comment provided.'}</p>
+    <div
+      className={
+        rejected
+          ? 'mb-6 rounded-md border border-status-red-line bg-status-red-bg px-4 py-3 text-sm text-status-red-fg'
+          : 'mb-6 rounded-md border border-status-orange-line bg-status-orange-bg px-4 py-3 text-sm text-status-orange-fg'
+      }
+    >
+      <p className="font-medium">{rejected ? 'Rejected at final approval' : 'Returned for revision'}</p>
+      <p className="mt-0.5 text-xs">
+        {who} ({requesterRole(review, steps)}) · {review.version || 'response'} · {formatDateTime(review.at)}
+      </p>
+      <p className="mt-1">{review.comment || 'No comment provided.'}</p>
     </div>
   );
 }
 
-function submitBlockedReason(isDirty, hasReviewers) {
+function submitBlockedReason(isDirty, hasReviewers, resubmit) {
   if (isDirty) return 'Save your changes as a version first';
   if (!hasReviewers) return 'Add at least one review level first';
+  if (resubmit && !resubmit.newVersionSaved) return 'Save a new version with the requested changes first';
+  if (resubmit && !resubmit.note.trim()) return 'Describe the changes you implemented first';
   return undefined;
+}
+
+function ChangesImplementedField({ resubmit }) {
+  return (
+    <div className="space-y-1.5 rounded-md border border-status-orange-line bg-status-orange-bg/40 p-3">
+      <label htmlFor="changes-implemented" className="text-sm font-medium text-foreground">
+        Changes implemented <span className="text-status-red-fg">*</span>
+      </label>
+      <Textarea
+        id="changes-implemented"
+        value={resubmit.note}
+        onChange={(e) => resubmit.onNote(e.target.value)}
+        rows={3}
+        maxLength={2000}
+        placeholder="Tell the reviewers what you changed in response to the request"
+      />
+      <p className="text-xs text-muted-foreground">
+        Shown to every reviewer and the Officer-in-Charge beside the original request.
+      </p>
+    </div>
+  );
 }
 
 function DraftActions({
@@ -49,6 +85,7 @@ function DraftActions({
   draft,
   versions,
   reviewSteps,
+  resubmit,
   onGenerate,
   onSave,
   onSubmit,
@@ -62,33 +99,35 @@ function DraftActions({
     );
   }
 
+  const blocked = submitBlockedReason(isDirty, reviewSteps.length > 0, resubmit);
+
   return (
-    <div className="flex flex-wrap gap-2">
-      {can(WORKFLOW_ACTION.GENERATE_AI_DRAFT) && (
-        <Button variant="secondary" disabled={running} onClick={onGenerate}>
-          {running ? (
-            <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-          ) : (
-            <SparklesIcon className="h-4 w-4" aria-hidden="true" />
-          )}
-          {running ? 'Generating…' : 'Generate AI draft'}
-        </Button>
+    <div className="space-y-3">
+      {resubmit && can(WORKFLOW_ACTION.SUBMIT_FOR_REVIEW) && (
+        <ChangesImplementedField resubmit={resubmit} />
       )}
+      <div className="flex flex-wrap gap-2">
+        {can(WORKFLOW_ACTION.GENERATE_AI_DRAFT) && (
+          <Button variant="secondary" disabled={running} onClick={onGenerate}>
+            {running ? (
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+            ) : (
+              <SparklesIcon className="h-4 w-4" aria-hidden="true" />
+            )}
+            {running ? 'Generating…' : 'Generate AI draft'}
+          </Button>
+        )}
 
-      <Button disabled={!isDirty || !draft.trim()} onClick={onSave}>
-        Save new version
-      </Button>
-
-      {can(WORKFLOW_ACTION.SUBMIT_FOR_REVIEW) && versions.length > 0 && (
-        <Button
-          variant="secondary"
-          disabled={isDirty || reviewSteps.length === 0}
-          title={submitBlockedReason(isDirty, reviewSteps.length > 0)}
-          onClick={onSubmit}
-        >
-          Submit for review
+        <Button disabled={!isDirty || !draft.trim()} onClick={onSave}>
+          Save new version
         </Button>
-      )}
+
+        {can(WORKFLOW_ACTION.SUBMIT_FOR_REVIEW) && versions.length > 0 && (
+          <Button variant="secondary" disabled={Boolean(blocked)} title={blocked} onClick={onSubmit}>
+            {resubmit ? 'Resubmit for review' : 'Submit for review'}
+          </Button>
+        )}
+      </div>
     </div>
   );
 }
@@ -102,6 +141,7 @@ function DraftEditorCard({
   running,
   isDirty,
   reviewSteps,
+  resubmit,
   onGenerate,
   onSave,
   onSubmit,
@@ -140,6 +180,7 @@ function DraftEditorCard({
           draft={draft}
           versions={versions}
           reviewSteps={reviewSteps}
+          resubmit={resubmit}
           onGenerate={onGenerate}
           onSave={onSave}
           onSubmit={onSubmit}
@@ -255,6 +296,15 @@ function VersionHistoryCard({ versions }) {
                       AI
                     </Badge>
                   )}
+                  {v.submittedAt && (
+                    <Badge
+                      variant={v.respondsToReviewId ? 'status-orange' : 'status-blue'}
+                      className="text-[10px]"
+                      title={v.changeSummary ? `Changes implemented: ${v.changeSummary}` : undefined}
+                    >
+                      {v.respondsToReviewId ? 'Resubmitted' : 'Submitted'}
+                    </Badge>
+                  )}
                 </div>
                 <p className="text-xs text-muted-foreground">
                   {v.label} · {v.createdBy}
@@ -284,14 +334,22 @@ export function DraftingDetailPage() {
   const [edited, setEdited] = useState(null);
   const [newReviewer, setNewReviewer] = useState('');
   const [deleteError, setDeleteError] = useState(null);
+  const [changeNote, setChangeNote] = useState('');
   const draft = edited ?? latestVersion?.content ?? '';
 
   if (!query) return <EmptyState title={resolving ? 'Loading case…' : 'Query not found'} />;
 
-  const wasReturned = query.workflowState === WORKFLOW_STATE.RETURNED_FOR_REVISION;
-  const latestReturn = [...reviews].reverse().find((r) => r.decision === 'CHANGES_REQUESTED');
+  const latestReturn = pendingChangeRequest({ reviews, versions, query });
+  const wasReturned = query.workflowState === WORKFLOW_STATE.RETURNED_FOR_REVISION || Boolean(latestReturn);
   const isDirty = edited !== null && edited !== (latestVersion?.content ?? '');
   const reviewSteps = steps.filter((s) => s.stepType === 'REVIEW');
+  const resubmit = latestReturn
+    ? {
+        note: changeNote,
+        onNote: setChangeNote,
+        newVersionSaved: Boolean(latestVersion) && latestVersion.responseId !== latestReturn?.responseId,
+      }
+    : null;
 
   const handleDelete = (stepId) => {
     const result = deleteReviewLevel(queryId, stepId, currentUser);
@@ -321,7 +379,9 @@ export function DraftingDetailPage() {
       <CaseSummaryBar query={query} />
 
       <ActionError message={error} onDismiss={clearError} />
-      {wasReturned && latestReturn && <ReturnedForRevisionNotice review={latestReturn} />}
+      {wasReturned && latestReturn && (
+        <ReturnedForRevisionNotice review={latestReturn} steps={[...steps, ...(stepHistory || [])]} />
+      )}
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="lg:col-span-2">
@@ -334,9 +394,15 @@ export function DraftingDetailPage() {
             running={running}
             isDirty={isDirty}
             reviewSteps={reviewSteps}
+            resubmit={resubmit}
             onGenerate={() => run(() => generateAiDraft(queryId, currentUser))}
             onSave={handleSave}
-            onSubmit={() => run(() => submitForReview(queryId, currentUser))}
+            onSubmit={() =>
+              run(() => {
+                submitForReview(queryId, currentUser, { changeSummary: changeNote });
+                setChangeNote('');
+              })
+            }
           />
         </div>
 

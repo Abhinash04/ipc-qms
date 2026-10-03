@@ -45,6 +45,7 @@ import {
   isPullbackSource,
   reviewLevelTargets,
 } from '@/constants/reviewCycle';
+import { pendingChangeRequest } from '@/constants/reviewRounds';
 import { fetchGemmaAiSummary, fetchGemmaAiDraft } from '@/services/api/aiService';
 import { assembleDraftEmail } from '@/services/ai/draftComposer';
 import { notify, beginBatch, endBatch } from '@/services/notify';
@@ -226,6 +227,8 @@ function computeTransition(state, { queryId, event, actor, patch = {}, details, 
     queryId,
     event,
     actor: actorLabel || actorName(actor),
+    actorId: actorLabel ? null : actor?.id || null,
+    actorRole: actorLabel ? null : actor?.role || null,
     at: timestamp,
     details,
   };
@@ -826,7 +829,7 @@ export const useWorkflowStore = create((set, get) => ({
     });
   },
 
-  submitForReview: (queryId, actor) => {
+  submitForReview: (queryId, actor, { changeSummary = '' } = {}) => {
     assertCan(get(), WORKFLOW_ACTION.SUBMIT_FOR_REVIEW, queryId, actor);
     const state = get();
     const steps = state.getSteps(queryId);
@@ -835,6 +838,26 @@ export const useWorkflowStore = create((set, get) => ({
       throw new Error(
         `${queryId} cannot be submitted: add at least one review level before sending for review`,
       );
+    }
+
+    const submitted = state.getLatestVersion(queryId);
+    const answered = pendingChangeRequest({
+      reviews: state.getReviews(queryId),
+      versions: state.getVersions(queryId),
+      query: state.getQuery(queryId),
+    });
+    const resubmission = Boolean(answered);
+    const summary = String(changeSummary || '').trim();
+
+    if (resubmission) {
+      if (!summary) {
+        throw new Error('Resubmitting requires a note describing the changes you implemented');
+      }
+      if (submitted?.responseId === answered.responseId) {
+        throw new Error(
+          `${submitted.version} is the version that was returned — save a new version with the requested changes first`,
+        );
+      }
     }
 
     let stepCounter = state.counters.STEP || 0;
@@ -889,13 +912,30 @@ export const useWorkflowStore = create((set, get) => ({
         workflowState: WORKFLOW_STATE.UNDER_REVIEW,
         currentWorkflowStepId: firstPendingReview?.stepId || null,
       },
-      details: 'Draft submitted for review.',
+      details: answered
+        ? `${submitted?.version} resubmitted for review after changes requested by ${
+            findUserById(answered.reviewerId)?.name || 'a reviewer'
+          } on ${answered.version}. Changes implemented: ${summary}`
+        : `${submitted?.version || 'Draft'} submitted for review.`,
       notify: {
         recipientRole: 'REVIEWER',
-        message: `${queryId} is awaiting review.`,
+        message: answered
+          ? `${queryId} ${submitted?.version} was resubmitted after changes were requested.`
+          : `${queryId} is awaiting review.`,
       },
       mutate: (base) => ({
         counters: { ...base.counters, STEP: stepCounter },
+        responseVersions: base.responseVersions.map((v) =>
+          v.responseId === submitted?.responseId
+            ? {
+                ...v,
+                status: RESPONSE_STATUS.SUBMITTED,
+                submittedAt: timestamp,
+                submittedBy: actor?.id || null,
+                ...(resubmission ? { changeSummary: summary, respondsToReviewId: answered?.reviewId || null } : {}),
+              }
+            : v,
+        ),
         workflowSteps: [...base.workflowSteps, ...newSteps].map((s) =>
           s.stepId === firstPendingReview?.stepId
             ? { ...s, status: 'IN_PROGRESS', startedAt: s.startedAt || timestamp }
@@ -982,6 +1022,7 @@ export const useWorkflowStore = create((set, get) => ({
       : { step: finalStep, workflowState: WORKFLOW_STATE.PENDING_FINAL_APPROVAL };
 
     const reviewMint = mintId(state.counters, 'REV');
+    const stageAtDecision = state.getQuery(queryId)?.workflowState || null;
     const timestamp = now();
 
     state.applyTransition({
@@ -1010,6 +1051,8 @@ export const useWorkflowStore = create((set, get) => ({
             responseId: approvedVersion?.responseId || null,
             version: approvedVersion?.version || null,
             reviewerId: actor?.id || null,
+            reviewerRole: actor?.role || null,
+            workflowState: stageAtDecision,
             at: timestamp,
           },
         ],
@@ -1038,6 +1081,7 @@ export const useWorkflowStore = create((set, get) => ({
     assertOwnsStep(current, actor, WORKFLOW_ACTION.REQUEST_REVISION);
 
     const reviewMint = mintId(state.counters, 'REV');
+    const stageAtDecision = state.getQuery(queryId)?.workflowState || null;
     const timestamp = now();
 
     state.applyTransition({
@@ -1066,6 +1110,8 @@ export const useWorkflowStore = create((set, get) => ({
             responseId: reviewed?.responseId || null,
             version: reviewed?.version || null,
             reviewerId: actor?.id || null,
+            reviewerRole: actor?.role || null,
+            workflowState: stageAtDecision,
             at: timestamp,
           },
         ],
@@ -1104,17 +1150,44 @@ export const useWorkflowStore = create((set, get) => ({
 
   rejectFinalApproval: (queryId, reason, actor) => {
     assertCan(get(), WORKFLOW_ACTION.FINAL_REJECT, queryId, actor);
-    return get().applyTransition({
+    if (!String(reason || '').trim()) {
+      throw new Error('Rejecting requires a reason the assigned official can act on');
+    }
+
+    const state = get();
+    const rejected = state.getLatestVersion(queryId);
+    const reviewMint = mintId(state.counters, 'REV');
+    const stageAtDecision = state.getQuery(queryId)?.workflowState || null;
+    const timestamp = now();
+
+    return state.applyTransition({
       queryId,
       actor,
       event: AUDIT_EVENT.FINAL_APPROVAL_REJECTED,
       patch: { workflowState: WORKFLOW_STATE.RETURNED_FOR_REVISION },
-      details: reason ? `Final approval rejected: ${reason}` : 'Final approval rejected.',
+      details: `Final approval rejected on ${rejected?.version || 'the response'}: ${reason}`,
       notify: {
         recipientRole: 'ASSIGNED_OFFICIAL',
         message: `${queryId} was rejected at final approval.`,
       },
       mutate: (base) => ({
+        counters: { ...base.counters, ...reviewMint.bump },
+        reviews: [
+          ...base.reviews,
+          {
+            reviewId: reviewMint.id,
+            queryId,
+            stepId: null,
+            decision: 'REJECTED',
+            comment: reason,
+            responseId: rejected?.responseId || null,
+            version: rejected?.version || null,
+            reviewerId: actor?.id || null,
+            reviewerRole: actor?.role || null,
+            workflowState: stageAtDecision,
+            at: timestamp,
+          },
+        ],
         workflowSteps: reopenReviewCycle(base.workflowSteps, queryIn(base, queryId)),
       }),
     });
@@ -1129,6 +1202,7 @@ export const useWorkflowStore = create((set, get) => ({
     const state = get();
     const reviewed = state.getLatestVersion(queryId);
     const reviewMint = mintId(state.counters, 'REV');
+    const stageAtDecision = state.getQuery(queryId)?.workflowState || null;
     const timestamp = now();
 
     return get().applyTransition({
@@ -1157,6 +1231,8 @@ export const useWorkflowStore = create((set, get) => ({
             responseId: reviewed?.responseId || null,
             version: reviewed?.version || null,
             reviewerId: actor?.id || null,
+            reviewerRole: actor?.role || null,
+            workflowState: stageAtDecision,
             at: timestamp,
           },
         ],

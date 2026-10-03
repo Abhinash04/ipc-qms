@@ -18,6 +18,8 @@ import { installFakeCaseMail } from '@/test/fakeCaseMail';
 import * as mailboxService from '@/services/api/mailboxService';
 import { EXTERNAL_INQUIRER as INQUIRER } from '@/test/externalInquirer';
 
+const CHANGES_NOTE = 'Revised as requested.';
+
 vi.mock('@/services/api/mailboxService');
 
 const s = () => useWorkflowStore.getState();
@@ -79,7 +81,7 @@ async function runTo(stopAt, { reviewers = [REVIEWER_A], message } = {}) {
   for (const reviewer of reviewers) {
     s().addReviewLevel(queryId, reviewer.id, OFFICIAL);
   }
-  s().submitForReview(queryId, OFFICIAL);
+  s().submitForReview(queryId, OFFICIAL, { changeSummary: CHANGES_NOTE });
   if (stopAt === WORKFLOW_STATE.UNDER_REVIEW) return queryId;
 
   for (const reviewer of reviewers) {
@@ -281,7 +283,7 @@ describe('revision cycles', () => {
     expect(stateOf(queryId)).toBe(WORKFLOW_STATE.RETURNED_FOR_REVISION);
 
     s().saveDraftVersion(queryId, 'Revised text citing IP 2022.', OFFICIAL, 'Revision after review');
-    s().submitForReview(queryId, OFFICIAL);
+    s().submitForReview(queryId, OFFICIAL, { changeSummary: CHANGES_NOTE });
     expect(stateOf(queryId)).toBe(WORKFLOW_STATE.UNDER_REVIEW);
 
     s().approveReview(queryId, 'Now correct.', REVIEWER_A);
@@ -294,7 +296,7 @@ describe('revision cycles', () => {
     for (let round = 1; round <= 3; round += 1) {
       s().requestRevision(queryId, `Round ${round}`, REVIEWER_A);
       s().saveDraftVersion(queryId, `Revision ${round}`, OFFICIAL, 'Revision after review');
-      s().submitForReview(queryId, OFFICIAL);
+      s().submitForReview(queryId, OFFICIAL, { changeSummary: CHANGES_NOTE });
     }
     s().approveReview(queryId, 'Finally.', REVIEWER_A);
 
@@ -313,7 +315,7 @@ describe('revision cycles', () => {
     expect(stateOf(queryId)).toBe(WORKFLOW_STATE.RETURNED_FOR_REVISION);
 
     s().saveDraftVersion(queryId, 'Softened text.', OFFICIAL, 'Revision after review');
-    s().submitForReview(queryId, OFFICIAL);
+    s().submitForReview(queryId, OFFICIAL, { changeSummary: CHANGES_NOTE });
 
     expect(stateOf(queryId)).toBe(WORKFLOW_STATE.UNDER_REVIEW);
 
@@ -334,7 +336,7 @@ describe('response versioning and locking', () => {
     s().saveDraftVersion(queryId, 'Officer edit A', OFFICIAL);
     s().saveDraftVersion(queryId, 'Officer edit B', OFFICIAL);
     s().addReviewLevel(queryId, REVIEWER_A.id, OFFICIAL);
-    s().submitForReview(queryId, OFFICIAL);
+    s().submitForReview(queryId, OFFICIAL, { changeSummary: CHANGES_NOTE });
     s().approveReview(queryId, 'ok', REVIEWER_A);
     await s().grantFinalApproval(queryId, OIC, finalApproval());
 
@@ -365,7 +367,7 @@ describe('response versioning and locking', () => {
     const queryId = await runTo(WORKFLOW_STATE.DRAFTING);
     s().saveDraftVersion(queryId, 'The final agreed wording.', OFFICIAL);
     s().addReviewLevel(queryId, REVIEWER_A.id, OFFICIAL);
-    s().submitForReview(queryId, OFFICIAL);
+    s().submitForReview(queryId, OFFICIAL, { changeSummary: CHANGES_NOTE });
     s().approveReview(queryId, 'ok', REVIEWER_A);
 
     await s().grantFinalApproval(queryId, OIC, finalApproval());
@@ -609,7 +611,7 @@ describe('every revision restarts at Reviewer-I', () => {
 
     s().requestRevision(queryId, 'Cite the edition.', REVIEWER_B);
     s().saveDraftVersion(queryId, 'Revised text.', OFFICIAL, 'Revision after review');
-    s().submitForReview(queryId, OFFICIAL);
+    s().submitForReview(queryId, OFFICIAL, { changeSummary: CHANGES_NOTE });
 
     expect(pendingReviewer(queryId)).toBe(REVIEWER_A.id);
 
@@ -624,7 +626,7 @@ describe('every revision restarts at Reviewer-I', () => {
 
     s().requestRevision(queryId, 'Needs the monograph reference.', REVIEWER_A);
     s().saveDraftVersion(queryId, 'Revised.', OFFICIAL, 'Revision after review');
-    s().submitForReview(queryId, OFFICIAL);
+    s().submitForReview(queryId, OFFICIAL, { changeSummary: CHANGES_NOTE });
 
     expect(pendingReviewer(queryId)).toBe(REVIEWER_A.id);
   });
@@ -636,7 +638,7 @@ describe('every revision restarts at Reviewer-I', () => {
 
     s().returnForRevisionFromApproval(queryId, 'Soften the tone.', OIC);
     s().saveDraftVersion(queryId, 'Softened.', OFFICIAL, 'Revision after review');
-    s().submitForReview(queryId, OFFICIAL);
+    s().submitForReview(queryId, OFFICIAL, { changeSummary: CHANGES_NOTE });
 
     expect(pendingReviewer(queryId)).toBe(REVIEWER_A.id);
 
@@ -651,7 +653,7 @@ describe('every revision restarts at Reviewer-I', () => {
 
     s().rejectFinalApproval(queryId, 'Not defensible as written.', OIC);
     s().saveDraftVersion(queryId, 'Rewritten.', OFFICIAL, 'Revision after review');
-    s().submitForReview(queryId, OFFICIAL);
+    s().submitForReview(queryId, OFFICIAL, { changeSummary: CHANGES_NOTE });
 
     expect(stateOf(queryId)).toBe(WORKFLOW_STATE.UNDER_REVIEW);
     expect(pendingReviewer(queryId)).toBe(REVIEWER_A.id);
@@ -665,18 +667,18 @@ describe('every revision restarts at Reviewer-I', () => {
 
     s().requestRevision(queryId, 'Round 1', REVIEWER_A);
     s().saveDraftVersion(queryId, 'v2 text', OFFICIAL, 'Revision after review');
-    s().submitForReview(queryId, OFFICIAL);
+    s().submitForReview(queryId, OFFICIAL, { changeSummary: CHANGES_NOTE });
 
     s().approveReview(queryId, 'ok', REVIEWER_A);
     s().requestRevision(queryId, 'Round 2', REVIEWER_B);
     s().saveDraftVersion(queryId, 'v3 text', OFFICIAL, 'Revision after review');
-    s().submitForReview(queryId, OFFICIAL);
+    s().submitForReview(queryId, OFFICIAL, { changeSummary: CHANGES_NOTE });
 
     s().approveReview(queryId, 'ok', REVIEWER_A);
     s().approveReview(queryId, 'ok', REVIEWER_B);
     s().returnForRevisionFromApproval(queryId, 'Round 3', OIC);
     s().saveDraftVersion(queryId, 'v4 text', OFFICIAL, 'Revision after review');
-    s().submitForReview(queryId, OFFICIAL);
+    s().submitForReview(queryId, OFFICIAL, { changeSummary: CHANGES_NOTE });
 
     s().approveReview(queryId, 'ok', REVIEWER_A);
     s().approveReview(queryId, 'ok', REVIEWER_B);
@@ -763,7 +765,7 @@ describe('reviewers may only act on their own level', () => {
     s().approveReview(queryId, 'Level 1 fine', REVIEWER_A);
     s().requestRevision(queryId, 'Cite the edition.', REVIEWER_B);
     s().saveDraftVersion(queryId, 'v2 text', OFFICIAL, 'Revision after review');
-    s().submitForReview(queryId, OFFICIAL);
+    s().submitForReview(queryId, OFFICIAL, { changeSummary: CHANGES_NOTE });
 
     expect(pendingReviewer(queryId)).toBe(REVIEWER_A.id);
     expect(() => s().approveReview(queryId, 'ok', REVIEWER_B)).toThrow(/assigned to Amit Mehta/);
@@ -793,7 +795,7 @@ describe('the final approver is resolved by role, not pinned to an id', () => {
 
     s().requestRevision(queryId, 'Round 1', REVIEWER_A);
     s().saveDraftVersion(queryId, 'v2 text', OFFICIAL, 'Revision after review');
-    s().submitForReview(queryId, OFFICIAL);
+    s().submitForReview(queryId, OFFICIAL, { changeSummary: CHANGES_NOTE });
 
     expect(s().getSteps(queryId).map((step) => step.stepType)).toEqual(typesAfterFirstSubmit);
   });
@@ -823,14 +825,14 @@ describe('the specified two-level path, end to end', () => {
     s().requestRevision(queryId, 'Cite the monograph edition.', REVIEWER_A);
     expect(stateOf(queryId)).toBe(WORKFLOW_STATE.RETURNED_FOR_REVISION);
     s().saveDraftVersion(queryId, 'v2 text', OFFICIAL, 'Revision after review');
-    s().submitForReview(queryId, OFFICIAL);
+    s().submitForReview(queryId, OFFICIAL, { changeSummary: CHANGES_NOTE });
 
     s().approveReview(queryId, 'Reviewer I approves', REVIEWER_A);
     expect(pendingReviewer(queryId)).toBe(REVIEWER_B.id);
 
     s().requestRevision(queryId, 'Add the analytical method.', REVIEWER_B);
     s().saveDraftVersion(queryId, 'v3 text', OFFICIAL, 'Revision after review');
-    s().submitForReview(queryId, OFFICIAL);
+    s().submitForReview(queryId, OFFICIAL, { changeSummary: CHANGES_NOTE });
 
     expect(pendingReviewer(queryId)).toBe(REVIEWER_A.id);
     s().approveReview(queryId, 'Reviewer I approves again', REVIEWER_A);
@@ -863,7 +865,7 @@ describe('review comments', () => {
 
     s().requestRevision(queryId, 'Fix the citation.', REVIEWER_A);
     s().saveDraftVersion(queryId, 'v2 text', OFFICIAL, 'Revision after review');
-    s().submitForReview(queryId, OFFICIAL);
+    s().submitForReview(queryId, OFFICIAL, { changeSummary: CHANGES_NOTE });
     s().approveReview(queryId, 'Now correct.', REVIEWER_A);
 
     const [rejection, approval] = s().getReviews(queryId);

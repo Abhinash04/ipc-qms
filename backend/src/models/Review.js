@@ -10,6 +10,8 @@ const reviewSchema = new mongoose.Schema(
     comment: { type: String, default: '' },
     responseId: { type: String, default: null },
     version: { type: String, default: null },
+    reviewerRole: { type: String, default: null },
+    workflowState: { type: String, default: null },
 
     at: { type: String, default: () => new Date().toISOString() },
   },

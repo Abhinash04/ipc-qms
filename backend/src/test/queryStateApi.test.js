@@ -197,6 +197,32 @@ describe('/api/v1/queries/persist — the client contract', () => {
     });
   });
 
+  it('keeps who resubmitted a version, when, and what they changed', () => {
+    const parsed = persistTransitionSchema.parse({
+      auditEvent: { event: 'DRAFT_UPDATED', queryId: 'QRY-2026-00001' },
+      upsertVersions: [
+        {
+          responseId: 'RESP-00003',
+          queryId: 'QRY-2026-00001',
+          version: 'v3',
+          status: 'SUBMITTED',
+          submittedAt: '2026-09-17T16:00:00.000Z',
+          submittedBy: 'USR-0005',
+          changeSummary: 'Monograph reference added.',
+          respondsToReviewId: 'REV-00001',
+        },
+      ],
+    });
+
+    expect(parsed.upsertVersions[0]).toMatchObject({
+      status: 'SUBMITTED',
+      submittedAt: '2026-09-17T16:00:00.000Z',
+      submittedBy: 'USR-0005',
+      changeSummary: 'Monograph reference added.',
+      respondsToReviewId: 'REV-00001',
+    });
+  });
+
   it('keeps the client id on an audit event', () => {
     const parsed = persistTransitionSchema.parse({
       auditEvent: {

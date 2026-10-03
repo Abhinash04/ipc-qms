@@ -7,6 +7,7 @@ import { AutoTransferTimerCard } from '@/components/workflow/AutoTransferTimerCa
 import { QueryLifecycleTimeline } from '@/components/workflow/QueryLifecycleTimeline';
 import { WorkflowActionsCard } from '@/components/workflow/WorkflowActionsCard';
 import { ReviewDecisionCard } from '@/components/workflow/ReviewDecisionCard';
+import { ResubmissionCard } from '@/components/workflow/ResubmissionCard';
 import { CaseOfficialsCard } from '@/components/workflow/CaseOfficialsCard';
 import { AuditHistoryCard } from '@/components/workflow/AuditHistoryCard';
 import { EmailThread } from '@/components/email/EmailThread';
@@ -189,6 +190,8 @@ export function QueryDetailPage() {
     currentUser,
     can,
     steps,
+    stepHistory,
+    currentStep,
     versions,
     latestVersion,
     reviews,
@@ -235,6 +238,15 @@ export function QueryDetailPage() {
 
       <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-[minmax(0,1fr)_340px] mb-5">
         <div className="min-w-0 space-y-5">
+          <ResubmissionCard
+            query={query}
+            reviews={reviews}
+            versions={versions}
+            steps={[...steps, ...(stepHistory || [])]}
+            latestVersion={latestVersion}
+            currentStep={currentStep}
+          />
+
           <CaseInsightPanels
             query={query}
             steps={steps}
