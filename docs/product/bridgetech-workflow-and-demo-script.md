@@ -216,7 +216,7 @@ The assigned official starts from an AI first draft built only from IPC's own re
 2. Searches IPC's indexed reference library — 22 IPC documents divided into 412 passages, with a glossary of IPC terms — for passages relevant to each question.
 3. Keeps only passages that genuinely match the question; a question with no matching evidence is not sent to the AI at all.
 4. Answers each question from that evidence alone. Where the material does not cover a point, the draft says so ("The available IPC material does not establish this requirement") instead of guessing.
-5. Assembles a formal IPC letter: a "\[FIRST DRAFT\]" marker, the inquirer's address block, a "Sub:" line, the answers, the IPC disclaimer and signature.
+5. Assembles a formal IPC response: opens directly with "Dear Sir/Madam,", followed by the reference sentence, the answers, the IPC disclaimer and signature.
 
 If the AI service is unavailable, a standard template draft is used and the official sees "AI assistant unavailable — A standard template was used instead".
 
@@ -535,7 +535,7 @@ The script runs about 9 minutes 55 seconds: roughly 1,190 words of narration at 
 
 - The second official opens the query, then the Drafting page.
 - Click **Generate AI draft**; hold on the loading state.
-- The draft appears: the "\[FIRST DRAFT\]" marker, address block, "Sub:" line and the answers. Highlight one answer drawn from IPC material and, if present, one "does not establish" line.
+- The draft appears: opens directly with "Dear Sir/Madam,", followed by the reference sentence and the answers. Highlight one answer drawn from IPC material and, if present, one "does not establish" line.
 - Edit a sentence; click **Save new version**.
 - **Version history**: v1 "AI generated", v2 "Officer revision".
 

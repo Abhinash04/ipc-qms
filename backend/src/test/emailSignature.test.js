@@ -71,11 +71,8 @@ describe('the IPC house style', () => {
   });
 
   it('renders exactly as the AI draft composer does', () => {
-    const inquirer = { name: 'Ms. Pujan Mehta', email: 'pujan@intas.example' };
     expect(composer.IPC_SIGNATURE).toBe(IPC_SIGNATURE);
     expect(composer.IPC_DISCLAIMER).toBe(IPC_DISCLAIMER);
-    expect(composer.IPC_GREETING).toBe(letter.IPC_GREETING);
-    expect(composer.letterOpening({ inquirer, subject: 'Re: Lactose' })).toBe(letter.letterOpening({ inquirer, subject: 'Re: Lactose' }));
     expect(composer.referenceSentence('2026-09-10T08:00:00.000Z')).toBe(letter.referenceSentence('2026-09-10T08:00:00.000Z'));
   });
 });
@@ -155,6 +152,18 @@ describe('closing a final reply', () => {
     expect(
       withOfficialClosing('[AI-GENERATED FIRST DRAFT — requires review and editing by the assigned official before it can proceed.]\n\nThe limit is 0.5%.'),
     ).toBe(closed('The limit is 0.5%.'));
+  });
+
+  it('never rewrites what the official approved, beyond the old draft marker', () => {
+    const subSection = 'Sub-section 2.4.1 of the monograph governs this test. The limit is 0.5%.';
+    expect(withOfficialClosing(subSection)).toBe(closed(subSection));
+
+    const houseStyle = 'To,\nMs. Pujan Mehta <pujan@intas.example>\n\nSub: Lactose monohydrate -reg.\n\nMadam,\nThe limit is 0.5%.';
+    expect(withOfficialClosing(houseStyle)).toBe(closed(houseStyle));
+    expect(withOfficialClosing(`[FIRST DRAFT]\n${houseStyle}`)).toBe(closed(houseStyle));
+
+    const dated = 'Date: 12.09.2026\nThe limit is 0.5%.';
+    expect(withOfficialClosing(dated)).toBe(closed(dated));
   });
 
   it('keeps a "regards" that is part of the answer rather than a closing', () => {

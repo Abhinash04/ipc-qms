@@ -8,41 +8,10 @@ export const IPC_DISCLAIMER =
   'This shall not be treated as an official interpretation of Indian Pharmacopoeia (IP) standard or relied on to ' +
   'demonstrate compliance with IP requirements.';
 
-export const IPC_GREETING = 'Greetings from Indian Pharmacopoeia Commission (IPC)!';
+export const DRAFT_SALUTATION = 'Dear Sir/Madam,';
 
 export const NOT_ESTABLISHED_SENTENCE =
   'The available IPC material does not establish this requirement.';
-
-const MADAM = /^(ms|mrs|miss|smt|kum|kumari)\.?\s+/i;
-const SIR = /^(mr|shri|sh|sri)\.?\s+/i;
-
-export function salutationFor(name) {
-  const text = String(name || '').trim();
-  if (MADAM.test(text)) return 'Madam,';
-  if (SIR.test(text)) return 'Sir,';
-  return 'Sir/Madam,';
-}
-
-export function addressBlock({ name, email, organization } = {}) {
-  const cleanName = String(name || '').trim();
-  const cleanEmail = String(email || '').trim();
-  const lines = ['To,'];
-  if (cleanName && cleanEmail && cleanName.toLowerCase() !== cleanEmail.toLowerCase()) {
-    lines.push(`${cleanName} <${cleanEmail}>`);
-  } else if (cleanEmail || cleanName) {
-    lines.push(cleanEmail || cleanName);
-  }
-  const org = String(organization || '').trim();
-  if (org) lines.push(/^m\/s\b/i.test(org) ? org : `M/s ${org}`);
-  return lines.join('\n');
-}
-
-export function subjectLine(subject) {
-  let text = String(subject || '').trim();
-  while (/^(re|fwd?|fw)\s*:\s*/i.test(text)) text = text.replace(/^(re|fwd?|fw)\s*:\s*/i, '');
-  text = text.replace(/\s*[-–—]\s*reg\.?\s*$/i, '').trim();
-  return `Sub: ${text || 'Your query'} -reg.`;
-}
 
 const LETTER_DATE = new Intl.DateTimeFormat('en-GB', {
   timeZone: 'Asia/Kolkata',
@@ -64,10 +33,6 @@ export function referenceSentence(receivedAt) {
   return date
     ? `This is in reference to your email dated ${date} on the subject matter cited above.`
     : 'This is in reference to your email on the subject matter cited above.';
-}
-
-export function letterOpening({ inquirer = {}, subject = '' } = {}) {
-  return [addressBlock(inquirer), subjectLine(subject), `${salutationFor(inquirer.name)}\n${IPC_GREETING}`].join('\n\n');
 }
 
 const heading = (answer, index) => {
@@ -114,8 +79,7 @@ export function assembleDraftEmail({ query, draft }) {
   }
 
   return [
-    '[FIRST DRAFT]',
-    letterOpening({ inquirer: query.inquirer || {}, subject: query.subject }),
+    DRAFT_SALUTATION,
     ...body,
     IPC_DISCLAIMER,
     IPC_SIGNATURE,

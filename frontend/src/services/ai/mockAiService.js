@@ -1,7 +1,7 @@
 import { MOCK_USERS } from '@/constants/mockUsers';
 import { findDivisionById } from '@/constants/mockDivisions';
 import { ROLES } from '@/constants/roles';
-import { IPC_DISCLAIMER, IPC_SIGNATURE, letterOpening, referenceSentence } from '@/services/ai/draftComposer';
+import { DRAFT_SALUTATION, IPC_DISCLAIMER, IPC_SIGNATURE, referenceSentence } from '@/services/ai/draftComposer';
 
 const TOPIC_DIVISIONS = {
   'monograph': 'DIV-003',
@@ -228,9 +228,7 @@ export function draftResponse(query) {
     ? `the division responsible for ${topics.slice(0, 3).join(', ')}`
     : 'the concerned division';
 
-  return `[AI-GENERATED FIRST DRAFT — requires review and editing by the assigned official before it can proceed.]
-
-${letterOpening({ inquirer: query.inquirer || {}, subject: query.subject })}
+  return `${DRAFT_SALUTATION}
 
 ${referenceSentence(query.createdAt)} This is to inform you that your query has been examined by ${reviewedBy}, and the response to the points raised is as follows:
 

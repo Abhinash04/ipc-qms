@@ -343,7 +343,8 @@ describe('response versioning and locking', () => {
     expect(versions.filter((v) => v.status === RESPONSE_STATUS.FINAL_APPROVED)).toHaveLength(1);
     expect(versions.at(-1).status).toBe(RESPONSE_STATUS.FINAL_APPROVED);
     expect(versions.at(-1).approvedAt).toBeTruthy();
-    expect(versions[0].content).toContain('AI-GENERATED FIRST DRAFT');
+    expect(versions[0].content.startsWith('Dear Sir/Madam,')).toBe(true);
+    expect(versions[0].content).not.toContain('FIRST DRAFT');
     expect(versions[1].content).toBe('Officer edit A');
   });
 
@@ -408,9 +409,14 @@ describe('AI is derived from the query, never a fixed template', () => {
     const draftB = s().getLatestVersion(second).content;
 
     expect(draftA).not.toBe(draftB);
-    expect(draftA).toContain('Sub: Clarification on monograph revision and impurity limits -reg.');
-    expect(draftB).toContain('Sub: Certificate reissue request -reg.');
-    expect(draftA).toContain('AI-GENERATED FIRST DRAFT');
+    expect(draftA.startsWith('Dear Sir/Madam,')).toBe(true);
+    expect(draftB.startsWith('Dear Sir/Madam,')).toBe(true);
+    expect(draftA).not.toContain('FIRST DRAFT');
+    expect(draftB).not.toContain('FIRST DRAFT');
+    expect(draftA).not.toContain('Sub:');
+    expect(draftB).not.toContain('Sub:');
+    expect(draftA).toContain('monograph');
+    expect(draftB).toContain('certificate reissue');
   });
 
   it('recommends an assignee and records it before the human decides', async () => {
