@@ -316,22 +316,14 @@ NIC endpoints return HTTP 200 even on failure, carrying `{ ok: false, stage, err
 can tell _where_ it failed (connect / authenticate / open_mailbox / fetch / submit).
 
 ### Audit
-<<<<<<< Updated upstream
 
-| Method | Path                    | Guards                           |
-| ------ | ----------------------- | -------------------------------- |
-| GET    | `/audit`                | `verifyRole(ADMIN, SUPER_ADMIN)` |
-| GET    | `/audit/summary`        | `verifyRole(ADMIN, SUPER_ADMIN)` |
-| GET    | `/audit/query/:queryId` | `verifyRole(ADMIN, SUPER_ADMIN)` |
-=======
-| Method | Path | Guards |
-|---|---|---|
-| GET | `/audit` | `verifyRole(ADMIN, SUPER_ADMIN)` |
-| GET | `/audit/summary` | `verifyRole(ADMIN, SUPER_ADMIN)` |
-| GET | `/audit/verify` | `verifyRole(ADMIN, SUPER_ADMIN)` |
-| GET | `/audit/export?format=csv\|pdf&…filters` | `verifyRole(ADMIN, SUPER_ADMIN)` |
-| GET | `/audit/query/:queryId` | `verifyRole(ADMIN, SUPER_ADMIN)` |
->>>>>>> Stashed changes
+| Method | Path                                      | Guards                           |
+| ------ | ----------------------------------------- | -------------------------------- |
+| GET    | `/audit`                                  | `verifyRole(ADMIN, SUPER_ADMIN)` |
+| GET    | `/audit/summary`                          | `verifyRole(ADMIN, SUPER_ADMIN)` |
+| GET    | `/audit/verify`                           | `verifyRole(ADMIN, SUPER_ADMIN)` |
+| GET    | `/audit/export?format=csv\|pdf&…filters` | `verifyRole(ADMIN, SUPER_ADMIN)` |
+| GET    | `/audit/query/:queryId`                   | `verifyRole(ADMIN, SUPER_ADMIN)` |
 
 `GET /audit/summary` passes a caller's `from`/`to` through to its `overall` half, so it can answer
 for any time window; the `today` half always overrides `from`. No route updates or deletes an

@@ -11,11 +11,11 @@ import {
   isDuplicateKey,
 } from "../services/email/outbox.js";
 import { ACTOR_TYPES } from "../constants/roles.js";
-<<<<<<< Updated upstream
-import { isKnownAuditAction, SERVER_ONLY_CASE_EVENTS } from "../constants/auditActions.js";
-=======
-import { AUDIT_ACTIONS, isKnownAuditAction } from "../constants/auditActions.js";
->>>>>>> Stashed changes
+import {
+  AUDIT_ACTIONS,
+  isKnownAuditAction,
+  SERVER_ONLY_CASE_EVENTS,
+} from "../constants/auditActions.js";
 import { caseScopeFor, scopeFilter } from "../services/authz/caseAccess.js";
 import {
   QueryCase,
@@ -216,13 +216,9 @@ async function persistTransition(req, res, next) {
     let caseChanges = null;
     if (query?.queryId) {
       const existing = await QueryCase.findOne({ queryId: query.queryId })
-<<<<<<< Updated upstream
         .select(
-          "createdAt workflowState businessStatus currentAssigneeId actionDeadline autoTransferHeldIds",
+          "createdAt workflowState businessStatus currentAssigneeId category priority actionDeadline autoTransferHeldIds",
         )
-=======
-        .select("createdAt workflowState businessStatus currentAssigneeId category priority")
->>>>>>> Stashed changes
         .lean();
       caseChanges = diffCase(existing, query);
 

@@ -1,5 +1,6 @@
 import { QueryCase, WorkflowStep, Notification, QueryCounter } from '../../models/index.js';
 import * as audit from '../audit/auditService.js';
+import { diffCase } from '../audit/caseChanges.js';
 import { ACTOR_TYPES } from '../../constants/roles.js';
 import { findUserById } from '../../constants/users.js';
 import { assignmentClockUpdate } from '../query/assignmentClock.js';
@@ -107,6 +108,7 @@ export async function pullBackQuery({ queryId, targetStage, reviewStepId = null,
     actorId: actor?.id ?? null,
     actorRole: actor?.role ?? null,
     details: plan.auditDetails,
+    changes: diffCase(query, updated),
   });
 
   const { _id, ...plain } = updated;
