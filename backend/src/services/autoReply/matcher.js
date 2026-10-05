@@ -65,13 +65,15 @@ export function sentencesOf({ body = '', subject = '' } = {}) {
   return normalise(topic) ? [topic] : [];
 }
 
+// How well a sentence matches an entry: its best score against the question or any variant.
+const scoreFor = (sentence, entry) =>
+  Math.max(...[entry.question, ...(entry.variants || [])].map((wording) => similarity(sentence, wording)));
+
 function closest(sentence, entries) {
   let best = { entry: null, score: 0 };
   for (const entry of entries) {
-    for (const wording of [entry.question, ...(entry.variants || [])]) {
-      const score = similarity(sentence, wording);
-      if (score > best.score) best = { entry, score };
-    }
+    const score = scoreFor(sentence, entry);
+    if (score > best.score) best = { entry, score };
   }
   return best;
 }
@@ -82,8 +84,11 @@ export const draftFor = (entry) => `Dear Sir/Madam,\n\n${entry.answer}`;
 const percent = (value) => `${Math.round(value * 100)}%`;
 
 /**
- * { eligible, confidence, entryId, topic, question, draft, reason } for one mail. `junk` is the
- * triage verdict; a mail marked as junk is never offered a reply.
+ * { eligible, confidence, entryId, topic, question, draft, reason } for one mail. The confidence
+ * is how well the whole mail matches its closest supported question: every sentence is scored
+ * against that one question, so a second question or any other remark pulls it down. It is
+ * worked out for every mail, including those sent to a person for another reason (attachments,
+ * a junk verdict), so the Front Office always sees it with the reason.
  */
 export function matchAutoReply(message = {}, { threshold = 1, entries = AUTO_REPLY_ENTRIES, junk = false } = {}) {
   const result = (eligible, reason, { confidence = 0, entry = null } = {}) => ({
@@ -96,23 +101,25 @@ export function matchAutoReply(message = {}, { threshold = 1, entries = AUTO_REP
     reason,
   });
 
-  if (junk) return result(false, 'marked as possible junk');
-  if (message.attachments?.length) return result(false, 'has attachments to read');
-
   const sentences = sentencesOf(message);
   if (!sentences.length) return result(false, 'asks no question');
 
   const matches = sentences.map((sentence) => closest(sentence, entries));
-  const confidence = Math.min(...matches.map((match) => match.score));
-  const entry = matches[0].entry;
-  if (!entry || matches.some((match) => match.entry?.id !== entry.id)) {
-    return result(false, 'asks more than one supported question, or something else as well', { confidence });
+  const entry = matches.reduce((best, match) => (match.score > best.score ? match : best)).entry;
+  if (!entry) return result(false, 'matches no supported question');
+
+  const scored = { confidence: Math.min(...sentences.map((sentence) => scoreFor(sentence, entry))), entry };
+  if (junk) return result(false, 'marked as possible junk', scored);
+  if (message.attachments?.length) return result(false, 'has attachments to read', scored);
+  if (matches.some((match) => match.entry && match.entry.id !== entry.id)) {
+    return result(false, 'asks more than one supported question, or something else as well', scored);
   }
-  if (confidence < threshold) {
-    return result(false, `closest supported question "${entry.question}" matched ${percent(confidence)}, below ${percent(threshold)}`, {
-      confidence,
-      entry,
-    });
+  if (scored.confidence < threshold) {
+    return result(
+      false,
+      `closest supported question "${entry.question}" matched ${percent(scored.confidence)}, below ${percent(threshold)}`,
+      scored,
+    );
   }
-  return result(true, `matches the supported question "${entry.question}"`, { confidence, entry });
+  return result(true, `matches the supported question "${entry.question}"`, scored);
 }

@@ -54,7 +54,10 @@ async function assessOne(message, { decided, junk, nowIso }) {
         ...common,
         status: AUTO_REPLY_STATUS.NOT_ELIGIBLE,
         confidence: match?.confidence ?? 0,
+        // The closest supported question, so the Front Office can see what the score was against.
         entryId: match?.entryId ?? null,
+        topic: match?.topic ?? null,
+        question: match?.question ?? null,
         reason: match ? match.reason : 'already handled through the standard workflow',
       };
 

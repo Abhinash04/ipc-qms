@@ -60,22 +60,30 @@ describe('matching a mail to a supported question', () => {
 
   it('sends a mail that also says something else to a person', () => {
     const match = matchAutoReply({ body: letter('My son took ten tablets. What is the use case of paracetamol?') }, { threshold: 1 });
-    expect(match.eligible).toBe(false);
+    expect(match).toMatchObject({ eligible: false, entryId: 'AR-PARACETAMOL-USE' });
+    expect(match.confidence).toBeLessThan(0.5);
   });
 
   it('sends a mail with two different questions to a person', () => {
     const match = matchAutoReply({ body: letter('What is IP Online?\nHow can I purchase IP Reference Substances?') }, { threshold: 1 });
-    expect(match).toMatchObject({ eligible: false });
+    expect(match).toMatchObject({ eligible: false, entryId: 'AR-IP-ONLINE' });
     expect(match.reason).toMatch(/more than one/);
+    // The score is for the whole mail against one question, so the second question pulls it down.
+    expect(match.confidence).toBeLessThan(0.5);
   });
 
   it('sends a mail with attachments to a person', () => {
     const match = matchAutoReply({ body: letter('What is IP Online?'), attachments: [{ filename: 'a.pdf' }] }, { threshold: 1 });
-    expect(match).toMatchObject({ eligible: false, reason: 'has attachments to read' });
+    // The question itself matched fully; the attachments are why a person must look.
+    expect(match).toMatchObject({ eligible: false, reason: 'has attachments to read', confidence: 1, entryId: 'AR-IP-ONLINE', draft: null });
   });
 
   it('never offers a reply to a mail marked as junk', () => {
-    expect(matchAutoReply({ body: letter('What is IP Online?') }, { threshold: 1, junk: true }).eligible).toBe(false);
+    expect(matchAutoReply({ body: letter('What is IP Online?') }, { threshold: 1, junk: true })).toMatchObject({
+      eligible: false,
+      reason: 'marked as possible junk',
+      confidence: 1,
+    });
   });
 
   it('sends a mail that asks nothing to a person', () => {

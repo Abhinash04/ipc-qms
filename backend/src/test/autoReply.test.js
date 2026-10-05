@@ -151,7 +151,15 @@ describe('assessing new mail for an automatic reply', () => {
     await syncWith(read('row-1'), asking('row-2', 'What is the main use case of paracetamol?'));
 
     expect(stored('row-1').autoReply).toMatchObject({ status: AUTO_REPLY_STATUS.NOT_ELIGIBLE });
-    expect(stored('row-2').autoReply).toMatchObject({ status: AUTO_REPLY_STATUS.NOT_ELIGIBLE, entryId: 'AR-PARACETAMOL-USE' });
+    expect(stored('row-2').autoReply).toMatchObject({
+      status: AUTO_REPLY_STATUS.NOT_ELIGIBLE,
+      entryId: 'AR-PARACETAMOL-USE',
+      topic: 'Uses of paracetamol',
+      question: QUESTION,
+      confidence: expect.any(Number),
+    });
+    expect(stored('row-2').autoReply.confidence).toBeGreaterThan(0.8);
+    expect(stored('row-2').autoReply.confidence).toBeLessThan(1);
     expect(stored('row-2').autoReply.reason).toMatch(/below 100%/);
     expect(audits('AUTO_REPLY_SUGGESTED')).toEqual([]);
   });
