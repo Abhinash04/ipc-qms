@@ -75,14 +75,15 @@ function mailboxUnavailable(error, { source, label }) {
 
 const newestFirst = (a, b) => String(b.receivedAt ?? '').localeCompare(String(a.receivedAt ?? ''));
 
-async function listPage(box, { unreadOnly, junkOnly, q, category, limit, offset }) {
+async function listPage(box, { unreadOnly, junkOnly, q, category, bucket, limit, offset }) {
   if (box.own) {
-    const [messages, categoryCounts] = await Promise.all([
-      box.store.list(box.address, { unreadOnly, junkOnly, q, category, limit, offset }),
-      box.store.categoryCounts(box.address, { unreadOnly, junkOnly, q }),
+    const [messages, categoryCounts, bucketCounts] = await Promise.all([
+      box.store.list(box.address, { unreadOnly, junkOnly, q, category, bucket, limit, offset }),
+      box.store.categoryCounts(box.address, { unreadOnly, junkOnly, q, bucket }),
+      box.store.bucketCounts(box.address, { unreadOnly, junkOnly, q }),
     ]);
-    const total = limit ? await box.store.count(box.address, { unreadOnly, junkOnly, q, category }) : messages.length;
-    return { messages, total, categoryCounts };
+    const total = limit ? await box.store.count(box.address, { unreadOnly, junkOnly, q, category, bucket }) : messages.length;
+    return { messages, total, categoryCounts, bucketCounts };
   }
 
   const all = (await box.store.list(box.address, { unreadOnly })).filter((message) => matchesSearch(message, q));
@@ -95,8 +96,16 @@ async function listMessages(req, res, next) {
 
   try {
     box = await resolveMailbox(req);
-    const { unreadOnly, junkOnly, q, category, limit, offset } = req.validatedQuery;
-    const { messages, total, categoryCounts } = await listPage(box, { unreadOnly, junkOnly, q, category, limit, offset });
+    const { unreadOnly, junkOnly, q, category, bucket, limit, offset } = req.validatedQuery;
+    const { messages, total, categoryCounts, bucketCounts } = await listPage(box, {
+      unreadOnly,
+      junkOnly,
+      q,
+      category,
+      bucket,
+      limit,
+      offset,
+    });
 
     health.recordSuccess({ source: box.source, address: box.address });
 
@@ -107,6 +116,7 @@ async function listMessages(req, res, next) {
       messages: await toMessageViews(messages, { keepsReadState: Boolean(box.own) }),
       ...(limit ? { total, limit, offset } : {}),
       ...(categoryCounts ? { categoryCounts } : {}),
+      ...(bucketCounts ? { bucketCounts } : {}),
       sync: described.sync ?? health.snapshot(),
     });
   } catch (error) {

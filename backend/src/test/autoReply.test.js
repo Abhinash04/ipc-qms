@@ -66,7 +66,12 @@ const browser = vi.hoisted(() => ({ sendMail: null }));
 vi.mock('../services/email/nic/browser/sendMail.js', () => ({
   sendMail: (...args) => browser.sendMail(...args),
 }));
+import request from 'supertest';
 import { memoryDb as db } from './support/memoryDb.js';
+import app from '../app.js';
+import authConfig from '../config/authConfig.js';
+import { signToken } from '../services/auth/tokenService.js';
+import { nicFrontOfficeUser } from '../constants/users.js';
 import env from '../config/env.js';
 import * as nicMailbox from '../services/email/mailbox/nicBrowserMailbox.js';
 import { assess, assessPending, AUTO_REPLY_STATUS } from '../services/autoReply/assess.js';
@@ -88,6 +93,8 @@ const read = (providerMessageId, overrides = {}) => ({
 });
 const asking = (providerMessageId, question = QUESTION) =>
   read(providerMessageId, { body: `Dear Sir/Madam,\n\n${question}\n\nRegards,\nRavi Kumar` });
+
+const cookieFor = (user) => ({ Cookie: `${authConfig.COOKIE_NAME}=${signToken(user)}` });
 
 const syncWith = (...messages) => nicMailbox.sync(NIC_ADDRESS, { reader: async () => messages });
 const stored = (providerMessageId) => db.rows('MailboxMessage').find((row) => row.providerMessageId === providerMessageId);
@@ -195,5 +202,52 @@ describe('assessing new mail for an automatic reply', () => {
 
     expect(stored('row-1').autoReply ?? null).toBeNull();
     expect(audits('AUTO_REPLY_SUGGESTED')).toEqual([]);
+  });
+});
+
+describe('the mailbox buckets', () => {
+  const listing = (query = {}) =>
+    request(app)
+      .get('/api/v1/mailbox/messages')
+      .query({ limit: 50, ...query })
+      .set(cookieFor(nicFrontOfficeUser()));
+  const ids = (res) => res.body.messages.map((message) => message.providerMessageId).sort();
+
+  beforeEach(async () => {
+    await syncWith(asking('row-1'), read('row-2'), read('row-3'));
+  });
+
+  it('lists every mail under All Mails, as before', async () => {
+    const res = await listing();
+    expect(res.status).toBe(200);
+    expect(ids(res)).toEqual(['row-1', 'row-2', 'row-3']);
+    expect(await listing({ bucket: 'all' }).then(ids)).toEqual(['row-1', 'row-2', 'row-3']);
+  });
+
+  it('lists the mails offered a reply under Auto Reply, with their suggestion', async () => {
+    const res = await listing({ bucket: 'auto_reply' });
+    expect(ids(res)).toEqual(['row-1']);
+    expect(res.body.messages[0].autoReply).toMatchObject({ status: 'SUGGESTED', entryId: 'AR-PARACETAMOL-USE' });
+  });
+
+  it('lists the rest under Human Intervention', async () => {
+    expect(await listing({ bucket: 'human' }).then(ids)).toEqual(['row-2', 'row-3']);
+  });
+
+  it('counts each bucket, and the categories within the bucket shown', async () => {
+    const res = await listing({ bucket: 'human' });
+    expect(res.body.bucketCounts).toEqual({ all: 3, auto_reply: 1, human: 2 });
+    expect(Object.values(res.body.categoryCounts).reduce((sum, n) => sum + n, 0)).toBe(2);
+    expect(res.body.total).toBe(2);
+  });
+
+  it('refuses an unknown bucket', async () => {
+    expect((await listing({ bucket: 'everything' })).status).toBe(400);
+  });
+
+  it('returns the suggestion with the message itself', async () => {
+    const id = stored('row-1').mailboxMessageId;
+    const res = await request(app).get(`/api/v1/mailbox/messages/${id}`).set(cookieFor(nicFrontOfficeUser()));
+    expect(res.body.autoReply).toMatchObject({ status: 'SUGGESTED', draft: expect.stringMatching(/^Dear Sir\/Madam/) });
   });
 });

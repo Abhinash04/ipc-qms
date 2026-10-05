@@ -23,6 +23,14 @@ export const AUTO_REPLY_STATUS = Object.freeze({
   DECLINED: 'DECLINED',
 });
 
+/** The statuses that keep a mail in the Auto Reply bucket; every other mail is for a person. */
+export const AUTO_REPLY_BUCKET = Object.freeze([
+  AUTO_REPLY_STATUS.SUGGESTED,
+  AUTO_REPLY_STATUS.APPROVING,
+  AUTO_REPLY_STATUS.FAILED,
+  AUTO_REPLY_STATUS.SENT,
+]);
+
 const SOURCES = ['nic-browser'];
 const BACKLOG_BATCH = 100;
 

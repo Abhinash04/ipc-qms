@@ -39,6 +39,8 @@ mailboxMessageSchema.index({ to: 1, source: 1, removedAt: 1, receivedAt: -1, mai
 
 mailboxMessageSchema.index({ to: 1, source: 1, removedAt: 1, mailCategory: 1, receivedAt: -1 });
 
+mailboxMessageSchema.index({ to: 1, source: 1, removedAt: 1, 'autoReply.status': 1, receivedAt: -1 });
+
 mailboxMessageSchema.index(
   { providerMessageId: 1 },
   { unique: true, partialFilterExpression: { providerMessageId: { $type: 'string' } } },

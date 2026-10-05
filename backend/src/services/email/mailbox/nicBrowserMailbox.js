@@ -14,7 +14,7 @@ import { searchFilter } from './messageView.js';
 import * as triage from './triage.js';
 import * as categorizer from './categorizer.js';
 import * as autoReply from '../../autoReply/assess.js';
-import { MAIL_CATEGORIES, REGISTERED, UNCLASSIFIED } from '../../../constants/mailCategories.js';
+import { MAIL_BUCKETS, MAIL_CATEGORIES, REGISTERED, UNCLASSIFIED } from '../../../constants/mailCategories.js';
 
 export const SOURCE = 'nic-browser';
 
@@ -234,10 +234,12 @@ async function registeredMessageIds() {
   return [...new Set([...cased, ...accepted])];
 }
 
-async function listFilter(recipient, { unreadOnly = false, junkOnly = false, q, category } = {}) {
+async function listFilter(recipient, { unreadOnly = false, junkOnly = false, q, category, bucket } = {}) {
   const filter = { ...scope(recipient), ...searchFilter(q) };
   const ids = [];
   if (unreadOnly) filter.ingested = false;
+  if (bucket === MAIL_BUCKETS.AUTO_REPLY) filter['autoReply.status'] = { $in: autoReply.AUTO_REPLY_BUCKET };
+  if (bucket === MAIL_BUCKETS.HUMAN) filter['autoReply.status'] = { $nin: autoReply.AUTO_REPLY_BUCKET };
   if (junkOnly) ids.push({ mailboxMessageId: { $in: await triage.junkMessageIds() } });
   if (category === REGISTERED) {
     ids.push({ mailboxMessageId: { $in: await registeredMessageIds() } });
@@ -249,11 +251,11 @@ async function listFilter(recipient, { unreadOnly = false, junkOnly = false, q, 
   return filter;
 }
 
-async function list(recipient, { unreadOnly = false, junkOnly = false, q, category, limit, offset = 0 } = {}) {
+async function list(recipient, { unreadOnly = false, junkOnly = false, q, category, bucket, limit, offset = 0 } = {}) {
   if (!isConnected()) throw unavailable();
   syncIfDue(recipient);
 
-  let query = MailboxMessage.find(await listFilter(recipient, { unreadOnly, junkOnly, q, category }))
+  let query = MailboxMessage.find(await listFilter(recipient, { unreadOnly, junkOnly, q, category, bucket }))
     .select('-bodyHtml')
     .sort({ receivedAt: -1, mailboxMessageId: -1 });
   if (limit) query = query.skip(offset).limit(limit);
@@ -280,6 +282,16 @@ async function categoryCounts(recipient, { category: _category, ...options } = {
     counts[key] += 1;
   }
   return counts;
+}
+
+/** How many mails each bucket holds, whatever category is picked. */
+async function bucketCounts(recipient, { category: _category, bucket: _bucket, ...options } = {}) {
+  if (!isConnected()) throw unavailable();
+  const [all, autoReplies] = await Promise.all([
+    MailboxMessage.countDocuments(await listFilter(recipient, options)),
+    MailboxMessage.countDocuments(await listFilter(recipient, { ...options, bucket: MAIL_BUCKETS.AUTO_REPLY })),
+  ]);
+  return { [MAIL_BUCKETS.ALL]: all, [MAIL_BUCKETS.AUTO_REPLY]: autoReplies, [MAIL_BUCKETS.HUMAN]: all - autoReplies };
 }
 
 async function get(recipient, id) {
@@ -360,6 +372,7 @@ export {
   list,
   count,
   categoryCounts,
+  bucketCounts,
   get,
   markRead,
   requestSync,

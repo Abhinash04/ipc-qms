@@ -62,6 +62,13 @@ export const UNCLASSIFIED = 'UNCLASSIFIED';
 
 export const REGISTERED = 'REGISTERED';
 
+// The mailbox's top-level views: every mail, the mails offered an automatic reply, and the rest.
+export const MAIL_BUCKETS = Object.freeze({
+  ALL: 'all',
+  AUTO_REPLY: 'auto_reply',
+  HUMAN: 'human',
+});
+
 export const CATEGORY_VERSION = 1;
 
 export const CATEGORY_CONFIDENCE_FLOOR = 0.6;
