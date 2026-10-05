@@ -10,7 +10,11 @@ vi.mock('../models/AuditEvent.js', async () => {
   return { AuditEvent: memoryDb.model('AuditEventChain', { unique: ['seq'] }) };
 });
 
+import request from 'supertest';
 import env from '../config/env.js';
+import app from '../app.js';
+import { authHeader } from './helpers/auth.js';
+import { ROLES } from '../constants/roles.js';
 import * as audit from '../services/audit/auditService.js';
 import { AuditEvent } from '../models/AuditEvent.js';
 import { memoryDb } from './support/memoryDb.js';
@@ -179,6 +183,20 @@ describe('verification finds every kind of tampering', () => {
     await recordMany(2);
 
     expect(await audit.verifyChain()).toMatchObject({ ok: true, checked: 2, legacy: 1 });
+  });
+});
+
+describe('checking the chain from the Audit Trail page', () => {
+  it('records every check that finds a break, however often it is repeated', async () => {
+    await recordMany(3);
+    await AuditEvent.updateOne({ seq: 2 }, { $set: { details: { i: 999 } } });
+
+    const admin = authHeader(ROLES.ADMIN);
+    await request(app).get('/api/v1/audit/verify').set(admin).expect(200);
+    await request(app).get('/api/v1/audit/verify').set(admin).expect(200);
+
+    const checks = (await rows()).filter((row) => row.action === AUDIT_ACTIONS.AUDIT_VERIFIED);
+    expect(checks.map((row) => row.result)).toEqual(['failure', 'failure']);
   });
 });
 

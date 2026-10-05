@@ -70,9 +70,16 @@ export function chainStatus(row) {
 
 const readableKey = Object.fromEntries(READABLE_COLUMNS.map(([key, header]) => [header, key]));
 
+// Each row is worded once per export, not once per readable column.
+const worded = new WeakMap();
+function viewOf(row) {
+  if (!worded.has(row)) worded.set(row, present(row));
+  return worded.get(row);
+}
+
 function cellValue(row, column) {
   if (column === 'chain') return chainStatus(row);
-  if (readableKey[column]) return present(row)[readableKey[column]] ?? '';
+  if (readableKey[column]) return viewOf(row)[readableKey[column]] ?? '';
   const value = row[column];
   if (value === null || value === undefined) return '';
   if (typeof value === 'object') return JSON.stringify(value);
@@ -410,7 +417,7 @@ export function buildPdf({
         { label: 'Result', width: 40, colour: (text) => RESULT_COLOUR[text] },
       ],
       rows.map((row, index) => {
-        const view = present(row);
+        const view = viewOf(row);
         return [
           String(index + 1),
           view.auditId === '-' ? 'Not issued' : view.auditId,

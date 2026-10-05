@@ -157,4 +157,13 @@ describe('GET /audit/verify', () => {
     expect(res.body).toMatchObject({ ok: true, checked: expect.any(Number), unpersisted: expect.any(Number) });
     expect(await audit.list({ action: AUDIT_ACTIONS.AUDIT_VERIFIED })).toHaveLength(1);
   });
+
+  it('records a passing re-check once a minute per person', async () => {
+    const superAdmin = authHeader(ROLES.SUPER_ADMIN);
+    await request(app).get('/api/v1/audit/verify').set(superAdmin).expect(200);
+    await request(app).get('/api/v1/audit/verify').set(superAdmin).expect(200);
+
+    const checks = await audit.list({ action: AUDIT_ACTIONS.AUDIT_VERIFIED });
+    expect(checks.filter((event) => event.actorRole === ROLES.SUPER_ADMIN)).toHaveLength(1);
+  });
 });

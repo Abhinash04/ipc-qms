@@ -30,17 +30,21 @@ function readFilters(query) {
   };
 }
 
-// Looking at the audit trail is itself recorded, once a minute per person and filter set, so a
-// page that refetches does not flood the trail.
-const VIEW_THROTTLE_MS = 60 * 1000;
-const recentViews = new Map();
+// Looking at the audit trail, and a passing re-check of it, are themselves recorded once a
+// minute per person (and filter set), so a page that refetches does not flood the trail.
+const THROTTLE_MS = 60 * 1000;
+const recentChecks = new Map();
+
+function firstThisMinute(key) {
+  const now = Date.now();
+  if (now - (recentChecks.get(key) || 0) < THROTTLE_MS) return false;
+  recentChecks.set(key, now);
+  if (recentChecks.size > 2000) recentChecks.delete(recentChecks.keys().next().value);
+  return true;
+}
 
 async function recordView(req, scope) {
-  const key = `${req.user?.id}|${JSON.stringify(scope)}`;
-  const now = Date.now();
-  if (now - (recentViews.get(key) || 0) < VIEW_THROTTLE_MS) return;
-  recentViews.set(key, now);
-  if (recentViews.size > 2000) recentViews.delete(recentViews.keys().next().value);
+  if (!firstThisMinute(`view|${req.user?.id}|${JSON.stringify(scope)}`)) return;
   await audit.record({ action: AUDIT_ACTIONS.AUDIT_VIEWED, ...actorOf(req), queryId: scope.queryId ?? null, details: scope });
 }
 
@@ -104,19 +108,22 @@ async function verifyChain(req, res, next) {
   try {
     const report = await audit.verifyChain();
 
-    await audit.record({
-      action: AUDIT_ACTIONS.AUDIT_VERIFIED,
-      ...actorOf(req),
-      result: report.ok ? AUDIT_RESULTS.SUCCESS : AUDIT_RESULTS.FAILURE,
-      details: {
-        ok: report.ok,
-        checked: report.checked,
-        legacy: report.legacy,
-        unpersisted: report.unpersisted,
-        head: report.head,
-        firstBreak: report.firstBreak,
-      },
-    });
+    // A break is always recorded.
+    if (!report.ok || firstThisMinute(`verify|${req.user?.id}`)) {
+      await audit.record({
+        action: AUDIT_ACTIONS.AUDIT_VERIFIED,
+        ...actorOf(req),
+        result: report.ok ? AUDIT_RESULTS.SUCCESS : AUDIT_RESULTS.FAILURE,
+        details: {
+          ok: report.ok,
+          checked: report.checked,
+          legacy: report.legacy,
+          unpersisted: report.unpersisted,
+          head: report.head,
+          firstBreak: report.firstBreak,
+        },
+      });
+    }
 
     res.status(HTTP_STATUS.OK).json(report);
   } catch (error) {
