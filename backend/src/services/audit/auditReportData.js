@@ -60,6 +60,7 @@ export function periodSummary(rows, verification = null) {
     ['Failed sign-in attempts', count(rows, 'LOGIN_FAILED')],
     ['Sign-outs', count(rows, 'LOGOUT')],
     ['Administrative changes', privilegedActivity(rows).filter((row) => row.action !== 'AUDIT_EXPORTED').length],
+    ['Automatic replies approved', count(rows, 'AUTO_REPLY_APPROVED')],
     ['Audit report exports', count(rows, 'AUDIT_EXPORTED')],
     ['Audit trail views', count(rows, 'AUDIT_VIEWED')],
     ['Attachments opened or downloaded', count(rows, 'ATTACHMENT_DOWNLOADED')],

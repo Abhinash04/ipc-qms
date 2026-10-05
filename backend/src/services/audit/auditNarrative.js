@@ -262,6 +262,14 @@ const SENTENCES = {
   SENT_APPEND_FAILED: () => 'Sent an email, but could not save a copy in the Sent folder',
   EMAIL_DELIVERY_CONFIRMED: (e) => `Confirmed an email for ${queryWord(e)} was sent`,
   EMAIL_DELIVERY_DENIED: (e) => `Confirmed an email for ${queryWord(e)} was not sent`,
+
+  AUTO_REPLY_SUGGESTED: (e) => ({
+    action: `Suggested an automatic reply to an email${field(e, 'topic') ? ` on ${String(field(e, 'topic')).toLowerCase()}` : ''}`,
+    other: emailFrom(e) ? from(emailFrom(e)) : null,
+  }),
+  AUTO_REPLY_APPROVED: (e) =>
+    `Approved the automatic reply for ${queryWord(e)}${field(e, 'edited') ? ', after editing it' : ', as drafted'}`,
+  AUTO_REPLY_DECLINED: (e) => withReason('Sent an email to Human Intervention instead of an automatic reply', field(e, 'reason')),
 };
 
 /**

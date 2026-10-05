@@ -63,6 +63,9 @@ const ACTIVITY = {
   QUERY_TRANSFERRED: 'Handed over to another officer',
   QUERY_AUTO_TRANSFERRED: 'Handed over to another officer automatically',
   QUERY_AUTO_TRANSFER_FAILED: 'Automatic handover found no officer',
+  AUTO_REPLY_SUGGESTED: 'Automatic reply suggested',
+  AUTO_REPLY_APPROVED: 'Automatic reply approved',
+  AUTO_REPLY_DECLINED: 'Automatic reply turned down',
   QUERY_PULLED_BACK: 'Moved back to an earlier step',
   DRAFT_CREATED: 'Reply started',
   DRAFT_GENERATED: 'Suggested reply prepared',
@@ -395,6 +398,13 @@ const PLAIN_DETAILS = {
       .filter(Boolean)
       .join('. '),
   CASE_ASSOCIATED: () => 'Email linked to this query',
+  AUTO_REPLY_SUGGESTED: (d) =>
+    [`Matched the supported question on ${d.topic || 'a general topic'} at ${Math.round((d.confidence ?? 0) * 100)}%`, fromLine(d)]
+      .filter(Boolean)
+      .join('. '),
+  AUTO_REPLY_APPROVED: (d) =>
+    `Reply on ${d.topic || 'a general topic'} ${d.edited ? 'edited by the Front Office before sending' : 'sent as drafted'}`,
+  AUTO_REPLY_DECLINED: (d) => `Sent to Human Intervention${d.reason ? `: ${d.reason}` : ''}`,
 };
 
 /** The event's particulars as plain sentences: problem first, then details, then AI facts. */
@@ -499,6 +509,8 @@ const STATE_CHANGES = {
   AI_SUMMARY_GENERATED: () => ['No summary', 'Summary prepared'],
   AI_DRAFT_GENERATED: () => ['No suggested reply', 'Suggested reply prepared'],
   DRAFT_GENERATED: () => ['No reply', 'Suggested reply prepared'],
+  AUTO_REPLY_SUGGESTED: () => ['Not checked', 'Automatic reply suggested'],
+  AUTO_REPLY_DECLINED: () => ['Automatic reply suggested', 'Sent to Human Intervention'],
 };
 
 function stateChange(event) {
