@@ -172,6 +172,15 @@ const SENTENCES = {
     ),
     other: to(personWithRole(piped(e, 'Transferred To') || e.changes?.assignee?.to)),
   }),
+  QUERY_AUTO_TRANSFERRED: (e) => ({
+    action: withReason(
+      `Handed ${queryWord(e)} over automatically from ${personWithRole(piped(e, 'Transferred From') || e.changes?.assignee?.from)}`,
+      piped(e, 'Reason'),
+    ),
+    other: to(personWithRole(piped(e, 'Transferred To') || e.changes?.assignee?.to)),
+  }),
+  QUERY_AUTO_TRANSFER_FAILED: (e) =>
+    withReason(`Could not hand ${queryWord(e)} over automatically; it stays with ${personWithRole(piped(e, 'Held By'))}`, piped(e, 'Reason')),
   QUERY_PULLED_BACK: (e) => {
     const target = e.changes?.status?.to || field(e, 'targetStage') || piped(e, 'Pulled Back To');
     return withReason(`Moved ${queryWord(e)} back to the step "${stage(target)}"`, field(e, 'reason') || piped(e, 'Reason'));

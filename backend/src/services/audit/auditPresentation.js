@@ -61,6 +61,8 @@ const ACTIVITY = {
   QUERY_ASSIGNED: 'Given to an officer to answer',
   ASSIGNMENT_OVERRIDDEN: 'Different officer chosen than suggested',
   QUERY_TRANSFERRED: 'Handed over to another officer',
+  QUERY_AUTO_TRANSFERRED: 'Handed over to another officer automatically',
+  QUERY_AUTO_TRANSFER_FAILED: 'Automatic handover found no officer',
   QUERY_PULLED_BACK: 'Moved back to an earlier step',
   DRAFT_CREATED: 'Reply started',
   DRAFT_GENERATED: 'Suggested reply prepared',

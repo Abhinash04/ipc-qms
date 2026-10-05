@@ -7,6 +7,7 @@ import { AUDIT_ACTIONS, AUDIT_RESULTS } from '../../constants/auditActions.js';
 import { allUsers } from '../../constants/users.js';
 import * as gemmaService from '../ai/gemmaService.js';
 import * as audit from '../audit/auditService.js';
+import { change } from '../audit/caseChanges.js';
 import { autoTransferSettings, deadlineFrom, sanitizeRanking, TRANSFER_TYPES } from './assignmentClock.js';
 
 const BATCH = 50;
@@ -168,6 +169,7 @@ export async function executeAutoTransfer(
     actorRole: 'SYSTEM',
     result: AUDIT_RESULTS.SUCCESS,
     details: `Case ID: ${query.queryId} | Transferred From: ${from} | Transferred To: ${to} | Transferred By: System (automatic) | Reason: ${reason}${match}`,
+    changes: change('assignee', query.currentAssigneeId, next.user.id),
   });
   await notify({
     notificationId: `NOTIF-AUTO-${query.queryId}-${updated.autoTransferCount}`,

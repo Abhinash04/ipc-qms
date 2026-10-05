@@ -196,6 +196,7 @@ describe('1-2. sequential transfers follow the AI recommendation order', () => {
     expect(rows[0].details).toContain(`Transferred From: ${OFFICER_A.name}`);
     expect(rows[0].details).toContain(`Transferred To: ${OFFICER_B.name}`);
     expect(rows[0].details).toContain('AI Match: 80%');
+    expect(rows[0].changes).toEqual({ assignee: { from: OFFICER_A.id, to: OFFICER_B.id } });
 
     const notes = await Notification.find({ queryId: CASE, recipientUserId: OFFICER_B.id }).lean();
     expect(notes).toHaveLength(1);

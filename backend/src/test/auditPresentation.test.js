@@ -36,6 +36,37 @@ describe('how an audit event reads', () => {
     for (const action of Object.values(AUDIT_ACTIONS)) expect(activityLabel(action)).not.toMatch(/_/);
   });
 
+  it('reads an automatic transfer like a person’s, with who it went from and to', () => {
+    const view = present({
+      action: 'QUERY_AUTO_TRANSFERRED',
+      actorType: 'system',
+      actorRole: 'SYSTEM',
+      queryId: 'QRY-2026-00050',
+      details:
+        'Case ID: QRY-2026-00050 | Transferred From: Neha Singh | Transferred To: EduTR Zairza | Transferred By: System (automatic) | Reason: No action within 30 minutes',
+      changes: { assignee: { from: 'USR-0004', to: 'USR-0003' } },
+    });
+    expect(view).toMatchObject({
+      who: 'System (automatic)',
+      activity: 'Handed over to another officer automatically',
+      other: 'To: EduTR Zairza (Officer-in-Charge)',
+      previousValue: 'Neha Singh',
+      newValue: 'EduTR Zairza',
+    });
+    expect(view.did).toMatch(/^Handed query QRY-2026-00050 over automatically from Neha Singh \(.+\) \(reason: No action within 30 minutes\)$/);
+  });
+
+  it('says why an automatic transfer found no one', () => {
+    const view = present({
+      action: 'QUERY_AUTO_TRANSFER_FAILED',
+      actorType: 'system',
+      queryId: 'QRY-2026-00050',
+      result: 'failure',
+      details: 'Case ID: QRY-2026-00050 | Held By: Neha Singh | Reason: No eligible recommended official remains',
+    });
+    expect(view.did).toMatch(/^Could not hand query QRY-2026-00050 over automatically; it stays with Neha Singh \(.+\) \(reason: No eligible/);
+  });
+
   it('puts each activity in a module', () => {
     expect(moduleOf('LOGIN_FAILED')).toBe('Login & access');
     expect(moduleOf('EMAIL_SENT')).toBe('Email');

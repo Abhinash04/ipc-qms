@@ -92,6 +92,14 @@ describe("the period summary", () => {
     expect(value(summary, "Critical audit exceptions")).toBe(0);
   });
 
+  it("counts automatic transfers as reassignments", () => {
+    const rows = [
+      { timestamp: "2026-09-01T05:00:00.000Z", action: "QUERY_TRANSFERRED", queryId: "Q1", actorType: "human" },
+      { timestamp: "2026-09-01T06:00:00.000Z", action: "QUERY_AUTO_TRANSFERRED", queryId: "Q2", actorType: "system" },
+    ];
+    expect(value(periodSummary(rows), "Queries reassigned (transferred)")).toBe(2);
+  });
+
   it("counts integrity breaks as critical exceptions", () => {
     expect(
       value(
