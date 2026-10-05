@@ -31,6 +31,7 @@ import { ROLES } from '../constants/roles.js';
 import { AUDIT_ACTIONS } from '../constants/auditActions.js';
 import { QueryCase, AuditEvent } from '../models/index.js';
 import * as audit from '../services/audit/auditService.js';
+import { clearRejectedSessionThrottle } from '../middleware/verifyToken.js';
 import { diffCase } from '../services/audit/caseChanges.js';
 import { present } from '../services/audit/auditPresentation.js';
 
@@ -41,6 +42,7 @@ const eventsOf = async (action) => (await AuditEvent.find({ action }).lean()).so
 beforeEach(() => {
   memoryDb.reset();
   audit.resetBuffer();
+  clearRejectedSessionThrottle();
 });
 
 describe('sessions', () => {
@@ -67,6 +69,8 @@ describe('sessions', () => {
   });
 
   it('records a rejected session when an invalid one is presented, and nothing when none is', async () => {
+    await request(app).get('/api/v1/audit').set('Cookie', `${authConfig.COOKIE_NAME}=forged.token.value`).expect(401);
+    // The same address again within the minute (an expired tab that keeps polling) adds nothing.
     await request(app).get('/api/v1/audit').set('Cookie', `${authConfig.COOKIE_NAME}=forged.token.value`).expect(401);
     await request(app).get('/api/v1/audit').expect(401);
 
