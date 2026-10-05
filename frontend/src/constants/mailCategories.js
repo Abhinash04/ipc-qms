@@ -21,9 +21,9 @@ export const MAIL_BUCKETS = Object.freeze({
 });
 
 export const MAIL_BUCKET_META = Object.freeze({
-  [MAIL_BUCKETS.ALL]: { label: 'All Mails', description: 'Every mail in the mailbox' },
-  [MAIL_BUCKETS.AUTO_REPLY]: { label: 'Auto Reply', description: 'General questions with a reply ready for your approval' },
-  [MAIL_BUCKETS.HUMAN]: { label: 'Human Intervention', description: 'Mail for the standard workflow' },
+  [MAIL_BUCKETS.ALL]: { label: 'All Mails', description: 'All categories and incoming mails' },
+  [MAIL_BUCKETS.AUTO_REPLY]: { label: 'Auto Reply', description: 'General queries with AI draft replies' },
+  [MAIL_BUCKETS.HUMAN]: { label: 'Human Intervention', description: 'Queries requiring manual processing' },
 });
 
 // What became of a mail's automatic reply (backend services/autoReply/assess.js).

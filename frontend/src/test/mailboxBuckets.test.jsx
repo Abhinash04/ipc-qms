@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
@@ -99,19 +99,23 @@ beforeEach(async () => {
   useAuthStore.setState({ currentUser: FRONT_OFFICE });
 });
 
-const tab = (name) => screen.getByRole('tab', { name: new RegExp(`^${name}`) });
-const pick = (name) => {
-  fireEvent.mouseDown(tab(name), { button: 0 });
-  fireEvent.click(tab(name));
-};
+const bucket = (name) => screen.getByRole('button', { name: new RegExp(`^${name},`) });
+const pick = (name) => fireEvent.click(bucket(name));
 
 describe('the mailbox buckets', () => {
   it('offers All Mails, Auto Reply and Human Intervention with their counts, All Mails first', async () => {
     renderInbox();
     await screen.findByText('Paracetamol');
 
-    expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual(['All Mails3', 'Auto Reply1', 'Human Intervention2']);
-    expect(tab('All Mails')).toHaveAttribute('aria-selected', 'true');
+    const views = screen.getByRole('group', { name: 'Mailbox views' });
+    expect(within(views).getAllByRole('button').map((b) => b.getAttribute('aria-label'))).toEqual([
+      'All Mails, 3 messages',
+      'Auto Reply, 1 message',
+      'Human Intervention, 2 messages',
+    ]);
+    expect(bucket('All Mails')).toHaveAttribute('aria-pressed', 'true');
+    expect(bucket('Auto Reply')).toHaveAttribute('aria-pressed', 'false');
+    expect(bucket('Auto Reply')).toHaveAccessibleDescription('General queries with AI draft replies');
     expect(fetchMailboxMessages).toHaveBeenLastCalledWith(expect.objectContaining({ bucket: undefined }));
   });
 
@@ -132,6 +136,7 @@ describe('the mailbox buckets', () => {
     pick('Auto Reply');
 
     await waitFor(() => expect(fetchMailboxMessages).toHaveBeenLastCalledWith(expect.objectContaining({ bucket: 'auto_reply', offset: 0 })));
+    expect(bucket('Auto Reply')).toHaveAttribute('aria-pressed', 'true');
     await waitFor(() => expect(screen.queryByRole('group', { name: 'Filter by category' })).toBeNull());
     expect(screen.getByRole('link', { name: 'Review the automatic reply to MSG-00001' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Accept message MSG-00001' })).toBeNull();
@@ -153,6 +158,6 @@ describe('the mailbox buckets', () => {
     renderInbox();
     await screen.findByText('Plain inbox');
 
-    expect(screen.queryByRole('tab')).toBeNull();
+    expect(screen.queryByRole('group', { name: 'Mailbox views' })).toBeNull();
   });
 });
