@@ -42,8 +42,3 @@ export async function resolveHostname(ip) {
   if (cache.size > CACHE_MAX) cache.delete(cache.keys().next().value);
   return name;
 }
-
-/** For tests. */
-export function clearHostnameCache() {
-  cache.clear();
-}
