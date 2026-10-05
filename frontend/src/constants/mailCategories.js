@@ -13,6 +13,29 @@ export const UNCLASSIFIED = 'UNCLASSIFIED';
 
 export const REGISTERED = 'REGISTERED';
 
+// The mailbox's top-level views (backend constants/mailCategories.js).
+export const MAIL_BUCKETS = Object.freeze({
+  ALL: 'all',
+  AUTO_REPLY: 'auto_reply',
+  HUMAN: 'human',
+});
+
+export const MAIL_BUCKET_META = Object.freeze({
+  [MAIL_BUCKETS.ALL]: { label: 'All Mails', description: 'Every mail in the mailbox' },
+  [MAIL_BUCKETS.AUTO_REPLY]: { label: 'Auto Reply', description: 'General questions with a reply ready for your approval' },
+  [MAIL_BUCKETS.HUMAN]: { label: 'Human Intervention', description: 'Mail for the standard workflow' },
+});
+
+// What became of a mail's automatic reply (backend services/autoReply/assess.js).
+export const AUTO_REPLY_STATUS = Object.freeze({
+  SUGGESTED: 'SUGGESTED',
+  NOT_ELIGIBLE: 'NOT_ELIGIBLE',
+  APPROVING: 'APPROVING',
+  SENT: 'SENT',
+  FAILED: 'FAILED',
+  DECLINED: 'DECLINED',
+});
+
 export const REGISTERED_META = Object.freeze({
   label: 'Registered Queries',
   tab: 'Registered queries',

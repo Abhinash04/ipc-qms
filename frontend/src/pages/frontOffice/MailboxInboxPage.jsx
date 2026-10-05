@@ -35,6 +35,9 @@ import {
 import { Button } from "@/components/ui/button";
 import { MailCategoryBadge } from "@/components/email/MailCategoryBadge";
 import { ALL_CATEGORIES, MailCategoryCards } from "@/components/email/MailCategoryCards";
+import { MailBucketTabs } from "@/components/email/MailBucketTabs";
+import { AutoReplyBadge } from "@/components/email/AutoReplyBadge";
+import { AUTO_REPLY_STATUS, MAIL_BUCKETS } from "@/constants/mailCategories";
 import {
   useMailboxIngestion,
   notifyMailboxCheck,
@@ -591,6 +594,7 @@ function MailboxRow({
   correctingCategory,
   caseHref,
   messageHref,
+  reviewReply,
 }) {
   const navigate = useNavigate();
   const sender = parseSender(message.from);
@@ -685,6 +689,7 @@ function MailboxRow({
             messageHref={messageHref}
             className="me-0.5"
           />
+          <AutoReplyBadge autoReply={message.autoReply} />
           <MailIcon className="h-3.5 w-3.5 text-purple-500 shrink-0" />
           <span className="truncate">
             {toSnippet(message.body) || "Email Enquiry"}
@@ -733,17 +738,27 @@ function MailboxRow({
       </div>
 
       <div className="flex items-center justify-center gap-2 w-full xl:w-auto">
-        <RowValidationControls
-          message={message}
-          decision={decision}
-          junk={junk}
-          pending={pending}
-          confirming={confirming?.action === "accept" || confirming?.action === "reject" ? confirming.action : null}
-          onAsk={onAskDecision}
-          onCancel={onCancelDecision}
-          onConfirm={onConfirmDecision}
-          onRescue={onRescue}
-        />
+        {reviewReply ? (
+          <Link
+            to={openPath}
+            aria-label={`Review the automatic reply to ${message.mailboxMessageId}`}
+            className="inline-flex h-8 items-center gap-1.5 rounded-xl bg-primary px-3 text-[12px] font-bold text-white shadow-2xs hover:bg-primary/90"
+          >
+            Review reply
+          </Link>
+        ) : (
+          <RowValidationControls
+            message={message}
+            decision={decision}
+            junk={junk}
+            pending={pending}
+            confirming={confirming?.action === "accept" || confirming?.action === "reject" ? confirming.action : null}
+            onAsk={onAskDecision}
+            onCancel={onCancelDecision}
+            onConfirm={onConfirmDecision}
+            onRescue={onRescue}
+          />
+        )}
         <RowDeleteControls
           message={message}
           known={known}
@@ -823,17 +838,19 @@ export function MailboxInboxPage() {
   const [deciding, setDeciding] = useState(false);
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState(ALL_CATEGORIES);
+  const [bucket, setBucket] = useState(MAIL_BUCKETS.ALL);
   const [offset, setOffset] = useState(0);
   const q = useDebouncedValue(search.trim(), SEARCH_DEBOUNCE_MS);
 
   const queryClient = useQueryClient();
 
   const inbox = useQuery({
-    queryKey: ["mailbox", "list", { q, category, offset }],
+    queryKey: ["mailbox", "list", { q, category, bucket, offset }],
     queryFn: () =>
       fetchMailboxMessages({
         unreadOnly: false,
         category: category === ALL_CATEGORIES ? undefined : category,
+        bucket: bucket === MAIL_BUCKETS.ALL ? undefined : bucket,
         q,
         limit: PAGE_SIZE,
         offset,
@@ -994,7 +1011,15 @@ export function MailboxInboxPage() {
     setOffset(0);
   };
 
-  const filtered = Boolean(q) || category !== ALL_CATEGORIES;
+  // The Auto Reply bucket is its own list, without the category cards.
+  const onBucketChange = (value) => {
+    setBucket(value);
+    setCategory(ALL_CATEGORIES);
+    setOffset(0);
+  };
+  const autoReplies = bucket === MAIL_BUCKETS.AUTO_REPLY;
+
+  const filtered = Boolean(q) || category !== ALL_CATEGORIES || bucket !== MAIL_BUCKETS.ALL;
 
   const getQueryDetailPath = (queryId) => {
     if (paths.QUERY_DETAIL) {
@@ -1050,7 +1075,11 @@ export function MailboxInboxPage() {
           onSearchChange={onSearchChange}
         />
 
-        {inbox.data?.categoryCounts && (
+        {inbox.data?.bucketCounts && (
+          <MailBucketTabs value={bucket} counts={inbox.data.bucketCounts} onChange={onBucketChange} />
+        )}
+
+        {inbox.data?.categoryCounts && !autoReplies && (
           <MailCategoryCards
             value={category}
             counts={inbox.data.categoryCounts}
@@ -1124,6 +1153,7 @@ export function MailboxInboxPage() {
                       setConfirming({ id: message.mailboxMessageId, action })
                     }
                     onCancelDecision={() => setConfirming(null)}
+                    reviewReply={autoReplies && message.autoReply?.status === AUTO_REPLY_STATUS.SUGGESTED}
                     onConfirmDecision={() =>
                       confirming?.action === "accept"
                         ? onAcceptMessage(message)

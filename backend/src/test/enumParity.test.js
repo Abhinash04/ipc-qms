@@ -9,7 +9,8 @@ import {
 import { CLIENT_AUDIT_EVENTS, isKnownAuditAction } from '../constants/auditActions.js';
 import { activityLabel } from '../services/audit/auditPresentation.js';
 import { ROLES } from '../constants/roles.js';
-import { MAIL_CATEGORIES, RELATION_KINDS, UNCLASSIFIED, REGISTERED, CATEGORY_SOURCES } from '../constants/mailCategories.js';
+import { MAIL_BUCKETS, MAIL_CATEGORIES, RELATION_KINDS, UNCLASSIFIED, REGISTERED, CATEGORY_SOURCES } from '../constants/mailCategories.js';
+import { AUTO_REPLY_STATUS } from '../services/autoReply/assess.js';
 
 import * as clientEnums from '../../../frontend/src/constants/statusEnums.js';
 import { ROLES as CLIENT_ROLES } from '../../../frontend/src/constants/roles.js';
@@ -60,6 +61,8 @@ describe('mail category parity with the client', () => {
     expect(RELATION_KINDS).toEqual(clientCategories.RELATION_KINDS);
     expect(UNCLASSIFIED).toBe(clientCategories.UNCLASSIFIED);
     expect(REGISTERED).toBe(clientCategories.REGISTERED);
+    expect(MAIL_BUCKETS).toEqual(clientCategories.MAIL_BUCKETS);
+    expect(AUTO_REPLY_STATUS).toEqual(clientCategories.AUTO_REPLY_STATUS);
   });
 
   it('gives every category and every source a label in the client', () => {
