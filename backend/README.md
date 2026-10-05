@@ -316,15 +316,113 @@ NIC endpoints return HTTP 200 even on failure, carrying `{ ok: false, stage, err
 can tell _where_ it failed (connect / authenticate / open_mailbox / fetch / submit).
 
 ### Audit
+<<<<<<< Updated upstream
 
 | Method | Path                    | Guards                           |
 | ------ | ----------------------- | -------------------------------- |
 | GET    | `/audit`                | `verifyRole(ADMIN, SUPER_ADMIN)` |
 | GET    | `/audit/summary`        | `verifyRole(ADMIN, SUPER_ADMIN)` |
 | GET    | `/audit/query/:queryId` | `verifyRole(ADMIN, SUPER_ADMIN)` |
+=======
+| Method | Path | Guards |
+|---|---|---|
+| GET | `/audit` | `verifyRole(ADMIN, SUPER_ADMIN)` |
+| GET | `/audit/summary` | `verifyRole(ADMIN, SUPER_ADMIN)` |
+| GET | `/audit/verify` | `verifyRole(ADMIN, SUPER_ADMIN)` |
+| GET | `/audit/export?format=csv\|pdf&…filters` | `verifyRole(ADMIN, SUPER_ADMIN)` |
+| GET | `/audit/query/:queryId` | `verifyRole(ADMIN, SUPER_ADMIN)` |
+>>>>>>> Stashed changes
 
 `GET /audit/summary` passes a caller's `from`/`to` through to its `overall` half, so it can answer
-for any time window; the `today` half always overrides `from`.
+for any time window; the `today` half always overrides `from`. No route updates or deletes an
+audit event.
+
+**The trail is tamper-evident** (`services/audit/auditChain.js`, `auditService.js`):
+
+- **Hash chain.** Every persisted event carries `seq` (1, 2, 3 … with no gaps), `prevHash` (the hash
+  of event `seq − 1`, or 64 zeros for event 1) and `hash = HMAC-SHA256(AUDIT_HMAC_SECRET,
+  canonicalJSON(fields + seq + prevHash))`. Editing a row breaks its own hash, deleting one leaves a
+  `seq` gap, and reordering or splicing breaks a `prevHash` link. The HMAC is keyed, so write access
+  to MongoDB without the secret cannot rebuild the chain to hide a change. Every backend on one
+  database must share the secret.
+- **Multi-writer safe.** An append reads the chain head and inserts `seq + 1`; a unique partial index
+  on `seq` makes a second writer that raced for the same position fail with a duplicate key and
+  retry. A position is only taken by a successful insert, so the chain never forks or gaps, even with
+  several backends on the shared database. Within one process appends are also serialised, so chain
+  order is call order.
+- **Never throws.** An event that cannot be stored stays in the in-memory buffer with `seq: null`, is
+  reported as *unpersisted* by verify and exports, and does not advance the chain.
+- **Append-only model.** `models/AuditEvent.js` throws on every update, replace, delete and
+  `bulkWrite`, and on re-saving an existing document. `details` and `aiMetadata` are normalised to
+  plain JSON before hashing, and `minimize: false` keeps empty objects, so what is hashed is exactly
+  what MongoDB stores. For production, give the application a MongoDB role that can only `insert` and
+  `find` on `auditevents`, so the model hooks are not the only barrier.
+- **Legacy rows.** Events written before chaining existed (or by an older backend still running
+  against the same database) have no `seq`; they are counted and labelled *legacy*, never treated as
+  breaks.
+- **`GET /audit/verify`** re-computes the chain in `seq` order, in batches of 1000, and answers
+  `{ ok, checked, legacy, unpersisted, head, firstBreak, breaks[≤50] }`, each break with its `seq`, a
+  reason (`gap`, `hash`, `link`, `order`) and a sentence. Each check is audited as `AUDIT_VERIFIED`.
+  Deleting events from the **end** of the chain cannot be detected from the data alone; the head
+  (`seq` and `hash`) printed on every report is the anchor to compare against.
+- **`GET /audit/export`** takes the same filters as `GET /audit` and returns up to 50 000 events,
+  oldest first:
+  - **CSV** — RFC 4180, CRLF, UTF-8 with BOM (Excel keeps Hindi text), every column including `seq`,
+    `prevHash`, `hash` and a `chain` status; a cell beginning `= + - @`, tab or CR is prefixed with
+    `'` so a spreadsheet never runs it as a formula.
+  - **PDF** (`pdfkit`) — a Government of India-format audit trail report
+    (`services/audit/auditReport.js`, sections from `auditReportData.js`, wording from
+    `auditPresentation.js`): report particulars (department — `REPORT_DEPARTMENT` —, environment, period,
+    generated on/by, reference `IPC-QMS/ATR/<yyyy-mm>/<nnn>` counted per month, classification "Official /
+    Internal Use"), then 1 Purpose, 2 Audit Period Summary, 3 Detailed Audit Trail (S.No., Audit ID
+    `AUD-<seq>`, date and time IST, user, role, source IP, case No., module, activity, previous value, new
+    value, result), 4 Mandatory Audit Information, 5 Query Lifecycle (when filtered to one case),
+    6 Authentication Audit by day, 7 Privileged / Administrative Activity, 8 Exception / Security Event
+    Report (refused access, rejected sessions, three or more failed sign-ins per address, integrity
+    breaks; all "Open - for review"), 9 Integrity Controls (a checklist and one verdict line — no hashes),
+    10 Log Retention, 11 Access Control Review, 12 Verification Checklist (20 items; what the app does
+    not do reads "Not applicable" or "Reviewer to confirm", never claimed), 13 Findings and
+    Recommendations, 14 Compliance Statement, 15 Sign-off blocks, and Annexure A. The detailed trail
+    honours every filter; sections 2 and 6–13 cover the whole report period. The built-in fonts are
+    Latin-1, so other scripts print as `?`; the CSV carries them exactly, plus the Annexure B fields
+    (Audit ID, session ID, section, previous/new value, failure reason, log source).
+  - **Previous and new values for every row.** Events stored with `changes` show them as recorded.
+    For a query event stored without them (anything recorded before they were captured), the
+    report works them out from that query's own recorded steps: the status each step leaves a query
+    in (`caseChanges.inferCaseChanges`), against the status the step before left it in; this is
+    display-only and stored events are not changed. Activities that are
+    not query changes show the state they change: a login (Logged out -> Logged in), an email's read
+    state, a mailbox's connection. Only activities with no before/after
+    (opening a file, viewing records) show "-".
+  - **Device name.** Browsers never send the computer's name, so each event's `source.hostname` comes
+    from a reverse DNS lookup of the client IP (`services/audit/hostLookup.js`: 400 ms timeout, cached an
+    hour, ten minutes when DNS has no name; a request from the server's own machine takes its hostname).
+    On a network whose DNS registers its computers this gives names like `IPC-FO-PC07.ipc.local`; where it
+    has none the column shows the IP and browser only. Older events get the name looked up for display
+    when a report is built. The PDF's "Source IP / device" cell shows the full IP, the device name and the
+    browser.
+  - **What is recorded for it.** Each sign-in opens a session (`sid` in the token, `SES-xxxxxxxx`) that
+    every later event of that person carries in `source.sessionId`; sign-out is `LOGOUT`; an expired or
+    forged session presented to the API is `AUTHENTICATION_FAILED` (a missing one is not recorded);
+    viewing the audit trail is `AUDIT_VIEWED`, once a minute per person and filter set. Events that move
+    a case carry `changes` — `{ status | assignee | category | priority: { from, to } }` — from the
+    browser's case saves (diffed on the server) and from the server's own transitions (accept, forward,
+    final approval, dispatch, pull-back). `changes` is hashed only when present, like `actorName` and
+    `source`.
+  - **Who and where.** Every event a person causes records their name (`actorName`) and the request's
+    IP address, browser, method and path (`source`), captured per request
+    (`services/audit/requestContext.js`); AI work a request starts carries that request's IP too.
+    Work no request caused (scheduled sync, purges) records this server's hostname and IP instead, so no new event lacks a source; events
+    from before capture existed read "Not recorded". Both fields are covered by the hash when present and left out when absent, so events recorded
+    before they existed still verify.
+  - Both carry `X-Report-SHA256`, a digest of the exported rows that is identical for the CSV and the
+    PDF of one selection, and `X-File-SHA256` of the exact bytes. The export is itself audited as
+    `AUDIT_EXPORTED` with its format, filters, row count and both digests, so a copy can be matched to
+    the trail later.
+
+Browser workflow events (assign, approve, transfer …) reach the trail through `POST /queries/persist`,
+which takes the actor from the session and checks the action against `CLIENT_AUDIT_EVENTS`; they are
+chained like any other event.
 
 ### Queries — the workflow-state sync API
 
@@ -352,7 +450,10 @@ Five things are enforced:
   only, and clears local state only once the server has accepted — a refused reset used to empty the
   tab anyway and leave it working against a zeroed counter while the server still held the cases.
   `middleware/refuseDestructive.js` answers 409 with the reason when `NODE_ENV=production` or
-  `DATABASE_URL` points at a shared database, and the UI shows that reason.
+  `DATABASE_URL` points at a shared database, and the UI shows that reason. Because the audit trail is
+  append-only and chained, a reset (local databases only) clears the **whole** audit collection and
+  starts a new chain: its first event is `AUDIT_CHAIN_RESET`, then `QUERY_STATE_RESET`, then any seeded
+  history appended through the chain, so verification stays green and the restart is on the record.
 - **Bodies are schema-validated** (`validators/queryStateSchemas.js`). Zod strips keys the models
   never declared, so a caller cannot `$set` arbitrary fields into a document. The corollary is that
   a field the schema forgets is **lost in silence**, which is how three contract bugs survived: a

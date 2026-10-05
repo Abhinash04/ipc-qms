@@ -36,6 +36,31 @@ const db = vi.hoisted(() => {
         lean: async () => null,
       }),
       findOneAndUpdate: async () => null,
+      // Just enough for the audit chain head lookup: find(...).sort({ seq: -1 }).limit(1).lean().
+      find: () => {
+        let sorted = [...rows];
+        const chain = {
+          sort: (spec) => {
+            const [[field, direction]] = Object.entries(spec);
+            sorted = sorted
+              .filter((row) => typeof row[field] === 'number')
+              .sort((a, b) => (a[field] - b[field]) * direction);
+            return chain;
+          },
+          limit: (n) => {
+            sorted = sorted.slice(0, n);
+            return chain;
+          },
+          lean: async () => sorted.map((row) => ({ ...row })),
+        };
+        return chain;
+      },
+      collection: {
+        deleteMany: async () => {
+          rows.splice(0);
+          return { acknowledged: true };
+        },
+      },
     };
   };
 
@@ -129,7 +154,7 @@ describe('POST /queries/persist — one row per event', () => {
   });
 });
 
-describe('POST /queries/reset — the history goes with the cases', () => {
+describe('POST /queries/reset — a local reset starts a fresh audit chain', () => {
   const reset = (body = {}) =>
     request(app).post('/api/v1/queries/reset').set(authHeader(ROLES.SUPER_ADMIN)).send(body);
 
@@ -143,23 +168,26 @@ describe('POST /queries/reset — the history goes with the cases', () => {
     expect(AuditEvent.rows.filter((row) => row.queryId)).toHaveLength(0);
   });
 
-  it('keeps the compliance trail — rows that belong to no case', async () => {
+  it('clears the whole old chain, since a chain cannot lose rows and stay valid', async () => {
     await AuditEvent.create({ action: 'LOGIN_SUCCEEDED', queryId: null });
-    await AuditEvent.create({ action: 'AUTHORIZATION_DENIED', queryId: null });
     await AuditEvent.create({ action: 'QUERY_ASSIGNED', queryId: 'QRY-2026-00001' });
 
     await reset();
 
     const actions = AuditEvent.rows.map((row) => row.action);
-    expect(actions).toContain('LOGIN_SUCCEEDED');
-    expect(actions).toContain('AUTHORIZATION_DENIED');
+    expect(actions).not.toContain('LOGIN_SUCCEEDED');
     expect(actions).not.toContain('QUERY_ASSIGNED');
   });
 
-  it('records the reset itself, after clearing', async () => {
+  it('opens the new chain with the reset marker, then the reset itself', async () => {
     await reset();
 
-    expect(AuditEvent.rows.map((row) => row.action)).toContain('QUERY_STATE_RESET');
+    expect(AuditEvent.rows.map((row) => [row.seq, row.action])).toEqual([
+      [1, 'AUDIT_CHAIN_RESET'],
+      [2, 'QUERY_STATE_RESET'],
+    ]);
+    expect(AuditEvent.rows[0].prevHash).toBe('0'.repeat(64));
+    expect(AuditEvent.rows[1].prevHash).toBe(AuditEvent.rows[0].hash);
   });
 
   it('restores seeded history in the stored shape', async () => {
@@ -171,6 +199,7 @@ describe('POST /queries/reset — the history goes with the cases', () => {
       timestamp: '2026-09-18T09:00:00.000Z',
       queryId: 'QRY-2026-00001',
       actorType: 'human',
+      seq: 3,
     });
   });
 

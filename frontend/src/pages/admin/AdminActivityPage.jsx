@@ -1,17 +1,22 @@
-import { useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { Search, RotateCcw } from 'lucide-react';
 
 import { Breadcrumb } from '@/components/common/Breadcrumb';
 import { PageHeader } from '@/components/common/PageHeader';
 import { AuditTable } from '@/components/admin/AuditTable';
+import { CaseViewSheet } from '@/components/admin/CaseViewSheet';
+import { AuditExportButtons, ChainIntegrityBadge } from '@/components/admin/AuditIntegrity';
 import { fetchAuditEvents } from '@/services/api/adminService';
 import { useRoutePaths } from '@/hooks/useRoutePaths';
-import { buildPath } from '@/constants/routePaths';
+import { toServerRange } from '@/utils/dateRange';
 import { AUDIT_ACTION_OPTIONS, RESULT_OPTIONS, ACTOR_OPTIONS } from '@/constants/auditFilters';
 
 const PAGE_SIZE = 50;
+// Typing a query ID asks the server once the typing stops, not once per letter (each request
+// is also an "activity records viewed" entry in the trail).
+const TYPING_PAUSE_MS = 400;
 
 const EMPTY = { action: '', actorType: '', result: '', queryId: '', from: '', to: '' };
 
@@ -24,14 +29,27 @@ function filtersFromSearch(searchParams) {
   return seeded;
 }
 
+function useDebouncedValue(value, ms) {
+  const [debounced, setDebounced] = useState(value);
+
+  useEffect(() => {
+    if (value === debounced) return undefined;
+    const timer = setTimeout(() => setDebounced(value), ms);
+    return () => clearTimeout(timer);
+  }, [value, debounced, ms]);
+
+  return debounced;
+}
+
 export function AdminActivityPage() {
   const paths = useRoutePaths();
-  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [filters, setFilters] = useState(() => filtersFromSearch(searchParams));
   const [page, setPage] = useState(0);
 
-  const applied = { ...filters, limit: PAGE_SIZE, offset: page * PAGE_SIZE };
+  const queryId = useDebouncedValue(filters.queryId.trim(), TYPING_PAUSE_MS);
+  const serverFilters = toServerRange({ ...filters, queryId });
+  const applied = { ...serverFilters, limit: PAGE_SIZE, offset: page * PAGE_SIZE };
 
   const audit = useQuery({
     queryKey: ['audit', 'list', applied],
@@ -44,9 +62,8 @@ export function AdminActivityPage() {
     setFilters((current) => ({ ...current, [key]: event.target.value }));
   };
 
-  const openQuery = (queryId) => {
-    if (paths.QUERY_DETAIL) navigate(buildPath(paths.QUERY_DETAIL, { queryId }));
-  };
+  // A case opens read-only here; the audit pages never take the admin into the query workflow.
+  const [viewedCase, setViewedCase] = useState(null);
 
   const events = audit.data?.events ?? [];
   const isFiltered = Object.values(filters).some(Boolean);
@@ -64,7 +81,13 @@ export function AdminActivityPage() {
       />
       <PageHeader
         title="Audit Trail"
-        purpose="Every recorded system action, newest first. Filters are applied by the server."
+        purpose="Every recorded system action, newest first. Filters are applied by the server; exports use the same filters."
+        actions={
+          <>
+            <ChainIntegrityBadge />
+            <AuditExportButtons filters={serverFilters} />
+          </>
+        }
       />
 
       <div  data-slot="panel" className="rounded-2xl border border-transparent bg-card p-5 shadow-card">
@@ -146,8 +169,9 @@ export function AdminActivityPage() {
           events={events}
           loading={audit.isLoading}
           error={audit.isError ? 'The audit API could not be reached.' : null}
-          onOpenQuery={openQuery}
+          onOpenQuery={setViewedCase}
         />
+        <CaseViewSheet queryId={viewedCase} onClose={() => setViewedCase(null)} />
 
         {!audit.isLoading && !audit.isError && (
           <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-3">

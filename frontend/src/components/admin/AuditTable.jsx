@@ -31,11 +31,37 @@ function ResultChip({ result }) {
   );
 }
 
+const plainValue = (value) =>
+  value !== null && typeof value === 'object' ? JSON.stringify(value) : String(value);
+
 function DetailRow({ event }) {
+  const view = event.view;
+  if (view) {
+    return (
+      <tr className="border-b border-slate-100 bg-slate-50/60">
+        <td />
+        <td colSpan={7} className="px-3 pb-3 pt-0 text-[12px] text-slate-700">
+          {view.details && <p className="m-0">{view.details}</p>}
+          <p className="m-0 mt-1 text-[11.5px] text-slate-500">
+            {[
+              view.section && `Section: ${view.section}`,
+              view.sessionId && `Login session ${view.sessionId}`,
+              view.device && `Browser: ${view.device}`,
+              view.module && `Module: ${view.module}`,
+              view.logSource && `Server: ${view.logSource}`,
+            ]
+              .filter(Boolean)
+              .join(' · ')}
+          </p>
+        </td>
+      </tr>
+    );
+  }
+
   return (
     <tr className="border-b border-slate-100 bg-slate-50/60">
       <td />
-      <td colSpan={5} className="px-3 pb-3 pt-0">
+      <td colSpan={7} className="px-3 pb-3 pt-0">
         <dl className="grid grid-cols-1 gap-x-6 gap-y-1 text-[12px] sm:grid-cols-2">
           {event.error && (
             <div className="sm:col-span-2">
@@ -59,14 +85,14 @@ function DetailRow({ event }) {
             Object.entries(event.aiMetadata).map(([key, value]) => (
               <div key={key}>
                 <dt className="inline font-bold text-slate-500">{key}: </dt>
-                <dd className="inline text-slate-700">{String(value)}</dd>
+                <dd className="inline text-slate-700">{plainValue(value)}</dd>
               </div>
             ))}
           {event.details &&
             Object.entries(event.details).map(([key, value]) => (
               <div key={key}>
                 <dt className="inline font-bold text-slate-500">{key}: </dt>
-                <dd className="inline break-all text-slate-700">{String(value)}</dd>
+                <dd className="inline break-all text-slate-700">{plainValue(value)}</dd>
               </div>
             ))}
         </dl>
@@ -75,9 +101,27 @@ function DetailRow({ event }) {
   );
 }
 
+// Shown on events saved by a copy of the application that does not give out audit IDs.
+const NOT_ISSUED_HINT =
+  'This activity was saved by a copy of the application that does not give audit IDs or record IP addresses.';
+
+/** Name, role and user ID of whoever did it. */
+function UserCell({ event }) {
+  const card = event.view?.userCard;
+  if (!card) return <span className="text-slate-700">{ACTOR_LABEL[event.actorType] || event.actorType}</span>;
+  return (
+    <>
+      <span className="block font-bold text-slate-800">{card.name}</span>
+      {card.role && <span className="block text-slate-600">{card.role}</span>}
+      {card.id && <span className="block font-mono text-[11px] text-slate-400">ID: {card.id}</span>}
+    </>
+  );
+}
+
 function Row({ event, onOpenQuery }) {
   const [open, setOpen] = useState(false);
-  const hasDetail = Boolean(event.details || event.error || event.aiMetadata);
+  const view = event.view;
+  const hasDetail = Boolean(event.details || event.error || event.aiMetadata || view?.device || view?.sessionId || event.changes);
 
   return (
     <>
@@ -97,14 +141,47 @@ function Row({ event, onOpenQuery }) {
             <span className="block h-6 w-6" />
           )}
         </td>
+        <td className="whitespace-nowrap px-3 py-2.5 font-mono text-[11.5px] text-slate-500">
+          {view?.auditId && view.auditId !== '-' ? (
+            view.auditId
+          ) : (
+            <span className="font-sans text-slate-400" title={NOT_ISSUED_HINT}>
+              Not issued
+            </span>
+          )}
+        </td>
         <td className="whitespace-nowrap px-3 py-2.5 text-[12.5px] tabular-nums text-slate-600">
           {formatTime(event.timestamp)}
         </td>
-        <td className="px-3 py-2.5">
-          <span className="text-[12.5px] font-bold text-slate-800">{ACTOR_LABEL[event.actorType] || event.actorType}</span>
-          {event.actorRole && <span className="ml-1.5 text-[11.5px] text-slate-400">{event.actorRole}</span>}
+        <td className="px-3 py-2.5 text-[12px] leading-snug">
+          <UserCell event={event} />
         </td>
-        <td className="px-3 py-2.5 text-[12.5px] font-semibold text-slate-800">{humaniseAction(event.action)}</td>
+        <td className="whitespace-nowrap px-3 py-2.5 font-mono text-[11.5px] text-slate-600">
+          {view?.ipAddress || '—'}
+          {view?.deviceName && <span className="block font-sans text-[11px] text-slate-400">{view.deviceName}</span>}
+        </td>
+        <td className="px-3 py-2.5 text-[12.5px]">
+          {view?.who ? (
+            <>
+              <span className="block font-bold text-slate-800">By: {view.who}</span>
+              <span className="mt-0.5 flex items-start gap-1.5 text-slate-700">
+                <span aria-hidden="true" className="font-bold text-primary-700">→</span>
+                <span>{view.did}</span>
+              </span>
+              {view.other && (
+                <span className="mt-0.5 flex items-start gap-1.5 font-semibold text-primary-700">
+                  <span aria-hidden="true">→</span>
+                  <span>{view.other}</span>
+                </span>
+              )}
+            </>
+          ) : (
+            <>
+              <span className="block font-bold text-slate-800">{ACTOR_LABEL[event.actorType] || event.actorType}</span>
+              <span className="block text-slate-700">{humaniseAction(event.action)}</span>
+            </>
+          )}
+        </td>
         <td className="px-3 py-2.5">
           {event.queryId ? (
             <button
@@ -161,11 +238,13 @@ export function AuditTable({ events, loading, error, onOpenQuery, emptyTitle = '
             <th scope="col" className="w-10 px-3 py-2">
               <span className="sr-only">Expand row</span>
             </th>
-            <th scope="col" className="px-3 py-2">Time</th>
-            <th scope="col" className="px-3 py-2">Actor</th>
-            <th scope="col" className="px-3 py-2">Event</th>
-            <th scope="col" className="px-3 py-2">Query</th>
-            <th scope="col" className="px-3 py-2">Result</th>
+            <th scope="col" className="px-3 py-2">Audit ID</th>
+            <th scope="col" className="px-3 py-2">Date &amp; time</th>
+            <th scope="col" className="px-3 py-2">User</th>
+            <th scope="col" className="px-3 py-2">IP address / device</th>
+            <th scope="col" className="px-3 py-2">Activity</th>
+            <th scope="col" className="px-3 py-2">Case No.</th>
+            <th scope="col" className="px-3 py-2">Status</th>
           </tr>
         </thead>
         <tbody>

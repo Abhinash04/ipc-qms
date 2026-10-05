@@ -87,7 +87,7 @@ describe('authentication is audited', () => {
     const [event] = await audit.list({ action: AUDIT_ACTIONS.LOGIN_FAILED });
     expect(event.result).toBe(AUDIT_RESULTS.DENIED);
     expect(event.actorId).toBeNull();
-    expect(event.details).toEqual({ email: 'nobody@ipc.example' });
+    expect(event.details).toEqual({ email: 'nobody@ipc.example', reason: 'invalid email or password' });
   });
 
   it('never records the password', async () => {

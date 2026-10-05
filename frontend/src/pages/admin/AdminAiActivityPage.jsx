@@ -1,4 +1,4 @@
-import { useNavigate } from 'react-router-dom';
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Bot, Sparkles, PenLine, AlertTriangle } from 'lucide-react';
 
@@ -7,14 +7,15 @@ import { PageHeader } from '@/components/common/PageHeader';
 import { StatTile } from '@/components/common/StatTile';
 import { Skeleton } from '@/components/ui/skeleton';
 import { AuditTable } from '@/components/admin/AuditTable';
+import { CaseViewSheet } from '@/components/admin/CaseViewSheet';
 import { StatusDonut } from '@/components/admin/charts';
 import { fetchAuditEvents, fetchAuditSummary } from '@/services/api/adminService';
 import { useRoutePaths } from '@/hooks/useRoutePaths';
-import { buildPath } from '@/constants/routePaths';
 
 export function AdminAiActivityPage() {
   const paths = useRoutePaths();
-  const navigate = useNavigate();
+  // A case opens read-only here; the audit pages never take the admin into the query workflow.
+  const [viewedCase, setViewedCase] = useState(null);
 
   const summary = useQuery({ queryKey: ['audit', 'summary'], queryFn: () => fetchAuditSummary(), retry: false });
   const events = useQuery({
@@ -130,9 +131,10 @@ export function AdminAiActivityPage() {
             events={aiEvents}
             loading={events.isLoading}
             error={events.isError ? 'The audit API could not be reached.' : null}
-            onOpenQuery={(queryId) => paths.QUERY_DETAIL && navigate(buildPath(paths.QUERY_DETAIL, { queryId }))}
+            onOpenQuery={setViewedCase}
             emptyTitle="No AI activity recorded yet"
           />
+          <CaseViewSheet queryId={viewedCase} onClose={() => setViewedCase(null)} />
         </section>
       </div>
     </div>

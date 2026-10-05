@@ -121,12 +121,13 @@ function CaseWorkspaceTabs({ query, versions, latestVersion }) {
   );
 }
 
-function CaseInsightPanels({ query, steps, audit, canAssign, currentUser, assignQuery }) {
+function CaseInsightPanels({ query, steps, audit, canAssign, currentUser, assignQuery, readOnly }) {
   return (
     <>
       <div data-slot="panel" className="bg-card rounded-2xl border border-transparent p-5 shadow-card">
         <AiSummaryCard
           variant="embedded"
+          readOnly={readOnly}
           summary={query.aiSummary}
           query={query}
           onSummaryUpdated={(newSummary) => {
@@ -182,7 +183,12 @@ function StageLinksFooter({ paths }) {
   );
 }
 
-export function QueryDetailPage() {
+/**
+ * The case page. `readOnly` (with `queryId`) is the same page for looking only, used by the audit
+ * pages: no breadcrumb, no workflow actions, no assignment and no AI re-generation, while every
+ * section still opens, expands and filters as it does here.
+ */
+export function QueryDetailPage({ queryId: viewedQueryId = null, readOnly = false } = {}) {
   const paths = useRoutePaths();
   const {
     queryId,
@@ -198,8 +204,8 @@ export function QueryDetailPage() {
     audit,
     messages,
     resolving,
-  } = useQueryCase();
-  const canAssign = can(WORKFLOW_ACTION.ASSIGN);
+  } = useQueryCase(viewedQueryId);
+  const canAssign = !readOnly && can(WORKFLOW_ACTION.ASSIGN);
   const assignQuery = useWorkflowStore((state) => state.assignQuery);
 
   if (!query) {
@@ -221,7 +227,7 @@ export function QueryDetailPage() {
 
   return (
     <div>
-      <Breadcrumb items={breadcrumbItems} />
+      {!readOnly && <Breadcrumb items={breadcrumbItems} />}
 
       <CaseSummaryBar query={query} />
 
@@ -254,6 +260,7 @@ export function QueryDetailPage() {
             canAssign={canAssign}
             currentUser={currentUser}
             assignQuery={assignQuery}
+            readOnly={readOnly}
           />
 
           <EmailThread messages={messages} />
@@ -261,16 +268,22 @@ export function QueryDetailPage() {
           <CaseWorkspaceTabs query={query} versions={versions} latestVersion={latestVersion} />
         </div>
 
-        <div className="lg:sticky lg:top-24 self-start space-y-4 lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto">
-          <WorkflowActionsCard />
-          {can(WORKFLOW_ACTION.APPROVE_REVIEW) && <ReviewDecisionCard />}
+        <div
+          className={
+            readOnly
+              ? 'self-start space-y-4'
+              : 'lg:sticky lg:top-24 self-start space-y-4 lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto'
+          }
+        >
+          {!readOnly && <WorkflowActionsCard />}
+          {!readOnly && can(WORKFLOW_ACTION.APPROVE_REVIEW) && <ReviewDecisionCard />}
           <CaseDetailsPanel query={query} />
         </div>
       </div>
 
       <AuditHistoryCard audit={audit} />
 
-      <StageLinksFooter paths={paths} />
+      {!readOnly && <StageLinksFooter paths={paths} />}
     </div>
   );
 }

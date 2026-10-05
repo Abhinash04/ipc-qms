@@ -6,6 +6,9 @@ import * as mailbox from '../services/email/mailbox/index.js';
 import * as attachmentStore from '../services/attachments/attachmentStore.js';
 import env from '../config/env.js';
 
+// Test-only key for the audit chain (services/audit/auditChain.js).
+env.AUDIT_HMAC_SECRET = 'test-audit-hmac-secret-not-for-production-use-0001';
+
 beforeAll(() => {
   mailbox.forceInMemory();
 

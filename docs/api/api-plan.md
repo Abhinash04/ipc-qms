@@ -20,7 +20,7 @@ the planning view.
 | `/ai` | `POST /summary`, `POST /recommend`, `POST /draft` | Any signed-in role. Grounded in the IPC corpus; never throws — falls back deterministically. |
 | `/attachments` | `POST /`, `GET /:id/meta`, `GET /:id` | **Top-level, not nested under a query** — see below. |
 | `/nic` | `GET /status`, `POST /read`, `POST /send` | Returns HTTP 200 with `{ ok:false, stage, error }` on failure so the caller can tell *where* it failed. |
-| `/audit` | `GET /`, `GET /summary`, `GET /query/:queryId` | Admin + Super Admin only. `GET /summary` honours caller `from`/`to` on its `overall` half. |
+| `/audit` | `GET /`, `GET /summary`, `GET /verify`, `GET /export?format=csv\|pdf`, `GET /query/:queryId` | Admin + Super Admin only. `GET /summary` honours caller `from`/`to` on its `overall` half. `GET /verify` re-computes the tamper-evident hash chain and reports the first break. `GET /export` streams the filtered trail as CSV or PDF with an `X-Report-SHA256` content digest and is itself audited (`AUDIT_EXPORTED`). |
 | `/queries` | `GET /`, `GET /is-empty`, `POST /persist`, `POST /:id/final-approval`, `POST /:id/outbound/resolve`, `POST /reset` | The workflow-state sync API — see below — plus two operations that are not state mirrors: final approval, which sends the response and closes the case, and `outbound/resolve`, which records what the Sent folder actually contained for a send nobody could confirm. `POST /reset` is **Super-Admin-only**; it deletes every case in the system, the outbound ledger included. Bodies are Zod-validated. |
 | `/queries/:id/pullback` | `POST` | `verifyAction(PULLBACK)` → Admin + Super Admin. Persists `workflowState` and writes a `QUERY_PULLED_BACK` audit event. |
 

@@ -71,7 +71,7 @@ export function SidebarContent({ open, collapsed = !open, onNavigate, onToggle }
               alt="Anuvadini Logo"
               width="512"
               height="288"
-              className="h-13 w-auto max-w-44 object-contain"
+              className="h-12 w-40 object-cover"
             />
           </span>
         ) : (

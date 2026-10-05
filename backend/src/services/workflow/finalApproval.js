@@ -1,4 +1,5 @@
 import { QueryCase, ResponseVersion, WorkflowStep } from '../../models/index.js';
+import { change } from '../audit/caseChanges.js';
 import * as caseMail from '../email/caseMail.js';
 import { OUTCOMES } from '../email/outbox.js';
 import * as audit from '../audit/auditService.js';
@@ -78,6 +79,7 @@ export async function grantFinalApproval({ queryId, actor, comment = '' }) {
     await audit.record({
       ...record(actor, 'FINAL_APPROVAL_GRANTED'),
       queryId,
+      changes: change('status', query.workflowState, 'READY_FOR_DISPATCH'),
       details:
         `Final approval granted; ${approvedVersion.version} locked and ready for dispatch.` +
         (comment ? ` ${comment}` : ''),

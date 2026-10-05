@@ -48,6 +48,12 @@ const env = {
 
   GEMMA_API_URL: process.env.GEMMA_API_URL ?? 'https://pravahai.aicte-india.org/llm/api/gemma',
   GEMMA_TIMEOUT_MS: parseInt(process.env.GEMMA_TIMEOUT_MS || '12000', 10),
+  // The issuing department named at the top of the audit trail report.
+  REPORT_DEPARTMENT:
+    process.env.REPORT_DEPARTMENT ||
+    'Indian Pharmacopoeia Commission, Ministry of Health & Family Welfare, Government of India',
+
+  AUDIT_HMAC_SECRET: process.env.AUDIT_HMAC_SECRET || '',
 
   MAILBOX_RETENTION_HOURS: Number(process.env.MAILBOX_RETENTION_HOURS ?? '42'),
   MAILBOX_SYNC_ENABLED: (process.env.MAILBOX_SYNC_ENABLED ?? 'true') !== 'false',

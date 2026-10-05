@@ -10,9 +10,10 @@ import {
 import { findUserById } from "@/constants/mockUsers";
 import { activeSteps, historicalSteps } from "@/constants/reviewCycle";
 
-export function useQueryCase() {
+/** The case named in the route, or `queryIdOverride` when it is shown outside its own page. */
+export function useQueryCase(queryIdOverride = null) {
   const params = useParams();
-  const queryId = params.queryId || null;
+  const queryId = queryIdOverride || params.queryId || null;
   const currentUser = useAuthStore((state) => state.currentUser);
   const query = useWorkflowStore(
     (state) => state.queries.find((q) => q.queryId === queryId) || null,

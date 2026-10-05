@@ -10,6 +10,7 @@ import env from './config/env.js';
 import apiRoutes from './routes/index.js';
 import notFound from './middleware/notFound.js';
 import errorHandler from './middleware/errorHandler.js';
+import { captureRequestContext } from './services/audit/requestContext.js';
 
 const app = express();
 if (env.NODE_ENV === 'production') {
@@ -24,6 +25,8 @@ if (env.NODE_ENV !== 'test') {
 }
 app.use(express.json({ limit: '2mb' }));
 app.use(cookieParser());
+// Who made each request and from where, for the audit trail.
+app.use(captureRequestContext);
 
 if (env.NODE_ENV !== 'test') {
   app.use(

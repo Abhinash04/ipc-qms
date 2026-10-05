@@ -21,7 +21,7 @@ Checked against the code on 2026-09-25: `backend/src/config/env.js`, `authConfig
 
 | | Backend | Frontend |
 |---|---|---|
-| **Secret.** Never in a tracked file, a chat, a ticket or a screenshot | `DATABASE_URL`, `JWT_SECRET`, `QMS_SEED_PASSWORD`, every `QMS_PASSWORD_<USER_ID>`, `NIC_APP_PASSWORD`, and the **contents** of the files that `QMS_PASSWORDS_FILE` and `NIC_APP_PASSWORD_FILE` name | none: every `VITE_` value is public, because it is compiled into the bundle |
+| **Secret.** Never in a tracked file, a chat, a ticket or a screenshot | `DATABASE_URL`, `JWT_SECRET`, `AUDIT_HMAC_SECRET`, `QMS_SEED_PASSWORD`, every `QMS_PASSWORD_<USER_ID>`, `NIC_APP_PASSWORD`, and the **contents** of the files that `QMS_PASSWORDS_FILE` and `NIC_APP_PASSWORD_FILE` name | none: every `VITE_` value is public, because it is compiled into the bundle |
 | **Local only.** Never on the VM | `QMS_SEED_PASSWORD`, `NIC_BROWSER_VIEWER`, `NODE_ENV=development`, `EMAIL_TRANSPORT=mock` | `VITE_NIC_FRONT_OFFICE_EMAIL` |
 | **Production values.** Different from, or absent on, a developer machine | `NODE_ENV=production`, `CLIENT_URL` (the Render origin), a separate-cluster `DATABASE_URL`, `QMS_PASSWORDS_FILE`, `QMS_ALLOW_SHARED_PASSWORD=false`, `EMAIL_TRANSPORT=nic`, real `FRONT_OFFICE_*` and `OFFICER_IN_CHARGE_*`, `NIC_EMAIL=lab.ipc@gov.in`, `NIC_IMAP_HOST` and `NIC_SMTP_HOST`, an absolute `ATTACHMENT_DIR` | `VITE_API_BASE_URL=/api/v1`, set on Render |
 
@@ -97,7 +97,7 @@ working-directory paths as absolute paths, and start the backend from `backend\`
 | `backend/.env.local` | no | a developer's backend and scripts | The local profile ([§5](#5-profiles-local)) |
 | `backend/.env` | no | legacy: loaded only when there is no `.env.local`, with a warning | Rename it to `.env.local` |
 | `backend/.env.production` | no | the production VM's backend, selected by `NODE_ENV=production` in the real environment (or named by `ENV_FILE`) | The production values ([§6.1](#61-vm-backend-backendenvproduction)). On a developer machine this is at most a template with the secrets empty, and it is never loaded there. The filled file exists only on the VM |
-| `backend/.env.e2e` | yes | the Playwright suite, which starts the backend with `ENV_FILE=.env.e2e` | A self-contained, credential-free test configuration: its own test-only `JWT_SECRET` and the local `qms_e2e` database. Nothing is inherited from a developer's env file. Playwright points `QMS_PASSWORDS_FILE` at `backend/src/test/fixtures/passwords.json` |
+| `backend/.env.e2e` | yes | the Playwright suite, which starts the backend with `ENV_FILE=.env.e2e` | A self-contained, credential-free test configuration: its own test-only `JWT_SECRET` and `AUDIT_HMAC_SECRET` and the local `qms_e2e` database. Nothing is inherited from a developer's env file. Playwright points `QMS_PASSWORDS_FILE` at `backend/src/test/fixtures/passwords.json` |
 | `frontend/.env.example` | yes | nobody; it is the template for `frontend/.env.local` | `VITE_API_BASE_URL`, an empty `VITE_NIC_FRONT_OFFICE_EMAIL` and an empty `VITE_GOOGLE_CLIENT_ID` |
 | `frontend/.env.local` | no | the Vite dev server, and any `vite build` run on that machine | [§4](#4-frontend-variables) |
 | Render dashboard | — | the production frontend build | `VITE_API_BASE_URL=/api/v1` and `NODE_VERSION=22`. Nothing secret ([§6.2](#62-render-static-site)) |
@@ -140,6 +140,7 @@ The root `.gitignore` ignores `.env` and every `.env.*`, except the `.env.exampl
 | Variable | Required | Secret | Default | Purpose |
 |---|---|---|---|---|
 | `JWT_SECRET` | both | **yes** | empty | Signs the session token. Required in every environment, at least 32 characters. Generate one with `openssl rand -base64 48`. Use a different value in production; never reuse a development one |
+| `AUDIT_HMAC_SECRET` | both | **yes** | empty | Keys the tamper-evident audit chain: every audit event carries an HMAC-SHA256 of its contents and of the previous event, so an edited, deleted or reordered row is detected by `GET /api/v1/audit/verify`. Required in every environment, at least 32 characters (`openssl rand -base64 48`). **Every backend writing to one database must use the same value** — a row chained under a different key fails verification. Never change it on a database that already holds chained events; if it leaks, rows can be forged, so treat it like `JWT_SECRET` |
 | `QMS_PASSWORDS_FILE` | production (local: optional) | path no; **contents yes** | empty | The path to a JSON object of user id → password, for example `{ "USR-0003": "…" }`. It is read relative to the **working directory**, so use an absolute path on the VM, kept outside the checkout. In production it must cover USR-0003 through USR-0014. If the file is set but unreadable, not JSON, or not an object, startup stops |
 | `QMS_PASSWORD_<USER_ID>` | optional (instead of the file) | **yes** | — | One account's own password. The key is `QMS_PASSWORD_` plus the user id with each non-alphanumeric character turned into `_`, in upper case: `QMS_PASSWORD_USR_0003` through `QMS_PASSWORD_USR_0013`, plus `QMS_PASSWORD_USR_0014` when the NICeMail Front Office exists |
 | `QMS_SEED_PASSWORD` | local | **yes** | empty | The shared development password. In auto mode (next row) it is the password of every account that has no credential of its own, outside production only. Never on the VM |
@@ -245,6 +246,7 @@ not expected to be reached.
 |---|---|---|---|---|
 | `GEMMA_API_URL` | optional | no | `https://pravahai.aicte-india.org/llm/api/gemma` | The Pravah Gemma endpoint; no key is used. Enquiry text is sent to it, which is external data sharing. **An empty value turns AI off.** Summaries, recommendations and drafts then fall back to deterministic text, and junk triage runs on the rules alone. Leave the variable out rather than blank it, unless you mean to turn AI off |
 | `GEMMA_TIMEOUT_MS` | optional | no | `12000` | The timeout per call. A recommendation gets 3× (36 s) and a draft 2× (24 s) |
+| `REPORT_DEPARTMENT` | optional | no | Indian Pharmacopoeia Commission, Ministry of Health & Family Welfare, Government of India | The department and ministry printed at the top of the audit trail report |
 
 ### 3.7 Sync
 
@@ -399,7 +401,7 @@ cd ../frontend && cp .env.example .env.local
 ```
 
 Then fill in `backend/.env.local`:
-1. Set `JWT_SECRET` (`openssl rand -base64 48`).
+1. Set `JWT_SECRET` and `AUDIT_HMAC_SECRET` (`openssl rand -base64 48` each; two different values).
 2. Set a credential for every account. Locally, `QMS_SEED_PASSWORD` is enough.
 3. Replace or empty the placeholder `DATABASE_URL`. As copied it names no real cluster, and startup
    stops.
@@ -418,6 +420,7 @@ The mailbox-host column below is the full key list of the host's `backend/.env.l
 | `CLIENT_URL` | `http://localhost:5173` | `http://localhost:5173` |
 | `DATABASE_URL` (**secret**) | the shared development Atlas URI, with your own Atlas user | the same cluster **and the same database name**, `/query_management_system`, with your own Atlas user |
 | `JWT_SECRET` (**secret**) | your own, at least 32 characters | your own |
+| `AUDIT_HMAC_SECRET` (**secret**) | the team's shared value for this database, at least 32 characters | **the same value as the host** — not your own |
 | `QMS_SEED_PASSWORD` (**secret**) | your own local sign-in password | your own; it only unlocks your own backend |
 | `EMAIL_TRANSPORT` | `mock` | `mock` |
 | `MAILBOX_SOURCE` | `auto` | `auto` |
@@ -499,6 +502,7 @@ This section lists the values.
 | `CLIENT_URL` | `https://<render-site>`, the Render site origin | no |
 | `DATABASE_URL` | `mongodb+srv://<prod-user>:<prod-password>@<prod-cluster>.mongodb.net/qms_production?retryWrites=true&w=majority`, on a **separate Atlas cluster** whose access list holds only the VM | **yes** |
 | `JWT_SECRET` | at least 32 random characters, never reused from development | **yes** |
+| `AUDIT_HMAC_SECRET` | at least 32 random characters, never reused from development, and never rotated once the production audit trail exists | **yes** |
 | `QMS_PASSWORDS_FILE` | an absolute path outside the checkout, for example `C:/qms-secrets/qms-passwords.json`, with entries USR-0003 through USR-0014 | path no; **contents yes** |
 | `QMS_ALLOW_SHARED_PASSWORD` | `false` | no |
 | `EMAIL_TRANSPORT` | `nic` | no |
@@ -586,6 +590,7 @@ exits with code 1. The mail checks report first, so fix them and run again; the
 |---|---|---|
 | `ENV_FILE` | it names a file that does not exist | always |
 | `JWT_SECRET` | empty, or shorter than 32 characters | always |
+| `AUDIT_HMAC_SECRET` | empty, or shorter than 32 characters | always |
 | every account | it has no credential from `QMS_PASSWORDS_FILE`, `QMS_PASSWORD_<USER_ID>` or shared mode | always |
 | `QMS_PASSWORDS_FILE` | set, but unreadable, not JSON, or not a JSON object | always |
 | `QMS_ALLOW_SHARED_PASSWORD=true` | `QMS_SEED_PASSWORD` is empty | always |

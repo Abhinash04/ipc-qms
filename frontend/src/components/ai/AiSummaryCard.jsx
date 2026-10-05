@@ -91,7 +91,7 @@ function SummaryBody({ summary, expanded, onToggleExpanded }) {
   );
 }
 
-export function AiSummaryCard({ summary, query, onSummaryUpdated, variant = 'card' }) {
+export function AiSummaryCard({ summary, query, onSummaryUpdated, variant = 'card', readOnly = false }) {
   const [loading, setLoading] = useState(false);
   const [expanded, setExpanded] = useState(false);
 
@@ -135,17 +135,19 @@ export function AiSummaryCard({ summary, query, onSummaryUpdated, variant = 'car
           {!loading && <ProvenanceBadge summary={summary} />}
         </div>
 
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            className="inline-flex items-center gap-1.5 text-[12px] font-bold text-slate-500 hover:text-purple-700 bg-card hover:bg-purple-50 px-3 py-1.5 rounded-xl border border-slate-200/80 transition-colors cursor-pointer disabled:opacity-50"
-            onClick={handleGenerateAiSummary}
-            disabled={loading}
-          >
-            <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
-            <span>{loading ? 'Generating...' : 'Re-generate'}</span>
-          </button>
-        </div>
+        {!readOnly && (
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              className="inline-flex items-center gap-1.5 text-[12px] font-bold text-slate-500 hover:text-purple-700 bg-card hover:bg-purple-50 px-3 py-1.5 rounded-xl border border-slate-200/80 transition-colors cursor-pointer disabled:opacity-50"
+              onClick={handleGenerateAiSummary}
+              disabled={loading}
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
+              <span>{loading ? 'Generating...' : 'Re-generate'}</span>
+            </button>
+          </div>
+        )}
       </div>
 
       <div className="pt-4 space-y-4">
@@ -160,14 +162,16 @@ export function AiSummaryCard({ summary, query, onSummaryUpdated, variant = 'car
         ) : !summary?.text ? (
           <div className="flex items-center justify-between py-2">
             <p className="text-[13.5px] font-medium text-slate-500">No AI summary generated yet for this query.</p>
-            <button
-              type="button"
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-purple-600 text-white font-bold text-[13px] shadow-sm hover:bg-purple-600/90 transition-colors cursor-pointer"
-              onClick={handleGenerateAiSummary}
-            >
-              <Sparkles className="h-4 w-4" />
-              <span>Generate AI Summary</span>
-            </button>
+            {!readOnly && (
+              <button
+                type="button"
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-purple-600 text-white font-bold text-[13px] shadow-sm hover:bg-purple-600/90 transition-colors cursor-pointer"
+                onClick={handleGenerateAiSummary}
+              >
+                <Sparkles className="h-4 w-4" />
+                <span>Generate AI Summary</span>
+              </button>
+            )}
           </div>
         ) : (
           <SummaryBody

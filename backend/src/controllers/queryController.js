@@ -1,6 +1,7 @@
 import HTTP_STATUS from "../constants/httpStatus.js";
 import { isConnected } from "../config/db.js";
 import * as audit from "../services/audit/auditService.js";
+import { diffCase } from "../services/audit/caseChanges.js";
 import * as workflow from "../services/workflow/finalApproval.js";
 import * as caseMail from "../services/email/caseMail.js";
 import { runAutoTransferSweep } from "../services/query/autoTransferScheduler.js";
@@ -10,7 +11,11 @@ import {
   isDuplicateKey,
 } from "../services/email/outbox.js";
 import { ACTOR_TYPES } from "../constants/roles.js";
+<<<<<<< Updated upstream
 import { isKnownAuditAction, SERVER_ONLY_CASE_EVENTS } from "../constants/auditActions.js";
+=======
+import { AUDIT_ACTIONS, isKnownAuditAction } from "../constants/auditActions.js";
+>>>>>>> Stashed changes
 import { caseScopeFor, scopeFilter } from "../services/authz/caseAccess.js";
 import {
   QueryCase,
@@ -208,12 +213,18 @@ async function persistTransition(req, res, next) {
       });
     }
 
+    let caseChanges = null;
     if (query?.queryId) {
       const existing = await QueryCase.findOne({ queryId: query.queryId })
+<<<<<<< Updated upstream
         .select(
           "createdAt workflowState businessStatus currentAssigneeId actionDeadline autoTransferHeldIds",
         )
+=======
+        .select("createdAt workflowState businessStatus currentAssigneeId category priority")
+>>>>>>> Stashed changes
         .lean();
+      caseChanges = diffCase(existing, query);
 
       if (
         existing?.createdAt &&
@@ -388,6 +399,7 @@ async function persistTransition(req, res, next) {
         actorId: req.user?.id ?? null,
         actorRole: req.user?.role ?? null,
         details: auditEvent.details || null,
+        changes: caseChanges,
       });
     }
 
@@ -436,8 +448,21 @@ async function resetQueryState(req, res, next) {
       EmailThread.deleteMany({}),
       QueryCounter.deleteOne({ key: COUNTER_KEY }),
       OutboundEmail.deleteMany({}),
-      AuditEvent.deleteMany({ queryId: { $ne: null } }),
     ]);
+
+    // The audit trail is append-only and hash-chained, so the reset (local
+    // databases only — refuseDestructive guards the route) starts a new chain
+    // rather than deleting rows out of the old one. Its first event is the
+    // AUDIT_CHAIN_RESET marker, then the reset itself, then any seeded history.
+    const actor = { id: req.user?.id ?? null, role: req.user?.role ?? null };
+    await audit.resetChain({ actor, reason: "workflow state reset" });
+    await audit.record({
+      action: AUDIT_ACTIONS.QUERY_STATE_RESET,
+      actorType: ACTOR_TYPES.HUMAN,
+      actorId: actor.id,
+      actorRole: actor.role,
+      details: { seededQueries: seed.queries?.length || 0 },
+    });
 
     await Promise.all([
       seed.queries?.length ? QueryCase.insertMany(seed.queries) : null,
@@ -460,18 +485,12 @@ async function resetQueryState(req, res, next) {
       seed.counters
         ? QueryCounter.create({ key: COUNTER_KEY, value: seed.counters })
         : null,
-      seed.auditEvents?.length
-        ? AuditEvent.insertMany(seed.auditEvents.map(fromClientAuditEvent))
-        : null,
     ]);
 
-    await audit.record({
-      action: "QUERY_STATE_RESET",
-      actorType: ACTOR_TYPES.HUMAN,
-      actorId: req.user?.id ?? null,
-      actorRole: req.user?.role ?? null,
-      details: { seededQueries: seed.queries?.length || 0 },
-    });
+    // Seeded history is appended through the chain, in order, like any event.
+    for (const event of seed.auditEvents ?? []) {
+      await audit.record(fromClientAuditEvent(event));
+    }
 
     res.status(HTTP_STATUS.OK).json({ success: true });
   } catch (error) {

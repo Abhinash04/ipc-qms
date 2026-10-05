@@ -1,4 +1,4 @@
-import { useNavigate } from 'react-router-dom';
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Mail, Inbox, Send, AlertTriangle } from 'lucide-react';
 
@@ -8,15 +8,16 @@ import { StatTile } from '@/components/common/StatTile';
 import { EmptyState } from '@/components/common/EmptyState';
 import { Skeleton } from '@/components/ui/skeleton';
 import { AuditTable } from '@/components/admin/AuditTable';
+import { CaseViewSheet } from '@/components/admin/CaseViewSheet';
 import { fetchAuditEvents, fetchAuditSummary } from '@/services/api/adminService';
 import { fetchMailboxMessages } from '@/services/api/mailboxService';
 import { useRoutePaths } from '@/hooks/useRoutePaths';
-import { buildPath } from '@/constants/routePaths';
 import { useWorkflowStore } from '@/store/useWorkflowStore';
 
 export function AdminEmailActivityPage() {
   const paths = useRoutePaths();
-  const navigate = useNavigate();
+  // A case opens read-only here; the audit pages never take the admin into the query workflow.
+  const [viewedCase, setViewedCase] = useState(null);
   const emailMessages = useWorkflowStore((state) => state.emailMessages);
 
   const summary = useQuery({ queryKey: ['audit', 'summary'], queryFn: () => fetchAuditSummary(), retry: false });
@@ -138,7 +139,7 @@ export function AdminEmailActivityPage() {
                         {queryId ? (
                           <button
                             type="button"
-                            onClick={() => paths.QUERY_DETAIL && navigate(buildPath(paths.QUERY_DETAIL, { queryId }))}
+                            onClick={() => setViewedCase(queryId)}
                             className="rounded font-mono text-[11.5px] font-bold text-primary-700 underline-offset-2 hover:underline"
                           >
                             {queryId}
@@ -164,9 +165,10 @@ export function AdminEmailActivityPage() {
           events={emailEvents}
           loading={outbound.isLoading}
           error={outbound.isError ? 'The audit API could not be reached.' : null}
-          onOpenQuery={(queryId) => paths.QUERY_DETAIL && navigate(buildPath(paths.QUERY_DETAIL, { queryId }))}
+          onOpenQuery={setViewedCase}
           emptyTitle="No email events recorded yet"
         />
+        <CaseViewSheet queryId={viewedCase} onClose={() => setViewedCase(null)} />
       </section>
     </div>
   );

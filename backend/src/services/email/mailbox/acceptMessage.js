@@ -8,6 +8,7 @@ import * as caseMail from '../caseMail.js';
 import { isDuplicateKey, OUTCOMES } from '../outbox.js';
 import * as audit from '../../audit/auditService.js';
 import * as gemmaService from '../../ai/gemmaService.js';
+import { change } from '../../audit/caseChanges.js';
 import * as decisions from './decisions.js';
 import { ACTOR_TYPES } from '../../../constants/roles.js';
 import { AUDIT_RESULTS } from '../../../constants/auditActions.js';
@@ -198,8 +199,18 @@ export async function acceptMessage({ mailboxMessageId, message = {}, actor, sou
       { upsert: true },
     );
 
-    await audit.record({ ...record(actor, 'QUERY_RECEIVED'), queryId, details: `Enquiry received from ${senderEmail}.` });
-    await audit.record({ ...record(actor, 'QUERY_REGISTERED'), queryId, details: 'Front Office accepted the message and registered the query.' });
+    await audit.record({
+      ...record(actor, 'QUERY_RECEIVED'),
+      queryId,
+      details: `Enquiry received from ${senderEmail}.`,
+      changes: change('status', null, 'RECEIVED'),
+    });
+    await audit.record({
+      ...record(actor, 'QUERY_REGISTERED'),
+      queryId,
+      details: 'Front Office accepted the message and registered the query.',
+      changes: change('status', 'RECEIVED', 'FRONT_OFFICE_VERIFICATION'),
+    });
     await audit.record({
       ...record(actor, 'CASE_ASSOCIATED'),
       queryId,

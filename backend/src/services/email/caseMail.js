@@ -16,6 +16,7 @@ import { withOfficialClosing } from './templates/signature.js';
 import * as audit from '../audit/auditService.js';
 import { ACTOR_TYPES } from '../../constants/roles.js';
 import { AUDIT_RESULTS } from '../../constants/auditActions.js';
+import { change } from '../audit/caseChanges.js';
 
 const PAST_APPROVAL = ['READY_FOR_DISPATCH', 'DISPATCHED', 'CLOSED'];
 const COUNTER_KEY = 'counters';
@@ -208,6 +209,9 @@ async function forwardPlan(query, actor, source = null) {
           ...record(actor, 'QUERY_FORWARDED'),
           queryId,
           details: 'Forwarded to the Officer-in-Charge for assignment.',
+          changes: ['RECEIVED', 'FRONT_OFFICE_VERIFICATION'].includes(query.workflowState)
+            ? change('status', query.workflowState, 'PENDING_ASSIGNMENT')
+            : null,
         });
         await Notification.create({
           notificationId: await mint('NOTIF'),
@@ -317,8 +321,14 @@ async function responsePlan(query, actor) {
           ...record(actor, 'RESPONSE_DISPATCHED'),
           queryId,
           details: `Approved response ${approved.version} emailed to ${to}.`,
+          changes: change('status', query.workflowState, 'DISPATCHED'),
         });
-        await audit.record({ ...record(actor, 'QUERY_CLOSED'), queryId, details: 'Query closed following dispatch.' });
+        await audit.record({
+          ...record(actor, 'QUERY_CLOSED'),
+          queryId,
+          details: 'Query closed following dispatch.',
+          changes: change('status', 'DISPATCHED', 'CLOSED'),
+        });
         await Notification.create({
           notificationId: await mint('NOTIF'),
           queryId,

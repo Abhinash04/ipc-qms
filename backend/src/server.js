@@ -1,6 +1,7 @@
 import app from './app.js';
 import env, { assertValidEmailConfig, EMAIL_TRANSPORTS, ENV_SOURCE } from './config/env.js';
 import { assertValidAuthConfig } from './config/authConfig.js';
+import { assertValidAuditConfig } from './config/auditConfig.js';
 import { connectDb, disconnectDb } from './config/db.js';
 import browserConfig from './config/browserConfig.js';
 import { IDENTITY_ROLES, identityForRole, formatSender } from './config/identities.js';
@@ -14,6 +15,7 @@ import { startAutoTransferScheduler, stopAutoTransferScheduler } from './service
 try {
   assertValidEmailConfig();
   assertValidAuthConfig();
+  assertValidAuditConfig();
 } catch (error) {
   console.error(`\n${error.message}\n  (env file: ${ENV_SOURCE || 'none'})\n`);
   process.exit(1);

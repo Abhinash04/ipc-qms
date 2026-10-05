@@ -1,7 +1,8 @@
 import HTTP_STATUS from '../constants/httpStatus.js';
 import env from '../config/env.js';
 import authConfig, { cookieOptions } from '../config/authConfig.js';
-import { signToken } from '../services/auth/tokenService.js';
+import { signToken, newSessionId, verifyToken as decodeToken } from '../services/auth/tokenService.js';
+import { setContextUser } from '../services/audit/requestContext.js';
 import {
   verifyCredentials,
   findByEmail,
@@ -32,7 +33,7 @@ async function login(req, res, next) {
         action: AUDIT_ACTIONS.LOGIN_FAILED,
         result: AUDIT_RESULTS.DENIED,
         actorType: ACTOR_TYPES.HUMAN,
-        details: { email: String(email).trim().toLowerCase() },
+        details: { email: String(email).trim().toLowerCase(), reason: 'invalid email or password' },
       });
 
       return res
@@ -40,6 +41,7 @@ async function login(req, res, next) {
         .json({ error: 'Invalid email or password' });
     }
 
+    const sessionId = startSession(user);
     await audit.record({
       action: AUDIT_ACTIONS.LOGIN_SUCCEEDED,
       actorType: ACTOR_TYPES.HUMAN,
@@ -47,17 +49,38 @@ async function login(req, res, next) {
       actorRole: user.role,
     });
 
-    res.cookie(authConfig.COOKIE_NAME, signToken(user), cookieOptions());
+    res.cookie(authConfig.COOKIE_NAME, signToken(user, sessionId), cookieOptions());
     return res.status(HTTP_STATUS.OK).json({ user });
   } catch (error) {
     return next(error);
   }
 }
 
-function logout(req, res) {
-  const { maxAge, ...options } = cookieOptions();
-  res.clearCookie(authConfig.COOKIE_NAME, options);
-  return res.status(HTTP_STATUS.OK).json({ ok: true });
+/** Opens a session: its ID goes into the token and onto this request's audit events. */
+function startSession(user) {
+  const sessionId = newSessionId();
+  setContextUser({ ...user, sessionId });
+  return sessionId;
+}
+
+async function logout(req, res, next) {
+  try {
+    const user = decodeToken(req.cookies?.[authConfig.COOKIE_NAME]);
+    if (user) {
+      setContextUser(user);
+      await audit.record({
+        action: AUDIT_ACTIONS.LOGOUT,
+        actorType: ACTOR_TYPES.HUMAN,
+        actorId: user.id,
+        actorRole: user.role,
+      });
+    }
+    const { maxAge, ...options } = cookieOptions();
+    res.clearCookie(authConfig.COOKIE_NAME, options);
+    return res.status(HTTP_STATUS.OK).json({ ok: true });
+  } catch (error) {
+    return next(error);
+  }
 }
 
 function me(req, res) {
@@ -104,6 +127,7 @@ async function devLogin(req, res, next) {
     }
 
     const publicUser = toPublicUser(user);
+    const sessionId = startSession(publicUser);
 
     await audit.record({
       action: AUDIT_ACTIONS.LOGIN_SUCCEEDED,
@@ -113,7 +137,7 @@ async function devLogin(req, res, next) {
       details: { devLogin: true },
     });
 
-    res.cookie(authConfig.COOKIE_NAME, signToken(publicUser), cookieOptions());
+    res.cookie(authConfig.COOKIE_NAME, signToken(publicUser, sessionId), cookieOptions());
     return res.status(HTTP_STATUS.OK).json({ user: publicUser });
   } catch (error) {
     return next(error);
@@ -155,6 +179,7 @@ async function googleLogin(req, res, next) {
     }
 
     const publicUser = toPublicUser(user);
+    const sessionId = startSession(publicUser);
 
     await audit.record({
       action: AUDIT_ACTIONS.LOGIN_SUCCEEDED,
@@ -164,7 +189,7 @@ async function googleLogin(req, res, next) {
       details: { authProvider: 'google' },
     });
 
-    res.cookie(authConfig.COOKIE_NAME, signToken(publicUser), cookieOptions());
+    res.cookie(authConfig.COOKIE_NAME, signToken(publicUser, sessionId), cookieOptions());
     return res.status(HTTP_STATUS.OK).json({ user: publicUser });
   } catch (error) {
     return next(error);

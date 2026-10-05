@@ -40,6 +40,38 @@ Each audit record conceptually captures: `event`, `queryId`, `actor` (user or `S
 
 ## 9.4 Retention & Immutability
 
-Audit records should not be editable or deletable through normal application flows.
-Retention period and any legal/compliance hold requirements are to be confirmed with the
-client.
+Audit records cannot be edited or deleted through the application: the `AuditEvent` model refuses
+every update, replace and delete, and no route mutates the trail. Retention period and any
+legal/compliance hold requirements are to be confirmed with the client.
+
+**Tamper evidence.** Every persisted record carries a sequence number, the previous record's hash,
+and an HMAC-SHA256 of its own contents keyed with `AUDIT_HMAC_SECRET`. An administrator can re-verify
+the whole chain at any time (`GET /api/v1/audit/verify`, and the badge on the Audit Trail page); an
+edited record, a deleted record and a reordered record are each reported with the position where the
+chain breaks. Records written before chaining existed are reported as *legacy*. Removal of records
+from the very end of the chain is not detectable from the data alone; the chain head printed on each
+report is the reference to compare against.
+
+**Production hardening (recommended).** Give the application's MongoDB user a role that allows only
+`insert` and `find` on the `auditevents` collection, keep `AUDIT_HMAC_SECRET` out of the database's
+reach, and never rotate it once the production trail exists.
+
+## 9.5 Audit Reports
+
+Administrators export the trail as **CSV** or **PDF** from the Audit Trail page, using the page's
+current filters (`GET /api/v1/audit/export`). The PDF follows the Government of India audit trail
+report format: report particulars with a unique reference (`IPC-QMS/ATR/<yyyy-mm>/<nnn>`) and the
+classification "Official / Internal Use"; purpose; period summary; the detailed trail (Audit ID, date and
+time in IST, user, role, source IP, case number, module, activity, previous and new value, result);
+mandatory information; query lifecycle (for one case); authentication by day; privileged activity;
+security events; integrity controls; log retention (CERT-In: at least 180 days); access-control review;
+a 20-point verification checklist; findings and recommendations; compliance statement; and sign-off
+blocks for the preparer, reviewer and approver. Items the application does not perform (user and role
+administration, account lockout, database-level auditing) are stated as not applicable or for the
+reviewer to confirm rather than claimed. Every export is itself recorded as `AUDIT_EXPORTED` with its
+reference and a SHA-256 digest of its contents, so a printed or downloaded copy can later be matched to
+the trail. CSV cells that a spreadsheet would treat as formulas are neutralised.
+
+Each event records the person's user ID, name, role and session, the source IP address and browser (or
+the server, for background work), and — for changes to a case — the previous and new status, assignee,
+category or priority. Sign-out, rejected sessions and every view of the audit trail are recorded too.
