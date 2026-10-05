@@ -82,17 +82,13 @@ describe('Approve cannot be pressed twice while it is working', () => {
     vi.spyOn(queryCaseService, 'grantFinalApproval').mockImplementation(approve);
 
     renderAs(OIC, `/officer-in-charge/approvals/${queryId}`);
-    const button = await screen.findByRole('button', { name: 'Approve' });
+    fireEvent.click(await screen.findByRole('button', { name: 'Approve' }));
+    const send = screen.getByRole('button', { name: 'Approve and send' });
+    fireEvent.click(send);
 
-    fireEvent.click(button);
-
-    await waitFor(() =>
-      expect(screen.getByRole('button', { name: 'Approving and sending…' })).toBeDisabled(),
-    );
-
-    const busy = screen.getByRole('button', { name: 'Approving and sending…' });
-    fireEvent.click(busy);
-    fireEvent.click(busy);
+    await waitFor(() => expect(send).toBeDisabled());
+    fireEvent.click(send);
+    fireEvent.click(send);
 
     await act(async () => {
       release();
@@ -266,5 +262,23 @@ describe('an acknowledgement nobody could confirm', () => {
       ).toHaveLength(1),
     );
     expect(mailboxService.sendAcknowledgement).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('the Officer-in-Charge approving with remarks', () => {
+  it('sends the remarks with the approval, and closes the dialog once approved', async () => {
+    const queryId = await readyForApproval('MSG-IDEM-0002');
+    const approve = vi.fn(fakeFinalApprovalEndpoint({ actor: OIC.name }));
+    vi.spyOn(queryCaseService, 'grantFinalApproval').mockImplementation(approve);
+
+    renderAs(OIC, `/officer-in-charge/approvals/${queryId}`);
+    fireEvent.click(await screen.findByRole('button', { name: 'Approve' }));
+    fireEvent.change(screen.getByRole('textbox', { name: 'Approval remarks (optional)' }), {
+      target: { value: 'Reviewed and approved. Accurate and complete.' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Approve and send' }));
+
+    await waitFor(() => expect(approve).toHaveBeenCalledWith(queryId, { comment: 'Reviewed and approved. Accurate and complete.' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
   });
 });

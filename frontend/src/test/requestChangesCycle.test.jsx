@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
@@ -166,7 +166,7 @@ describe('resubmitting after changes were requested', () => {
     expect(screen.getByText('See the IP monograph on assay.').closest('[data-diff]')).toHaveAttribute('data-diff', 'added');
   });
 
-  it('carries the same context to the Officer-in-Charge, whose Approve also yields to a written return', () => {
+  it('carries the same context to the Officer-in-Charge, who asks for changes in a dialog', () => {
     returnedAndRevised();
     s().submitForReview(queryId, OFFICIAL, { changeSummary: NOTE });
     s().approveReview(queryId, '', REVIEWER);
@@ -175,10 +175,15 @@ describe('resubmitting after changes were requested', () => {
     expect(screen.getByText('Resubmitted after changes requested')).toBeInTheDocument();
     expect(screen.getByText(NOTE)).toBeInTheDocument();
 
-    const approve = screen.getByRole('button', { name: 'Approve' });
-    fireEvent.change(screen.getByRole('textbox', { name: 'Changes or reason' }), { target: { value: 'Tighten the wording.' } });
-    expect(approve).toBeDisabled();
-    expect(screen.getByRole('button', { name: 'Return for revision' })).toBeEnabled();
+    expect(screen.queryByRole('textbox')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Approve' })).toBeEnabled();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Return for revision' }));
+    const dialog = screen.getByRole('dialog', { name: 'Return for revision' });
+    const send = within(dialog).getByRole('button', { name: 'Return for revision' });
+    expect(send).toBeDisabled();
+    fireEvent.change(within(dialog).getByRole('textbox', { name: 'Changes required' }), { target: { value: 'Tighten the wording.' } });
+    expect(send).toBeEnabled();
   });
 });
 
@@ -240,16 +245,18 @@ describe('an OIC rejection', () => {
 
   it('asks the OIC for a reason and a confirmation before rejecting', async () => {
     renderAs(OIC, `/officer-in-charge/approvals/${queryId}`);
-    const reject = screen.getByRole('button', { name: 'Reject' });
-    expect(reject).toBeDisabled();
-
-    fireEvent.change(screen.getByRole('textbox', { name: 'Changes or reason' }), { target: { value: REJECTION } });
-    fireEvent.click(reject);
+    fireEvent.click(screen.getByRole('button', { name: 'Reject' }));
     expect(rejections()).toEqual([]);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Confirm rejection' }));
+    const dialog = screen.getByRole('dialog', { name: /^Reject v\d+\?$/ });
+    expect(dialog).toHaveTextContent('The reason is recorded and sent back to the assigned official.');
+    const confirm = within(dialog).getByRole('button', { name: 'Reject' });
+    expect(confirm).toBeDisabled();
+
+    fireEvent.change(within(dialog).getByRole('textbox', { name: 'Reason for rejecting' }), { target: { value: REJECTION } });
+    fireEvent.click(confirm);
     await waitFor(() => expect(rejections()).toHaveLength(1));
-    await waitFor(() => expect(screen.queryByRole('button', { name: 'Confirm rejection' })).toBeNull());
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
   });
 
   it('shows the officer the OIC reason, labelled as a rejection', () => {

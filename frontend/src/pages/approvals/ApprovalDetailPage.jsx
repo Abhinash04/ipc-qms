@@ -7,8 +7,6 @@ import { buildLifecycle } from "@/constants/queryLifecycle";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { useQueryCase } from "@/hooks/useQueryCase";
 import { useWorkflowStore } from "@/store/useWorkflowStore";
 import { WORKFLOW_ACTION } from "@/constants/workflowRules";
@@ -17,6 +15,7 @@ import { useRoutePaths } from "@/hooks/useRoutePaths";
 import { useWorkflowAction } from "@/hooks/useWorkflowAction";
 import { ActionError } from "@/components/workflow/ActionError";
 import { ResubmissionCard } from "@/components/workflow/ResubmissionCard";
+import { DecisionCommentDialog } from "@/components/workflow/DecisionCommentDialog";
 import { DECISION_LABEL, DECISION_VARIANT, requesterRole } from "@/constants/reviewRounds";
 import { formatDateTime } from "@/utils/dateTime";
 import { notify } from "@/services/notify";
@@ -48,13 +47,53 @@ export function ApprovalDetailPage() {
   const returnForRevision = useWorkflowStore(
     (state) => state.returnForRevisionFromApproval,
   );
-  const [comment, setComment] = useState("");
-  const [confirmingReject, setConfirmingReject] = useState(false);
+  // Which decision's dialog is open: "approve", "return", "reject" or none.
+  const [deciding, setDeciding] = useState(null);
 
   if (!query) return <EmptyState title={resolving ? "Loading case…" : "Query not found"} />;
 
   const canApprove = can(WORKFLOW_ACTION.FINAL_APPROVE);
-  const requesting = comment.length > 0;
+  const openDialog = (decision) => {
+    clearError();
+    setDeciding(decision);
+  };
+  const dialogProps = (decision) => ({
+    open: deciding === decision,
+    onOpenChange: (open) => setDeciding(open ? decision : null),
+    error: deciding === decision ? error : null,
+  });
+
+  // Approves and sends. Once approved, the dialog closes even if the email then failed: that is
+  // reported on the page, and approving again would not help.
+  const approve = async (comment) => {
+    let approved = false;
+    const ok = await run(async () => {
+      const result = await grantFinalApproval(queryId, currentUser, undefined, { comment });
+      approved = true;
+
+      if (result?.inProgress) {
+        notify.info(
+          "Already being sent",
+          `${queryId} is being sent by another request. This page will show the result shortly.`,
+        );
+        return result;
+      }
+
+      if (!result?.dispatched && !result?.alreadyDispatched) {
+        const failure = result?.errors?.[0];
+        const reason = failure?.error || "the response could not be sent";
+
+        throw new Error(
+          failure?.unconfirmed
+            ? `Approved, and the response may already have been sent: ${reason}`
+            : `Approved, but the inquirer was not emailed: ${reason}`,
+        );
+      }
+
+      return result;
+    });
+    return ok || approved;
+  };
 
   return (
     <div>
@@ -158,109 +197,55 @@ export function ApprovalDetailPage() {
             <CardBody className="space-y-3">
               {canApprove ? (
                 <>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="approval-comment">
-                      Changes or reason
-                    </Label>
-                    <Textarea
-                      id="approval-comment"
-                      value={comment}
-                      onChange={(e) => setComment(e.target.value)}
-                      placeholder="Describe what must change, or why it is rejected — leave empty to approve"
-                      rows={3}
-                    />
-                  </div>
-                  <Button
-                    className="w-full"
-                    disabled={running || requesting}
-                    title={requesting ? "Clear the text to approve" : undefined}
-                    onClick={() =>
-                      run(async () => {
-                        const result = await grantFinalApproval(
-                          queryId,
-                          currentUser,
-                          undefined,
-                          {},
-                        );
-                        setComment("");
-
-                        if (result?.inProgress) {
-                          notify.info(
-                            "Already being sent",
-                            `${queryId} is being sent by another request. This page will show the result shortly.`,
-                          );
-                          return result;
-                        }
-
-                        if (!result?.dispatched && !result?.alreadyDispatched) {
-                          const failure = result?.errors?.[0];
-                          const reason =
-                            failure?.error || "the response could not be sent";
-
-                          throw new Error(
-                            failure?.unconfirmed
-                              ? `Approved, and the response may already have been sent: ${reason}`
-                              : `Approved, but the inquirer was not emailed: ${reason}`,
-                          );
-                        }
-
-                        return result;
-                      })
-                    }
-                  >
-                    {running ? "Approving and sending…" : "Approve"}
+                  <Button className="w-full" disabled={running} onClick={() => openDialog("approve")}>
+                    {running && deciding === "approve" ? "Approving and sending…" : "Approve"}
                   </Button>
                   <Button
                     className="w-full bg-status-orange-fg text-white hover:bg-status-orange-fg/90 focus-visible:ring-status-orange-fg/30"
-                    disabled={running || !comment.trim()}
-                    onClick={() => {
-                      run(() =>
-                        returnForRevision(queryId, comment, currentUser),
-                      );
-                      setComment("");
-                    }}
+                    disabled={running}
+                    onClick={() => openDialog("return")}
                   >
                     Return for revision
                   </Button>
+                  <Button variant="destructive" className="w-full" disabled={running} onClick={() => openDialog("reject")}>
+                    Reject
+                  </Button>
                   <p className="text-xs text-muted-foreground">
-                    {requesting
-                      ? "Approve is disabled while changes are written — clear the box to approve instead."
-                      : "Approve if nothing needs to change. Returning needs a description of the changes and restarts the full review cycle before it comes back here."}
+                    Approve sends the response to the inquirer and closes the query. Returning restarts the full review
+                    cycle before it comes back here.
                   </p>
-                  {confirmingReject ? (
-                    <div className="space-y-2 rounded-md border border-status-red-line bg-status-red-bg p-3">
-                      <p className="text-sm font-medium text-status-red-fg">
-                        Reject {latestVersion?.version || "this response"}? The reason is recorded and sent back to the assigned official.
-                      </p>
-                      <div className="flex gap-2">
-                        <Button
-                          variant="destructive"
-                          className="flex-1"
-                          disabled={running || !comment.trim()}
-                          onClick={() => {
-                            run(() => rejectFinalApproval(queryId, comment, currentUser));
-                            setComment("");
-                            setConfirmingReject(false);
-                          }}
-                        >
-                          Confirm rejection
-                        </Button>
-                        <Button variant="outline" className="flex-1" onClick={() => setConfirmingReject(false)}>
-                          Cancel
-                        </Button>
-                      </div>
-                    </div>
-                  ) : (
-                    <Button
-                      variant="destructive"
-                      className="w-full"
-                      disabled={running || !comment.trim()}
-                      title={comment.trim() ? undefined : "Write the reason for rejecting first"}
-                      onClick={() => setConfirmingReject(true)}
-                    >
-                      Reject
-                    </Button>
-                  )}
+
+                  <DecisionCommentDialog
+                    {...dialogProps("approve")}
+                    title="Give final approval"
+                    description={`${latestVersion?.version || "The response"} is locked and emailed to the inquirer, and the query is closed.`}
+                    label="Approval remarks (optional)"
+                    placeholder="Reviewed and approved. The response is accurate and can proceed to the next stage."
+                    confirmLabel="Approve and send"
+                    onSubmit={approve}
+                  />
+                  <DecisionCommentDialog
+                    {...dialogProps("return")}
+                    title="Return for revision"
+                    description="The response goes back to the assigned officer, and the full review cycle restarts."
+                    label="Changes required"
+                    placeholder="Please revise the response to include the relevant reference standards and provide more details regarding the testing methodology."
+                    required
+                    confirmLabel="Return for revision"
+                    tone="change"
+                    onSubmit={(comment) => run(() => returnForRevision(queryId, comment, currentUser))}
+                  />
+                  <DecisionCommentDialog
+                    {...dialogProps("reject")}
+                    title={`Reject ${latestVersion?.version || "this response"}?`}
+                    description="The reason is recorded and sent back to the assigned official."
+                    label="Reason for rejecting"
+                    placeholder="State why the response cannot be approved."
+                    required
+                    confirmLabel="Reject"
+                    tone="reject"
+                    onSubmit={(comment) => run(() => rejectFinalApproval(queryId, comment, currentUser))}
+                  />
                   <p className="text-xs text-muted-foreground">
                     Whether the OIC may directly edit the response at this stage
                     is a client clarification item — editing is not offered
