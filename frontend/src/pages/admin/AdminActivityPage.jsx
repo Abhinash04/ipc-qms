@@ -11,7 +11,7 @@ import { AuditExportButtons, ChainIntegrityBadge } from '@/components/admin/Audi
 import { fetchAuditEvents } from '@/services/api/adminService';
 import { useRoutePaths } from '@/hooks/useRoutePaths';
 import { toServerRange } from '@/utils/dateRange';
-import { AUDIT_ACTION_OPTIONS, RESULT_OPTIONS, ACTOR_OPTIONS } from '@/constants/auditFilters';
+import { AUDIT_ACTION_GROUPS, RESULT_OPTIONS, ACTOR_OPTIONS } from '@/constants/auditFilters';
 
 const PAGE_SIZE = 50;
 // Typing a query ID asks the server once the typing stops, not once per letter (each request
@@ -96,10 +96,14 @@ export function AdminActivityPage() {
             <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Event</span>
             <select className={field} value={filters.action} onChange={set('action')}>
               <option value="">All events</option>
-              {AUDIT_ACTION_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
+              {AUDIT_ACTION_GROUPS.map(({ group, options }) => (
+                <optgroup key={group} label={group}>
+                  {options.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </optgroup>
               ))}
             </select>
           </label>

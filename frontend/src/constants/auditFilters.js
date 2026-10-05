@@ -8,6 +8,26 @@ export const AUDIT_ACTION_OPTIONS = [
     label: "Tried to open something without permission",
     group: "Access",
   },
+  { value: "QUERY_RECEIVED", label: "New query received", group: "Query handling" },
+  { value: "QUERY_REGISTERED", label: "Query accepted and registered", group: "Query handling" },
+  { value: "ACKNOWLEDGEMENT_SENT", label: "\"We have received your query\" email sent", group: "Query handling" },
+  { value: "QUERY_FORWARDED", label: "Sent to the Officer-in-Charge", group: "Query handling" },
+  { value: "QUERY_ASSIGNED", label: "Given to an officer to answer", group: "Query handling" },
+  { value: "ASSIGNMENT_OVERRIDDEN", label: "Different officer chosen than suggested", group: "Query handling" },
+  { value: "QUERY_TRANSFERRED", label: "Handed over to another officer", group: "Query handling" },
+  { value: "QUERY_AUTO_TRANSFERRED", label: "Handed over to another officer automatically", group: "Query handling" },
+  { value: "QUERY_AUTO_TRANSFER_FAILED", label: "Automatic handover found no officer", group: "Query handling" },
+  { value: "DRAFT_GENERATED", label: "Suggested reply prepared", group: "Query handling" },
+  { value: "DRAFT_UPDATED", label: "Reply updated", group: "Query handling" },
+  { value: "REVIEW_ADDED", label: "Reply sent for checking", group: "Query handling" },
+  { value: "REVIEW_REMOVED", label: "Checking step removed", group: "Query handling" },
+  { value: "REVIEW_COMPLETED", label: "Reply checked and approved", group: "Query handling" },
+  { value: "REVISION_REQUESTED", label: "Changes asked for in the reply", group: "Query handling" },
+  { value: "FINAL_APPROVAL_GRANTED", label: "Reply given final approval", group: "Query handling" },
+  { value: "FINAL_APPROVAL_REJECTED", label: "Final approval refused", group: "Query handling" },
+  { value: "RESPONSE_DISPATCHED", label: "Reply emailed to the person who asked", group: "Query handling" },
+  { value: "QUERY_CLOSED", label: "Query closed", group: "Query handling" },
+  { value: "QUERY_PULLED_BACK", label: "Moved back to an earlier step", group: "Query handling" },
   { value: "EMAIL_RECEIVED", label: "Email taken in from the mailbox", group: "Email" },
   { value: "EMAIL_READ", label: "Mailbox opened", group: "Email" },
   { value: "EMAIL_SENT", label: "Email sent", group: "Email" },
@@ -22,6 +42,7 @@ export const AUDIT_ACTION_OPTIONS = [
     label: "Suitable officers suggested automatically",
     group: "AI",
   },
+  { value: "AI_ASSIGNMENT_RECOMMENDED", label: "Suitable officer suggested automatically", group: "AI" },
   {
     value: "ATTACHMENT_UPLOADED",
     label: "File attached",
@@ -35,7 +56,17 @@ export const AUDIT_ACTION_OPTIONS = [
   { value: "AUDIT_EXPORTED", label: "Activity report downloaded", group: "Audit" },
   { value: "AUDIT_VERIFIED", label: "Records checked for tampering", group: "Audit" },
   { value: "AUDIT_VIEWED", label: "Activity records viewed", group: "Audit" },
+  { value: "AUDIT_CHAIN_RESET", label: "Activity records restarted (test system only)", group: "Audit" },
+  { value: "QUERY_STATE_RESET", label: "All query data cleared (test system only)", group: "Audit" },
 ];
+
+/** The options in their groups, in order, for a grouped select. */
+export const AUDIT_ACTION_GROUPS = AUDIT_ACTION_OPTIONS.reduce((groups, option) => {
+  const last = groups.at(-1);
+  if (last?.group === option.group) last.options.push(option);
+  else groups.push({ group: option.group, options: [option] });
+  return groups;
+}, []);
 
 export const EMAIL_ACTIONS = AUDIT_ACTION_OPTIONS.filter(
   (o) => o.group === "Email",

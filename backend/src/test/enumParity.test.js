@@ -6,7 +6,8 @@ import {
   RESPONSE_STATUS,
   PRIORITY,
 } from '../constants/workflowStates.js';
-import { CLIENT_AUDIT_EVENTS } from '../constants/auditActions.js';
+import { CLIENT_AUDIT_EVENTS, isKnownAuditAction } from '../constants/auditActions.js';
+import { activityLabel } from '../services/audit/auditPresentation.js';
 import { ROLES } from '../constants/roles.js';
 import { MAIL_CATEGORIES, RELATION_KINDS, UNCLASSIFIED, REGISTERED, CATEGORY_SOURCES } from '../constants/mailCategories.js';
 
@@ -14,6 +15,7 @@ import * as clientEnums from '../../../frontend/src/constants/statusEnums.js';
 import { ROLES as CLIENT_ROLES } from '../../../frontend/src/constants/roles.js';
 import * as clientCategories from '../../../frontend/src/constants/mailCategories.js';
 import * as clientCycle from '../../../frontend/src/constants/reviewCycle.js';
+import { AUDIT_ACTION_OPTIONS } from '../../../frontend/src/constants/auditFilters.js';
 import { PULLBACK_RANK, STEP_STATUS } from '../services/workflow/pullbackPlan.js';
 
 describe('workflow vocabulary parity with the client', () => {
@@ -30,6 +32,19 @@ describe('workflow vocabulary parity with the client', () => {
 describe('audit vocabulary parity with the client', () => {
   it('lists every client audit event the server will accept', () => {
     expect([...CLIENT_AUDIT_EVENTS].sort()).toEqual(Object.values(clientEnums.AUDIT_EVENT).sort());
+  });
+
+  it('filters the Audit Trail by actions the server records, in the words its rows use', () => {
+    for (const option of AUDIT_ACTION_OPTIONS) {
+      expect(isKnownAuditAction(option.value), option.value).toBe(true);
+      expect(option.label, option.value).toBe(activityLabel(option.value));
+    }
+  });
+
+  it('lets the Audit Trail be filtered by every step of the query workflow', () => {
+    const offered = new Set(AUDIT_ACTION_OPTIONS.map((option) => option.value));
+    const steps = [...CLIENT_AUDIT_EVENTS, 'QUERY_AUTO_TRANSFERRED', 'QUERY_AUTO_TRANSFER_FAILED'];
+    expect(steps.filter((action) => !offered.has(action))).toEqual([]);
   });
 });
 
