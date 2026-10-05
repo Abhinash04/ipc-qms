@@ -153,6 +153,14 @@ const ACTIVITIES_COVERED = [
   'Refused and unauthorised access attempts',
 ];
 
+/** What the detailed trail adds under the activity: the change made, and why a failure failed. */
+function trailNotes(row, view) {
+  return [
+    row.changes ? `Changed from ${view.previousValue} to ${view.newValue}` : null,
+    view.failureReason && !view.did.includes(view.failureReason) ? `Reason: ${view.failureReason}` : null,
+  ].filter(Boolean);
+}
+
 const ANNEXURE_FIELDS =
   'Audit ID | Timestamp (IST) | User ID | User name | Role | Section | Session ID | Source IP | Device name | Browser | ' +
   'Module | Case No. | Activity | Previous value | New value | Result | Failure reason | Log source';
@@ -259,14 +267,17 @@ export function buildPdf({
       // The built-in fonts have no arrow character, so the arrow is drawn.
       const ARROW_INDENT = 11;
       const isStory = (cell) => Boolean(cell) && typeof cell === 'object' && 'who' in cell;
-      // "By: name (role)" in bold, then one arrowed line for what was done and, when another
-      // person is involved, one for "To: name (role)" / "From: …".
-      const storyLines = (cell) => [cell.did, cell.other].filter(Boolean);
+      // "By: name (role)" in bold, then one arrowed line for what was done, one for "To: name
+      // (role)" / "From: …" when another person is involved, and one for each note.
+      const storyLines = (cell) =>
+        [{ text: cell.did }, { text: cell.other, other: true }, ...(cell.notes || []).map((note) => ({ text: note }))].filter(
+          (line) => line.text,
+        );
       const storyHeight = (cell, cellWidth) => {
         doc.font('Helvetica-Bold').fontSize(fontSize);
         const whoHeight = doc.heightOfString(`By: ${cell.who}`, { width: cellWidth - 6 });
         doc.font('Helvetica').fontSize(fontSize);
-        const lineHeights = storyLines(cell).map((line) => doc.heightOfString(line, { width: cellWidth - 6 - ARROW_INDENT }));
+        const lineHeights = storyLines(cell).map((line) => doc.heightOfString(line.text, { width: cellWidth - 6 - ARROW_INDENT }));
         return { whoHeight, lineHeights, total: whoHeight + lineHeights.reduce((sum, h) => sum + h + 1, 0) };
       };
       const drawArrow = (x, y) => {
@@ -278,7 +289,14 @@ export function buildPdf({
       data.forEach((cells, index) => {
         doc.font('Helvetica').fontSize(fontSize);
         const texts = cells.map((cell) =>
-          isStory(cell) ? { who: clip(cell.who, 300), did: clip(cell.did, 900), other: clip(cell.other || '', 300) } : clip(cell ?? '', 900),
+          isStory(cell)
+            ? {
+                who: clip(cell.who, 300),
+                did: clip(cell.did, 900),
+                other: clip(cell.other || '', 300),
+                notes: (cell.notes || []).map((note) => clip(note, 600)),
+              }
+            : clip(cell ?? '', 900),
         );
         const heights = texts.map((text, i) =>
           isStory(text) ? storyHeight(text, widths[i]).total : doc.heightOfString(text, { width: widths[i] - 6 }),
@@ -306,10 +324,10 @@ export function buildPdf({
               if (lineY + fontSize > y + rowHeight) return;
               drawArrow(x + 3, lineY);
               doc
-                .font(n === 1 ? 'Helvetica-Bold' : 'Helvetica')
+                .font(line.other ? 'Helvetica-Bold' : 'Helvetica')
                 .fontSize(fontSize)
-                .fillColor(n === 1 ? '#1f4e9c' : ink)
-                .text(line, x + 3 + ARROW_INDENT, lineY, {
+                .fillColor(line.other ? '#1f4e9c' : ink)
+                .text(line.text, x + 3 + ARROW_INDENT, lineY, {
                   width: widths[i] - 6 - ARROW_INDENT,
                   height: Math.max(y + rowHeight - lineY - 2, fontSize),
                   ellipsis: true,
@@ -401,7 +419,7 @@ export function buildPdf({
           [view.ipAddress || '-', view.deviceName, source(view)].filter(Boolean).join('\n'),
           view.caseNo || '-',
           view.module,
-          { who: view.who, did: view.did, other: view.other },
+          { who: view.who, did: view.did, other: view.other, notes: trailNotes(row, view) },
           view.status,
         ];
       }),

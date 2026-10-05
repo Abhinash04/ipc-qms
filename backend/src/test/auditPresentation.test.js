@@ -56,6 +56,30 @@ describe('how an audit event reads', () => {
     expect(view.did).toMatch(/^Handed query QRY-2026-00050 over automatically from Neha Singh \(.+\) \(reason: No action within 30 minutes\)$/);
   });
 
+  it('keeps the reason a final approval was refused', () => {
+    const view = present({
+      action: 'FINAL_APPROVAL_REJECTED',
+      actorType: 'human',
+      actorId: 'USR-0003',
+      queryId: 'QRY-2026-00050',
+      details: 'Final approval rejected on v2: Cite the 2026 monograph',
+    });
+    expect(view.did).toBe('Refused final approval for the reply to query QRY-2026-00050 (reason: Cite the 2026 monograph)');
+  });
+
+  it('keeps what was changed when a reply is resubmitted', () => {
+    const view = present({
+      action: 'DRAFT_UPDATED',
+      actorType: 'human',
+      actorId: 'USR-0004',
+      queryId: 'QRY-2026-00050',
+      details: 'v2 resubmitted for review after changes requested by EduTR Zairza on v1. Changes implemented: Added the limits table.',
+    });
+    expect(view.did).toBe(
+      'Sent the reply to query QRY-2026-00050 back for checking after the changes asked for by EduTR Zairza (Officer-in-Charge) (changes made: Added the limits table)',
+    );
+  });
+
   it('says why an automatic transfer found no one', () => {
     const view = present({
       action: 'QUERY_AUTO_TRANSFER_FAILED',
@@ -232,6 +256,27 @@ describe('the PDF report', () => {
     expect(trail).toContain('System (automatic)');
     expect(text).toContain('10.21.4.18');
     expect(text).toMatch(/Page 1 of \d+/);
+  });
+
+  it('adds the change made and the reason for a failure under the activity', async () => {
+    const forwarded = {
+      seq: 43,
+      timestamp: '2026-10-01T05:13:00.000Z',
+      action: 'QUERY_FORWARDED',
+      result: 'success',
+      actorType: 'human',
+      actorId: 'USR-0014',
+      queryId: 'QRY-2026-00043',
+      changes: { status: { from: 'FRONT_OFFICE_VERIFICATION', to: 'PENDING_ASSIGNMENT' } },
+    };
+    const text = await pdfText(
+      await buildPdf({ rows: [...rows, forwarded], filters: {}, generatedBy: 'A', generatedAt: '2026-10-01T09:15:27.000Z' }),
+    );
+    const trail = text.slice(text.indexOf('3. Detailed Audit Trail'), text.indexOf('4. Mandatory Audit Information'));
+    const loose = (words) => new RegExp(words.split(' ').join('\\s+'));
+
+    expect(trail).toMatch(loose('Changed from Being checked by Front Office to Waiting to be given to an officer'));
+    expect(trail).toMatch(loose('Reason: SMTP connection timed out'));
   });
 
   it('carries no chain internals, hashes, sequence numbers or slugs', async () => {

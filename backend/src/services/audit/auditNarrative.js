@@ -190,8 +190,17 @@ const SENTENCES = {
   DRAFT_GENERATED: (e) => `Started the reply to ${queryWord(e)} from a suggested draft`,
   DRAFT_CREATED: (e) => `Started the reply to ${queryWord(e)}`,
   DRAFT_EDITED: (e) => `Edited the reply to ${queryWord(e)}`,
-  DRAFT_UPDATED: (e) =>
-    /submitted for review/i.test(text(e)) ? `Sent the reply to ${queryWord(e)} for checking` : `Saved changes to the reply to ${queryWord(e)}`,
+  DRAFT_UPDATED: (e) => {
+    if (/resubmitted for review/i.test(text(e))) {
+      const asker = after(e, /changes requested by (.+?) on \S+\./i);
+      return withReason(
+        `Sent the reply to ${queryWord(e)} back for checking after the changes asked for${asker ? ` by ${personWithRole(asker)}` : ''}`,
+        after(e, /Changes implemented:\s*(.+)$/i),
+        'changes made',
+      );
+    }
+    return /submitted for review/i.test(text(e)) ? `Sent the reply to ${queryWord(e)} for checking` : `Saved changes to the reply to ${queryWord(e)}`;
+  },
   DRAFT_SUBMITTED_FOR_APPROVAL: (e) => `Sent the reply to ${queryWord(e)} for approval`,
   REVIEW_ADDED: (e) => ({
     action: `Asked for the reply to ${queryWord(e)} to be checked`,
@@ -209,7 +218,8 @@ const SENTENCES = {
       'comment',
     ),
   FINAL_APPROVAL_GRANTED: (e) => `Gave final approval to the reply to ${queryWord(e)}`,
-  FINAL_APPROVAL_REJECTED: (e) => withReason(`Refused final approval for the reply to ${queryWord(e)}`, after(e, /rejected:\s*(.+)$/i)),
+  FINAL_APPROVAL_REJECTED: (e) =>
+    withReason(`Refused final approval for the reply to ${queryWord(e)}`, after(e, /rejected(?: on [^:]+)?:\s*(.+)$/i)),
   RESPONSE_DISPATCHED: (e) => ({
     action: `Emailed the approved reply to ${queryWord(e)}`,
     other: to(inquirer(after(e, /emailed to (\S+?)\.?$/i))),
