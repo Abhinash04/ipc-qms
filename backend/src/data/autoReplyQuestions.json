@@ -1,0 +1,69 @@
+{
+  "version": 1,
+  "note": "Demo content for the auto-reply pitch. Questions, variants and answers are to be approved or replaced by IPC before use. Answers 1-7 follow the IPC FAQ in ipcKnowledge.json.",
+  "entries": [
+    {
+      "id": "AR-IP-WHAT",
+      "topic": "The Indian Pharmacopoeia",
+      "question": "What is the Indian Pharmacopoeia?",
+      "variants": ["What is IP?", "What is Indian Pharmacopoeia?", "What is the IP?", "What is the Indian Pharmacopoeia (IP)?"],
+      "answer": "As per the provisions of the Second Schedule of the Drugs and Cosmetics Act, 1940, the Indian Pharmacopoeia (IP) is the official book of standards for drugs in India. IP standards are authoritative in nature and are legally enforceable in India. The IP is published by the Indian Pharmacopoeia Commission (IPC) on behalf of the Ministry of Health & Family Welfare, Government of India."
+    },
+    {
+      "id": "AR-IPC-ROLE",
+      "topic": "The role of the IPC",
+      "question": "What is the role of the Indian Pharmacopoeia Commission?",
+      "variants": ["What is the role of IPC?", "What does the IPC do?", "What does the Indian Pharmacopoeia Commission do?"],
+      "answer": "The Indian Pharmacopoeia Commission (IPC) is an autonomous institution under the Ministry of Health & Family Welfare, Government of India, solely responsible for setting and publishing official drug standards in the Indian Pharmacopoeia. The IPC has no role in the regulatory review and approval of drugs in India; under the Drugs and Cosmetics Act, 1940, the Central Drugs Standard Control Organisation (CDSCO) and the State Licensing Authorities take regulatory decisions."
+    },
+    {
+      "id": "AR-IP-PURCHASE",
+      "topic": "Buying the Indian Pharmacopoeia",
+      "question": "How can I purchase a copy of the Indian Pharmacopoeia?",
+      "variants": ["How can I buy the Indian Pharmacopoeia?", "Where can I purchase the IP?", "How do I buy a copy of the IP?", "How can I purchase the IP?"],
+      "answer": "A copy of the Indian Pharmacopoeia can be purchased directly from the IPC. Details are available on the IPC website, www.ipc.gov.in."
+    },
+    {
+      "id": "AR-IP-ONLINE",
+      "topic": "IP Online",
+      "question": "What is IP Online?",
+      "variants": ["How can I subscribe to IP Online?", "How do I subscribe to IP Online?"],
+      "answer": "IP Online is the digital version of the Indian Pharmacopoeia. It gives user-friendly access to the IP monographs and the associated IP Reference Substances, with advanced search functions. You may subscribe at www.iponline.ipc.gov.in."
+    },
+    {
+      "id": "AR-IPRS-PURCHASE",
+      "topic": "Buying IP Reference Substances",
+      "question": "How can I purchase IP Reference Substances?",
+      "variants": ["Where can I buy IPRS?", "How can I purchase IPRS?", "How can I purchase IPRS and impurity standards?", "Where can I buy IP Reference Substances?"],
+      "answer": "IP Reference Substances (IPRS) and impurity standards can be purchased directly from the IPC or from laboratories authorised by the IPC. The list of available IPRS and impurity standards is at www.onlinestore.ipc.gov.in, where orders can be placed. The IPC has not authorised any vendors or distributors for the sale and distribution of IP standards."
+    },
+    {
+      "id": "AR-IPRS-VALIDITY",
+      "topic": "Validity of an IPRS lot",
+      "question": "How long is the current lot of an IPRS valid?",
+      "variants": ["What is the validity of the current IPRS lot?", "Till when is the current IPRS lot valid?"],
+      "answer": "The current lot of an IPRS or impurity standard remains valid for as long as the lot appears in the list of IPRS and impurity standards at www.onlinestore.ipc.gov.in."
+    },
+    {
+      "id": "AR-IPRS-CERTIFICATE",
+      "topic": "IPRS certificates and MSDS",
+      "question": "Where can I download the certificate or MSDS of an IPRS?",
+      "variants": ["How can I get the MSDS of an IP Reference Substance?", "Where can I download the certificate of an IPRS?", "Where can I download the MSDS of an IPRS?"],
+      "answer": "The certificates and Material Safety Data Sheets (MSDS) of IPRS and impurity standards can be downloaded from www.onlinestore.ipc.gov.in."
+    },
+    {
+      "id": "AR-PARACETAMOL-USE",
+      "topic": "Uses of paracetamol",
+      "question": "What is the use case of paracetamol?",
+      "variants": ["What is paracetamol used for?", "What are the uses of paracetamol?", "What is the use of paracetamol?"],
+      "answer": "Paracetamol is a commonly used medicine for the relief of mild to moderate pain, such as headache and body ache, and for reducing fever. Its quality standards are laid down in the Paracetamol monographs of the Indian Pharmacopoeia. The IPC sets drug standards and does not give medical advice; for advice on taking any medicine, please consult a registered medical practitioner or pharmacist."
+    },
+    {
+      "id": "AR-ADR-REPORT",
+      "topic": "Reporting an adverse drug reaction",
+      "question": "How can I report an adverse drug reaction?",
+      "variants": ["Where do I report a side effect of a medicine?", "How do I report an adverse drug reaction?", "How can I report a side effect of a medicine?"],
+      "answer": "Suspected adverse drug reactions can be reported to the Pharmacovigilance Programme of India (PvPI), coordinated by the IPC, through the PvPI helpline 1800-180-3024 (toll free) or the ADR PvPI mobile app. Details are available on the IPC website, www.ipc.gov.in."
+    }
+  ]
+}

@@ -55,6 +55,11 @@ const env = {
 
   AUDIT_HMAC_SECRET: process.env.AUDIT_HMAC_SECRET || '',
 
+  // Offer an FO-approved automatic reply to mails that ask a supported general question
+  // (services/autoReply). The threshold is the confidence a match must reach; 1 = exact wording.
+  AUTO_REPLY_ENABLED: (process.env.AUTO_REPLY_ENABLED ?? 'true') !== 'false',
+  AUTO_REPLY_CONFIDENCE_THRESHOLD: Number(process.env.AUTO_REPLY_CONFIDENCE_THRESHOLD ?? '1'),
+
   MAILBOX_RETENTION_HOURS: Number(process.env.MAILBOX_RETENTION_HOURS ?? '42'),
   MAILBOX_SYNC_ENABLED: (process.env.MAILBOX_SYNC_ENABLED ?? 'true') !== 'false',
   MAILBOX_SYNC_INTERVAL_MS: parseInt(process.env.MAILBOX_SYNC_INTERVAL_MS || '15000', 10),
