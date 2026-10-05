@@ -116,9 +116,9 @@ function DetailRow({ event }) {
   );
 }
 
-// Shown on events saved by a copy of the application that does not give out audit IDs.
+// Shown on events recorded before audit IDs were given out, or by a copy that does not give them.
 const NOT_ISSUED_HINT =
-  'This activity was saved by a copy of the application that does not give audit IDs or record IP addresses.';
+  'This activity was recorded before audit IDs were given out, or by a copy of the application that does not give audit IDs.';
 
 /** Name, role and user ID of whoever did it. */
 function UserCell({ event }) {

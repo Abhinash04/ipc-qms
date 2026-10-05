@@ -434,7 +434,7 @@ export function buildPdf({
     );
     if (rows.some((row) => typeof row.seq !== 'number')) {
       paragraph(
-        'Rows whose Audit ID reads "Not issued" were saved by a copy of the application that does not give audit IDs or record IP addresses, so they are outside the integrity check.',
+        'Rows whose Audit ID reads "Not issued" were recorded before audit IDs were given out, or by a copy of the application that does not give audit IDs, so they are outside the integrity check.',
         { colour: '#555555' },
       );
     }
