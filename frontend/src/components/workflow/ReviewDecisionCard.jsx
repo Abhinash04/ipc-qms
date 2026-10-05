@@ -1,8 +1,7 @@
 import { useState } from "react";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
-import { Textarea } from "@/components/ui/textarea";
-import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
+import { DecisionCommentDialog } from "@/components/workflow/DecisionCommentDialog";
 import { useQueryCase } from "@/hooks/useQueryCase";
 import { useWorkflowStore } from "@/store/useWorkflowStore";
 import { useWorkflowAction } from "@/hooks/useWorkflowAction";
@@ -15,8 +14,17 @@ export function ReviewDecisionCard() {
   const { run, error, clearError } = useWorkflowAction();
   const approveReview = useWorkflowStore((state) => state.approveReview);
   const requestRevision = useWorkflowStore((state) => state.requestRevision);
-  const [comment, setComment] = useState("");
-  const requesting = comment.length > 0;
+  // Which decision's dialog is open: "approve", "changes" or none.
+  const [deciding, setDeciding] = useState(null);
+  const openDialog = (decision) => {
+    clearError();
+    setDeciding(decision);
+  };
+  const dialogProps = (decision) => ({
+    open: deciding === decision,
+    onOpenChange: (open) => setDeciding(open ? decision : null),
+    error: deciding === decision ? error : null,
+  });
 
   if (!query) return null;
 
@@ -38,43 +46,40 @@ export function ReviewDecisionCard() {
 
         {canDecide ? (
           <>
-            <div className="space-y-1.5">
-              <Label htmlFor="review-comment">Request changes</Label>
-              <Textarea
-                id="review-comment"
-                value={comment}
-                onChange={(e) => setComment(e.target.value)}
-                placeholder="Describe the changes the officer must make — leave empty to approve"
-                rows={4}
-                aria-describedby="review-comment-hint"
-              />
-            </div>
-            <Button
-              className="w-full"
-              disabled={requesting}
-              title={requesting ? "Clear the change request to approve" : undefined}
-              onClick={() => {
-                run(() => approveReview(queryId, "", currentUser));
-                setComment("");
-              }}
-            >
+            <Button className="w-full" onClick={() => openDialog("approve")}>
               Approve
             </Button>
             <Button
               className="w-full bg-status-orange-fg text-white hover:bg-status-orange-fg/90 focus-visible:ring-status-orange-fg/30"
-              disabled={!comment.trim()}
-              onClick={() => {
-                run(() => requestRevision(queryId, comment, currentUser));
-                setComment("");
-              }}
+              onClick={() => openDialog("changes")}
             >
               Request changes
             </Button>
-            <p id="review-comment-hint" className="text-xs text-muted-foreground">
-              {requesting
-                ? "Approve is disabled while a change request is written — clear the box to approve instead."
-                : "Approve if no changes are needed. To return it, describe what must change — the officer works from your request, and the review restarts at the first reviewer."}
+            <p className="text-xs text-muted-foreground">
+              Approve if no changes are needed, with remarks if you wish. Request changes returns it to the officer
+              with your comments, and the review restarts at the first reviewer.
             </p>
+
+            <DecisionCommentDialog
+              {...dialogProps("approve")}
+              title="Approve review"
+              description="The response moves to the next review level, or to final approval."
+              label="Approval remarks (optional)"
+              placeholder="Reviewed and approved. The response is accurate and can proceed to the next stage."
+              confirmLabel="Approve"
+              onSubmit={(comment) => run(() => approveReview(queryId, comment, currentUser))}
+            />
+            <DecisionCommentDialog
+              {...dialogProps("changes")}
+              title="Request changes"
+              description="The response goes back to the assigned officer, who works from your comments."
+              label="Changes required"
+              placeholder="Please revise the response to include the relevant reference standards and provide more details regarding the testing methodology."
+              required
+              confirmLabel="Request changes"
+              tone="change"
+              onSubmit={(comment) => run(() => requestRevision(queryId, comment, currentUser))}
+            />
           </>
         ) : currentStep?.stepType === "REVIEW" && !isCurrentReviewer ? (
           <p className="rounded-md border border-status-amber-line bg-status-amber-bg px-3 py-2 text-sm text-status-amber-fg">

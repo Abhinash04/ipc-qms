@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
@@ -104,7 +104,7 @@ describe('End-to-end reviewer flow and role dashboard reactivity', () => {
     unmountB();
   });
 
-  it('allows Reviewer A to approve on QueryDetailPage, advancing state to PENDING_FINAL_APPROVAL', () => {
+  it('allows Reviewer A to approve on QueryDetailPage, advancing state to PENDING_FINAL_APPROVAL', async () => {
     const { unmount: unmountDetail } = renderAs(REVIEWER_A, `/reviewer/queries/${queryId}`);
 
     expect(screen.getByRole('heading', { name: 'Review decision' })).toBeInTheDocument();
@@ -115,9 +115,12 @@ describe('End-to-end reviewer flow and role dashboard reactivity', () => {
     expect(requestBtn).toBeInTheDocument();
 
     fireEvent.click(approveBtn);
+    const dialog = screen.getByRole('dialog', { name: 'Approve review' });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Approve' }));
 
-    const updatedQuery = s().queries.find((q) => q.queryId === queryId);
-    expect(updatedQuery.workflowState).toBe(WORKFLOW_STATE.PENDING_FINAL_APPROVAL);
+    await waitFor(() =>
+      expect(s().queries.find((q) => q.queryId === queryId).workflowState).toBe(WORKFLOW_STATE.PENDING_FINAL_APPROVAL),
+    );
     unmountDetail();
 
     const { unmount: unmountDash } = renderAs(REVIEWER_A, '/reviewer/dashboard');
@@ -131,20 +134,23 @@ describe('End-to-end reviewer flow and role dashboard reactivity', () => {
     unmountOic();
   });
 
-  it('allows Reviewer A to request changes with comment, returning query to official', () => {
+  it('allows Reviewer A to request changes with comment, returning query to official', async () => {
     const { unmount: unmountDetail } = renderAs(REVIEWER_A, `/reviewer/queries/${queryId}`);
 
-    const requestBtn = screen.getByRole('button', { name: 'Request changes' });
-    expect(requestBtn).toBeDisabled();
+    fireEvent.click(screen.getByRole('button', { name: 'Request changes' }));
+    const dialog = screen.getByRole('dialog', { name: 'Request changes' });
+    const send = within(dialog).getByRole('button', { name: 'Request changes' });
+    expect(send).toBeDisabled();
 
-    const commentBox = screen.getByPlaceholderText(/Describe the changes the officer must make/);
-    fireEvent.change(commentBox, { target: { value: 'Please update testing limits according to revised monograph.' } });
-    expect(requestBtn).toBeEnabled();
+    fireEvent.change(within(dialog).getByRole('textbox', { name: 'Changes required' }), {
+      target: { value: 'Please update testing limits according to revised monograph.' },
+    });
+    expect(send).toBeEnabled();
+    fireEvent.click(send);
 
-    fireEvent.click(requestBtn);
-
-    const updatedQuery = s().queries.find((q) => q.queryId === queryId);
-    expect(updatedQuery.workflowState).toBe(WORKFLOW_STATE.RETURNED_FOR_REVISION);
+    await waitFor(() =>
+      expect(s().queries.find((q) => q.queryId === queryId).workflowState).toBe(WORKFLOW_STATE.RETURNED_FOR_REVISION),
+    );
     unmountDetail();
 
     const { unmount: unmountReviewerDash } = renderAs(REVIEWER_A, '/reviewer/dashboard');

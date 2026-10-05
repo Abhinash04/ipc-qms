@@ -81,19 +81,29 @@ describe('requesting changes', () => {
     expect(s().getLatestVersion(queryId)).toMatchObject({ status: RESPONSE_STATUS.SUBMITTED, submittedBy: OFFICIAL.id });
   });
 
-  it('disables Approve while a change request is typed, and re-enables it when cleared', () => {
+  it('shows only the two decisions in the card, each asking for its comment in a dialog', () => {
     renderAs(REVIEWER, `/reviewer/queries/${queryId}`);
-    const approve = screen.getByRole('button', { name: 'Approve' });
-    const box = screen.getByRole('textbox', { name: 'Request changes' });
 
-    expect(approve).toBeEnabled();
-    fireEvent.change(box, { target: { value: 'x' } });
-    expect(approve).toBeDisabled();
+    expect(screen.queryByRole('textbox', { name: /Request changes|Changes required|Approval remarks/ })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Approve' })).toBeEnabled();
     expect(screen.getByRole('button', { name: 'Request changes' })).toBeEnabled();
+  });
 
-    fireEvent.change(box, { target: { value: '' } });
-    expect(approve).toBeEnabled();
-    expect(screen.getByRole('button', { name: 'Request changes' })).toBeDisabled();
+  it('records the approval remarks a reviewer adds', async () => {
+    renderAs(REVIEWER, `/reviewer/queries/${queryId}`);
+    fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
+    const box = screen.getByRole('textbox', { name: 'Approval remarks (optional)' });
+    expect(box).toHaveAttribute('placeholder', 'Reviewed and approved. The response is accurate and can proceed to the next stage.');
+
+    fireEvent.change(box, { target: { value: '  Accurate and complete.  ' } });
+    fireEvent.click(screen.getAllByRole('button', { name: 'Approve' }).at(-1));
+
+    await waitFor(() =>
+      expect(s().auditEvents.find((e) => e.queryId === queryId && e.event === 'REVIEW_COMPLETED')?.details).toBe(
+        'Review approved: Accurate and complete.',
+      ),
+    );
+    expect(screen.queryByRole('dialog')).toBeNull();
   });
 });
 
