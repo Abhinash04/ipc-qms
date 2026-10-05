@@ -325,3 +325,46 @@ describe('the automatic reply', () => {
     expect(screen.queryByRole('heading', { name: 'Automatic reply' })).toBeNull();
   });
 });
+
+describe('the AI confidence card', () => {
+  it('shows the score, the decision, the bar it had to reach and why, for a mail left to a person', async () => {
+    fetchMailboxMessage.mockResolvedValue({
+      ...MESSAGE,
+      source: 'nic-browser',
+      autoReply: {
+        status: 'NOT_ELIGIBLE',
+        confidence: 0.87,
+        threshold: 1,
+        question: 'What is the use case of paracetamol?',
+        reason: 'closest supported question matched 87%, below 100%',
+      },
+    });
+    renderMessage();
+
+    const card = (await screen.findByRole('heading', { name: 'AI confidence' })).closest('section');
+    expect(card).toHaveTextContent('87%');
+    expect(card).toHaveTextContent('Human Intervention');
+    expect(card).toHaveTextContent('Auto Reply needs: 100%');
+    expect(card).toHaveTextContent('Closest supported question: “What is the use case of paracetamol?”');
+    expect(card).toHaveTextContent('Why: Closest supported question matched 87%, below 100%');
+    expect(screen.getByRole('meter', { name: 'Confidence' })).toHaveAttribute('aria-valuetext', '87%, Human Intervention');
+  });
+
+  it('shows 100% and Auto Reply for a mail offered a reply', async () => {
+    fetchMailboxMessage.mockResolvedValue({
+      ...MESSAGE,
+      autoReply: { status: 'SUGGESTED', confidence: 1, threshold: 1, question: 'What is the use case of paracetamol?', draft: 'Dear Sir/Madam,\n\nAnswer.' },
+    });
+    renderMessage();
+
+    expect(await screen.findByRole('meter', { name: 'Confidence' })).toHaveAttribute('aria-valuetext', '100%, Auto Reply');
+  });
+
+  it('says when the mail has not been checked yet', async () => {
+    fetchMailboxMessage.mockResolvedValue({ ...MESSAGE, source: 'nic-browser' });
+    renderMessage();
+
+    const card = (await screen.findByRole('heading', { name: 'AI confidence' })).closest('section');
+    expect(card).toHaveTextContent('has not been checked yet');
+  });
+});

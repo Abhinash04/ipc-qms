@@ -10,6 +10,7 @@ import { AttachmentList } from "@/components/attachments/AttachmentList";
 import { MailHtmlFrame } from "@/components/email/MailHtmlFrame";
 import { MailCategoryDetails } from "@/components/email/MailCategoryBadge";
 import { AutoReplyPanel } from "@/components/email/AutoReplyPanel";
+import { AutoReplyConfidenceCard } from "@/components/email/AutoReplyConfidence";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useRoutePaths } from "@/hooks/useRoutePaths";
 import { buildPath } from "@/constants/routePaths";
@@ -254,6 +255,7 @@ function MessageView({ message, paths }) {
       </div>
 
       <div className="lg:sticky lg:top-6 self-start space-y-5">
+        <AutoReplyConfidenceCard message={message} />
         <MessageCaseCard message={message} paths={paths} />
         <MessageCategoryCard message={message} paths={paths} />
       </div>

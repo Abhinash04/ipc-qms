@@ -37,6 +37,7 @@ import { MailCategoryBadge } from "@/components/email/MailCategoryBadge";
 import { ALL_CATEGORIES, MailCategoryCards } from "@/components/email/MailCategoryCards";
 import { MailBucketTabs } from "@/components/email/MailBucketTabs";
 import { AutoReplyBadge } from "@/components/email/AutoReplyBadge";
+import { AutoReplyConfidence } from "@/components/email/AutoReplyConfidence";
 import { AUTO_REPLY_STATUS, MAIL_BUCKETS } from "@/constants/mailCategories";
 import {
   useMailboxIngestion,
@@ -665,21 +666,24 @@ function MailboxRow({
       </div>
 
       <div className="min-w-0 w-full xl:w-auto px-1 xl:px-0">
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Link
-                to={openPath}
-                className="block text-[14px] font-semibold text-slate-900 truncate group-hover:text-purple-700 transition-colors"
-              >
-                {message.subject || "(No Subject)"}
-              </Link>
-            </TooltipTrigger>
-            <TooltipContent className="max-w-100 wrap-break-word">
-              {message.subject}
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
+        <div className="flex min-w-0 items-center gap-2">
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Link
+                  to={openPath}
+                  className="block min-w-0 text-[14px] font-semibold text-slate-900 truncate group-hover:text-purple-700 transition-colors"
+                >
+                  {message.subject || "(No Subject)"}
+                </Link>
+              </TooltipTrigger>
+              <TooltipContent className="max-w-100 wrap-break-word">
+                {message.subject}
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+          <AutoReplyConfidence message={message} />
+        </div>
         <div className="flex items-center gap-1.5 text-[11.5px] font-medium text-slate-400 mt-0.5">
           <MailCategoryBadge
             triage={message.triage}
@@ -689,7 +693,8 @@ function MailboxRow({
             messageHref={messageHref}
             className="me-0.5"
           />
-          <AutoReplyBadge autoReply={message.autoReply} />
+          {/* "Auto Reply" already shows beside the subject; the badge adds sending, failed or sent. */}
+          {message.autoReply?.status !== AUTO_REPLY_STATUS.SUGGESTED && <AutoReplyBadge autoReply={message.autoReply} />}
           <MailIcon className="h-3.5 w-3.5 text-purple-500 shrink-0" />
           <span className="truncate">
             {toSnippet(message.body) || "Email Enquiry"}

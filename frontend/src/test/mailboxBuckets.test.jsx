@@ -89,8 +89,11 @@ beforeEach(async () => {
         ...message(1, 'Paracetamol'),
         autoReply: { status: 'SUGGESTED', topic: 'Uses of paracetamol', confidence: 1, entryId: 'AR-PARACETAMOL-USE' },
       },
-      { ...message(2, 'Dissolution limits'), autoReply: { status: 'NOT_ELIGIBLE' } },
-      message(3, 'Not yet looked at'),
+      {
+        ...message(2, 'Dissolution limits'),
+        autoReply: { status: 'NOT_ELIGIBLE', confidence: 0.87, threshold: 1, reason: 'closest supported question matched 87%, below 100%' },
+      },
+      { ...message(3, 'Not yet looked at'), source: 'nic-browser' },
     ],
   });
 
@@ -126,7 +129,7 @@ describe('the mailbox buckets', () => {
     expect(screen.getByRole('group', { name: 'Filter by category' })).toBeInTheDocument();
     expect(acceptFor('MSG-00001')).toBeInTheDocument();
     expect(rejectFor('MSG-00001')).toBeInTheDocument();
-    expect(screen.getByText('Auto reply ready')).toHaveAttribute('title', 'Uses of paracetamol (100% match)');
+    expect(screen.queryByText('Auto reply ready')).toBeNull();
   });
 
   it('lists the Auto Reply bucket without category cards, each mail with a link to review its reply', async () => {
@@ -159,5 +162,36 @@ describe('the mailbox buckets', () => {
     await screen.findByText('Plain inbox');
 
     expect(screen.queryByRole('group', { name: 'Mailbox views' })).toBeNull();
+  });
+});
+
+describe('the confidence on every mail', () => {
+  const rowOf = (subject) => screen.getByRole('link', { name: subject }).closest('div.group');
+
+  it('shows the score and the decision on each row', async () => {
+    renderInbox();
+    await screen.findByText('Paracetamol');
+
+    expect(rowOf('Paracetamol')).toHaveTextContent('Confidence: 100%·Auto Reply');
+    expect(rowOf('Dissolution limits')).toHaveTextContent('Confidence: 87%·Human Intervention');
+    expect(screen.getByText('Confidence: 87%', { exact: false }).closest('span')).toHaveAttribute(
+      'title',
+      'Closest supported question matched 87%, below 100%',
+    );
+  });
+
+  it('says when a mail has not been checked yet', async () => {
+    renderInbox();
+    await screen.findByText('Paracetamol');
+
+    expect(rowOf('Not yet looked at')).toHaveTextContent('Confidence: not checked yet');
+  });
+
+  it('shows no score for a mailbox the check does not cover', async () => {
+    fetchMailboxMessages.mockResolvedValue({ messages: [message(1, 'Plain inbox')] });
+    renderInbox();
+    await screen.findByText('Plain inbox');
+
+    expect(screen.queryByText(/Confidence:/)).toBeNull();
   });
 });
