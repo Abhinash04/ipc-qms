@@ -6,10 +6,11 @@ import {
   Hourglass,
   AlertTriangle,
   AlertCircle,
-  Info,
   RefreshCw,
   ChevronDown,
   ChevronUp,
+  ChevronRight,
+  Timer,
 } from 'lucide-react';
 import { findUserById } from '@/constants/mockUsers';
 import { useWorkflowStore } from '@/store/useWorkflowStore';
@@ -81,152 +82,191 @@ export function AutoTransferTimerCard({ query }) {
   const autoTransferCount = query.autoTransferCount || 0;
   const visibleHistory = showAllHistory ? transferHistory : transferHistory.slice(0, 3);
 
-  let timerBadgeColor = 'bg-emerald-50 text-emerald-700 border-emerald-200';
+  let countdownTextClass = 'text-slate-900';
   if (expired) {
-    timerBadgeColor = 'bg-rose-50 text-rose-700 border-rose-200 animate-pulse';
+    countdownTextClass = 'text-rose-600 animate-pulse';
   } else if (remainingSeconds < 30) {
-    timerBadgeColor = 'bg-rose-50 text-rose-700 border-rose-200';
+    countdownTextClass = 'text-rose-600';
   } else if (remainingSeconds < 60) {
-    timerBadgeColor = 'bg-amber-50 text-amber-800 border-amber-200';
+    countdownTextClass = 'text-amber-600';
   }
 
   return (
     <div
       data-slot="panel"
-      className="bg-white rounded-[20px] border border-[#E6EAF2] p-5 sm:p-6 shadow-[0_4px_20px_-2px_rgba(99,102,241,0.06)] select-none space-y-4 text-slate-800"
+      className="bg-white rounded-2xl border border-slate-200/90 p-5 sm:p-6 shadow-sm select-none space-y-5 text-slate-800"
     >
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#E6EAF2] pb-4">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 text-white flex items-center justify-center shadow-xs shrink-0">
-            <Clock className="h-5 w-5" strokeWidth={2.2} />
+      {/* HEADER SECTION */}
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-4">
+        <div className="flex items-center gap-3.5">
+          <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-blue-600 via-indigo-600 to-purple-600 text-white flex items-center justify-center shadow-xs shrink-0">
+            <Timer className="h-5 w-5" strokeWidth={2.2} />
           </div>
           <div>
-            <h2 className="font-heading text-[20px] sm:text-[21px] font-bold text-slate-900 m-0 leading-tight tracking-tight">
+            <h2 className="font-heading text-lg sm:text-xl font-bold text-slate-900 m-0 leading-tight tracking-tight">
               Action Timeline &amp; Auto Transfer Status
             </h2>
             <p className="text-xs font-medium text-slate-500 m-0 mt-0.5">
               {minutes
-                ? `The assigned official has ${minutes} minute${minutes === 1 ? '' : 's'} to act before the case moves to the next recommended official`
-                : 'Automatic transfer is not running for this assignment'}
+                ? `The assigned official has ${minutes} minute${minutes === 1 ? '' : 's'} to act before the case moves to the next recommended official.`
+                : 'Automatic transfer is not running for this assignment.'}
             </p>
           </div>
         </div>
 
         {minutes && (
-          <span className="text-xs font-bold text-indigo-700 bg-indigo-50/80 px-3 py-1 rounded-full border border-indigo-200/80 shadow-2xs">
-            Limit: {minutes} min
-          </span>
+          <div className="inline-flex items-center gap-1.5 text-xs font-bold text-purple-700 bg-purple-100/70 border border-purple-200 px-3.5 py-1.5 rounded-full shadow-2xs">
+            <Clock className="w-3.5 h-3.5 text-purple-600" />
+            <span>Limit: {minutes} min</span>
+          </div>
         )}
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
-        <div className="bg-blue-100/70 border border-blue-200/80 p-3.5 rounded-2xl flex items-center gap-3 transition-all hover:bg-blue-100/90">
-          <div className="w-9 h-9 rounded-full bg-blue-200/80 text-blue-700 flex items-center justify-center shrink-0">
-            <User className="h-4.5 w-4.5" strokeWidth={2.2} />
-          </div>
-          <div className="min-w-0 flex-1">
-            <span className="text-[10.5px] font-bold uppercase text-blue-900/70 tracking-wider block">
-              Assigned Officer
-            </span>
-            <span className="font-bold text-[14px] text-slate-900 truncate block mt-0.5">
-              {assignee?.name || query.currentAssigneeId || 'Unassigned'}
-            </span>
-          </div>
-        </div>
-
-        <div className="bg-purple-100/70 border border-purple-200/80 p-3.5 rounded-2xl flex items-center gap-3 transition-all hover:bg-purple-100/90">
-          <div className="w-9 h-9 rounded-full bg-purple-200/80 text-purple-700 flex items-center justify-center shrink-0">
-            <Calendar className="h-4.5 w-4.5" strokeWidth={2.2} />
-          </div>
-          <div className="min-w-0 flex-1">
-            <span className="text-[10.5px] font-bold uppercase text-purple-900/70 tracking-wider block">
-              Assignment Time
-            </span>
-            <span className="font-bold text-[13px] text-slate-900 block mt-0.5">
-              {formatDateTime(query.assignedAt)}
-            </span>
-          </div>
-        </div>
-
-        <div className="bg-sky-100/70 border border-sky-200/80 p-3.5 rounded-2xl flex items-center gap-3 transition-all hover:bg-sky-100/90">
-          <div className="w-9 h-9 rounded-full bg-sky-200/80 text-sky-700 flex items-center justify-center shrink-0">
-            <Clock className="h-4.5 w-4.5" strokeWidth={2.2} />
-          </div>
-          <div className="min-w-0 flex-1">
-            <span className="text-[10.5px] font-bold uppercase text-sky-900/70 tracking-wider block">
-              Action Deadline
-            </span>
-            <span className="font-bold text-[13px] text-slate-900 block mt-0.5">
-              {formatDateTime(query.actionDeadline)}
-            </span>
-          </div>
-        </div>
-
-        <div className="bg-amber-100/70 border border-amber-200/80 p-3.5 rounded-2xl flex items-center gap-3 transition-all hover:bg-amber-100/90">
-          <div className="w-9 h-9 rounded-full bg-amber-200/80 text-amber-700 flex items-center justify-center shrink-0">
-            <Hourglass className="h-4.5 w-4.5" strokeWidth={2.2} />
-          </div>
-          <div className="min-w-0 flex-1">
-            <span className="text-[10.5px] font-bold uppercase text-amber-900/70 tracking-wider block">
-              Remaining Time
-            </span>
-            {live ? (
-              <span
-                data-testid="auto-transfer-countdown"
-                className={`inline-flex items-center gap-1.5 font-bold text-[13px] px-2.5 py-0.5 rounded-full border mt-0.5 ${timerBadgeColor}`}
-              >
-                <Clock className="h-3.5 w-3.5 shrink-0" />
-                {formatCountdown(remainingSeconds)}
+      {/* 4 HORIZONTALLY ALIGNED CARDS WITH LEFT COLOR ACCENT BORDERS */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* CARD 1: ASSIGNED OFFICER */}
+        <div className="rounded-2xl bg-[#F0F6FF] border border-blue-100 border-l-[5px] border-l-blue-500 p-3.5 sm:p-4 flex items-center justify-between gap-3 transition-all hover:shadow-xs">
+          <div className="flex items-center gap-3 min-w-0 flex-1">
+            <div className="w-9 h-9 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center shrink-0">
+              <User className="h-4.5 w-4.5" strokeWidth={2.2} />
+            </div>
+            <div className="min-w-0 flex-1">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-blue-600 block">
+                ASSIGNED OFFICER
               </span>
-            ) : (
-              <span className="font-semibold text-[13px] text-slate-600 block mt-0.5">Not running</span>
-            )}
+              <span className="font-bold text-[14.5px] text-slate-900 truncate block mt-0.5">
+                {assignee?.name || query.currentAssigneeId || 'Unassigned'}
+              </span>
+              <span className="text-[11px] font-medium text-slate-500 truncate block mt-0.5">
+                Currently handling this query
+              </span>
+            </div>
           </div>
+          <ChevronRight className="w-4 h-4 text-blue-400 shrink-0" />
+        </div>
+
+        {/* CARD 2: ASSIGNMENT TIME */}
+        <div className="rounded-2xl bg-[#F7F3FF] border border-purple-100 border-l-[5px] border-l-purple-500 p-3.5 sm:p-4 flex items-center justify-between gap-3 transition-all hover:shadow-xs">
+          <div className="flex items-center gap-3 min-w-0 flex-1">
+            <div className="w-9 h-9 rounded-full bg-purple-100 text-purple-600 flex items-center justify-center shrink-0">
+              <Calendar className="h-4.5 w-4.5" strokeWidth={2.2} />
+            </div>
+            <div className="min-w-0 flex-1">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-purple-600 block">
+                ASSIGNMENT TIME
+              </span>
+              <span className="font-bold text-[13px] text-slate-900 truncate block mt-0.5">
+                {formatDateTime(query.assignedAt)}
+              </span>
+              <span className="text-[11px] font-medium text-slate-500 truncate block mt-0.5">
+                Query assigned to the officer
+              </span>
+            </div>
+          </div>
+          <ChevronRight className="w-4 h-4 text-purple-400 shrink-0" />
+        </div>
+
+        {/* CARD 3: ACTION DEADLINE */}
+        <div className="rounded-2xl bg-[#EEFAF7] border border-emerald-100 border-l-[5px] border-l-emerald-500 p-3.5 sm:p-4 flex items-center justify-between gap-3 transition-all hover:shadow-xs">
+          <div className="flex items-center gap-3 min-w-0 flex-1">
+            <div className="w-9 h-9 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center shrink-0">
+              <Clock className="h-4.5 w-4.5" strokeWidth={2.2} />
+            </div>
+            <div className="min-w-0 flex-1">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 block">
+                ACTION DEADLINE
+              </span>
+              <span className="font-bold text-[13px] text-slate-900 truncate block mt-0.5">
+                {formatDateTime(query.actionDeadline)}
+              </span>
+              <span className="text-[11px] font-medium text-slate-500 truncate block mt-0.5">
+                {minutes ? `${minutes} minutes remaining` : 'Action deadline timestamp'}
+              </span>
+            </div>
+          </div>
+          <ChevronRight className="w-4 h-4 text-emerald-400 shrink-0" />
+        </div>
+
+        {/* CARD 4: REMAINING TIME */}
+        <div className="rounded-2xl bg-[#FFF6ED] border border-amber-100 border-l-[5px] border-l-amber-500 p-3.5 sm:p-4 flex items-center justify-between gap-3 transition-all hover:shadow-xs">
+          <div className="flex items-center gap-3 min-w-0 flex-1">
+            <div className="w-9 h-9 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center shrink-0">
+              <Hourglass className="h-4.5 w-4.5" strokeWidth={2.2} />
+            </div>
+            <div className="min-w-0 flex-1">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-amber-600 block">
+                REMAINING TIME
+              </span>
+              {live ? (
+                <span
+                  data-testid="auto-transfer-countdown"
+                  className={`font-bold text-[15px] block mt-0.5 ${countdownTextClass}`}
+                >
+                  {formatCountdown(remainingSeconds)}
+                </span>
+              ) : (
+                <span className="font-bold text-[13px] text-slate-600 block mt-0.5">Not running</span>
+              )}
+              <span className="text-[11px] font-medium text-slate-500 truncate block mt-0.5">
+                Auto transfer will be triggered
+              </span>
+            </div>
+          </div>
+          <ChevronRight className="w-4 h-4 text-amber-400 shrink-0" />
         </div>
       </div>
 
-      <div className="rounded-2xl border border-[#E6EAF2] bg-slate-50/70 p-3 px-4 flex flex-wrap items-center justify-between gap-3 text-xs">
-        <div className="flex flex-wrap items-center gap-2.5">
-          <div className="w-7 h-7 rounded-full bg-blue-100/60 text-blue-600 flex items-center justify-center shrink-0">
-            <Info className="h-4 w-4" strokeWidth={2.2} />
+      {/* AUTO TRANSFER STATUS BAR (LIGHT THEME MATCHING DESIGN 1) */}
+      <div className="rounded-2xl bg-[#F0F6FF]/90 border border-blue-100 p-3 px-4 flex flex-wrap sm:flex-nowrap items-center justify-between gap-3 text-slate-700">
+        {/* Left Side */}
+        <div className="flex flex-wrap items-center gap-2.5 min-w-0">
+          <div className="w-7.5 h-7.5 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center shrink-0">
+            <RefreshCw className="h-3.5 w-3.5" strokeWidth={2.2} />
           </div>
-          <span className="font-bold text-slate-500 uppercase tracking-wider text-[11px]">
-            AUTO TRANSFER STATUS:
+          <span className="font-bold text-[10.5px] tracking-wider text-blue-600/90 uppercase shrink-0">
+            AUTO TRANSFER STATUS
           </span>
+          <span className="hidden sm:block h-3.5 w-px bg-blue-200/80 mx-1" aria-hidden="true" />
+
+          {/* Status Badge */}
           {failed ? (
-            <span className="bg-rose-100/80 text-rose-700 border border-rose-200/80 px-3 py-1 rounded-full font-bold flex items-center gap-1.5 shadow-2xs">
+            <span className="bg-rose-100 text-rose-700 border border-rose-200 px-3 py-1 rounded-full font-bold text-xs flex items-center gap-1.5">
               <AlertCircle className="h-3.5 w-3.5 text-rose-600 shrink-0" />
               Stopped — no eligible official left
             </span>
           ) : expired ? (
-            <span className="bg-rose-100/80 text-rose-700 border border-rose-200/80 px-3 py-1 rounded-full font-bold flex items-center gap-1.5 shadow-2xs">
+            <span className="bg-rose-100 text-rose-700 border border-rose-200 px-3 py-1 rounded-full font-bold text-xs flex items-center gap-1.5">
               <AlertTriangle className="h-3.5 w-3.5 text-rose-600 shrink-0" />
               Deadline passed — transferring to the next recommended official
             </span>
           ) : live ? (
-            <span className="bg-amber-100/80 text-amber-800 border border-amber-200/80 px-3 py-1 rounded-full font-bold flex items-center gap-1.5 shadow-2xs">
+            <span className="bg-[#FFF3D6] text-amber-900 border border-amber-200/80 font-bold px-3 py-1 rounded-full text-xs flex items-center gap-1.5 shadow-2xs">
               <Clock className="h-3.5 w-3.5 text-amber-600 shrink-0" />
               Awaiting action from the assigned official
             </span>
           ) : (
-            <span className="bg-slate-200/70 text-slate-700 border border-slate-300/80 px-3 py-1 rounded-full font-bold">
+            <span className="bg-slate-200/70 text-slate-700 border border-slate-300 px-3 py-1 rounded-full font-bold text-xs">
               Not running
             </span>
           )}
         </div>
 
-        <div className="flex items-center gap-2">
-          <span className="font-bold text-slate-500 uppercase tracking-wider text-[11px]">AUTO TRANSFERS:</span>
-          <span className="font-bold text-indigo-700 bg-indigo-100/80 px-2.5 py-0.5 rounded-full border border-indigo-200/80 text-[12px]">
+        {/* Right Side */}
+        <div className="flex items-center gap-2 shrink-0 ms-auto sm:ms-0">
+          <span className="font-bold text-[10.5px] tracking-wider text-blue-600/90 uppercase">
+            AUTO TRANSFERS
+          </span>
+          <span className="w-6 h-6 rounded-full bg-blue-100 text-blue-700 font-bold text-xs flex items-center justify-center border border-blue-200/80">
             {autoTransferCount}
           </span>
         </div>
       </div>
 
+      {/* FAILED ALERT */}
       {failed && (
         <div
           role="alert"
-          className="rounded-2xl border border-rose-200 bg-rose-50/80 p-3.5 px-4 flex items-center gap-3 text-xs text-rose-900 font-semibold shadow-2xs"
+          className="rounded-2xl border border-rose-200 bg-rose-50/90 p-3.5 px-4 flex items-center gap-3 text-xs text-rose-900 font-semibold shadow-2xs"
         >
           <div className="w-6 h-6 rounded-full bg-rose-500 text-white flex items-center justify-center shrink-0">
             <AlertCircle className="h-4 w-4" strokeWidth={2.5} />
@@ -238,17 +278,18 @@ export function AutoTransferTimerCard({ query }) {
         </div>
       )}
 
+      {/* TRANSFER HISTORY */}
       {transferHistory.length > 0 && (
-        <div className="pt-3 border-t border-[#E6EAF2]">
+        <div className="pt-3 border-t border-slate-100">
           <h3 className="text-xs font-bold text-slate-600 uppercase tracking-wider mb-2.5 flex items-center gap-2 m-0">
             <RefreshCw className="h-3.5 w-3.5 text-indigo-500" strokeWidth={2.2} />
             Transfer History ({transferHistory.length})
           </h3>
 
-          <div className="overflow-x-auto rounded-2xl border border-[#E6EAF2] bg-white shadow-2xs">
+          <div className="overflow-x-auto rounded-2xl border border-slate-200/80 bg-white shadow-2xs">
             <table className="w-full text-left text-xs border-collapse">
               <thead>
-                <tr className="bg-slate-50/90 border-b border-[#E6EAF2] text-slate-400 font-bold uppercase tracking-wider text-[10.5px]">
+                <tr className="bg-slate-50/90 border-b border-slate-200/80 text-slate-400 font-bold uppercase tracking-wider text-[10.5px]">
                   <th className="py-2.5 px-3.5">#</th>
                   <th className="py-2.5 px-3.5">From</th>
                   <th className="py-2.5 px-3.5">To</th>
@@ -320,5 +361,3 @@ export function AutoTransferTimerCard({ query }) {
     </div>
   );
 }
-
-
