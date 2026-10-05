@@ -109,9 +109,13 @@ async function summarise({ subject, body, inquirerName }) {
   }
 }
 
-export async function acceptMessage({ mailboxMessageId, message = {}, actor, sourceMailbox = null }) {
-  const errors = [];
-
+/**
+ * Registers a mailbox message as a Query Case, or finds the case it already became: the case,
+ * its thread and inbound email, the receipt and registration audit events, and the move to Front
+ * Office verification. What happens next (acknowledge and forward, or an auto-reply) is the
+ * caller's.
+ */
+export async function registerCase({ mailboxMessageId, message = {}, actor, sourceMailbox = null, caseFields = {} }) {
   const existingDecision = await decisions.findDecision(mailboxMessageId);
   if (existingDecision?.decision === 'REJECTED') {
     throw Object.assign(new Error('This message was already rejected; it cannot be registered.'), { status: 409 });
@@ -151,6 +155,7 @@ export async function acceptMessage({ mailboxMessageId, message = {}, actor, sou
         sourceEmailId: minted.messageId,
         sourceMailboxMessageId: mailboxMessageId,
         sourceMailbox,
+        ...caseFields,
         createdAt: now,
         updatedAt: now,
       });
@@ -224,6 +229,13 @@ export async function acceptMessage({ mailboxMessageId, message = {}, actor, sou
       { $set: { workflowState: 'FRONT_OFFICE_VERIFICATION', updatedAt: new Date().toISOString() }, $inc: { revision: 1 } },
     );
   }
+
+  return { queryId, created, known, decidedQueryId };
+}
+
+export async function acceptMessage({ mailboxMessageId, message = {}, actor, sourceMailbox = null }) {
+  const errors = [];
+  const { queryId, created, known, decidedQueryId } = await registerCase({ mailboxMessageId, message, actor, sourceMailbox });
 
   let aiSummary = known?.aiSummary ?? null;
 
