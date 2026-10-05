@@ -42,7 +42,7 @@ function renderPage() {
         subject: 'Monograph clarification for Paracetamol',
         description: 'Please clarify the assay limits.',
         source: 'Email',
-        inquirer: { name: 'Abhinash Pritiraj', email: 'abhinash.pritiraj@gmail.com' },
+        inquirer: { name: 'Ravi Kumar', email: 'ravi@pharma.example' },
         priority: 'NORMAL',
         workflowState: 'CLOSED',
         currentAssigneeId: 'USR-0011',
