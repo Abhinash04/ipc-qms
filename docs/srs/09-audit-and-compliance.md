@@ -49,8 +49,8 @@ and an HMAC-SHA256 of its own contents keyed with `AUDIT_HMAC_SECRET`. An admini
 the whole chain at any time (`GET /api/v1/audit/verify`, and the badge on the Audit Trail page); an
 edited record, a deleted record and a reordered record are each reported with the position where the
 chain breaks. Records written before chaining existed are reported as *legacy*. Removal of records
-from the very end of the chain is not detectable from the data alone; the chain head printed on each
-report is the reference to compare against.
+from the very end of the chain is not detectable from the data alone; the chain head recorded with each
+export, and the latest audit ID printed on each PDF report, are the references to compare against.
 
 **Production hardening (recommended).** Give the application's MongoDB user a role that allows only
 `insert` and `find` on the `auditevents` collection, keep `AUDIT_HMAC_SECRET` out of the database's
@@ -60,9 +60,10 @@ reach, and never rotate it once the production trail exists.
 
 Administrators export the trail as **CSV** or **PDF** from the Audit Trail page, using the page's
 current filters (`GET /api/v1/audit/export`). The PDF follows the Government of India audit trail
-report format: report particulars with a unique reference (`IPC-QMS/ATR/<yyyy-mm>/<nnn>`) and the
+report format: report particulars with a unique reference (`BRIDGETECH/ATR/<yyyy-mm>/<nnn>`) and the
 classification "Official / Internal Use"; purpose; period summary; the detailed trail (Audit ID, date and
-time in IST, user, role, source IP, case number, module, activity, previous and new value, result);
+time in IST, user, role, source IP, case number, module, activity with the change made (previous and new
+value) and any failure reason, result);
 mandatory information; query lifecycle (for one case); authentication by day; privileged activity;
 security events; integrity controls; log retention (CERT-In: at least 180 days); access-control review;
 a 20-point verification checklist; findings and recommendations; compliance statement; and sign-off
@@ -74,4 +75,5 @@ the trail. CSV cells that a spreadsheet would treat as formulas are neutralised.
 
 Each event records the person's user ID, name, role and session, the source IP address and browser (or
 the server, for background work), and — for changes to a case — the previous and new status, assignee,
-category or priority. Sign-out, rejected sessions and every view of the audit trail are recorded too.
+category or priority. Sign-out, rejected sessions (once a minute per address) and views of the audit
+trail (once a minute per person and filter set) are recorded too.

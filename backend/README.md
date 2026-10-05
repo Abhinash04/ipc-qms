@@ -354,9 +354,11 @@ audit event.
   breaks.
 - **`GET /audit/verify`** re-computes the chain in `seq` order, in batches of 1000, and answers
   `{ ok, checked, legacy, unpersisted, head, firstBreak, breaks[≤50] }`, each break with its `seq`, a
-  reason (`gap`, `hash`, `link`, `order`) and a sentence. Each check is audited as `AUDIT_VERIFIED`.
-  Deleting events from the **end** of the chain cannot be detected from the data alone; the head
-  (`seq` and `hash`) printed on every report is the anchor to compare against.
+  reason (`gap`, `hash`, `link`, `order`) and a sentence. A check that finds a break is always audited
+  as `AUDIT_VERIFIED`; a passing one once a minute per person. Deleting events from the **end** of the
+  chain cannot be detected from the data alone. The anchors to compare against are the head (`seq`
+  and `hash`) that each `AUDIT_EXPORTED` event records, and the latest audit ID that each PDF prints
+  ("Latest audit record").
 - **`GET /audit/export`** takes the same filters as `GET /audit` and returns up to 50 000 events,
   oldest first:
   - **CSV** — RFC 4180, CRLF, UTF-8 with BOM (Excel keeps Hindi text), every column including `seq`,
@@ -364,11 +366,13 @@ audit event.
     `'` so a spreadsheet never runs it as a formula.
   - **PDF** (`pdfkit`) — a Government of India-format audit trail report
     (`services/audit/auditReport.js`, sections from `auditReportData.js`, wording from
-    `auditPresentation.js`): report particulars (department — `REPORT_DEPARTMENT` —, environment, period,
-    generated on/by, reference `IPC-QMS/ATR/<yyyy-mm>/<nnn>` counted per month, classification "Official /
-    Internal Use"), then 1 Purpose, 2 Audit Period Summary, 3 Detailed Audit Trail (S.No., Audit ID
-    `AUD-<seq>`, date and time IST, user, role, source IP, case No., module, activity, previous value, new
-    value, result), 4 Mandatory Audit Information, 5 Query Lifecycle (when filtered to one case),
+    `auditPresentation.js`): report particulars (department — `REPORT_DEPARTMENT` —, period, generated
+    on/by, reference `BRIDGETECH/ATR/<yyyy-mm>/<nnn>` counted per month, classification "Official /
+    Internal Use", filters, latest audit record), then 1 Purpose, 2 Audit Period Summary, 3 Detailed
+    Audit Trail (S.No., Audit ID `AUD-<seq>`, date and time IST, user with role and ID, source IP and
+    device, case No., module, activity — who, what and to whom, with a "Changed from … to …" line for a
+    change to the case and a "Reason: …" line for a failure — and result), 4 Mandatory Audit
+    Information, 5 Query Lifecycle (when filtered to one case),
     6 Authentication Audit by day, 7 Privileged / Administrative Activity, 8 Exception / Security Event
     Report (refused access, rejected sessions, three or more failed sign-ins per address, integrity
     breaks; all "Open - for review"), 9 Integrity Controls (a checklist and one verdict line — no hashes),
@@ -382,7 +386,8 @@ audit event.
     For a query event stored without them (anything recorded before they were captured), the
     report works them out from that query's own recorded steps: the status each step leaves a query
     in (`caseChanges.inferCaseChanges`), against the status the step before left it in; this is
-    display-only and stored events are not changed. Activities that are
+    display-only, stored events are not changed, and such values read "(inferred)" on the page, in the
+    CSV and in the PDF. Activities that are
     not query changes show the state they change: a login (Logged out -> Logged in), an email's read
     state, a mailbox's connection. Only activities with no before/after
     (opening a file, viewing records) show "-".
@@ -395,11 +400,12 @@ audit event.
     browser.
   - **What is recorded for it.** Each sign-in opens a session (`sid` in the token, `SES-xxxxxxxx`) that
     every later event of that person carries in `source.sessionId`; sign-out is `LOGOUT`; an expired or
-    forged session presented to the API is `AUTHENTICATION_FAILED` (a missing one is not recorded);
+    forged session presented to the API is `AUTHENTICATION_FAILED`, once a minute per address (a missing
+    one is not recorded);
     viewing the audit trail is `AUDIT_VIEWED`, once a minute per person and filter set. Events that move
     a case carry `changes` — `{ status | assignee | category | priority: { from, to } }` — from the
     browser's case saves (diffed on the server) and from the server's own transitions (accept, forward,
-    final approval, dispatch, pull-back). `changes` is hashed only when present, like `actorName` and
+    final approval, dispatch, pull-back, automatic transfer). `changes` is hashed only when present, like `actorName` and
     `source`.
   - **Who and where.** Every event a person causes records their name (`actorName`) and the request's
     IP address, browser, method and path (`source`), captured per request
@@ -407,10 +413,12 @@ audit event.
     Work no request caused (scheduled sync, purges) records this server's hostname and IP instead, so no new event lacks a source; events
     from before capture existed read "Not recorded". Both fields are covered by the hash when present and left out when absent, so events recorded
     before they existed still verify.
-  - Both carry `X-Report-SHA256`, a digest of the exported rows that is identical for the CSV and the
-    PDF of one selection, and `X-File-SHA256` of the exact bytes. The export is itself audited as
-    `AUDIT_EXPORTED` with its format, filters, row count and both digests, so a copy can be matched to
-    the trail later.
+  - Both carry `X-Report-SHA256`, a digest of the exported rows as stored (not their wording, which
+    depends on DNS, the staff list and inferred values), so it is identical for the CSV and the PDF of
+    one selection and for the same selection exported again; and `X-File-SHA256` of the exact bytes.
+    The export is itself audited as `AUDIT_EXPORTED` with its reference, format, filters, row count,
+    both digests and the chain head, so a copy can be matched to the trail later through its
+    reference.
 
 Browser workflow events (assign, approve, transfer …) reach the trail through `POST /queries/persist`,
 which takes the actor from the session and checks the action against `CLIENT_AUDIT_EVENTS`; they are
