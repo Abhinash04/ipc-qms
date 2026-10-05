@@ -368,7 +368,7 @@ audit event.
     `'` so a spreadsheet never runs it as a formula.
   - **PDF** (`pdfkit`) — a Government of India-format audit trail report
     (`services/audit/auditReport.js`, sections from `auditReportData.js`, wording from
-    `auditPresentation.js`): report particulars (department — `REPORT_DEPARTMENT` —, period, generated
+    `auditPresentation.js`): report particulars (department — a constant in `auditReport.js` —, period, generated
     on/by, reference `BRIDGETECH/ATR/<yyyy-mm>/<nnn>` counted per month, classification "Official /
     Internal Use", filters, latest audit record), then 1 Purpose, 2 Audit Period Summary, 3 Detailed
     Audit Trail (S.No., Audit ID `AUD-<seq>`, date and time IST, user with role and ID, source IP and

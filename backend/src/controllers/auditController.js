@@ -1,5 +1,4 @@
 import HTTP_STATUS from '../constants/httpStatus.js';
-import env from '../config/env.js';
 import * as audit from '../services/audit/auditService.js';
 import { buildCsv, buildPdf, contentDigest } from '../services/audit/auditReport.js';
 import { sha256 } from '../services/audit/auditChain.js';
@@ -170,7 +169,6 @@ async function exportEvents(req, res, next) {
             truncated,
             verification,
             reference,
-            department: env.REPORT_DEPARTMENT,
           });
 
     const fileDigest = sha256(body);

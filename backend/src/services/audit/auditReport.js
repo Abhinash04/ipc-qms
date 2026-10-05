@@ -16,6 +16,10 @@ import {
   securityExceptions,
 } from './auditReportData.js';
 
+// The issuing department named at the top of the audit trail report.
+const REPORT_DEPARTMENT =
+  'Indian Pharmacopoeia Commission, Ministry of Health & Family Welfare, Government of India';
+
 // Stored fields first (for machine checks), then the same event as a person reads it.
 export const RAW_COLUMNS = [
   'seq',
@@ -191,7 +195,7 @@ export function buildPdf({
   truncated = false,
   verification = null,
   reference = 'BRIDGETECH/ATR',
-  department = 'Indian Pharmacopoeia Commission, Ministry of Health & Family Welfare, Government of India',
+  department = REPORT_DEPARTMENT,
 }) {
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({ size: 'A4', layout: 'landscape', margin: 30, bufferPages: true });
