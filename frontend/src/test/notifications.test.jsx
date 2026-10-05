@@ -307,3 +307,35 @@ describe('failures that used to be invisible', () => {
     await screen.findByText('Could not save your work locally');
   });
 });
+
+describe('an approval toast carries its remarks', () => {
+  const committed = (event) =>
+    act(() => useWorkflowStore.setState((state) => ({ auditEvents: [...state.auditEvents, { queryId: 'QRY-2026-00090', at: new Date().toISOString(), ...event }] })));
+
+  it('shows the reviewer’s remarks with the approval', async () => {
+    render(<NotificationHost />);
+    committed({ event: AUDIT_EVENT.REVIEW_COMPLETED, details: 'Review approved: Reviewed and approved. Accurate and complete.' });
+
+    await screen.findByText('Review approved');
+    expect(screen.getByText('Remarks: “Reviewed and approved. Accurate and complete.”')).toBeInTheDocument();
+  });
+
+  it('says when an approval came without remarks', async () => {
+    render(<NotificationHost />);
+    committed({ event: AUDIT_EVENT.REVIEW_COMPLETED, details: 'Review approved.' });
+
+    await screen.findByText('Review approved');
+    expect(screen.getByText('Approved without remarks.')).toBeInTheDocument();
+  });
+
+  it('shows the Officer-in-Charge’s remarks with the final approval', async () => {
+    render(<NotificationHost />);
+    committed({
+      event: AUDIT_EVENT.FINAL_APPROVAL_GRANTED,
+      details: 'Final approval granted; v2 locked and ready for dispatch. Accurate; send it.',
+    });
+
+    await screen.findByText('Final approval granted');
+    expect(screen.getByText('Remarks: “Accurate; send it.”')).toBeInTheDocument();
+  });
+});

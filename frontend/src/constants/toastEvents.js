@@ -1,5 +1,21 @@
 import { AUDIT_EVENT } from './statusEnums';
 
+// An approval's remarks, out of its audit text: "Review approved: <remarks>" for a review, or the
+// server's "Final approval granted; v2 locked and ready for dispatch. <remarks>".
+const REMARKS = {
+  [AUDIT_EVENT.REVIEW_COMPLETED]: /^Review approved:\s*(.+)$/s,
+  [AUDIT_EVENT.FINAL_APPROVAL_GRANTED]: /ready for dispatch\.\s*(.+)$/s,
+};
+
+export function approvalRemarks(event) {
+  const remarks = REMARKS[event?.event]?.exec(String(event?.details || ''))?.[1]?.trim();
+  return remarks ? `Remarks: “${remarks}”` : 'Approved without remarks.';
+}
+
+/**
+ * The toast each committed event raises. `describe(event)` words its description; without one
+ * the toast shows the event's audit text.
+ */
 export const TOAST_EVENTS = {
   [AUDIT_EVENT.QUERY_RECEIVED]: {
     type: 'success',
@@ -24,6 +40,7 @@ export const TOAST_EVENTS = {
   [AUDIT_EVENT.REVIEW_COMPLETED]: {
     type: 'success',
     title: 'Review approved',
+    describe: approvalRemarks,
   },
   [AUDIT_EVENT.REVISION_REQUESTED]: {
     type: 'warning',
@@ -32,6 +49,7 @@ export const TOAST_EVENTS = {
   [AUDIT_EVENT.FINAL_APPROVAL_GRANTED]: {
     type: 'success',
     title: 'Final approval granted',
+    describe: approvalRemarks,
   },
   [AUDIT_EVENT.FINAL_APPROVAL_REJECTED]: {
     type: 'warning',

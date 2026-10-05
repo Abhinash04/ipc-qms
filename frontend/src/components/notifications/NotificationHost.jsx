@@ -26,7 +26,7 @@ export function NotificationHost() {
       for (const event of fresh) {
         const spec = TOAST_EVENTS[event.event];
         if (!spec) continue;
-        notify[spec.type](spec.title, event.details || event.queryId);
+        notify[spec.type](spec.title, spec.describe ? spec.describe(event) : event.details || event.queryId);
       }
     });
 
