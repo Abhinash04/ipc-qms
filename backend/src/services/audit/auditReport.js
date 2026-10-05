@@ -1,6 +1,6 @@
 import PDFDocument from 'pdfkit';
-import { canonicalJSON, sha256 } from './auditChain.js';
-import { present, describeFilters, formatDateTime, REPORT_TIME_ZONE_LABEL } from './auditPresentation.js';
+import { canonicalJSON, sha256, OPTIONAL_CHAINED_FIELDS } from './auditChain.js';
+import { auditIdOf, present, describeFilters, formatDateTime, REPORT_TIME_ZONE_LABEL } from './auditPresentation.js';
 import {
   MANDATORY_INFORMATION,
   RECOMMENDATIONS,
@@ -80,14 +80,19 @@ function cellValue(row, column) {
 }
 
 /**
- * The report's content digest: SHA-256 over the canonical form of exactly the
- * rows exported. It is the same for the CSV and the PDF of one selection, so
- * a printed PDF can be checked against a CSV export or the database.
+ * The report's content digest: SHA-256 over the canonical form of the rows exported, as
+ * stored. Pass the rows before names, device names and inferred values are filled in for
+ * display: those depend on DNS, the staff list and later events, and would give the same
+ * selection a different digest each time. It is the same for the CSV and the PDF of one
+ * selection, so a copy can be checked against the database.
  */
 export function contentDigest(rows) {
   const lines = rows.map((row) => {
     const picked = {};
-    for (const column of REPORT_COLUMNS) picked[column] = cellValue(row, column);
+    for (const column of RAW_COLUMNS) picked[column] = cellValue(row, column);
+    for (const field of OPTIONAL_CHAINED_FIELDS) {
+      if (row[field] !== null && row[field] !== undefined) picked[field] = row[field];
+    }
     return canonicalJSON(picked);
   });
   return sha256(lines.join('\n'));
@@ -343,6 +348,8 @@ export function buildPdf({
       ['Classification', CLASSIFICATION],
       ['Filters applied', describeFilters(filters)],
       ['Records in detailed trail', `${rows.length}${truncated ? ' (limit reached; narrow the filters for a complete trail)' : ''}`],
+      // Records later found missing after this one were deleted after the report was made.
+      ...(verification?.head ? [['Latest audit record', `${auditIdOf(verification.head)}, when this report was made`]] : []),
     ];
     table(
       [

@@ -146,7 +146,7 @@ async function exportEvents(req, res, next) {
     const rows = await audit.withDisplayDetails(stored);
     const periodRows = period ? await audit.withDisplayDetails(period.rows) : rows;
 
-    const digest = contentDigest(rows);
+    const digest = contentDigest(stored);
     const generatedAt = new Date().toISOString();
     const generatedBy = req.user?.name || req.user?.id || 'Unknown user';
     const reference = await audit.nextReportReference(generatedAt);
@@ -181,6 +181,8 @@ async function exportEvents(req, res, next) {
         digest,
         fileDigest,
         chainOk: verification.ok,
+        // The chain's last record when the report was made, to compare the trail against later.
+        head: verification.head,
       },
     });
 

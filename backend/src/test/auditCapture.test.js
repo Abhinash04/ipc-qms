@@ -85,6 +85,20 @@ describe('sessions', () => {
   });
 });
 
+describe('exporting the audit trail', () => {
+  it('records the last event of the chain at the time, to compare the trail against later', async () => {
+    await audit.record({ action: AUDIT_ACTIONS.EMAIL_SENT, actorType: 'system' });
+    await audit.record({ action: AUDIT_ACTIONS.EMAIL_SENT, actorType: 'system' });
+    const [, last] = await eventsOf(AUDIT_ACTIONS.EMAIL_SENT);
+
+    await request(app).get('/api/v1/audit/export').query({ format: 'csv' }).set(authHeader(ROLES.ADMIN)).expect(200);
+
+    const [exported] = await eventsOf(AUDIT_ACTIONS.AUDIT_EXPORTED);
+    expect(exported.details.head).toEqual({ seq: last.seq, hash: last.hash });
+    expect(exported.seq).toBe(last.seq + 1);
+  });
+});
+
 describe('looking at the audit trail', () => {
   it('is recorded once a minute per person and filter set', async () => {
     const admin = authHeader(ROLES.ADMIN);

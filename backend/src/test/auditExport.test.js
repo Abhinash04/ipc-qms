@@ -114,6 +114,21 @@ describe('GET /audit/export', () => {
     });
   });
 
+  it('gives the same selection the same digest when only its wording has changed since', async () => {
+    const queryId = 'QRY-2026-00077';
+    await audit.record({ action: 'QUERY_ASSIGNED', actorType: 'human', queryId, timestamp: '2026-09-01T05:00:00.000Z' });
+    await audit.record({ action: 'REVIEW_COMPLETED', actorType: 'human', queryId, timestamp: '2026-09-01T06:00:00.000Z' });
+    const selection = { queryId, to: '2026-09-01T07:00:00.000Z' };
+
+    const first = await exportAs('csv', selection);
+    // A later second review changes the status worked out for the first one, outside the selection.
+    await audit.record({ action: 'REVIEW_COMPLETED', actorType: 'human', queryId, timestamp: '2026-09-02T06:00:00.000Z' });
+    const second = await exportAs('csv', selection);
+
+    expect(second.body.toString('utf8')).not.toBe(first.body.toString('utf8'));
+    expect(second.headers['x-report-sha256']).toBe(first.headers['x-report-sha256']);
+  });
+
   it('produces a digest that depends on every exported row', async () => {
     const one = [{ seq: 1, action: 'EMAIL_SENT', timestamp: 't' }];
     const edited = [{ seq: 1, action: 'EMAIL_SENT', timestamp: 't2' }];

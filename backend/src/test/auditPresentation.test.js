@@ -213,6 +213,20 @@ describe('the PDF report', () => {
     }
   });
 
+  it('names the latest audit record at the time of the report, without its seal', async () => {
+    const text = await pdfText(
+      await buildPdf({
+        rows,
+        filters: {},
+        generatedBy: 'A',
+        generatedAt: '2026-10-01T09:15:27.000Z',
+        verification: { ok: true, checked: 57, head: { seq: 57, hash: 'a'.repeat(64) } },
+      }),
+    );
+    expect(text).toMatch(/Latest audit record\s+AUD-000057, when this report was made/);
+    expect(text).not.toContain('aaaaaaaa');
+  });
+
   it('numbers rows 1, 2, 3 whatever their chain position', async () => {
     const text = await pdfText(await buildPdf({ rows, filters: {}, generatedBy: 'A', generatedAt: '2026-10-01T09:15:27.000Z' }));
     expect(text).toMatch(/\b1\s+AUD-000041/);
