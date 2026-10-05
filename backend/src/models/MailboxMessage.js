@@ -29,6 +29,8 @@ const mailboxMessageSchema = new mongoose.Schema(
     readByUserId: { type: String, default: null },
     createdAt: { type: String, default: null },
     mailCategory: { type: String, default: null },
+    // Whether the mail can be offered an automatic reply, and what became of it (services/autoReply).
+    autoReply: { type: Object, default: null },
   },
   { versionKey: false },
 );

@@ -13,6 +13,7 @@ import { normaliseAddress } from './address.js';
 import { searchFilter } from './messageView.js';
 import * as triage from './triage.js';
 import * as categorizer from './categorizer.js';
+import * as autoReply from '../../autoReply/assess.js';
 import { MAIL_CATEGORIES, REGISTERED, UNCLASSIFIED } from '../../../constants/mailCategories.js';
 
 export const SOURCE = 'nic-browser';
@@ -133,6 +134,12 @@ async function sync(address = browserConfig.mailboxAddress, { reader = readInbox
         categorizer.kick(storedIds.map(mailboxMessageId));
       } catch (error) {
         console.warn(`[qms] categoriser: could not start for new mail: ${error.message}`);
+      }
+
+      try {
+        await autoReply.assess(storedIds.map(mailboxMessageId));
+      } catch (error) {
+        console.warn(`[qms] auto-reply: could not assess new mail: ${error.message}`);
       }
 
       const failures = out?.failures ?? [];

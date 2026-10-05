@@ -10,6 +10,7 @@ import * as audit from '../../audit/auditService.js';
 import { AUDIT_ACTIONS, AUDIT_RESULTS } from '../../../constants/auditActions.js';
 import { ACTOR_TYPES } from '../../../constants/roles.js';
 import { backfillMissingRows, categorizeBacklog, classifyCandidateFilter } from './categorizer.js';
+import { assessPending } from '../../autoReply/assess.js';
 import { MAIL_STATUS, toMessageViews } from './messageView.js';
 
 export const PURGEABLE_SOURCES = ['nic-browser'];
@@ -182,6 +183,13 @@ export async function sweepOnce({
       const classified = await categorizeBacklog({ now, dryRun });
       result.classified = classified.classified;
       result.categorized = classified.categorized;
+      if (!dryRun) {
+        try {
+          await assessPending({ now });
+        } catch (error) {
+          console.warn(`[qms] auto-reply: could not assess older mail: ${error.message}`);
+        }
+      }
     }
 
     if (!purge) return { ...result, durationMs: Date.now() - started };

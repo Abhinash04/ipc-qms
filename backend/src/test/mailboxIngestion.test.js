@@ -25,6 +25,12 @@ vi.mock('../models/MailboxTriage.js', async () => {
 vi.mock('../models/AuditEvent.js', async () => ({
   AuditEvent: (await import('./support/memoryDb.js')).memoryDb.model('AuditEvent'),
 }));
+vi.mock('../models/MailboxDecision.js', async () => ({
+  MailboxDecision: (await import('./support/memoryDb.js')).memoryDb.model('MailboxDecision', {
+    unique: ['mailboxMessageId'],
+  }),
+  DECISIONS: { ACCEPTED: 'ACCEPTED', REJECTED: 'REJECTED' },
+}));
 
 import { memoryDb as db } from './support/memoryDb.js';
 import { MailboxMessage } from '../models/MailboxMessage.js';
