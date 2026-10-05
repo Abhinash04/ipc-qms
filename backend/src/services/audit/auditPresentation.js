@@ -544,6 +544,8 @@ export function present(event) {
   const details = describeDetails(event);
   const states = values ? null : stateChange(event);
   const who = whoDidIt(event);
+  // Worked out from the query's other recorded steps, not recorded with this event.
+  const inferred = (text) => (event.changesInferred ? `${text} (inferred)` : text);
   const { action: did, other } = narrate(event, {
     who,
     fallback: [activityLabel(event.action), event.queryId ? `for query ${event.queryId}` : null].filter(Boolean).join(' ') +
@@ -557,8 +559,8 @@ export function present(event) {
     userCard: userCard(event, who),
     narrative: [`By: ${who}`, did, other ? `${other.label}: ${other.person}` : null].filter(Boolean).join(' -> '),
     auditId: auditIdOf(event),
-    previousValue: values ? values.previous : states ? states[0] : '-',
-    newValue: values ? values.next : states ? [states[1], details].filter(Boolean).join('. ') : details || '-',
+    previousValue: values ? inferred(values.previous) : states ? states[0] : '-',
+    newValue: values ? inferred(values.next) : states ? [states[1], details].filter(Boolean).join('. ') : details || '-',
     sessionId: source.sessionId || '',
     logSource: source.server || source.host || '',
     section: sectionOf(event.actorId),

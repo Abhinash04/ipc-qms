@@ -134,14 +134,14 @@ describe('who and where an event came from', () => {
     expect(named.actorName).toBe('Neha Singh');
   });
 
-  it('shows previous and new values for older records worked out from the query history', async () => {
+  it('shows previous and new values for older records worked out from the query history, marked as inferred', async () => {
     await audit.record({ action: 'QUERY_RECEIVED', actorType: 'human', queryId: 'QRY-2026-00090' });
     await audit.record({ action: 'QUERY_REGISTERED', actorType: 'human', queryId: 'QRY-2026-00090' });
     await audit.record({ action: 'QUERY_FORWARDED', actorType: 'human', queryId: 'QRY-2026-00090' });
     const res = await request(app).get('/api/v1/audit').query({ action: 'QUERY_FORWARDED' }).set(authHeader(ROLES.ADMIN));
     expect(res.body.events[0].view).toMatchObject({
-      previousValue: 'Being checked by Front Office',
-      newValue: 'Waiting to be given to an officer',
+      previousValue: 'Being checked by Front Office (inferred)',
+      newValue: 'Waiting to be given to an officer (inferred)',
     });
   });
 

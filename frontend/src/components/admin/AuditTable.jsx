@@ -42,6 +42,21 @@ function DetailRow({ event }) {
         <td />
         <td colSpan={7} className="px-3 pb-3 pt-0 text-[12px] text-slate-700">
           {view.details && <p className="m-0">{view.details}</p>}
+          {event.changes && (
+            <p className="m-0 mt-1">
+              <span className="font-bold text-slate-500">Previous value: </span>
+              {view.previousValue}
+              <span aria-hidden="true" className="mx-1.5 font-bold text-primary-700">→</span>
+              <span className="font-bold text-slate-500">New value: </span>
+              {view.newValue}
+            </p>
+          )}
+          {view.failureReason && !view.details?.includes(view.failureReason) && (
+            <p className="m-0 mt-1">
+              <span className="font-bold text-slate-500">Failure reason: </span>
+              {view.failureReason}
+            </p>
+          )}
           <p className="m-0 mt-1 text-[11.5px] text-slate-500">
             {[
               view.section && `Section: ${view.section}`,

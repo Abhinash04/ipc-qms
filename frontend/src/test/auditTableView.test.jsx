@@ -74,4 +74,28 @@ describe('the audit trail table', () => {
     expect(screen.getByText(/Login session SES-1A2B3C4D/)).toBeInTheDocument();
     expect(screen.queryByText(/\{"/)).toBeNull();
   });
+
+  it('expands to the previous and new value of a change to the case', () => {
+    const changed = { ...EVENT, changes: { status: { from: 'PENDING_ASSIGNMENT', to: 'ASSIGNED' } } };
+    render(<AuditTable events={[changed]} />);
+    fireEvent.click(screen.getByRole('button', { name: /Show details/ }));
+
+    const line = screen.getByText('Previous value:').closest('p');
+    expect(line).toHaveTextContent('Previous value: Pending assignment→New value: Assigned');
+  });
+
+  it('shows no previous and new value for an activity that changed nothing', () => {
+    render(<AuditTable events={[EVENT]} />);
+    fireEvent.click(screen.getByRole('button', { name: /Show details/ }));
+
+    expect(screen.queryByText('Previous value:')).toBeNull();
+  });
+
+  it('expands to the failure reason when the description does not already give it', () => {
+    const failed = { ...EVENT, view: { ...EVENT.view, failureReason: 'Mailbox refused the sign-in' } };
+    render(<AuditTable events={[failed]} />);
+    fireEvent.click(screen.getByRole('button', { name: /Show details/ }));
+
+    expect(screen.getByText('Mailbox refused the sign-in')).toBeInTheDocument();
+  });
 });

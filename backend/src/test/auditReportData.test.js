@@ -188,6 +188,13 @@ describe("the query lifecycle", () => {
       ["Query closed", "Closed"],
     ]);
   });
+
+  it("marks a status worked out from the history rather than recorded", () => {
+    const rows = [
+      { timestamp: "2026-10-01T05:00:00.000Z", action: "QUERY_FORWARDED", queryId: "Q2", actorType: "human", changes: { status: { from: "FRONT_OFFICE_VERIFICATION", to: "PENDING_ASSIGNMENT" } }, changesInferred: true },
+    ];
+    expect(lifecycle(rows, "Q2")[0].status).toBe("Waiting to be given to an officer (inferred)");
+  });
 });
 
 describe("findings", () => {

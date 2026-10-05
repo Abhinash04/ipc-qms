@@ -232,7 +232,7 @@ export function lifecycle(rows, queryId) {
     .sort((a, b) => String(a.timestamp).localeCompare(String(b.timestamp)))
     .map((row) => {
       const view = present(row);
-      if (row.changes?.status?.to) status = statusWords(row.changes.status.to);
+      if (row.changes?.status?.to) status = `${statusWords(row.changes.status.to)}${row.changesInferred ? ' (inferred)' : ''}`;
       return { dateTime: view.dateTime, user: view.user, who: view.who, did: view.did, other: view.other, activity: view.activity, detail: view.details, status };
     });
 }
