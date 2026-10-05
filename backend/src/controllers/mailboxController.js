@@ -26,11 +26,61 @@ import * as decisions from '../services/email/mailbox/decisions.js';
 import * as triage from '../services/email/mailbox/triage.js';
 import * as categorizer from '../services/email/mailbox/categorizer.js';
 import * as accept from '../services/email/mailbox/acceptMessage.js';
+import * as autoReply from '../services/autoReply/approve.js';
 import * as health from '../services/email/mailbox/health.js';
 import { matchesSearch, toMessageViews } from '../services/email/mailbox/messageView.js';
 import { sendAttachment } from './attachmentController.js';
 import { describeError, isUnreachable, isAuthFailure } from '../services/email/delivery.js';
 import { isConnected } from '../config/db.js';
+
+const actorOf = (req) => ({ id: req.user?.id ?? null, role: req.user?.role ?? null });
+
+/** The stored NICeMail message an automatic reply belongs to; it exists only in that mailbox. */
+async function autoReplyMessage(req, res) {
+  const box = await resolveMailbox(req);
+  const message = box.own ? await box.store.get(box.address, req.params.messageId) : null;
+  if (!message) {
+    res.status(HTTP_STATUS.NOT_FOUND).json({ error: 'Message not found', messageId: req.params.messageId });
+    return null;
+  }
+  return { box, message };
+}
+
+async function approveAutoReply(req, res, next) {
+  if (!requireDb(next)) return;
+
+  try {
+    const found = await autoReplyMessage(req, res);
+    if (!found) return;
+    const result = await autoReply.approveAutoReply({
+      mailboxMessageId: req.params.messageId,
+      message: found.message,
+      body: req.body.body,
+      actor: actorOf(req),
+      sourceMailbox: { source: found.box.source, address: found.box.address },
+    });
+    res.status(HTTP_STATUS.OK).json(result);
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function declineAutoReply(req, res, next) {
+  if (!requireDb(next)) return;
+
+  try {
+    const found = await autoReplyMessage(req, res);
+    if (!found) return;
+    const result = await autoReply.declineAutoReply({
+      mailboxMessageId: req.params.messageId,
+      reason: req.body.reason,
+      actor: actorOf(req),
+    });
+    res.status(HTTP_STATUS.OK).json({ autoReply: result });
+  } catch (error) {
+    next(error);
+  }
+}
 
 function requireDb(next) {
   if (isConnected()) return true;
@@ -323,6 +373,9 @@ async function decideMessage(req, res, next) {
 
   try {
     const { decision, queryId, reason, message } = req.body;
+    if ((await resolveMailbox(req)).own) {
+      await autoReply.releaseForStandardWorkflow({ mailboxMessageId: req.params.messageId, actor: actorOf(req) });
+    }
 
     const result = await decisions.recordDecision({
       mailboxMessageId: req.params.messageId,
@@ -360,6 +413,8 @@ async function acceptMessage(req, res, next) {
       }
       message = stored;
     }
+    // Automatic replies exist only for the NICeMail mailbox.
+    if (box.own) await autoReply.releaseForStandardWorkflow({ mailboxMessageId: req.params.messageId, actor: actorOf(req) });
 
     const result = await accept.acceptMessage({
       mailboxMessageId: req.params.messageId,
@@ -417,4 +472,6 @@ export {
   syncMailbox,
   rescueMessage,
   setMessageCategory,
+  approveAutoReply,
+  declineAutoReply,
 };

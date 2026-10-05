@@ -43,6 +43,14 @@ export const mailCategorySchema = z.object({
   category: z.enum(Object.values(MAIL_CATEGORIES)),
 });
 
+export const approveAutoReplySchema = z.object({
+  body: z.string().trim().min(1, 'the reply is empty').max(20000),
+});
+
+export const declineAutoReplySchema = z.object({
+  reason: z.string().trim().max(500).optional(),
+});
+
 export const acceptMessageSchema = z.object({
   from: z.string().optional(),
   to: z.union([z.string(), z.array(z.string())]).nullable().optional(),

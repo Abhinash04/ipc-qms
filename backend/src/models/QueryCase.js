@@ -21,6 +21,8 @@ const queryCaseSchema = new mongoose.Schema(
     sourceEmailId: { type: String, default: null },
     sourceMailboxMessageId: { type: String, default: null },
     sourceMailbox: { type: Object, default: null },
+    // Set when the case was answered by an FO-approved automatic reply: { entryId, topic, confidence }.
+    autoReply: { type: Object, default: null },
     aiSummary: { type: Object, default: null },
     assignmentDecision: { type: Object, default: null },
     pullbackHistory: { type: Array, default: [] },

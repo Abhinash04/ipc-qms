@@ -10,6 +10,8 @@ import {
   acceptMessageSchema,
   listMessagesQuerySchema,
   mailCategorySchema,
+  approveAutoReplySchema,
+  declineAutoReplySchema,
 } from '../validators/mailboxSchemas.js';
 import {
   listMessages,
@@ -26,6 +28,8 @@ import {
   syncMailbox,
   rescueMessage,
   setMessageCategory,
+  approveAutoReply,
+  declineAutoReply,
 } from '../controllers/mailboxController.js';
 
 const router = express.Router();
@@ -63,6 +67,23 @@ router.post(
   verifyRole(FRONT_OFFICE_ONLY),
   validateBody(mailCategorySchema),
   setMessageCategory,
+);
+
+// The only way an automatic reply is sent: the Front Office approves it.
+router.post(
+  '/mailbox/messages/:messageId/auto-reply/approve',
+  verifyToken,
+  verifyRole(FRONT_OFFICE_ONLY),
+  validateBody(approveAutoReplySchema),
+  approveAutoReply,
+);
+
+router.post(
+  '/mailbox/messages/:messageId/auto-reply/decline',
+  verifyToken,
+  verifyRole(FRONT_OFFICE_ONLY),
+  validateBody(declineAutoReplySchema),
+  declineAutoReply,
 );
 
 router.post('/mailbox/sync', verifyToken, verifyRole(FRONT_OFFICE_ONLY), syncMailbox);
