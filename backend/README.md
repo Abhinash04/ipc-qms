@@ -154,6 +154,8 @@ endpoints that must not be retried blindly.
 | POST   | `/mailbox/sync`                                          | `verifyRole(FRONT_OFFICE, SUPER_ADMIN)`                   |
 | POST   | `/mailbox/messages/:messageId/accept`                    | `verifyRole(FRONT_OFFICE, SUPER_ADMIN)` + `validateBody`  |
 | POST   | `/mailbox/messages/:messageId/decision`                  | `verifyRole(FRONT_OFFICE, SUPER_ADMIN)` + `validateBody`  |
+| POST   | `/mailbox/messages/:messageId/auto-reply/approve`        | `verifyRole(FRONT_OFFICE, SUPER_ADMIN)` + `validateBody`  |
+| POST   | `/mailbox/messages/:messageId/auto-reply/decline`        | `verifyRole(FRONT_OFFICE, SUPER_ADMIN)` + `validateBody`  |
 | GET    | `/mailbox/decisions`                                     | `verifyRole(FRONT_OFFICE, SUPER_ADMIN)`                   |
 | POST   | `/mailbox/messages/:messageId/ingested`                  | `verifyRole(FRONT_OFFICE, SUPER_ADMIN)`                   |
 | DELETE | `/mailbox/messages/:messageId`                           | `verifyRole(FRONT_OFFICE, SUPER_ADMIN)`                   |
@@ -965,6 +967,41 @@ so old cases are never re-sent.
 `npm run db:reset` and `scripts/resetWorkflowState.mjs` clear `outboundemails` along with
 everything else — Case IDs restart after a reset, so a stale ledger row would silently suppress the
 first email of a new case.
+
+### Automatic replies
+
+The NICeMail inbox has three views, `GET /mailbox/messages?bucket=all|auto_reply|human` (with
+`bucketCounts` in the answer): **All Mails** (everything, as before), **Auto Reply** (mails that ask a
+supported general question, with a reply drafted) and **Human Intervention** (everything else, through
+the standard accept / reject workflow, unchanged).
+
+**Classification is a demo stand-in for a trained model.** `services/autoReply/matcher.js` compares a
+mail with `src/data/autoReplyQuestions.json`: a list of supported questions, each with paraphrase
+variants and an answer (demo content for IPC to approve or replace). A mail is offered a reply only
+when every sentence it asks (greeting, sign-off, quoted history and courtesies aside) matches the same
+entry at or above `AUTO_REPLY_CONFIDENCE_THRESHOLD`. The default, 1, means the very wording of a listed
+question or variant. A near miss, a second question, any other remark, attachments or a junk verdict
+send the mail to a person. `services/autoReply/assess.js` records the outcome once per mail on
+`MailboxMessage.autoReply`, when the browser agent stores it (older mail in the hourly sweep), and
+audits a suggestion as `AUTO_REPLY_SUGGESTED`. Swapping in a model means replacing `matchAutoReply`.
+
+**Nothing is sent without the Front Office.** Assessment never sends and never creates a case. The
+only path to the inquirer is `POST /mailbox/messages/:id/auto-reply/approve { body }`
+(`services/autoReply/approve.js`):
+
+1. It claims the suggestion atomically, so a double click or a second tab sends once.
+2. It registers the mail as a Query Case (`registerCase`, shared with accept) carrying
+   `autoReply: { entryId, topic, confidence }`.
+3. It stores the Front Office's text, edited or not, as the `FINAL_APPROVED` response v1.
+4. It moves the case to `READY_FOR_DISPATCH` (`AUTO_REPLY_APPROVED`, noting whether the draft was
+   edited) and sends through `caseMail.dispatchResponse`, which closes the case and records
+   `RESPONSE_DISPATCHED` and `QUERY_CLOSED`.
+
+No acknowledgement and no forward to the Officer-in-Charge are sent. A failed send leaves the mail
+`FAILED` and the case ready for dispatch; approving again retries the reply already approved.
+`…/auto-reply/decline` sends the mail to Human Intervention (`AUTO_REPLY_DECLINED`). Accepting or
+rejecting a suggested mail through the standard workflow withdraws its suggestion, and the standard
+workflow refuses a mail whose automatic reply is being sent or was sent.
 
 ### When the mailbox cannot be read
 

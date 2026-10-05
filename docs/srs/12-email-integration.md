@@ -225,3 +225,23 @@ for what is still required before deployment.
 **Attachments fail closed on send.** Every referenced file is verified (existence, bytes, SHA-256)
 before an outbound message leaves; an unresolvable attachment aborts the send with a 409 naming it,
 rather than delivering a message with documents silently missing.
+
+## 12.5 Automatic Replies (Demo)
+
+The Front Office mailbox has three views: **All Mails** (everything, unchanged), **Auto Reply** and
+**Human Intervention** (the standard validation workflow, unchanged).
+
+A mail lands in **Auto Reply** when it asks only a supported general question, matched against a
+predefined list of questions and answers. For the demo the match must be exact (a confidence
+threshold of 100 %, configurable through `AUTO_REPLY_CONFIDENCE_THRESHOLD` for a future trained
+model). The system drafts the reply from the list. The Front Office opens the mail, reviews and may
+edit the draft, then approves it, and only then is the reply sent to the inquirer. **No automatic reply
+is ever sent without the Front Office's approval.**
+
+An approved reply is recorded as a Query Case that is answered and closed at once, with no
+acknowledgement and no forward to the Officer-in-Charge, so it appears in the case list, the
+dashboards and the audit trail. Every step is audited: the suggestion, the approval (noting whether
+the draft was edited), the dispatch and the closure, or the Front Office sending the mail to Human
+Intervention instead.
+
+The question list is demo content, to be approved or replaced by IPC before use.

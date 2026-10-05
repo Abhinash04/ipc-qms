@@ -246,6 +246,8 @@ not expected to be reached.
 |---|---|---|---|---|
 | `GEMMA_API_URL` | optional | no | `https://pravahai.aicte-india.org/llm/api/gemma` | The Pravah Gemma endpoint; no key is used. Enquiry text is sent to it, which is external data sharing. **An empty value turns AI off.** Summaries, recommendations and drafts then fall back to deterministic text, and junk triage runs on the rules alone. Leave the variable out rather than blank it, unless you mean to turn AI off |
 | `GEMMA_TIMEOUT_MS` | optional | no | `12000` | The timeout per call. A recommendation gets 3× (36 s) and a draft 2× (24 s) |
+| `AUTO_REPLY_ENABLED` | optional | no | `true` | Offer an automatic reply, for the Front Office to review and approve, to NICeMail mail that asks a supported general question (`src/data/autoReplyQuestions.json`). `false` stops new suggestions; nothing is ever sent without approval either way |
+| `AUTO_REPLY_CONFIDENCE_THRESHOLD` | optional | no | `1` | How closely a mail must match a supported question to be offered a reply, above 0 and at most 1. `1` means the very wording of a listed question or variant. A value outside the range stops startup |
 | `REPORT_DEPARTMENT` | optional | no | Indian Pharmacopoeia Commission, Ministry of Health & Family Welfare, Government of India | The department and ministry printed at the top of the audit trail report |
 
 ### 3.7 Sync
