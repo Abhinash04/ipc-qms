@@ -94,6 +94,24 @@ export async function setMailboxMessageCategory(mailboxMessageId, category) {
   return data;
 }
 
+/** Sends the automatic reply, with the Front Office's text, to the mail's sender. */
+export async function approveAutoReply(mailboxMessageId, body) {
+  const { data } = await axiosClient.post(
+    `/mailbox/messages/${encodeURIComponent(mailboxMessageId)}/auto-reply/approve`,
+    { body },
+  );
+  return data;
+}
+
+/** Sends a mail offered an automatic reply to Human Intervention instead. */
+export async function declineAutoReply(mailboxMessageId, reason) {
+  const { data } = await axiosClient.post(
+    `/mailbox/messages/${encodeURIComponent(mailboxMessageId)}/auto-reply/decline`,
+    reason ? { reason } : {},
+  );
+  return data;
+}
+
 export async function deleteMailboxMessage(mailboxMessageId, { recipient } = {}) {
   const { data } = await axiosClient.delete(
     `/mailbox/messages/${encodeURIComponent(mailboxMessageId)}`,

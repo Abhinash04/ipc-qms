@@ -304,3 +304,24 @@ describe('the category card', () => {
     expect(card).toHaveTextContent('Not classified yet');
   });
 });
+
+describe('the automatic reply', () => {
+  it('offers the drafted reply for review on a mail in the Auto Reply bucket', async () => {
+    fetchMailboxMessage.mockResolvedValue({
+      ...MESSAGE,
+      autoReply: { status: 'SUGGESTED', confidence: 1, question: 'What is the use case of paracetamol?', draft: 'Dear Sir/Madam,\n\nAnswer.' },
+    });
+    renderMessage();
+
+    expect(await screen.findByRole('heading', { name: 'Automatic reply' })).toBeInTheDocument();
+    expect(screen.getByLabelText('Reply to ravi@pharma.example')).toHaveValue('Dear Sir/Madam,\n\nAnswer.');
+  });
+
+  it('shows no automatic reply on a mail left to the standard workflow', async () => {
+    fetchMailboxMessage.mockResolvedValue({ ...MESSAGE, autoReply: { status: 'NOT_ELIGIBLE' } });
+    renderMessage();
+
+    await screen.findByText(MESSAGE.subject, { selector: 'h1' });
+    expect(screen.queryByRole('heading', { name: 'Automatic reply' })).toBeNull();
+  });
+});

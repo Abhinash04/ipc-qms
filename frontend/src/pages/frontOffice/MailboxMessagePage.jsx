@@ -9,6 +9,7 @@ import { StatusBadge } from "@/components/common/StatusBadge";
 import { AttachmentList } from "@/components/attachments/AttachmentList";
 import { MailHtmlFrame } from "@/components/email/MailHtmlFrame";
 import { MailCategoryDetails } from "@/components/email/MailCategoryBadge";
+import { AutoReplyPanel } from "@/components/email/AutoReplyPanel";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useRoutePaths } from "@/hooks/useRoutePaths";
 import { buildPath } from "@/constants/routePaths";
@@ -234,6 +235,11 @@ function MessageView({ message, paths }) {
       <div className="min-w-0 space-y-5">
         <MessageHeader message={message} />
         <MessageBody key={message.mailboxMessageId} message={message} />
+        <AutoReplyPanel
+          key={`${message.mailboxMessageId}-${message.autoReply?.status}`}
+          message={message}
+          caseHref={paths.QUERY_DETAIL ? (queryId) => buildPath(paths.QUERY_DETAIL, { queryId }) : null}
+        />
         {attachments.length > 0 && (
           <section className={CARD}>
             <h2 className={`${CARD_TITLE} mb-3`}>Attachments ({attachments.length})</h2>
