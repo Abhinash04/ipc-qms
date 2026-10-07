@@ -1,8 +1,9 @@
 import { useId } from "react";
 import { Link } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { ArrowRight, Bot, Loader2, RotateCcw, UserRound } from "lucide-react";
+import { ArrowRight, Bot, Loader2, MessageSquareText, RotateCcw, Send, UserRound } from "lucide-react";
 
+import { CaseCard } from "@/components/common/CaseCard";
 import { Button } from "@/components/ui/button";
 import { AutoReplyBadge } from "@/components/email/AutoReplyBadge";
 import { AUTO_REPLY_STATUS } from "@/constants/mailCategories";
@@ -10,7 +11,6 @@ import { declineAutoReply, retryAutoReply } from "@/services/api/mailboxService"
 import { notify } from "@/services/notify";
 import { formatFullDate, parseSender } from "@/utils/mailboxFormat";
 
-const CARD = "bg-card rounded-2xl border border-status-purple-line/60 p-5 shadow-card";
 const SHOWN = new Set([AUTO_REPLY_STATUS.SUGGESTED, AUTO_REPLY_STATUS.APPROVING, AUTO_REPLY_STATUS.FAILED, AUTO_REPLY_STATUS.SENT]);
 
 const errorOf = (failure) => failure?.response?.data?.error || failure?.message || "Please try again.";
@@ -65,15 +65,14 @@ export function AutoReplyPanel({ message, caseHref = null }) {
   }[status];
 
   return (
-    <section className={CARD} aria-labelledby={`${textId}-title`}>
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2.5">
-        <h2 id={`${textId}-title`} className="m-0 flex items-center gap-2 font-heading text-[17px] font-bold text-slate-900">
-          <Bot className="h-5 w-5 text-status-purple-fg" aria-hidden="true" />
-          Automatic reply
-        </h2>
-        <AutoReplyBadge autoReply={autoReply} />
-      </div>
-
+    <CaseCard
+      tone="ai"
+      banner
+      art={[MessageSquareText, Bot, Send]}
+      icon={Bot}
+      title="Automatic reply"
+      badge={<AutoReplyBadge autoReply={autoReply} />}
+    >
       <div className="space-y-3">
         <p className="m-0 text-[12.5px] font-medium text-slate-500">
           Matched the supported question “{autoReply.question}” ({percent}% match).
@@ -125,6 +124,6 @@ export function AutoReplyPanel({ message, caseHref = null }) {
           </Button>
         )}
       </div>
-    </section>
+    </CaseCard>
   );
 }

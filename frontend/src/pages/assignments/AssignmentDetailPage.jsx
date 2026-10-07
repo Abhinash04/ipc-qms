@@ -1,8 +1,9 @@
 import { useState } from 'react';
+import { BadgeCheck, UserCheck, UserPlus, Users } from 'lucide-react';
 import { Breadcrumb } from '@/components/common/Breadcrumb';
 import { EmptyState } from '@/components/common/EmptyState';
+import { CaseCard } from '@/components/common/CaseCard';
 import { CaseSummaryBar } from '@/components/workflow/CaseSummaryBar';
-import { Card, CardBody, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select';
@@ -48,23 +49,21 @@ export function AssignmentDetailPage() {
       <ActionError message={error} onDismiss={clearError} />
 
       {assignee && (
-        <Card className="border-emerald-200 bg-emerald-50/50">
-          <CardBody className="p-4 flex items-center justify-between">
-            <div>
-              <p className="text-xs font-semibold text-emerald-800">
-                Official Assigned
-              </p>
-              <p className="text-base font-bold text-foreground mt-0.5">
-                {assignee.name} ({assignee.email})
-              </p>
-            </div>
-            <p className="text-xs text-muted-foreground">
-              {query.assignmentDecision?.acceptedAiRecommendation
-                ? 'AI Recommendation accepted by OIC'
-                : 'Selected & assigned by Officer-in-Charge'}
-            </p>
-          </CardBody>
-        </Card>
+        <CaseCard
+          banner
+          art={[UserCheck, BadgeCheck]}
+          icon={BadgeCheck}
+          title="Official Assigned"
+          meta={
+            query.assignmentDecision?.acceptedAiRecommendation
+              ? 'AI Recommendation accepted by OIC'
+              : 'Selected & assigned by Officer-in-Charge'
+          }
+        >
+          <p className="m-0 text-base font-bold text-foreground">
+            {assignee.name} ({assignee.email})
+          </p>
+        </CaseCard>
       )}
 
       <AiRecommendationCard
@@ -74,41 +73,43 @@ export function AssignmentDetailPage() {
       />
 
       {canAssign && (
-        <Card>
-          <CardHeader>
-            <h2 className="text-sm font-semibold text-foreground">Or Manual Assignment</h2>
-          </CardHeader>
-          <CardBody className="space-y-3">
-            <div className="flex flex-wrap items-center gap-3">
-              <div className="flex-1 min-w-60">
-                <Label htmlFor="override-assignee" className="text-xs text-muted-foreground mb-1 block">
-                  Choose from full directory
-                </Label>
-                <Select value={override} onValueChange={setOverride}>
-                  <SelectTrigger id="override-assignee">
-                    <SelectValue placeholder="Select an official" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {ELIGIBLE_ASSIGNEES.map((user) => (
-                      <SelectItem key={user.id} value={user.id}>
-                        {user.name} — {ROLE_LABELS[user.role]}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <Button
-                variant="secondary"
-                disabled={!override}
-                onClick={() => handleAssignToOfficial(override)}
-                className="mt-5"
-              >
-                Assign Selected Official
-              </Button>
+        <CaseCard
+          tone="action"
+          banner
+          art={[Users, UserPlus, UserCheck]}
+          icon={UserPlus}
+          title="Or Manual Assignment"
+          bodyClassName="space-y-3"
+        >
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex-1 min-w-60">
+              <Label htmlFor="override-assignee" className="text-xs text-muted-foreground mb-1 block">
+                Choose from full directory
+              </Label>
+              <Select value={override} onValueChange={setOverride}>
+                <SelectTrigger id="override-assignee">
+                  <SelectValue placeholder="Select an official" />
+                </SelectTrigger>
+                <SelectContent>
+                  {ELIGIBLE_ASSIGNEES.map((user) => (
+                    <SelectItem key={user.id} value={user.id}>
+                      {user.name} — {ROLE_LABELS[user.role]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
-          </CardBody>
-        </Card>
+
+            <Button
+              variant="secondary"
+              disabled={!override}
+              onClick={() => handleAssignToOfficial(override)}
+              className="mt-5"
+            >
+              Assign Selected Official
+            </Button>
+          </div>
+        </CaseCard>
       )}
     </div>
   );

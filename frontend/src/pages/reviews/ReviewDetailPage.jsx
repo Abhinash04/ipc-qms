@@ -1,12 +1,25 @@
 import { useState } from 'react';
-import { Trash2Icon } from 'lucide-react';
+import {
+  CircleCheckBig,
+  ClipboardCheck,
+  Eye,
+  FileSearch,
+  FileText,
+  Flag,
+  Layers,
+  ListChecks,
+  MessageSquareText,
+  Milestone,
+  Route,
+  Trash2Icon,
+} from 'lucide-react';
 import { Breadcrumb } from '@/components/common/Breadcrumb';
 import { EmptyState } from '@/components/common/EmptyState';
+import { CaseCard } from '@/components/common/CaseCard';
 import { CaseSummaryBar } from '@/components/workflow/CaseSummaryBar';
 import { QueryLifecycleTimeline } from '@/components/workflow/QueryLifecycleTimeline';
-import { buildLifecycle } from '@/constants/queryLifecycle';
+import { buildLifecycle, STAGE_STATUS } from '@/constants/queryLifecycle';
 import { buildSpecialEvents } from '@/constants/workflowExceptions';
-import { Card, CardBody, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ReviewDecisionCard } from '@/components/workflow/ReviewDecisionCard';
 import { Badge } from '@/components/ui/badge';
@@ -37,6 +50,9 @@ export function ReviewDetailPage() {
   if (!query) return <EmptyState title={resolving ? 'Loading case…' : 'Query not found'} />;
 
   const reviewSteps = steps.filter((s) => s.stepType === 'REVIEW');
+  const stages = buildLifecycle({ query, steps, versions, reviews, audit, messages });
+  const specialEvents = buildSpecialEvents({ query, audit });
+  const completedStages = stages.filter((stage) => stage.status === STAGE_STATUS.COMPLETE).length;
   const roundOf = (review) =>
     1 + reviews.filter((r) => isSendBack(r) && String(r.at) < String(review.at)).length;
 
@@ -60,18 +76,19 @@ export function ReviewDetailPage() {
       <ActionError message={error} onDismiss={clearError} />
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="space-y-6 lg:col-span-2">
-          <Card>
-            <CardHeader>
-              <h2 className="text-sm font-semibold text-foreground">Workflow progress</h2>
-            </CardHeader>
-            <CardBody>
-              <QueryLifecycleTimeline
-                stages={buildLifecycle({ query, steps, versions, reviews, audit, messages })}
-                events={buildSpecialEvents({ query, audit })}
-                audit={audit}
-              />
-            </CardBody>
-          </Card>
+          <CaseCard
+            tone="progress"
+            banner
+            art={[Milestone, Flag, CircleCheckBig]}
+            icon={Route}
+            title="Workflow progress"
+            meta={`${completedStages} of ${stages.length} stages complete${
+              specialEvents.length ? ` · ${specialEvents.length} pull backs & transfers` : ''
+            }`}
+            bodyClassName="py-5"
+          >
+            <QueryLifecycleTimeline stages={stages} events={specialEvents} audit={audit} />
+          </CaseCard>
 
           <ResubmissionCard
             query={query}
@@ -82,131 +99,130 @@ export function ReviewDetailPage() {
             currentStep={currentStep}
           />
 
-          <Card>
-            <CardHeader>
-              <h2 className="text-sm font-semibold text-foreground">Draft under review</h2>
-              {latestVersion && (
-                <p className="mt-0.5 text-xs text-muted-foreground">
-                  {latestVersion.version} — {latestVersion.label}
-                </p>
-              )}
-            </CardHeader>
-            <CardBody>
-              {latestVersion ? (
-                <pre className="rounded-md border border-border bg-muted/40 p-4 font-sans text-sm whitespace-pre-wrap text-foreground">
-                  {latestVersion.content}
-                </pre>
-              ) : (
-                <EmptyState title="No draft submitted yet" />
-              )}
-            </CardBody>
-          </Card>
+          <CaseCard
+            tone="document"
+            banner
+            art={[FileSearch, FileText, Eye]}
+            icon={FileText}
+            title="Draft under review"
+            meta={latestVersion ? `${latestVersion.version} — ${latestVersion.label}` : undefined}
+          >
+            {latestVersion ? (
+              <pre className="rounded-md border border-border bg-muted/40 p-4 font-sans text-sm whitespace-pre-wrap text-foreground">
+                {latestVersion.content}
+              </pre>
+            ) : (
+              <EmptyState title="No draft submitted yet" />
+            )}
+          </CaseCard>
 
           {reviews.length > 0 && (
-            <Card>
-              <CardHeader>
-                <h2 className="text-sm font-semibold text-foreground">Review decisions</h2>
-              </CardHeader>
-              <CardBody className="space-y-3">
-                {reviews.map((r) => (
-                  <div key={r.reviewId} className="border-b border-border pb-3 text-sm last:border-0 last:pb-0">
-                    <div className="flex items-center gap-2">
-                      <Badge variant={DECISION_VARIANT[r.decision] || 'status-gray'}>
-                        {DECISION_LABEL[r.decision] || r.decision}
+            <CaseCard
+              banner
+              art={[ClipboardCheck, MessageSquareText, ListChecks]}
+              icon={ClipboardCheck}
+              title="Review decisions"
+              meta={`${reviews.length} ${reviews.length === 1 ? 'decision' : 'decisions'}`}
+              bodyClassName="space-y-3"
+            >
+              {reviews.map((r) => (
+                <div key={r.reviewId} className="border-b border-border pb-3 text-sm last:border-0 last:pb-0">
+                  <div className="flex items-center gap-2">
+                    <Badge variant={DECISION_VARIANT[r.decision] || 'status-gray'}>
+                      {DECISION_LABEL[r.decision] || r.decision}
+                    </Badge>
+                    <span className="text-foreground">{findUserById(r.reviewerId)?.name || 'Unknown'}</span>
+                    <span className="text-xs text-muted-foreground">
+                      {requesterRole(r, [...steps, ...(stepHistory || [])])}
+                    </span>
+                    {r.version && (
+                      <Badge variant="outline" title="The response version this decision was made against">
+                        {r.version}
                       </Badge>
-                      <span className="text-foreground">{findUserById(r.reviewerId)?.name || 'Unknown'}</span>
-                      <span className="text-xs text-muted-foreground">
-                        {requesterRole(r, [...steps, ...(stepHistory || [])])}
-                      </span>
-                      {r.version && (
-                        <Badge variant="outline" title="The response version this decision was made against">
-                          {r.version}
-                        </Badge>
-                      )}
-                      <Badge variant="outline" title="Review round — a new round starts after each change request">
-                        Round {roundOf(r)}
-                      </Badge>
-                      <span className="text-xs text-muted-foreground">{formatDateTime(r.at)}</span>
-                    </div>
-                    {r.comment && <p className="mt-1 text-muted-foreground">{r.comment}</p>}
+                    )}
+                    <Badge variant="outline" title="Review round — a new round starts after each change request">
+                      Round {roundOf(r)}
+                    </Badge>
+                    <span className="text-xs text-muted-foreground">{formatDateTime(r.at)}</span>
                   </div>
-                ))}
-              </CardBody>
-            </Card>
+                  {r.comment && <p className="mt-1 text-muted-foreground">{r.comment}</p>}
+                </div>
+              ))}
+            </CaseCard>
           )}
         </div>
 
         <div className="space-y-6 lg:col-span-1">
           <ReviewDecisionCard />
 
-          <Card>
-            <CardHeader>
-              <h2 className="text-sm font-semibold text-foreground">Review levels</h2>
-              <p className="mt-0.5 text-xs text-muted-foreground">
-                Levels are dynamic — add as many as the query needs.
-              </p>
-            </CardHeader>
-            <CardBody className="space-y-3">
-              {reviewSteps.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No review levels configured yet.</p>
-              ) : (
-                reviewSteps.map((step, index) => (
-                  <div
-                    key={step.stepId}
-                    className="flex items-center justify-between gap-2 rounded-md border border-border px-3 py-2"
-                  >
-                    <div>
-                      <p className="text-sm font-medium text-foreground">Level {index + 1}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {findUserById(step.assignedUserId)?.name}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      <Badge
-                        variant={
-                          step.status === 'COMPLETED'
-                            ? 'status-green'
-                            : step.status === 'IN_PROGRESS'
-                              ? 'status-blue'
-                              : 'status-gray'
-                        }
-                      >
-                        {step.status}
-                      </Badge>
-                      {step.status === 'PENDING' && can(WORKFLOW_ACTION.DELETE_REVIEW_LEVEL) && (
-                        <Button
-                          variant="ghost"
-                          size="icon-sm"
-                          aria-label={`Delete review level ${index + 1}`}
-                          onClick={() => handleDelete(step.stepId)}
-                        >
-                          <Trash2Icon className="h-4 w-4" aria-hidden="true" />
-                        </Button>
-                      )}
-                    </div>
+          <CaseCard
+            banner
+            compact
+            art={[ListChecks]}
+            icon={Layers}
+            title="Review levels"
+            meta="Levels are dynamic — add as many as the query needs."
+            bodyClassName="space-y-3"
+          >
+            {reviewSteps.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No review levels configured yet.</p>
+            ) : (
+              reviewSteps.map((step, index) => (
+                <div
+                  key={step.stepId}
+                  className="flex items-center justify-between gap-2 rounded-md border border-border px-3 py-2"
+                >
+                  <div>
+                    <p className="text-sm font-medium text-foreground">Level {index + 1}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {findUserById(step.assignedUserId)?.name}
+                    </p>
                   </div>
-                ))
-              )}
+                  <div className="flex items-center gap-1.5">
+                    <Badge
+                      variant={
+                        step.status === 'COMPLETED'
+                          ? 'status-green'
+                          : step.status === 'IN_PROGRESS'
+                            ? 'status-blue'
+                            : 'status-gray'
+                      }
+                    >
+                      {step.status}
+                    </Badge>
+                    {step.status === 'PENDING' && can(WORKFLOW_ACTION.DELETE_REVIEW_LEVEL) && (
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        aria-label={`Delete review level ${index + 1}`}
+                        onClick={() => handleDelete(step.stepId)}
+                      >
+                        <Trash2Icon className="h-4 w-4" aria-hidden="true" />
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              ))
+            )}
 
-              {deleteError && <p className="text-xs text-destructive">{deleteError}</p>}
+            {deleteError && <p className="text-xs text-destructive">{deleteError}</p>}
 
-              {can(WORKFLOW_ACTION.ADD_REVIEW_LEVEL) && (
-                <AddReviewLevelField
-                  label={"Add a review level"}
-                  value={newReviewer}
-                  onChange={setNewReviewer}
-                  onAdd={() => {
-                    run(() => addReviewLevel(queryId, newReviewer, currentUser));
-                    setNewReviewer('');
-                  }}
-                />
-              )}
+            {can(WORKFLOW_ACTION.ADD_REVIEW_LEVEL) && (
+              <AddReviewLevelField
+                label={"Add a review level"}
+                value={newReviewer}
+                onChange={setNewReviewer}
+                onAdd={() => {
+                  run(() => addReviewLevel(queryId, newReviewer, currentUser));
+                  setNewReviewer('');
+                }}
+              />
+            )}
 
-              <p className="text-xs text-muted-foreground">
-                Only a PENDING level can be deleted — a completed review's decision is part of the audit trail. Only the assigned official can add or delete levels.
-              </p>
-            </CardBody>
-          </Card>
+            <p className="text-xs text-muted-foreground">
+              Only a PENDING level can be deleted — a completed review's decision is part of the audit trail. Only the assigned official can add or delete levels.
+            </p>
+          </CaseCard>
 
           <PreviousReviewCycles steps={stepHistory} />
         </div>

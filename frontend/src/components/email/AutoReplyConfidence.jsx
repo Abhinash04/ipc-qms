@@ -1,5 +1,6 @@
 import { Bot, Gauge, UserRound } from "lucide-react";
 
+import { CaseCard } from "@/components/common/CaseCard";
 import { confidenceOf } from "@/utils/autoReplyConfidence";
 import { cn } from "@/utils/cn";
 
@@ -44,10 +45,7 @@ export function AutoReplyConfidenceCard({ message, className }) {
   const tone = TONE[confidence.tone];
 
   return (
-    <section aria-labelledby="ai-confidence" className={cn("bg-card rounded-2xl border border-transparent p-5 shadow-card", className)}>
-      <h2 id="ai-confidence" className="m-0 mb-3 border-b border-slate-100 pb-2.5 font-heading text-[17px] font-bold text-slate-900">
-        AI confidence
-      </h2>
+    <CaseCard tone="ai" banner compact art={[Gauge]} icon={Gauge} title="AI confidence" className={className}>
 
       {confidence.pending ? (
         <p className="m-0 text-[13px] font-medium text-slate-500">This mail has not been checked yet. It is checked shortly after it arrives.</p>
@@ -95,6 +93,6 @@ export function AutoReplyConfidenceCard({ message, className }) {
           </dl>
         </div>
       )}
-    </section>
+    </CaseCard>
   );
 }

@@ -1,7 +1,6 @@
 import { useState } from 'react';
-import { ArrowRight, ChevronDown, GitCompareArrows, RotateCcw } from 'lucide-react';
-import { Card, CardBody, CardHeader } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
+import { ArrowRight, ChevronDown, GitCompareArrows, History, RotateCcw } from 'lucide-react';
+import { CaseCard, Pill } from '@/components/common/CaseCard';
 import { findUserById } from '@/constants/mockUsers';
 import { WORKFLOW_STATE } from '@/constants/statusEnums';
 import { currentResubmission, requesterRole } from '@/constants/reviewRounds';
@@ -141,64 +140,59 @@ export function ResubmissionCard({ query, reviews, versions, steps, latestVersio
   const before = current.reviewedVersion;
 
   return (
-    <Card className="border-status-orange-line">
-      <CardHeader>
-        <div className="flex flex-wrap items-center gap-2">
-          <RotateCcw className="h-4 w-4 text-status-orange-fg" aria-hidden="true" />
-          <h2 className="text-sm font-semibold text-foreground">
-            {current.rejected ? 'Resubmitted after rejection' : 'Resubmitted after changes requested'}
-          </h2>
-          <Badge variant="status-orange">Round {current.round}</Badge>
-        </div>
-        <p className="mt-0.5 text-xs text-muted-foreground">
-          You are reviewing {latestVersion.version}. {before?.version || 'The previous version'} was {current.rejected ? 'rejected' : 'returned'} by{' '}
-          {current.requesterRole} — what was asked and what changed are below.
-        </p>
-      </CardHeader>
-      <CardBody className="space-y-4">
-        <ol aria-label="How this version came about" className="flex flex-col gap-2 sm:flex-row">
-          <Step title={`${before?.version || 'Previous'} reviewed`} detail={when(current.request.at)} />
-          <Arrow />
-          <Step
-            tone="orange"
-            title={current.rejected ? 'Rejected' : 'Changes requested'}
-            detail={`${current.requesterRole} · ${current.requestedBy}`}
-          />
-          <Arrow />
-          <Step title={`${latestVersion.version} updated`} detail={`${officer} · ${when(latestVersion.submittedAt)}`} />
-          <Arrow />
-          <Step tone="blue" title="Under review now" detail={reviewingNow(query, currentStep, steps)} />
-        </ol>
+    <CaseCard
+      banner
+      art={[GitCompareArrows, RotateCcw, History]}
+      icon={RotateCcw}
+      title={current.rejected ? 'Resubmitted after rejection' : 'Resubmitted after changes requested'}
+      badge={<Pill tone="warning">Round {current.round}</Pill>}
+      meta={`You are reviewing ${latestVersion.version}. ${before?.version || 'The previous version'} was ${
+        current.rejected ? 'rejected' : 'returned'
+      } by ${current.requesterRole} — what was asked and what changed are below.`}
+      bodyClassName="space-y-4"
+    >
+      <ol aria-label="How this version came about" className="flex flex-col gap-2 sm:flex-row">
+        <Step title={`${before?.version || 'Previous'} reviewed`} detail={when(current.request.at)} />
+        <Arrow />
+        <Step
+          tone="orange"
+          title={current.rejected ? 'Rejected' : 'Changes requested'}
+          detail={`${current.requesterRole} · ${current.requestedBy}`}
+        />
+        <Arrow />
+        <Step title={`${latestVersion.version} updated`} detail={`${officer} · ${when(latestVersion.submittedAt)}`} />
+        <Arrow />
+        <Step tone="blue" title="Under review now" detail={reviewingNow(query, currentStep, steps)} />
+      </ol>
 
-        <div className="grid gap-3 md:grid-cols-2">
-          <Quote
-            label={current.rejected ? 'Rejection reason' : 'Changes requested'}
-            who={`${current.requesterRole} (${current.requestedBy}) on ${before?.version || 'the previous version'}, ${when(current.request.at)}`}
+      <div className="grid gap-3 md:grid-cols-2">
+        <Quote
+          label={current.rejected ? 'Rejection reason' : 'Changes requested'}
+          who={`${current.requesterRole} (${current.requestedBy}) on ${before?.version || 'the previous version'}, ${when(current.request.at)}`}
+        >
+          {current.request.comment}
+        </Quote>
+        <Quote label="Changes implemented" who={`${officer} in ${latestVersion.version}, ${when(latestVersion.submittedAt)}`}>
+          {latestVersion.changeSummary || 'No note was recorded.'}
+        </Quote>
+      </div>
+
+      {before && (
+        <div className="space-y-2">
+          <button
+            type="button"
+            aria-expanded={comparing}
+            onClick={() => setComparing((v) => !v)}
+            className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-xs font-semibold text-foreground hover:bg-muted"
           >
-            {current.request.comment}
-          </Quote>
-          <Quote label="Changes implemented" who={`${officer} in ${latestVersion.version}, ${when(latestVersion.submittedAt)}`}>
-            {latestVersion.changeSummary || 'No note was recorded.'}
-          </Quote>
+            <GitCompareArrows className="h-3.5 w-3.5" aria-hidden="true" />
+            {comparing ? 'Hide comparison' : `Compare ${before.version} → ${latestVersion.version}`}
+          </button>
+          {comparing && <VersionDiff before={before} after={latestVersion} />}
         </div>
+      )}
 
-        {before && (
-          <div className="space-y-2">
-            <button
-              type="button"
-              aria-expanded={comparing}
-              onClick={() => setComparing((v) => !v)}
-              className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-xs font-semibold text-foreground hover:bg-muted"
-            >
-              <GitCompareArrows className="h-3.5 w-3.5" aria-hidden="true" />
-              {comparing ? 'Hide comparison' : `Compare ${before.version} → ${latestVersion.version}`}
-            </button>
-            {comparing && <VersionDiff before={before} after={latestVersion} />}
-          </div>
-        )}
-
-        <EarlierRounds rounds={earlier} />
-      </CardBody>
-    </Card>
+      <EarlierRounds rounds={earlier} />
+    </CaseCard>
   );
 }

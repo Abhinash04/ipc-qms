@@ -1,9 +1,22 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, ArrowRight, MailIcon } from "lucide-react";
+import {
+  ArrowLeft,
+  ArrowRight,
+  ClipboardList,
+  FileText,
+  FolderOpen,
+  Inbox,
+  MailIcon,
+  MailOpen,
+  Paperclip,
+  Tag,
+  Tags,
+} from "lucide-react";
 
 import { Breadcrumb } from "@/components/common/Breadcrumb";
+import { CaseCard, Segmented } from "@/components/common/CaseCard";
 import { EmptyState } from "@/components/common/EmptyState";
 import { StatusBadge } from "@/components/common/StatusBadge";
 import { AttachmentList } from "@/components/attachments/AttachmentList";
@@ -23,14 +36,12 @@ import {
 import { notify } from "@/services/notify";
 import { MAIL_CATEGORY_META } from "@/constants/mailCategories";
 import { parseSender, formatFullDate } from "@/utils/mailboxFormat";
-import { cn } from "@/utils/cn";
 
 const CARD = "bg-card rounded-2xl border border-transparent p-5 shadow-card";
-const CARD_TITLE = "font-heading text-[17px] font-bold text-slate-900 m-0";
 
 const BODY_FORMATS = [
-  { formatted: false, label: "Plain text" },
-  { formatted: true, label: "Formatted" },
+  { value: false, label: "Plain text" },
+  { value: true, label: "Formatted" },
 ];
 
 const UNLINKED = {
@@ -122,31 +133,18 @@ function MessageBody({ message }) {
   const [formatted, setFormatted] = useState(false);
 
   return (
-    <section className={CARD}>
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-2.5 mb-4">
-        <h2 className={CARD_TITLE}>Message</h2>
-        {message.bodyHtml && (
-          <div role="group" aria-label="Body format" className="flex bg-slate-100/80 p-1 rounded-xl">
-            {BODY_FORMATS.map((option) => (
-              <button
-                key={option.label}
-                type="button"
-                aria-pressed={formatted === option.formatted}
-                onClick={() => setFormatted(option.formatted)}
-                className={cn(
-                  "px-3 py-1.5 text-[12px] font-bold rounded-lg transition-colors cursor-pointer",
-                  formatted === option.formatted
-                    ? "bg-card text-slate-800 shadow-sm"
-                    : "text-slate-500 hover:text-slate-700",
-                )}
-              >
-                {option.label}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-
+    <CaseCard
+      tone="email"
+      banner
+      art={[MailOpen, MailIcon, Inbox]}
+      icon={MailIcon}
+      title="Message"
+      toolbar={
+        message.bodyHtml && (
+          <Segmented label="Body format" options={BODY_FORMATS} value={formatted} onChange={setFormatted} />
+        )
+      }
+    >
       {formatted ? (
         <>
           <MailHtmlFrame html={message.bodyHtml} />
@@ -159,7 +157,7 @@ function MessageBody({ message }) {
           {message.body || "(No text)"}
         </div>
       )}
-    </section>
+    </CaseCard>
   );
 }
 
@@ -168,8 +166,7 @@ function MessageCaseCard({ message, paths }) {
   const [state, hint] = UNLINKED[message.status] || AWAITING;
 
   return (
-    <section className={CARD}>
-      <h2 className={`${CARD_TITLE} border-b border-slate-100 pb-2.5 mb-3`}>Query case</h2>
+    <CaseCard tone="context" banner compact art={[ClipboardList]} icon={FolderOpen} title="Query case">
       {linked ? (
         <div className="space-y-3">
           <Link
@@ -190,7 +187,7 @@ function MessageCaseCard({ message, paths }) {
           {hint && <p className="mt-1 mb-0 text-[12.5px] font-medium text-slate-500">{hint}</p>}
         </>
       )}
-    </section>
+    </CaseCard>
   );
 }
 
@@ -211,10 +208,7 @@ function MessageCategoryCard({ message, paths }) {
   });
 
   return (
-    <section className={CARD} aria-labelledby="message-category">
-      <h2 id="message-category" className={`${CARD_TITLE} border-b border-slate-100 pb-2.5 mb-3`}>
-        Category
-      </h2>
+    <CaseCard tone="context" banner compact art={[Tags]} icon={Tag} title="Category">
       <MailCategoryDetails
         triage={message.triage}
         onCorrect={(category) => correct.mutate(category)}
@@ -224,7 +218,7 @@ function MessageCategoryCard({ message, paths }) {
           buildPath(paths.INBOX_DETAIL, { messageId: encodeURIComponent(mailboxMessageId) })
         }
       />
-    </section>
+    </CaseCard>
   );
 }
 
@@ -242,15 +236,19 @@ function MessageView({ message, paths }) {
           caseHref={paths.QUERY_DETAIL ? (queryId) => buildPath(paths.QUERY_DETAIL, { queryId }) : null}
         />
         {attachments.length > 0 && (
-          <section className={CARD}>
-            <h2 className={`${CARD_TITLE} mb-3`}>Attachments ({attachments.length})</h2>
+          <CaseCard
+            banner
+            art={[Paperclip, FileText]}
+            icon={Paperclip}
+            title={`Attachments (${attachments.length})`}
+          >
             <AttachmentList
               attachments={attachments}
               urlFor={(attachmentId) =>
                 mailboxAttachmentUrl(message.mailboxMessageId, attachmentId)
               }
             />
-          </section>
+          </CaseCard>
         )}
       </div>
 

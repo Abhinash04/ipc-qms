@@ -1,9 +1,19 @@
 import { useState } from 'react';
-import { SparklesIcon, Trash2Icon, Loader2 } from 'lucide-react';
+import {
+  SparklesIcon,
+  Trash2Icon,
+  Loader2,
+  ClipboardCheck,
+  FileSignature,
+  GitBranch,
+  History,
+  ListOrdered,
+  PenLine,
+} from 'lucide-react';
 import { Breadcrumb } from '@/components/common/Breadcrumb';
 import { EmptyState } from '@/components/common/EmptyState';
+import { CaseCard } from '@/components/common/CaseCard';
 import { CaseSummaryBar } from '@/components/workflow/CaseSummaryBar';
-import { Card, CardBody, CardHeader } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -147,52 +157,50 @@ function DraftEditorCard({
   onSubmit,
 }) {
   return (
-    <Card>
-      <CardHeader>
-        <h2 className="text-sm font-semibold text-foreground">Response draft</h2>
-        {latestVersion && (
-          <p className="mt-0.5 text-xs text-muted-foreground">
-            Editing from {latestVersion.version} ({latestVersion.label})
-          </p>
-        )}
-      </CardHeader>
-      <CardBody className="space-y-4">
-        {versions.length === 0 ? (
-          <EmptyState
-            icon={SparklesIcon}
-            title="No draft yet"
-            description="Generate an AI first draft to get started, or write one from scratch."
-          />
-        ) : (
-          <Textarea
-            value={draft}
-            onChange={(e) => onDraftChange(e.target.value)}
-            rows={14}
-            className="resize-none"
-            disabled={!can(WORKFLOW_ACTION.SAVE_DRAFT)}
-          />
-        )}
-
-        <DraftActions
-          can={can}
-          running={running}
-          isDirty={isDirty}
-          draft={draft}
-          versions={versions}
-          reviewSteps={reviewSteps}
-          resubmit={resubmit}
-          onGenerate={onGenerate}
-          onSave={onSave}
-          onSubmit={onSubmit}
+    <CaseCard
+      tone="document"
+      banner
+      art={[FileSignature, PenLine, SparklesIcon]}
+      icon={PenLine}
+      title="Response draft"
+      meta={latestVersion ? `Editing from ${latestVersion.version} (${latestVersion.label})` : undefined}
+      bodyClassName="space-y-4"
+    >
+      {versions.length === 0 ? (
+        <EmptyState
+          icon={SparklesIcon}
+          title="No draft yet"
+          description="Generate an AI first draft to get started, or write one from scratch."
         />
+      ) : (
+        <Textarea
+          value={draft}
+          onChange={(e) => onDraftChange(e.target.value)}
+          rows={14}
+          className="resize-none"
+          disabled={!can(WORKFLOW_ACTION.SAVE_DRAFT)}
+        />
+      )}
 
-        <p className="text-xs text-muted-foreground">
-          AI-generated content never becomes the final response automatically — a human must review
-          and can edit it. Every save appends a new version; previous versions are never
-          overwritten.
-        </p>
-      </CardBody>
-    </Card>
+      <DraftActions
+        can={can}
+        running={running}
+        isDirty={isDirty}
+        draft={draft}
+        versions={versions}
+        reviewSteps={reviewSteps}
+        resubmit={resubmit}
+        onGenerate={onGenerate}
+        onSave={onSave}
+        onSubmit={onSubmit}
+      />
+
+      <p className="text-xs text-muted-foreground">
+        AI-generated content never becomes the final response automatically — a human must review
+        and can edit it. Every save appends a new version; previous versions are never
+        overwritten.
+      </p>
+    </CaseCard>
   );
 }
 
@@ -230,94 +238,97 @@ function ReviewChainCard({
   onAddReviewer,
 }) {
   return (
-    <Card>
-      <CardHeader>
-        <h2 className="text-sm font-semibold text-foreground">Review chain</h2>
-        <p className="mt-0.5 text-xs text-muted-foreground">
-          The response passes each level in order before it reaches the Officer-in-Charge.
+    <CaseCard
+      banner
+      compact
+      art={[ClipboardCheck]}
+      icon={ListOrdered}
+      title="Review chain"
+      meta="The response passes each level in order before it reaches the Officer-in-Charge."
+      bodyClassName="space-y-3"
+    >
+      {reviewSteps.length === 0 ? (
+        <p className="text-sm text-muted-foreground">
+          No reviewer chosen yet — the draft cannot be submitted until you add one.
         </p>
-      </CardHeader>
-      <CardBody className="space-y-3">
-        {reviewSteps.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            No reviewer chosen yet — the draft cannot be submitted until you add one.
-          </p>
-        ) : (
-          reviewSteps.map((step, index) => (
-            <ReviewChainRow
-              key={step.stepId}
-              step={step}
-              index={index}
-              onDelete={can(WORKFLOW_ACTION.DELETE_REVIEW_LEVEL) ? onDelete : null}
-            />
-          ))
-        )}
-
-        {deleteError && <p className="text-xs text-destructive">{deleteError}</p>}
-
-        {can(WORKFLOW_ACTION.ADD_REVIEW_LEVEL) && (
-          <AddReviewLevelField
-            label={`Add ${levelName(reviewSteps.length)}`}
-            value={newReviewer}
-            onChange={onNewReviewerChange}
-            onAdd={onAddReviewer}
+      ) : (
+        reviewSteps.map((step, index) => (
+          <ReviewChainRow
+            key={step.stepId}
+            step={step}
+            index={index}
+            onDelete={can(WORKFLOW_ACTION.DELETE_REVIEW_LEVEL) ? onDelete : null}
           />
-        )}
+        ))
+      )}
 
-        <p className="text-xs text-muted-foreground">
-          If a reviewer requests changes the response comes back to you for a new version, and the
-          chain restarts at {levelName(0)}.
-        </p>
-      </CardBody>
-    </Card>
+      {deleteError && <p className="text-xs text-destructive">{deleteError}</p>}
+
+      {can(WORKFLOW_ACTION.ADD_REVIEW_LEVEL) && (
+        <AddReviewLevelField
+          label={`Add ${levelName(reviewSteps.length)}`}
+          value={newReviewer}
+          onChange={onNewReviewerChange}
+          onAdd={onAddReviewer}
+        />
+      )}
+
+      <p className="text-xs text-muted-foreground">
+        If a reviewer requests changes the response comes back to you for a new version, and the
+        chain restarts at {levelName(0)}.
+      </p>
+    </CaseCard>
   );
 }
 
 function VersionHistoryCard({ versions }) {
   return (
-    <Card>
-      <CardHeader>
-        <h2 className="text-sm font-semibold text-foreground">Version history</h2>
-      </CardHeader>
-      <CardBody className="space-y-3">
-        {versions.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No versions yet.</p>
-        ) : (
-          versions.map((v) => (
-            <div
-              key={v.responseId}
-              className="flex items-center justify-between border-b border-border pb-2 text-sm last:border-0 last:pb-0"
-            >
-              <div>
-                <div className="flex items-center gap-1.5">
-                  <p className="font-medium text-foreground">{v.version}</p>
-                  {v.aiGenerated && (
-                    <Badge variant="status-indigo" className="text-[10px]">
-                      AI
-                    </Badge>
-                  )}
-                  {v.submittedAt && (
-                    <Badge
-                      variant={v.respondsToReviewId ? 'status-orange' : 'status-blue'}
-                      className="text-[10px]"
-                      title={v.changeSummary ? `Changes implemented: ${v.changeSummary}` : undefined}
-                    >
-                      {v.respondsToReviewId ? 'Resubmitted' : 'Submitted'}
-                    </Badge>
-                  )}
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  {v.label} · {v.createdBy}
-                </p>
+    <CaseCard
+      banner
+      compact
+      art={[GitBranch]}
+      icon={History}
+      title="Version history"
+      meta={versions.length > 0 ? `${versions.length} ${versions.length === 1 ? 'version' : 'versions'}` : undefined}
+      bodyClassName="space-y-3"
+    >
+      {versions.length === 0 ? (
+        <p className="text-sm text-muted-foreground">No versions yet.</p>
+      ) : (
+        versions.map((v) => (
+          <div
+            key={v.responseId}
+            className="flex items-center justify-between border-b border-border pb-2 text-sm last:border-0 last:pb-0"
+          >
+            <div>
+              <div className="flex items-center gap-1.5">
+                <p className="font-medium text-foreground">{v.version}</p>
+                {v.aiGenerated && (
+                  <Badge variant="status-indigo" className="text-[10px]">
+                    AI
+                  </Badge>
+                )}
+                {v.submittedAt && (
+                  <Badge
+                    variant={v.respondsToReviewId ? 'status-orange' : 'status-blue'}
+                    className="text-[10px]"
+                    title={v.changeSummary ? `Changes implemented: ${v.changeSummary}` : undefined}
+                  >
+                    {v.respondsToReviewId ? 'Resubmitted' : 'Submitted'}
+                  </Badge>
+                )}
               </div>
               <p className="text-xs text-muted-foreground">
-                {new Date(v.createdAt).toLocaleDateString()}
+                {v.label} · {v.createdBy}
               </p>
             </div>
-          ))
-        )}
-      </CardBody>
-    </Card>
+            <p className="text-xs text-muted-foreground">
+              {new Date(v.createdAt).toLocaleDateString()}
+            </p>
+          </div>
+        ))
+      )}
+    </CaseCard>
   );
 }
 
