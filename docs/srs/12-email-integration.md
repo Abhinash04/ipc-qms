@@ -234,14 +234,24 @@ The Front Office mailbox has three views: **All Mails** (everything, unchanged),
 A mail lands in **Auto Reply** when it asks only a supported general question, matched against a
 predefined list of questions and answers. For the demo the match must be exact (a confidence
 threshold of 100 %, configurable through `AUTO_REPLY_CONFIDENCE_THRESHOLD` for a future trained
-model). The system drafts the reply from the list. The Front Office opens the mail, reviews and may
-edit the draft, then approves it, and only then is the reply sent to the inquirer. **No automatic reply
-is ever sent without the Front Office's approval.**
+model). The system drafts the reply from the list, and the Front Office can see it on the mail.
 
-An approved reply is recorded as a Query Case that is answered and closed at once, with no
-acknowledgement and no forward to the Officer-in-Charge, so it appears in the case list, the
-dashboards and the audit trail. Every step is audited: the suggestion, the approval (noting whether
-the draft was edited), the dispatch and the closure, or the Front Office sending the mail to Human
-Intervention instead.
+**Accepting the mail is the only human step.** When the Front Office accepts a mail in the Auto Reply
+bucket (or the same mail from All Mails):
+
+1. the Query Case is registered
+2. the AI summary is generated
+3. the acknowledgement is sent to the inquirer
+4. the case is **not** forwarded to the Officer-in-Charge
+5. the AI-drafted reply is sent to the inquirer automatically, and the case is closed
+
+**No automatic reply is sent before the Front Office accepts the mail.** Before accepting, the Front
+Office can send the mail to Human Intervention instead. A reply that could not be sent is retried by the
+Front Office; it is never handed to the Officer-in-Charge. Mail below the threshold follows the
+standard workflow unchanged.
+
+The case appears in the case list, the dashboards and the audit trail. Every step is audited: the
+suggestion, the reply prepared by the AI on behalf of the accepting Front Officer, the dispatch and the
+closure, or the mail being sent to Human Intervention instead.
 
 The question list is demo content, to be approved or replaced by IPC before use.

@@ -154,7 +154,7 @@ endpoints that must not be retried blindly.
 | POST   | `/mailbox/sync`                                          | `verifyRole(FRONT_OFFICE, SUPER_ADMIN)`                   |
 | POST   | `/mailbox/messages/:messageId/accept`                    | `verifyRole(FRONT_OFFICE, SUPER_ADMIN)` + `validateBody`  |
 | POST   | `/mailbox/messages/:messageId/decision`                  | `verifyRole(FRONT_OFFICE, SUPER_ADMIN)` + `validateBody`  |
-| POST   | `/mailbox/messages/:messageId/auto-reply/approve`        | `verifyRole(FRONT_OFFICE, SUPER_ADMIN)` + `validateBody`  |
+| POST   | `/mailbox/messages/:messageId/auto-reply/retry`          | `verifyRole(FRONT_OFFICE, SUPER_ADMIN)`                   |
 | POST   | `/mailbox/messages/:messageId/auto-reply/decline`        | `verifyRole(FRONT_OFFICE, SUPER_ADMIN)` + `validateBody`  |
 | GET    | `/mailbox/decisions`                                     | `verifyRole(FRONT_OFFICE, SUPER_ADMIN)`                   |
 | POST   | `/mailbox/messages/:messageId/ingested`                  | `verifyRole(FRONT_OFFICE, SUPER_ADMIN)`                   |
@@ -985,23 +985,32 @@ send the mail to a person. `services/autoReply/assess.js` records the outcome on
 `MailboxMessage.autoReply`, when the browser agent stores it (older mail in the hourly sweep), and
 audits a suggestion as `AUTO_REPLY_SUGGESTED`. Swapping in a model means replacing `matchAutoReply`.
 
-**Nothing is sent without the Front Office.** Assessment never sends and never creates a case. The
-only path to the inquirer is `POST /mailbox/messages/:id/auto-reply/approve { body }`
-(`services/autoReply/approve.js`):
+**The Front Office's Accept is the only human step.** Assessment never sends and never creates a
+case. Accepting a mail whose suggestion stands (`POST /mailbox/messages/:id/accept`,
+`services/email/mailbox/acceptMessage.js`):
 
-1. It claims the suggestion atomically, so a double click or a second tab sends once.
-2. It registers the mail as a Query Case (`registerCase`, shared with accept) carrying
-   `autoReply: { entryId, topic, confidence }`.
-3. It stores the Front Office's text, edited or not, as the `FINAL_APPROVED` response v1.
-4. It moves the case to `READY_FOR_DISPATCH` (`AUTO_REPLY_APPROVED`, noting whether the draft was
-   edited) and sends through `caseMail.dispatchResponse`, which closes the case and records
-   `RESPONSE_DISPATCHED` and `QUERY_CLOSED`.
+1. Registers the Query Case (`registerCase`), carrying `autoReply: { entryId, topic, confidence }`.
+2. Generates the AI summary and sends the acknowledgement, as for any accepted mail.
+3. Does **not** forward the case to the Officer-in-Charge.
+4. Sends the automatic reply (`services/autoReply/send.js`, `sendAutoReply`):
+   - It claims the suggestion atomically, so a double click, a second tab or a repeat Accept sends
+     once.
+   - It stores the reply drafted from the matched entry as the `FINAL_APPROVED` response v1 and moves
+     the case to `READY_FOR_DISPATCH`. This is audited as `AUTO_REPLY_PREPARED`, by the AI on behalf
+     of the accepting Front Officer.
+   - It sends through `caseMail.dispatchResponse`, which closes the case and records
+     `RESPONSE_DISPATCHED` and `QUERY_CLOSED`.
 
-No acknowledgement and no forward to the Officer-in-Charge are sent. A failed send leaves the mail
-`FAILED` and the case ready for dispatch; approving again retries the reply already approved.
-`…/auto-reply/decline` sends the mail to Human Intervention (`AUTO_REPLY_DECLINED`). Accepting or
-rejecting a suggested mail through the standard workflow withdraws its suggestion, and the standard
-workflow refuses a mail whose automatic reply is being sent or was sent.
+An automatic-reply case is never forwarded, however often it is accepted. A failed send leaves the mail
+`FAILED` and the case ready for dispatch, and it never falls back to the Officer-in-Charge.
+`POST …/auto-reply/retry` sends that same reply again. `…/auto-reply/decline` sends a suggested mail to
+Human Intervention before it is accepted (`AUTO_REPLY_DECLINED`), and rejecting it withdraws the
+suggestion. Mail below the threshold, or declined, is accepted through the standard workflow
+(acknowledge, then forward). Records made under the earlier flow, where the Front Office approved an
+edited reply, keep their `AUTO_REPLY_APPROVED` events.
+
+The acknowledgement is the standard one, which says the query was forwarded to the concerned division
+for examination; for an automatically answered mail the reply follows within moments.
 
 ### When the mailbox cannot be read
 
