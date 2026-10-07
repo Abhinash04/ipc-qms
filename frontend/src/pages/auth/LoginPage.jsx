@@ -163,19 +163,12 @@ export function LoginPage() {
 
         <div className="w-full max-w-md">
           <div className="rounded-2xl border border-transparent bg-surface p-6 pt-5 shadow-card sm:p-8 sm:pt-5">
-            <div className="flex items-end justify-between gap-4">
-              <h2 className="font-heading text-[28px] font-bold leading-tight text-ink sm:text-[30px]">
+            <div className="flex items-center justify-center gap-4">
+              <h2 className="font-heading text-[28px] font-bold leading-tight text-center text-primary sm:text-[30px]">
                 Sign in
               </h2>
-              <img
-                src="/mohfw-l.png"
-                alt="Ministry of Health & Family Welfare, Government of India"
-                width="336"
-                height="126"
-                className="h-14 w-auto shrink-0 object-contain sm:h-16"
-              />
             </div>
-            <p className="mt-1.5 text-[13.5px] text-ink-muted">
+            <p className="mt-1.5 text-[13.5px] text-center text-ink-muted">
               Enter your credentials to continue to your workspace.
             </p>
 
