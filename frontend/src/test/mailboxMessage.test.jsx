@@ -306,7 +306,7 @@ describe('the category card', () => {
 });
 
 describe('the automatic reply', () => {
-  it('offers the drafted reply for review on a mail in the Auto Reply bucket', async () => {
+  it('shows the reply that accepting the mail will send, on a mail in the Auto Reply bucket', async () => {
     fetchMailboxMessage.mockResolvedValue({
       ...MESSAGE,
       autoReply: { status: 'SUGGESTED', confidence: 1, question: 'What is the use case of paracetamol?', draft: 'Dear Sir/Madam,\n\nAnswer.' },
@@ -314,7 +314,8 @@ describe('the automatic reply', () => {
     renderMessage();
 
     expect(await screen.findByRole('heading', { name: 'Automatic reply' })).toBeInTheDocument();
-    expect(screen.getByLabelText('Reply to ravi@pharma.example')).toHaveValue('Dear Sir/Madam,\n\nAnswer.');
+    expect(screen.getByRole('heading', { name: 'Reply to ravi@pharma.example' }).nextElementSibling).toHaveTextContent('Answer.');
+    expect(screen.queryByRole('textbox')).toBeNull();
   });
 
   it('shows no automatic reply on a mail left to the standard workflow', async () => {

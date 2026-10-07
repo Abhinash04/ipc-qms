@@ -4,10 +4,10 @@ import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 import { AutoReplyPanel } from '@/components/email/AutoReplyPanel';
-import { approveAutoReply, declineAutoReply } from '@/services/api/mailboxService';
+import { declineAutoReply, retryAutoReply } from '@/services/api/mailboxService';
 
 vi.mock('@/services/api/mailboxService', () => ({
-  approveAutoReply: vi.fn(),
+  retryAutoReply: vi.fn(),
   declineAutoReply: vi.fn(),
 }));
 
@@ -39,49 +39,23 @@ function renderPanel(message) {
   );
 }
 
-const reply = () => screen.getByLabelText('Reply to ravi@pharma.example');
+const reply = () => screen.getByRole('heading', { name: 'Reply to ravi@pharma.example' }).nextElementSibling;
 
 beforeEach(() => {
   vi.clearAllMocks();
-  approveAutoReply.mockResolvedValue({ sent: true, queryId: 'QRY-2026-00090' });
+  retryAutoReply.mockResolvedValue({ sent: true, queryId: 'QRY-2026-00090' });
   declineAutoReply.mockResolvedValue({ autoReply: { status: 'DECLINED' } });
 });
 
 describe('the automatic reply panel', () => {
-  it('shows the matched question and the drafted reply, ready to edit', () => {
+  it('shows the matched question and the reply that accepting the mail will send, read-only', () => {
     renderPanel(mail());
 
     expect(screen.getByText(/Matched the supported question “What is the use case of paracetamol\?” \(100% match\)/)).toBeInTheDocument();
-    expect(reply()).toHaveValue(DRAFT);
-    expect(reply()).not.toHaveAttribute('readonly');
-  });
-
-  it('sends the Front Office’s edited text only after they confirm, naming the recipient', async () => {
-    renderPanel(mail());
-    fireEvent.change(reply(), { target: { value: 'Dear Sir/Madam,\n\nEdited answer.' } });
-
-    fireEvent.click(screen.getByRole('button', { name: 'Approve and send' }));
-    expect(approveAutoReply).not.toHaveBeenCalled();
-    expect(screen.getByText('Send this reply to ravi@pharma.example?')).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole('button', { name: 'Yes, send' }));
-    await waitFor(() => expect(approveAutoReply).toHaveBeenCalledWith('NIC-row-1', 'Dear Sir/Madam,\n\nEdited answer.'));
-  });
-
-  it('sends nothing when the confirmation is cancelled', () => {
-    renderPanel(mail());
-    fireEvent.click(screen.getByRole('button', { name: 'Approve and send' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
-
-    expect(approveAutoReply).not.toHaveBeenCalled();
-    expect(screen.getByRole('button', { name: 'Approve and send' })).toBeInTheDocument();
-  });
-
-  it('cannot send an empty reply', () => {
-    renderPanel(mail());
-    fireEvent.change(reply(), { target: { value: '   ' } });
-
-    expect(screen.getByRole('button', { name: 'Approve and send' })).toBeDisabled();
+    expect(screen.getByText(/Sent automatically to ravi@pharma\.example when you accept this mail, after the acknowledgement/)).toBeInTheDocument();
+    expect(reply()).toHaveTextContent('Paracetamol is a commonly used medicine.');
+    expect(screen.queryByRole('textbox')).toBeNull();
+    expect(screen.queryByRole('button', { name: /Approve|Send$|Retry/ })).toBeNull();
   });
 
   it('sends the mail to Human Intervention instead', async () => {
@@ -89,32 +63,32 @@ describe('the automatic reply panel', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Send to Human Intervention' }));
 
     await waitFor(() => expect(declineAutoReply).toHaveBeenCalledWith('NIC-row-1'));
-    expect(approveAutoReply).not.toHaveBeenCalled();
   });
 
-  it('retries a failed send with the reply already approved, unchanged', async () => {
-    renderPanel(
-      mail({ status: 'FAILED', queryId: 'QRY-2026-00090', approvedBody: 'Approved text.', error: 'NICeMail refused the message' }),
-    );
+  it('retries a reply that could not be sent', async () => {
+    renderPanel(mail({ status: 'FAILED', queryId: 'QRY-2026-00090', error: 'NICeMail refused the message' }));
 
     expect(screen.getByRole('alert')).toHaveTextContent('The reply was not sent: NICeMail refused the message');
-    expect(reply()).toHaveValue('Approved text.');
-    expect(reply()).toHaveAttribute('readonly');
     expect(screen.queryByRole('button', { name: 'Send to Human Intervention' })).toBeNull();
 
     fireEvent.click(screen.getByRole('button', { name: 'Retry sending' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Yes, send' }));
-    await waitFor(() => expect(approveAutoReply).toHaveBeenCalledWith('NIC-row-1', 'Approved text.'));
+    await waitFor(() => expect(retryAutoReply).toHaveBeenCalledWith('NIC-row-1'));
+  });
+
+  it('shows a reply being sent, with nothing to press', () => {
+    renderPanel(mail({ status: 'APPROVING', queryId: 'QRY-2026-00090' }));
+
+    expect(screen.getByText('Sending to ravi@pharma.example…')).toBeInTheDocument();
+    expect(screen.queryByRole('button')).toBeNull();
   });
 
   it('shows a sent reply as sent, with its closed case', () => {
-    renderPanel(mail({ status: 'SENT', queryId: 'QRY-2026-00090', approvedBody: 'Approved text.', sentAt: '2026-10-05T05:00:00.000Z' }));
+    renderPanel(mail({ status: 'SENT', queryId: 'QRY-2026-00090', sentAt: '2026-10-05T05:00:00.000Z' }));
 
     expect(screen.getByText('Auto reply sent')).toBeInTheDocument();
-    expect(screen.getByText('Approved text.')).toBeInTheDocument();
+    expect(screen.getByText(/Sent to ravi@pharma\.example on .*The query case is closed\./)).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /QRY-2026-00090/ })).toHaveAttribute('href', '/front-officer/queries/QRY-2026-00090');
-    expect(screen.queryByRole('textbox')).toBeNull();
-    expect(screen.queryByRole('button', { name: /send/i })).toBeNull();
+    expect(screen.queryByRole('button')).toBeNull();
   });
 
   it('shows nothing for a mail not offered a reply', () => {

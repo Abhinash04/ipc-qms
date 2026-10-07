@@ -118,11 +118,17 @@ function describeAccept(result, message) {
   if (result.acknowledged) done.push(`acknowledgement sent to ${sender}`);
   else failed.push(ackUnconfirmed ? "acknowledgement may already have been sent" : "acknowledgement not sent");
 
-  (result.forwarded ? done : failed).push(
-    result.forwarded
-      ? "forwarded to the Officer-in-Charge"
-      : "not forwarded to the Officer-in-Charge",
-  );
+  if (result.autoReply) {
+    // An automatic-reply case is answered and closed, never forwarded.
+    if (result.autoReply.sent) done.push(`automatic reply sent to ${sender}`);
+    else failed.push(`automatic reply not sent${result.autoReply.error ? `: ${result.autoReply.error}` : ""} — retry it from the mail`);
+  } else {
+    (result.forwarded ? done : failed).push(
+      result.forwarded
+        ? "forwarded to the Officer-in-Charge"
+        : "not forwarded to the Officer-in-Charge",
+    );
+  }
 
   const sentence = [...done, ...failed].join(" · ");
   if (!failed.length) return `${sentence}.`;
@@ -402,7 +408,11 @@ function RowValidationControls({ message, decision, junk, pending, confirming, o
     return (
       <div className="flex flex-col items-center gap-1.5">
         <span className="hidden xl:block text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
-          {accepting ? "Register & forward?" : "Reject?"}
+          {accepting
+            ? message.autoReply?.status === AUTO_REPLY_STATUS.SUGGESTED
+              ? "Register & auto-reply?"
+              : "Register & forward?"
+            : "Reject?"}
         </span>
         <div className="flex items-center gap-1.5">
           <button
@@ -595,7 +605,6 @@ function MailboxRow({
   correctingCategory,
   caseHref,
   messageHref,
-  reviewReply,
 }) {
   const navigate = useNavigate();
   const sender = parseSender(message.from);
@@ -743,27 +752,17 @@ function MailboxRow({
       </div>
 
       <div className="flex items-center justify-center gap-2 w-full xl:w-auto">
-        {reviewReply ? (
-          <Link
-            to={openPath}
-            aria-label={`Review the automatic reply to ${message.mailboxMessageId}`}
-            className="inline-flex h-8 items-center gap-1.5 rounded-xl bg-primary px-3 text-[12px] font-bold text-white shadow-2xs hover:bg-primary/90"
-          >
-            Review reply
-          </Link>
-        ) : (
-          <RowValidationControls
-            message={message}
-            decision={decision}
-            junk={junk}
-            pending={pending}
-            confirming={confirming?.action === "accept" || confirming?.action === "reject" ? confirming.action : null}
-            onAsk={onAskDecision}
-            onCancel={onCancelDecision}
-            onConfirm={onConfirmDecision}
-            onRescue={onRescue}
-          />
-        )}
+        <RowValidationControls
+          message={message}
+          decision={decision}
+          junk={junk}
+          pending={pending}
+          confirming={confirming?.action === "accept" || confirming?.action === "reject" ? confirming.action : null}
+          onAsk={onAskDecision}
+          onCancel={onCancelDecision}
+          onConfirm={onConfirmDecision}
+          onRescue={onRescue}
+        />
         <RowDeleteControls
           message={message}
           known={known}
@@ -1158,7 +1157,6 @@ export function MailboxInboxPage() {
                       setConfirming({ id: message.mailboxMessageId, action })
                     }
                     onCancelDecision={() => setConfirming(null)}
-                    reviewReply={autoReplies && message.autoReply?.status === AUTO_REPLY_STATUS.SUGGESTED}
                     onConfirmDecision={() =>
                       confirming?.action === "accept"
                         ? onAcceptMessage(message)

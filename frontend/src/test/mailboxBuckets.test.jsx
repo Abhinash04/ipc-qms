@@ -4,6 +4,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 import { MailboxInboxPage } from '@/pages/frontOffice/MailboxInboxPage';
+import { notify } from '@/services/notify';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useWorkflowStore } from '@/store/useWorkflowStore';
 import { FRONT_OFFICE_USER as FRONT_OFFICE } from '@/test/frontOfficeUser';
@@ -132,7 +133,7 @@ describe('the mailbox buckets', () => {
     expect(screen.queryByText('Auto reply ready')).toBeNull();
   });
 
-  it('lists the Auto Reply bucket without category cards, each mail with a link to review its reply', async () => {
+  it('lists the Auto Reply bucket without category cards, each mail with Accept and Reject', async () => {
     renderInbox();
     await screen.findByText('Paracetamol');
 
@@ -141,8 +142,41 @@ describe('the mailbox buckets', () => {
     await waitFor(() => expect(fetchMailboxMessages).toHaveBeenLastCalledWith(expect.objectContaining({ bucket: 'auto_reply', offset: 0 })));
     expect(bucket('Auto Reply')).toHaveAttribute('aria-pressed', 'true');
     await waitFor(() => expect(screen.queryByRole('group', { name: 'Filter by category' })).toBeNull());
-    expect(screen.getByRole('link', { name: 'Review the automatic reply to MSG-00001' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Accept message MSG-00001' })).toBeNull();
+    expect(acceptFor('MSG-00001')).toBeInTheDocument();
+    expect(rejectFor('MSG-00001')).toBeInTheDocument();
+  });
+
+  it('says accepting a mail offered a reply will answer it automatically, and confirms the reply was sent', async () => {
+    const success = vi.spyOn(notify, 'success').mockImplementation(() => {});
+    acceptMailboxMessage.mockResolvedValue({
+      queryId: 'QRY-2026-00001',
+      created: true,
+      acknowledged: true,
+      forwarded: false,
+      aiSummaryStatus: 'GENERATED',
+      autoReply: { sent: true },
+      errors: [],
+    });
+    renderInbox();
+    await screen.findByText('Paracetamol');
+
+    fireEvent.click(acceptFor('MSG-00001'));
+    expect(screen.getByText('Register & auto-reply?')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Yes' }));
+
+    await waitFor(() => expect(success).toHaveBeenCalled());
+    const [title, description] = success.mock.calls.at(-1);
+    expect(title).toBe('Query case QRY-2026-00001 created');
+    expect(description).toMatch(/AI summary generated · acknowledgement sent to ravi@pharma\.example · automatic reply sent to ravi@pharma\.example/);
+    expect(description).not.toMatch(/Officer-in-Charge/);
+  });
+
+  it('asks to register and forward a mail left to a person', async () => {
+    renderInbox();
+    await screen.findByText('Paracetamol');
+
+    fireEvent.click(acceptFor('MSG-00002'));
+    expect(screen.getByText('Register & forward?')).toBeInTheDocument();
   });
 
   it('lists Human Intervention with its category cards and the standard controls', async () => {

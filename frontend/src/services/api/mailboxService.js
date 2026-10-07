@@ -94,11 +94,10 @@ export async function setMailboxMessageCategory(mailboxMessageId, category) {
   return data;
 }
 
-/** Sends the automatic reply, with the Front Office's text, to the mail's sender. */
-export async function approveAutoReply(mailboxMessageId, body) {
+/** Sends again an automatic reply that could not be sent when the mail was accepted. */
+export async function retryAutoReply(mailboxMessageId) {
   const { data } = await axiosClient.post(
-    `/mailbox/messages/${encodeURIComponent(mailboxMessageId)}/auto-reply/approve`,
-    { body },
+    `/mailbox/messages/${encodeURIComponent(mailboxMessageId)}/auto-reply/retry`,
   );
   return data;
 }
