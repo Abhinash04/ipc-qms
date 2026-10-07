@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 
 import { AuditHistoryCard } from '@/components/workflow/AuditHistoryCard';
 
@@ -21,20 +21,32 @@ const serverRow = {
   details: { method: 'POST', path: '/queries/accept', reason: 'mailbox accept' },
 };
 
+// The timeline is the default view; each event is one item.
+const items = () => within(screen.getByRole('list', { name: 'Audit events' })).getAllByRole('listitem');
 const rows = () => within(screen.getByRole('table')).getAllByRole('row');
 
 describe('the audit card renders both shapes of an audit row', () => {
-  it('shows a client sentence and a server record in the same table', () => {
+  it('shows a client sentence and a server record on the same timeline', () => {
     render(<AuditHistoryCard audit={[serverRow, clientRow]} />);
 
-    expect(rows()).toHaveLength(3);
+    expect(items()).toHaveLength(2);
 
-    expect(screen.getByText('QUERY REGISTERED')).toBeInTheDocument();
-    expect(screen.getByText('QUERY RECEIVED')).toBeInTheDocument();
+    expect(screen.getByText('Query verified and registered')).toBeInTheDocument();
+    expect(screen.getByText('Enquiry received')).toBeInTheDocument();
     expect(screen.getByText(/Front Office \(primary mailbox\)/)).toBeInTheDocument();
     expect(screen.getByText(/FRONT_OFFICE/)).toBeInTheDocument();
 
     expect(screen.getByText(clientRow.details)).toBeInTheDocument();
+  });
+
+  it('lists newest first, and switches to a table with the same events', () => {
+    render(<AuditHistoryCard audit={[serverRow, clientRow]} />);
+
+    expect(within(items()[0]).getByText('Query verified and registered')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Table' }));
+    expect(rows()).toHaveLength(3);
+    expect(screen.queryByRole('list', { name: 'Audit events' })).toBeNull();
   });
 
   it('reads an object details back as text instead of throwing on it', () => {
@@ -75,7 +87,7 @@ describe('the audit card keys its rows without a React warning', () => {
 
     render(<AuditHistoryCard audit={legacy} />);
 
-    expect(rows()).toHaveLength(3);
+    expect(items()).toHaveLength(2);
     expect(screen.getByText('AI generated response version v1.')).toBeInTheDocument();
     expect(screen.getByText('Officer revision saved as v2.')).toBeInTheDocument();
   });
@@ -91,7 +103,7 @@ describe('the audit card keys its rows without a React warning', () => {
 
     render(<AuditHistoryCard audit={[serverRow, legacy, clientRow]} />);
 
-    expect(rows()).toHaveLength(4);
+    expect(items()).toHaveLength(3);
     expect(screen.getByText('3 Total Events')).toBeInTheDocument();
   });
 });

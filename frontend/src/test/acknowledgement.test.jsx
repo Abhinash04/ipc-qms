@@ -260,13 +260,14 @@ describe('the email thread on the case workspace', () => {
 
     expect(await screen.findByText('Email thread')).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: /Show 1 previous message/ }));
-    fireEvent.click(within(screen.getByRole('main')).getByRole('button', { expanded: false }));
-
-    expect(screen.getByText('Received by IPC')).toBeInTheDocument();
     expect(screen.getByText('Sent by IPC')).toBeInTheDocument();
-    expect(screen.getByText('Original enquiry')).toBeInTheDocument();
     expect(screen.getByText('Acknowledgement')).toBeInTheDocument();
+
+
+    const inbox = screen.getByRole('list', { name: 'Messages' });
+    fireEvent.click(within(inbox).getByRole('button', { name: /^Received:/ }));
+    expect(screen.getByText('Received by IPC')).toBeInTheDocument();
+    expect(screen.getByText('Original enquiry')).toBeInTheDocument();
 
     expect(screen.queryByText('INBOUND')).not.toBeInTheDocument();
     expect(screen.queryByText('OUTBOUND')).not.toBeInTheDocument();
@@ -288,7 +289,8 @@ describe('the email thread on the case workspace', () => {
     renderAt(`/super-admin/queries/${queryId}`);
 
     expect(await screen.findByText('Audit history')).toBeInTheDocument();
-    expect(screen.getByText('ACKNOWLEDGEMENT SENT')).toBeInTheDocument();
+    const auditCard = screen.getByRole('heading', { name: 'Audit history' }).closest('[data-slot="panel"]');
+    expect(within(auditCard).getByText('Acknowledgement sent to the inquirer')).toBeInTheDocument();
   });
 });
 

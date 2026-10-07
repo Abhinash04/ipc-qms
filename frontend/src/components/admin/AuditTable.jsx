@@ -172,7 +172,21 @@ function Row({ event, onOpenQuery }) {
           <UserCell event={event} />
         </td>
         <td className="whitespace-nowrap px-3 py-2.5 font-mono text-[11.5px] text-slate-600">
-          {view?.ipAddress || '—'}
+          {view?.localIp ? (
+            <span className="block" title="Public IPv4 address of the network the request came from">
+              <span className="me-1 rounded bg-primary-50 px-1 py-px font-sans text-[9.5px] font-bold uppercase tracking-wide text-primary-700">
+                IPv4
+              </span>
+              <span className="font-semibold text-slate-800">{view.ipAddress}</span>
+            </span>
+          ) : (
+            view?.ipAddress || '—'
+          )}
+          {view?.localIp && (
+            <span className="block font-sans text-[11px] text-slate-400" title="Address on the local network">
+              LAN {view.localIp}
+            </span>
+          )}
           {view?.deviceName && <span className="block font-sans text-[11px] text-slate-400">{view.deviceName}</span>}
         </td>
         <td className="px-3 py-2.5 text-[12.5px]">

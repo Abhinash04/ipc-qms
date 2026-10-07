@@ -64,12 +64,15 @@ beforeEach(async () => {
   ({ queryId } = s().ingestEmail(enquiry([NEW_STYLE, LEGACY_STYLE]), async () => null));
 });
 
+// The case's emails list their attachments too; these tests are about the Attachments tab.
+const attachmentsTab = async () => within(await screen.findByRole('tabpanel', { name: 'Attachments' }));
+
 describe('attachment access follows the existing case permissions', () => {
   it('a Front Officer on the case sees its attachments', async () => {
     renderAs(FRONT_OFFICE, `/front-officer/queries/${queryId}`);
     fireEvent.focus(await screen.findByRole('tab', { name: 'Attachments' }));
 
-    expect(await screen.findByText('spec.pdf')).toBeInTheDocument();
+    expect(await (await attachmentsTab()).findByText('spec.pdf')).toBeInTheDocument();
   });
 
   it('a role with no route to this case is denied by the existing guard, not by attachment code', async () => {
@@ -81,12 +84,12 @@ describe('attachment access follows the existing case permissions', () => {
     renderAs(FRONT_OFFICE, `/front-officer/queries/${queryId}`);
     fireEvent.focus(await screen.findByRole('tab', { name: 'Attachments' }));
 
-    const legacyRow = (await screen.findByText('old-scan.jpg')).closest('li');
+    const legacyRow = (await (await attachmentsTab()).findByText('old-scan.jpg')).closest('li');
     expect(within(legacyRow).queryByRole('button', { name: /Preview/ })).toBeNull();
     expect(within(legacyRow).queryByRole('link', { name: /Download/ })).toBeNull();
     expect(within(legacyRow).getByText('Preview unavailable')).toBeInTheDocument();
 
-    const realRow = screen.getByText('spec.pdf').closest('li');
+    const realRow = (await (await attachmentsTab()).findByText('spec.pdf')).closest('li');
     expect(within(realRow).getByRole('button', { name: /Preview/ })).toBeInTheDocument();
   });
 });

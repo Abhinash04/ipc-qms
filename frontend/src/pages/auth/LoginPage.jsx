@@ -168,11 +168,11 @@ export function LoginPage() {
                 Sign in
               </h2>
               <img
-                src="/imageFile1.png"
-                alt="IPC Emblem Logo"
-                width="103"
-                height="199"
-                className="h-20 w-auto shrink-0 object-contain sm:h-22"
+                src="/mohfw-l.png"
+                alt="Ministry of Health & Family Welfare, Government of India"
+                width="336"
+                height="126"
+                className="h-14 w-auto shrink-0 object-contain sm:h-16"
               />
             </div>
             <p className="mt-1.5 text-[13.5px] text-ink-muted">

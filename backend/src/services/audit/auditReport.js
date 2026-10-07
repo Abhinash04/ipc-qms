@@ -47,6 +47,7 @@ const READABLE_COLUMNS = [
   ['user', 'User'],
   ['role', 'Role'],
   ['ipAddress', 'IP address'],
+  ['localIp', 'Local IP address'],
   ['deviceName', 'Device name'],
   ['device', 'Browser / device'],
   ['module', 'Module'],
@@ -427,7 +428,9 @@ export function buildPdf({
           view.auditId === '-' ? 'Not issued' : view.auditId,
           view.dateTime,
           [view.userCard.name, view.userCard.role, view.userCard.id && `ID: ${view.userCard.id}`].filter(Boolean).join('\n'),
-          [view.ipAddress || '-', view.deviceName, source(view)].filter(Boolean).join('\n'),
+          [view.ipAddress || '-', view.localIp && `LAN ${view.localIp}`, view.deviceName, source(view)]
+            .filter(Boolean)
+            .join('\n'),
           view.caseNo || '-',
           view.module,
           { who: view.who, did: view.did, other: view.other, notes: trailNotes(row, view) },

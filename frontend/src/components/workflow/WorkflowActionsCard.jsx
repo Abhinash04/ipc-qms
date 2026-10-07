@@ -1,6 +1,19 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { Lock, ArrowRight, ArrowRightLeft, RotateCcw } from "lucide-react";
+import {
+  Lock,
+  ArrowRight,
+  ArrowRightLeft,
+  RotateCcw,
+  CheckCircle2,
+  Download,
+  History,
+  Mail,
+  Zap,
+  Rocket,
+} from "lucide-react";
+import { CaseCard } from "@/components/common/CaseCard";
+import { cn } from "@/utils/cn";
 import { useQueryCase } from "@/hooks/useQueryCase";
 import { useWorkflowStore } from "@/store/useWorkflowStore";
 import {
@@ -281,7 +294,7 @@ function PrimaryActionButton({
     <button
       type="button"
       onClick={onClick}
-      className={`w-full py-3 px-4 rounded-2xl font-semibold text-[16px] transition-colors cursor-pointer flex items-center justify-center gap-2 ${className}`}
+      className={`w-full py-2.5 px-3.5 rounded-lg font-semibold text-[14px] transition-colors cursor-pointer flex items-center justify-center gap-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary ${className}`}
     >
       <Icon className={iconClassName || "h-4 w-4"} />
       <span>{children}</span>
@@ -303,7 +316,7 @@ function PrimaryActions({
         <PrimaryActionButton
           onClick={onForward}
           icon={ArrowRight}
-          className="bg-primary hover:bg-primary-hover text-white shadow-md shadow-indigo-500/20"
+          className="bg-primary hover:bg-primary-hover text-white shadow-xs"
         >
           Forward to Officer-in-Charge
         </PrimaryActionButton>
@@ -313,7 +326,7 @@ function PrimaryActions({
         <PrimaryActionButton
           onClick={onTransfer}
           icon={ArrowRightLeft}
-          className="bg-primary-50 hover:bg-primary-100 text-primary-700 border border-primary-200/80 shadow-2xs"
+          className="bg-card hover:bg-primary-50 text-primary-700 border border-primary-200"
         >
           Transfer Query
         </PrimaryActionButton>
@@ -324,7 +337,7 @@ function PrimaryActions({
           onClick={onPullback}
           icon={RotateCcw}
           iconClassName="h-4 w-4 text-amber-700"
-          className="bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300/80 shadow-2xs"
+          className="bg-card hover:bg-amber-50 text-amber-900 border border-amber-300"
         >
           Pullback Query
         </PrimaryActionButton>
@@ -333,22 +346,81 @@ function PrimaryActions({
   );
 }
 
-function ActionLinks({ links, queryId }) {
-  return links.map((link) => (
-    <Link
-      key={link.path}
-      to={buildPath(link.path, { queryId })}
-      className="block"
-    >
-      <button
-        type="button"
-        className="w-full py-3 px-4 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-semibold text-[16px] transition-colors cursor-pointer flex items-center justify-center gap-2"
+function ActionLinks({ links, queryId, firstIsPrimary }) {
+  return links.map((link, index) => {
+    const primary = firstIsPrimary && index === 0;
+    return (
+      <Link
+        key={link.path}
+        to={buildPath(link.path, { queryId })}
+        className="block"
       >
-        <span>{link.label}</span>
-        <ArrowRight className="h-4 w-4 text-slate-400" />
-      </button>
-    </Link>
-  ));
+        <button
+          type="button"
+          className={cn(
+            "w-full py-2.5 px-3.5 rounded-lg font-semibold text-[14px] transition-colors cursor-pointer flex items-center justify-center gap-2",
+            primary
+              ? "bg-primary hover:bg-primary-hover text-white shadow-xs"
+              : "bg-card hover:bg-slate-50 text-slate-800 border border-slate-200",
+          )}
+        >
+          <span>{link.label}</span>
+          <ArrowRight className={cn("h-4 w-4", primary ? "text-white/80" : "text-slate-400")} />
+        </button>
+      </Link>
+    );
+  });
+}
+
+function scrollToSection(id) {
+  document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function downloadResponse(query, version) {
+  const blob = new Blob([version.content || ""], { type: "text/plain;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = Object.assign(document.createElement("a"), {
+    href: url,
+    download: `${query.queryId}-response-${version.version || "final"}.txt`,
+  });
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+const SECONDARY =
+  "w-full inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-card px-3 py-2 text-[13px] font-semibold text-slate-700 transition-colors hover:bg-slate-50 cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-card";
+
+function ClosedState({ query, finalVersion }) {
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-col items-center rounded-xl border border-emerald-200 bg-linear-to-b from-emerald-50 to-card px-3 py-4 text-center">
+        <span className="flex h-12 w-12 items-center justify-center rounded-full bg-emerald-500 text-white shadow-sm ring-4 ring-emerald-100">
+          <CheckCircle2 className="h-6 w-6" aria-hidden="true" />
+        </span>
+        <p className="m-0 mt-2.5 text-[15px] font-bold text-emerald-900">Query closed</p>
+        <p className="m-0 mt-0.5 text-[12.5px] leading-relaxed text-emerald-900/80">
+          This query is closed. Its full audit history remains available below.
+        </p>
+      </div>
+      <div className="space-y-1.5">
+        <button type="button" className={SECONDARY} onClick={() => scrollToSection("case-audit-history")}>
+          <History className="h-4 w-4 text-slate-400" aria-hidden="true" /> View audit history
+        </button>
+        <button
+          type="button"
+          className={SECONDARY}
+          disabled={!finalVersion}
+          title={finalVersion ? undefined : "No approved response was recorded for this query."}
+          onClick={() => finalVersion && downloadResponse(query, finalVersion)}
+        >
+          <Download className="h-4 w-4 text-slate-400" aria-hidden="true" /> Download response
+        </button>
+        <button type="button" className={SECONDARY} onClick={() => scrollToSection("case-email-thread")}>
+          <Mail className="h-4 w-4 text-slate-400" aria-hidden="true" /> View email
+        </button>
+      </div>
+    </div>
+  );
 }
 
 function ClarificationList({ actions, openAction, onToggle }) {
@@ -387,7 +459,7 @@ function ClarificationList({ actions, openAction, onToggle }) {
 }
 
 export function WorkflowActionsCard() {
-  const { queryId, query, currentStep, currentUser, can } = useQueryCase();
+  const { queryId, query, currentStep, currentUser, can, versions = [] } = useQueryCase();
   const paths = useRoutePaths();
   const {
     ackError,
@@ -413,15 +485,31 @@ export function WorkflowActionsCard() {
 
   const clarificationActions = Object.keys(CLARIFICATION_REQUIRED_ACTIONS);
 
-  return (
-    <div  data-slot="panel" className="bg-card rounded-2xl border border-transparent p-5 shadow-card select-none flex flex-col space-y-4">
-      <div>
-        <h2 className="font-heading text-[22px] font-bold text-slate-900 m-0">
-          Available actions
-        </h2>
-      </div>
+  const finalVersion =
+    versions.find((v) => v.status === "FINAL_APPROVED") || null;
 
-      <div className="space-y-3">
+  return (
+    <CaseCard
+      tone="action"
+      banner
+      art={[Rocket]}
+      icon={Zap}
+      title="Available actions"
+      meta={
+        isClosed && !canPullback
+          ? "Case complete"
+          : canForward
+            ? "Next step: Forward to Officer-in-Charge"
+            : links[0]
+              ? `Next step: ${links[0].label}`
+              : hasNoActions
+                ? "Nothing waiting on you"
+                : "Choose an action"
+      }
+      compact
+      className="select-none"
+    >
+      <div className="space-y-2.5">
 
         {ackError && (
           <EmailRetryNotice
@@ -467,10 +555,7 @@ export function WorkflowActionsCard() {
         )}
 
         {isClosed && !canPullback && (
-          <p className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-[15px] font-medium text-slate-500 leading-relaxed m-0">
-            This query is closed. Its full audit history remains available
-            below.
-          </p>
+          <ClosedState query={query} finalVersion={finalVersion} />
         )}
 
         <PrimaryActions
@@ -482,10 +567,10 @@ export function WorkflowActionsCard() {
           onPullback={() => setIsPullbackModalOpen(true)}
         />
 
-        <ActionLinks links={links} queryId={queryId} />
+        <ActionLinks links={links} queryId={queryId} firstIsPrimary={!canForward} />
 
         {!isClosed && hasNoActions && (
-          <div className="rounded-2xl border border-slate-200/90 bg-slate-50/80 p-4 text-[15px] font-medium text-slate-500 leading-relaxed">
+          <div className="rounded-lg border border-slate-200 bg-card p-3 text-[13px] text-slate-500 leading-relaxed">
             No actions available to you at this stage.
           </div>
         )}
@@ -512,6 +597,6 @@ export function WorkflowActionsCard() {
         onClose={() => setIsPullbackModalOpen(false)}
         currentUser={currentUser}
       />
-    </div>
+    </CaseCard>
   );
 }

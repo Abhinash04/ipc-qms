@@ -311,6 +311,226 @@ body {
   }
 }
 
+/* Card banner illustrations: the subject icon floats, its companions drift, the circles breathe,
+   the dot texture creeps and a sheen crosses the banner now and then. --art-delay staggers cards. */
+@keyframes art-float {
+  0%,
+  100% {
+    transform: translateY(-50%) rotate(-6deg);
+  }
+  50% {
+    transform: translateY(calc(-50% - 7px)) rotate(-1deg);
+  }
+}
+@keyframes art-drift-a {
+  0%,
+  100% {
+    transform: translate(0, 0) rotate(12deg) scale(1);
+  }
+  33% {
+    transform: translate(-6px, 4px) rotate(24deg) scale(1.08);
+  }
+  66% {
+    transform: translate(3px, 6px) rotate(4deg) scale(0.96);
+  }
+}
+@keyframes art-drift-b {
+  0%,
+  100% {
+    transform: translate(0, 0) rotate(-12deg);
+  }
+  50% {
+    transform: translate(7px, -5px) rotate(-28deg);
+  }
+}
+@keyframes art-breathe {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.14);
+    opacity: 0.6;
+  }
+}
+@keyframes art-dots {
+  to {
+    background-position: 24px 12px;
+  }
+}
+@keyframes art-shine {
+  0%,
+  70% {
+    transform: translateX(-120%) skewX(-20deg);
+  }
+  90%,
+  100% {
+    transform: translateX(420%) skewX(-20deg);
+  }
+}
+.art-float {
+  animation: art-float 5.5s ease-in-out infinite;
+  animation-delay: var(--art-delay, 0s);
+  transform: translateY(-50%) rotate(-6deg);
+}
+.art-drift-a {
+  animation: art-drift-a 7s ease-in-out infinite;
+  animation-delay: calc(var(--art-delay, 0s) - 1.5s);
+  transform: rotate(12deg);
+}
+.art-drift-b {
+  animation: art-drift-b 6s ease-in-out infinite;
+  animation-delay: calc(var(--art-delay, 0s) - 3s);
+  transform: rotate(-12deg);
+}
+.art-breathe {
+  animation: art-breathe 6s ease-in-out infinite;
+  animation-delay: var(--art-delay, 0s);
+}
+.art-dots {
+  animation: art-dots 4s linear infinite;
+}
+.art-shine {
+  animation: art-shine 9s ease-in-out infinite;
+  animation-delay: var(--art-delay, 0s);
+  background-image: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.16), transparent);
+  transform: translateX(-120%) skewX(-20deg);
+}
+@media (prefers-reduced-motion: reduce) {
+  .art-float,
+  .art-drift-a,
+  .art-drift-b,
+  .art-breathe,
+  .art-dots,
+  .art-shine {
+    animation: none;
+  }
+  .art-shine {
+    display: none;
+  }
+}
+
+/* Workflow tracker: completed segments fill in turn, the current step pulses, exceptions slide in. */
+@keyframes wf-fill-x {
+  from {
+    transform: scaleX(0);
+  }
+}
+@keyframes wf-fill-y {
+  from {
+    transform: scaleY(0);
+  }
+}
+@keyframes wf-ring {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in oklab, var(--color-primary) 45%, transparent);
+  }
+  70%,
+  100% {
+    box-shadow: 0 0 0 9px color-mix(in oklab, var(--color-primary) 0%, transparent);
+  }
+}
+@keyframes wf-rise {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+/* A light sweep that travels along each completed segment, one after another, on a loop. */
+@keyframes wf-sweep-x {
+  0% {
+    transform: translateX(-100%);
+  }
+  25%,
+  100% {
+    transform: translateX(100%);
+  }
+}
+@keyframes wf-sweep-y {
+  0% {
+    transform: translateY(-100%);
+  }
+  25%,
+  100% {
+    transform: translateY(100%);
+  }
+}
+/* Dashes that keep moving towards the next stage: the step in progress. */
+@keyframes wf-march-x {
+  to {
+    background-position: 12px 0;
+  }
+}
+@keyframes wf-march-y {
+  to {
+    background-position: 0 12px;
+  }
+}
+.wf-sweep-x,
+.wf-sweep-y {
+  animation: wf-sweep-x 3.2s ease-in-out infinite;
+  animation-delay: calc(0.6s + var(--wf-delay, 0ms) * 2);
+  background-image: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.9), transparent);
+  transform: translateX(-100%);
+}
+.wf-sweep-y {
+  animation-name: wf-sweep-y;
+  background-image: linear-gradient(180deg, transparent, rgb(255 255 255 / 0.9), transparent);
+  transform: translateY(-100%);
+}
+[dir="rtl"] .wf-sweep-x {
+  animation-direction: reverse;
+}
+.wf-march-x {
+  background-image: repeating-linear-gradient(90deg, var(--color-primary) 0 6px, transparent 6px 12px);
+  animation: wf-march-x 0.7s linear infinite;
+}
+[dir="rtl"] .wf-march-x {
+  animation-direction: reverse;
+}
+.wf-march-y {
+  background-image: repeating-linear-gradient(180deg, var(--color-primary) 0 6px, transparent 6px 12px);
+  animation: wf-march-y 0.7s linear infinite;
+}
+.wf-fill-x {
+  transform-origin: left;
+  animation: wf-fill-x 0.55s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation-delay: var(--wf-delay, 0ms);
+}
+[dir="rtl"] .wf-fill-x {
+  transform-origin: right;
+}
+.wf-fill-y {
+  transform-origin: top;
+  animation: wf-fill-y 0.55s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation-delay: var(--wf-delay, 0ms);
+}
+.wf-node {
+  animation: qms-pop-in 0.35s ease-out both;
+  animation-delay: var(--wf-delay, 0ms);
+}
+.wf-current {
+  animation: wf-ring 1.8s ease-out infinite;
+}
+.wf-rise {
+  animation: wf-rise 0.4s ease-out both;
+  animation-delay: var(--wf-delay, 0ms);
+}
+@media (prefers-reduced-motion: reduce) {
+  .wf-fill-x,
+  .wf-fill-y,
+  .wf-node,
+  .wf-current,
+  .wf-rise,
+  .wf-sweep-x,
+  .wf-sweep-y,
+  .wf-march-x,
+  .wf-march-y {
+    animation: none;
+  }
+}
+
 @layer components {
 
   .brand-plate {

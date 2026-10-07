@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
@@ -245,7 +245,8 @@ describe('Transfer Query Functionality Unit & Integration Tests', () => {
       expect(screen.getAllByText(OFFICIAL_B.name).length).toBeGreaterThan(0);
 
       expect(screen.getByRole('heading', { name: 'Audit history' })).toBeInTheDocument();
-      expect(screen.getByText('QUERY TRANSFERRED')).toBeInTheDocument();
+      const auditCard = screen.getByRole('heading', { name: 'Audit history' }).closest('[data-slot="panel"]');
+      expect(within(auditCard).getByText('Transferred')).toBeInTheDocument();
       expect(screen.getAllByText(new RegExp(`Transferred From: ${OFFICIAL_A.name}`)).length).toBeGreaterThan(0);
       expect(screen.getAllByText(new RegExp(`Transferred To: ${OFFICIAL_B.name}`)).length).toBeGreaterThan(0);
       expect(screen.getAllByText(new RegExp(`Reason: Colleague has better expertise`)).length).toBeGreaterThan(0);

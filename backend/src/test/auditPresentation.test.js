@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
+import os from 'node:os';
 import request from 'supertest';
 import { extractText, getDocumentProxy } from 'unpdf';
 import app from '../app.js';
@@ -159,7 +160,8 @@ describe('who and where an event came from', () => {
     const [exported] = await audit.list({ action: AUDIT_ACTIONS.AUDIT_EXPORTED });
     expect(exported.actorName).toBe('Suresh Gupta');
     expect(exported.source).toMatchObject({ userAgent: CHROME, method: 'GET', path: '/api/v1/audit/export' });
-    expect(exported.source.ip).toMatch(/127\.0\.0\.1|::1/);
+    expect(exported.source.ip).toMatch(/^\d+\.\d+\.\d+\.\d+$/);
+    expect(exported.source.hostname).toBe(os.hostname());
   });
 
   it('records the server that did work no request caused', async () => {
@@ -355,7 +357,7 @@ describe('the PDF report', () => {
 
   it('keeps the readable columns in the CSV too', () => {
     const csv = buildCsv(rows).toString('utf8');
-    expect(csv.split('\r\n')[0]).toContain('Date and time (IST),User,Role,IP address,Device name,Browser / device,Module,Activity,Case No.,Status,Description');
+    expect(csv.split('\r\n')[0]).toContain('Date and time (IST),User,Role,IP address,Local IP address,Device name,Browser / device,Module,Activity,Case No.,Status,Description');
     expect(csv).toContain('Priya Sharma');
     expect(csv).toContain('Email could not be sent');
   });

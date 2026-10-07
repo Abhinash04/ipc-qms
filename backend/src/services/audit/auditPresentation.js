@@ -584,10 +584,9 @@ export function present(event) {
     userId: event.actorId || '',
     performedBy: event.actorType === 'agent' ? 'AI assistant' : event.actorType === 'system' ? 'System' : 'User',
     role: nameInRoleField(event) ? '' : roleLabel(event.actorRole),
-    // Events recorded before IP capture existed have no source at all.
     ipAddress: event.source ? displayIp(source.ip) : 'Not recorded',
+    localIp: source.localIp ? displayIp(source.localIp) : '',
     device: source.server ? `Server ${source.server}` : describeDevice(source.userAgent),
-    // The computer's network name from DNS; for the server's own work, the server's name.
     deviceName: source.hostname || source.server || '',
     module: moduleOf(event.action),
     activity: activityLabel(event.action),

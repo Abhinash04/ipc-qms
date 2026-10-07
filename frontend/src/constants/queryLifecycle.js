@@ -89,7 +89,10 @@ export function buildLifecycle({
   const received = lastOf(AUDIT_EVENT.QUERY_RECEIVED);
   const verified = lastOf(AUDIT_EVENT.QUERY_REGISTERED, AUDIT_EVENT.ACKNOWLEDGEMENT_SENT);
   const forwarded = lastOf(AUDIT_EVENT.QUERY_FORWARDED);
-  const assigned = lastOf(AUDIT_EVENT.QUERY_ASSIGNED, AUDIT_EVENT.QUERY_TRANSFERRED, SERVER_EVENTS.QUERY_AUTO_TRANSFERRED);
+
+  const assigned =
+    lastOf(AUDIT_EVENT.QUERY_ASSIGNED) ||
+    lastOf(AUDIT_EVENT.QUERY_TRANSFERRED, SERVER_EVENTS.QUERY_AUTO_TRANSFERRED);
   const dispatched = lastOf(AUDIT_EVENT.RESPONSE_DISPATCHED);
 
   let assignedActivity = null;

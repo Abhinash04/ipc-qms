@@ -54,6 +54,14 @@ export function Header() {
 
       <div className="hidden shrink-0 items-center gap-3 xl:flex">
         <img
+          src="/mohfw-l.png"
+          alt="Ministry of Health & Family Welfare, Government of India"
+          width="336"
+          height="126"
+          className="h-12 w-auto object-contain mix-blend-multiply"
+        />
+        <span className="h-8 w-px bg-line" aria-hidden="true" />
+        <img
           src="/imageFile1.png"
           alt="IPC Emblem Logo"
           width="103"

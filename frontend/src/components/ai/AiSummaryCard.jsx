@@ -1,97 +1,106 @@
 import { useState } from 'react';
-import { Sparkles, RefreshCw, Loader2 } from 'lucide-react';
+import { Sparkles, RefreshCw, Loader2, Lightbulb, Tag, ShieldAlert, BrainCircuit } from 'lucide-react';
 import { fetchGemmaAiSummary } from '@/services/api/aiService';
+import { CaseCard, CardAction, Pill } from '@/components/common/CaseCard';
 import { cn } from '@/utils/cn';
+import { useIsClamped } from '@/hooks/useIsClamped';
 
 const KEY_POINT_PREVIEW = 3;
 
 function ProvenanceBadge({ summary }) {
-  if (!summary) return null;
+  if (!summary?.text) return null;
 
   const status = summary.status ?? (summary.fallback ? 'FALLBACK' : 'GENERATED');
-  if (status === 'GENERATED') return null;
+  if (status === 'GENERATED') return <Pill tone="ai">AI generated</Pill>;
 
   const failed = status === 'FAILED';
-
   return (
-    <span
+    <Pill
+      tone={failed ? 'danger' : 'warning'}
       title={
         failed
           ? summary?.error || 'The AI service could not be reached.'
           : 'The AI service did not answer, so this was produced from the enquiry text without a model.'
       }
-      className={cn(
-        'inline-flex items-center rounded-full border px-2.5 py-0.5 text-[11px] font-semibold',
-        failed
-          ? 'bg-rose-50 text-rose-700 border-rose-200'
-          : 'bg-amber-50 text-amber-800 border-amber-200',
-      )}
     >
       {failed ? 'Not generated' : 'Offline summary'}
-    </span>
+    </Pill>
   );
 }
 
 function SummaryBody({ summary, expanded, onToggleExpanded }) {
   const keyPoints = summary.keyPoints || [];
   const visibleKeyPoints = expanded ? keyPoints : keyPoints.slice(0, KEY_POINT_PREVIEW);
-  const hasMoreKeyPoints = keyPoints.length > KEY_POINT_PREVIEW;
-  const hasMoreText = (summary.text?.length || 0) > 220;
+  // Offer the full summary only when something is actually hidden: the text is cut off by its
+  // clamp, or there are key points beyond the preview.
+  const [textRef, textClamped] = useIsClamped(summary.text, expanded);
+  const hasMore = expanded || textClamped || keyPoints.length > KEY_POINT_PREVIEW;
 
   return (
-    <>
-      <p
-        className={cn(
-          'text-[15px] font-semibold text-slate-800 leading-relaxed m-0',
-          !expanded && 'line-clamp-3',
-        )}
-      >
-        {summary.text}
-      </p>
+    <div className="space-y-5">
+      <blockquote className="m-0 border-s-4 border-violet-400 bg-violet-50/60 py-3 ps-4 pe-3 rounded-e-lg">
+        <p ref={textRef} className={cn('m-0 max-w-[75ch] text-[15.5px] leading-relaxed font-medium text-slate-800', !expanded && 'line-clamp-4')}>
+          {summary.text}
+        </p>
+      </blockquote>
 
       {keyPoints.length > 0 && (
-        <div className="rounded-2xl bg-card/90 p-3.5 border border-purple-100 shadow-2xs space-y-1.5">
-          <p className="text-[14px] font-bold text-slate-900 m-0">Key Points Raised:</p>
-          <ul className="space-y-1 pl-0 m-0 list-none">
-            {visibleKeyPoints.map((point) => (
-              <li key={point} className="flex items-start gap-2 text-[13.5px] font-medium text-slate-600 leading-snug">
-                <span className="w-1.5 h-1.5 rounded-full bg-purple-500 shrink-0 mt-1.5" />
+        <div>
+          <h3 className="m-0 mb-2 flex items-center gap-2 text-[11.5px] font-semibold uppercase tracking-wider text-violet-700">
+            <Lightbulb className="h-3.5 w-3.5" aria-hidden="true" /> Key points raised
+          </h3>
+          <ol className="m-0 grid list-none grid-cols-1 gap-2.5 p-0 md:grid-cols-2">
+            {visibleKeyPoints.map((point, index) => (
+              <li
+                key={point}
+                className="flex items-start gap-3 rounded-xl border border-violet-100 bg-card p-3 text-[13.5px] leading-snug text-slate-700 shadow-xs"
+              >
+                <span
+                  className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-violet-600 text-[11.5px] font-bold text-white"
+                  aria-hidden="true"
+                >
+                  {index + 1}
+                </span>
                 <span>{point}</span>
+              </li>
+            ))}
+          </ol>
+        </div>
+      )}
+
+      {summary.topics?.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2">
+          <h3 className="m-0 flex items-center gap-1.5 text-[11.5px] font-semibold uppercase tracking-wider text-slate-500">
+            <Tag className="h-3.5 w-3.5" aria-hidden="true" /> Topics
+          </h3>
+          <ul className="m-0 flex list-none flex-wrap gap-1.5 p-0">
+            {summary.topics.map((topic) => (
+              <li
+                key={topic}
+                className="rounded-full bg-violet-100 px-2.5 py-0.5 text-[12px] font-semibold text-violet-800"
+              >
+                {topic}
               </li>
             ))}
           </ul>
         </div>
       )}
 
-      {(hasMoreText || hasMoreKeyPoints) && (
+      {hasMore && (
         <button
           type="button"
           onClick={onToggleExpanded}
-          className="w-full py-1.5 text-[12.5px] font-bold text-slate-500 hover:text-purple-700 bg-card/70 hover:bg-purple-50 border border-slate-200/70 rounded-xl transition-colors cursor-pointer"
+          aria-expanded={expanded}
+          className="cursor-pointer text-[12.5px] font-semibold text-violet-700 hover:text-violet-900 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
         >
           {expanded ? 'Show less' : 'View full summary'}
         </button>
       )}
-
-      {summary.topics?.length > 0 && (
-        <div className="flex flex-wrap items-center gap-2 pt-1">
-          <span className="text-[14px] font-bold text-slate-400">Topics:</span>
-          {summary.topics.map((topic) => (
-            <span key={topic} className="text-[13px] font-bold text-purple-700 bg-purple-50 px-2.5 py-1 rounded-lg border border-purple-100">
-              {topic}
-            </span>
-          ))}
-        </div>
-      )}
-
-      <p className="text-[11.5px] font-medium text-slate-400 pt-3 border-t border-primary-100/60 m-0">
-        Generated by Pravah AI from inquirer&apos;s email. Assistive only — verify before taking official action.
-      </p>
-    </>
+    </div>
   );
 }
 
-export function AiSummaryCard({ summary, query, onSummaryUpdated, variant = 'card', readOnly = false }) {
+export function AiSummaryCard({ summary, query, onSummaryUpdated, readOnly = false }) {
   const [loading, setLoading] = useState(false);
   const [expanded, setExpanded] = useState(false);
 
@@ -113,74 +122,60 @@ export function AiSummaryCard({ summary, query, onSummaryUpdated, variant = 'car
     }
   };
 
-  const outerClass = variant === 'embedded'
-    ? "select-none"
-    : "bg-linear-to-br from-primary-50/80 via-purple-50/30 to-card rounded-2xl border border-primary-200/80 p-6 shadow-sm select-none";
-
   return (
-    <div className={outerClass}>
-      <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-primary-100">
-        <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-xl bg-purple-600 text-white flex items-center justify-center shadow-2xs">
-            {loading ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Sparkles className="h-4 w-4" strokeWidth={2.2} />
-            )}
-          </div>
-          <h2 className="font-heading text-[20px] font-bold text-slate-900 m-0">
-            {loading ? 'Generating Pravah AI Summary...' : 'AI Summary '}
-          </h2>
-
-          {!loading && <ProvenanceBadge summary={summary} />}
+    <CaseCard
+      tone="ai"
+      banner
+      art={[BrainCircuit, Sparkles, Lightbulb]}
+      icon={loading ? Loader2 : Sparkles}
+      title={loading ? 'Generating AI summary…' : 'AI Summary'}
+      meta="Pravah AI's reading of the inquirer's email"
+      badge={!loading && <ProvenanceBadge summary={summary} />}
+      actions={
+        !readOnly &&
+        summary?.text && (
+          <CardAction
+            onClick={handleGenerateAiSummary}
+            disabled={loading}
+            className="border-white/30 bg-white/10 text-white hover:border-white/50 hover:bg-white/20 hover:text-white"
+          >
+            <RefreshCw className={cn('h-3.5 w-3.5', loading && 'animate-spin')} aria-hidden="true" />
+            {loading ? 'Generating…' : 'Re-generate'}
+          </CardAction>
+        )
+      }
+      footer={
+        summary?.text && !loading ? (
+          <span className="inline-flex items-center gap-1.5">
+            <ShieldAlert className="h-3.5 w-3.5 text-amber-600" aria-hidden="true" />
+            AI-assisted summary — verify before taking official action.
+          </span>
+        ) : null
+      }
+    >
+      {loading ? (
+        <div className="flex flex-col items-center justify-center gap-1.5 py-6 text-center" role="status">
+          <Loader2 className="h-6 w-6 animate-spin text-violet-600" aria-hidden="true" />
+          <p className="m-0 text-[13.5px] font-semibold text-slate-800">Reading the enquiry and summarising it…</p>
+          <p className="m-0 text-[12px] text-slate-500">Main request, key points and topics</p>
         </div>
-
-        {!readOnly && (
-          <div className="flex items-center gap-2">
+      ) : !summary?.text ? (
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="m-0 text-[13.5px] text-slate-600">No AI summary generated yet for this query.</p>
+          {!readOnly && (
             <button
               type="button"
-              className="inline-flex items-center gap-1.5 text-[12px] font-bold text-slate-500 hover:text-purple-700 bg-card hover:bg-purple-50 px-3 py-1.5 rounded-xl border border-slate-200/80 transition-colors cursor-pointer disabled:opacity-50"
               onClick={handleGenerateAiSummary}
-              disabled={loading}
+              className="inline-flex cursor-pointer items-center gap-2 rounded-lg bg-violet-600 px-3.5 py-2 text-[13px] font-semibold text-white transition-colors hover:bg-violet-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-600"
             >
-              <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
-              <span>{loading ? 'Generating...' : 'Re-generate'}</span>
+              <Sparkles className="h-4 w-4" aria-hidden="true" />
+              Generate AI Summary
             </button>
-          </div>
-        )}
-      </div>
-
-      <div className="pt-4 space-y-4">
-        {loading ? (
-          <div className="flex flex-col items-center justify-center py-8 space-y-2">
-            <Loader2 className="h-7 w-7 animate-spin text-purple-600" />
-            <p className="text-[14px] font-bold text-slate-800">
-              Analyzing query & generating crisp AI summary with Pravah LLM...
-            </p>
-            <p className="text-[12px] font-medium text-slate-400">Extracting main request, key points, and domain topics</p>
-          </div>
-        ) : !summary?.text ? (
-          <div className="flex items-center justify-between py-2">
-            <p className="text-[13.5px] font-medium text-slate-500">No AI summary generated yet for this query.</p>
-            {!readOnly && (
-              <button
-                type="button"
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-purple-600 text-white font-bold text-[13px] shadow-sm hover:bg-purple-600/90 transition-colors cursor-pointer"
-                onClick={handleGenerateAiSummary}
-              >
-                <Sparkles className="h-4 w-4" />
-                <span>Generate AI Summary</span>
-              </button>
-            )}
-          </div>
-        ) : (
-          <SummaryBody
-            summary={summary}
-            expanded={expanded}
-            onToggleExpanded={() => setExpanded((open) => !open)}
-          />
-        )}
-      </div>
-    </div>
+          )}
+        </div>
+      ) : (
+        <SummaryBody summary={summary} expanded={expanded} onToggleExpanded={() => setExpanded((open) => !open)} />
+      )}
+    </CaseCard>
   );
 }

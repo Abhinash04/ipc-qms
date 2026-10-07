@@ -20,7 +20,9 @@ export function CaseViewSheet({ queryId, onClose }) {
           <DialogDescription className="sr-only">The case as it stands, for viewing only.</DialogDescription>
         </DialogHeader>
 
-        <div className="min-h-0 flex-1 overflow-y-auto p-5">{queryId && <QueryDetailPage queryId={queryId} readOnly />}</div>
+        <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-5">
+          <div className="pt-5">{queryId && <QueryDetailPage queryId={queryId} readOnly />}</div>
+        </div>
       </DialogContent>
     </Dialog>
   );

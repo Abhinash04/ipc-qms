@@ -104,10 +104,7 @@ describe('records written under the old name', () => {
       />,
     );
 
-    const actor = screen.getByText((_content, element) =>
-      element?.tagName === 'SPAN' && element.textContent.trim() === `👤 ${IPC_FRONT_OFFICE_NAME}`.trim(),
-    );
-    expect(actor).toBeInTheDocument();
+    expect(screen.getByText(IPC_FRONT_OFFICE_NAME)).toBeInTheDocument();
     expect(screen.queryByText(/Eco-Clubs/)).toBeNull();
   });
 

@@ -67,13 +67,13 @@ function renderAs(user, path) {
 }
 
 const grid = () =>
-  document.querySelector('[class*="lg:grid-cols-[minmax(0,1fr)_340px]"]');
+  document.querySelector('[data-slot="case-workspace"]');
 
 const threadPanel = () =>
   screen.getByRole('heading', { name: 'Email thread' }).closest('[data-slot="panel"]');
 
-const collapsedRows = () =>
-  within(threadPanel()).queryAllByRole('button', { expanded: false });
+const inboxRows = () =>
+  within(within(threadPanel()).getByRole('list', { name: 'Messages' })).getAllByRole('button');
 
 const expandedMessages = () => threadPanel().querySelectorAll('article').length;
 
@@ -126,66 +126,56 @@ describe('the page is one workspace, not a long document', () => {
 
 });
 
-describe('the email thread reads like a conversation', () => {
-  it('expands only the newest message and collapses the rest', async () => {
+describe('the email thread reads like an email client', () => {
+  const caseEmails = () => s().emailMessages.filter((m) => m.queryId === queryId);
+  const openSubject = () => within(threadPanel().querySelector('article')).getByRole('heading').textContent;
+
+  it('lists every email, newest first, and opens the newest in the reading pane', async () => {
     await underReview();
     renderAs(REVIEWER, `/reviewer/queries/${queryId}`);
 
-    const total = s().emailMessages.filter((m) => m.queryId === queryId).length;
+    const total = caseEmails().length;
     expect(total).toBeGreaterThan(1);
 
+    expect(inboxRows()).toHaveLength(total);
     expect(expandedMessages()).toBe(1);
-    expect(
-      within(threadPanel()).getByRole('button', { name: /Show \d+ previous messages?/ }),
-    ).toBeInTheDocument();
+    expect(inboxRows()[0]).toHaveAttribute('aria-current', 'true');
   });
 
-  it('reveals earlier messages, then expands one on click', async () => {
+  it('opens an earlier email in the reading pane when it is chosen', async () => {
     await underReview();
     renderAs(REVIEWER, `/reviewer/queries/${queryId}`);
 
-    fireEvent.click(
-      within(threadPanel()).getByRole('button', { name: /Show \d+ previous messages?/ }),
-    );
-    const rows = collapsedRows();
-    expect(rows.length).toBeGreaterThan(0);
-    expect(expandedMessages()).toBe(1);
+    const oldest = inboxRows().at(-1);
+    fireEvent.click(oldest);
 
-    fireEvent.click(rows[0]);
-    expect(expandedMessages()).toBe(2);
-    expect(collapsedRows()).toHaveLength(rows.length - 1);
+    expect(expandedMessages()).toBe(1);
+    expect(oldest).toHaveAttribute('aria-current', 'true');
+    expect(openSubject()).toBe(caseEmails()[0].subject);
   });
 
-  it('collapses an opened message again', async () => {
+  it('steps through the thread with Older and Newer', async () => {
     await underReview();
     renderAs(REVIEWER, `/reviewer/queries/${queryId}`);
 
-    fireEvent.click(
-      within(threadPanel()).getByRole('button', { name: /Show \d+ previous messages?/ }),
-    );
-    fireEvent.click(collapsedRows()[0]);
-    expect(expandedMessages()).toBe(2);
-
-    fireEvent.click(
-      within(threadPanel()).getAllByRole('button', { name: 'Collapse message' })[0],
-    );
-    expect(expandedMessages()).toBe(1);
+    expect(within(threadPanel()).getByRole('button', { name: /Newer/ })).toBeDisabled();
+    fireEvent.click(within(threadPanel()).getByRole('button', { name: /Older/ }));
+    expect(inboxRows()[1]).toHaveAttribute('aria-current', 'true');
+    expect(within(threadPanel()).getByRole('button', { name: /Newer/ })).toBeEnabled();
   });
 
-  it('keeps the direction filter working alongside collapse', async () => {
+  it('filters the inbox by direction', async () => {
     await underReview();
     renderAs(REVIEWER, `/reviewer/queries/${queryId}`);
 
-    const inbound = s().emailMessages.filter(
-      (m) => m.queryId === queryId && m.direction === 'INBOUND',
-    ).length;
+    const inbound = caseEmails().filter((m) => m.direction === 'INBOUND').length;
 
-    fireEvent.click(screen.getByRole('button', { name: 'Received Only' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Received' }));
+    expect(inboxRows()).toHaveLength(inbound);
     expect(expandedMessages()).toBe(1);
-    expect(collapsedRows().length + expandedMessages()).toBeLessThanOrEqual(inbound + 1);
 
     fireEvent.click(screen.getByRole('button', { name: 'All Emails' }));
-    expect(expandedMessages()).toBe(1);
+    expect(inboxRows()).toHaveLength(caseEmails().length);
   });
 });
 
@@ -243,10 +233,33 @@ describe('audit history is bounded but complete', () => {
     const auditCard = screen
       .getByRole('heading', { name: 'Audit history' })
       .closest('[data-slot="panel"]');
-    expect(within(auditCard).getAllByRole('row')).toHaveLength(8 + 1);
+    const events = () => within(within(auditCard).getByRole('list', { name: 'Audit events' })).getAllByRole('listitem');
+    expect(events()).toHaveLength(8);
 
     fireEvent.click(screen.getByRole('button', { name: new RegExp(`Show all ${total} events`) }));
-    expect(within(auditCard).getAllByRole('row')).toHaveLength(total + 1);
+    expect(events()).toHaveLength(total);
+  });
+});
+
+describe('Query Info reads as a dossier', () => {
+  it('shows the inquirer, the key dates, the facts and the original enquiry', async () => {
+    await underReview();
+    renderAs(REVIEWER, `/reviewer/queries/${queryId}`);
+
+    fireEvent.mouseDown(screen.getByRole('tab', { name: 'Query Info' }));
+    fireEvent.focus(screen.getByRole('tab', { name: 'Query Info' }));
+    const info = within(await screen.findByRole('tabpanel', { name: 'Query Info' }));
+
+    const inquirerCard = within(info.getByRole('region', { name: 'Inquirer' }));
+    expect(inquirerCard.getByText(INQUIRER.name)).toBeInTheDocument();
+    expect(inquirerCard.getByRole('link', { name: INQUIRER.email })).toHaveAttribute('href', `mailto:${INQUIRER.email}`);
+
+    const dates = within(info.getByRole('region', { name: 'Key dates' }));
+    expect(dates.getByText('Received')).toBeInTheDocument();
+    expect(dates.getByText('Due')).toBeInTheDocument();
+
+    expect(info.getByText('Assigned to')).toBeInTheDocument();
+    expect(info.getByRole('region', { name: 'Original enquiry' })).toHaveTextContent(s().getQuery(queryId).description);
   });
 });
 

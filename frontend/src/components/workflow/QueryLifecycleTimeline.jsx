@@ -6,9 +6,46 @@ import { formatDate, formatTime } from '@/utils/dateTime';
 
 const NODE_STYLES = {
   [STAGE_STATUS.COMPLETE]: 'bg-emerald-500 text-white border-emerald-600 shadow-2xs',
-  [STAGE_STATUS.CURRENT]: 'bg-primary text-white border-primary shadow-2xs',
+  [STAGE_STATUS.CURRENT]: 'wf-current bg-primary text-white border-primary shadow-2xs',
   [STAGE_STATUS.PENDING]: 'bg-slate-100 text-slate-400 border-slate-300',
 };
+
+const STEP_MS = 70;
+const delay = (position) => ({ '--wf-delay': `${Math.max(0, position) * STEP_MS}ms` });
+
+function Segment({ filled, active = false, position, vertical = false, hidden = false, className }) {
+  if (hidden) return <span className={cn(vertical ? 'w-0.5' : 'h-0.5', 'flex-1 bg-transparent', className)} />;
+  return (
+    <span
+      className={cn(
+        'relative flex-1 overflow-hidden rounded-full',
+        vertical ? 'w-0.5' : 'h-0.5',
+        active ? (vertical ? 'wf-march-y bg-primary-100' : 'wf-march-x bg-primary-100') : 'bg-slate-200',
+        className,
+      )}
+      data-filled={filled || undefined}
+      data-active={active || undefined}
+    >
+      {filled && (
+        <span
+          className={cn('absolute inset-0 overflow-hidden bg-emerald-400', vertical ? 'wf-fill-y' : 'wf-fill-x')}
+          style={delay(position)}
+        >
+          <span className={cn('absolute inset-0', vertical ? 'wf-sweep-y' : 'wf-sweep-x')} style={delay(position)} />
+        </span>
+      )}
+    </span>
+  );
+}
+
+function CurrentRing() {
+  return (
+    <span
+      className="pointer-events-none absolute -inset-1.5 rounded-full border-2 border-dashed border-primary/40 motion-safe:animate-[spin_8s_linear_infinite]"
+      aria-hidden="true"
+    />
+  );
+}
 
 function StageIcon({ status, size = 'h-3.5 w-3.5' }) {
   if (status === STAGE_STATUS.COMPLETE) {
@@ -91,40 +128,37 @@ export function QueryLifecycleTimeline({ stages = [] }) {
                       className="flex w-full cursor-default flex-col items-center rounded-lg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
                     >
                       <div className="flex w-full items-center">
-                        <span
-                          className={cn(
-                            'h-0.5 flex-1',
-                            index === 0
-                              ? 'bg-transparent'
-                              : stages[index - 1].status === STAGE_STATUS.COMPLETE
-                                ? 'bg-emerald-400'
-                                : 'bg-slate-200',
-                          )}
+                        <Segment
+                          hidden={index === 0}
+                          filled={index > 0 && stages[index - 1].status === STAGE_STATUS.COMPLETE}
+                          position={2 * index - 1}
                         />
                         <div
                           className={cn(
-                            'flex h-7 w-7 shrink-0 items-center justify-center rounded-full border',
+                            'wf-node relative flex h-7 w-7 shrink-0 items-center justify-center rounded-full border transition-colors duration-500',
                             NODE_STYLES[stage.status],
                           )}
+                          style={delay(2 * index)}
                         >
+                          {stage.status === STAGE_STATUS.CURRENT && <CurrentRing />}
                           <StageIcon status={stage.status} />
                         </div>
-                        <span
-                          className={cn(
-                            'h-0.5 flex-1',
-                            index === stages.length - 1
-                              ? 'bg-transparent'
-                              : stage.status === STAGE_STATUS.COMPLETE
-                                ? 'bg-emerald-400'
-                                : 'bg-slate-200',
-                          )}
+                        <Segment
+                          hidden={index === stages.length - 1}
+                          filled={stage.status === STAGE_STATUS.COMPLETE}
+                          active={stage.status === STAGE_STATUS.CURRENT}
+                          position={2 * index}
                         />
                       </div>
 
                       <p
                         className={cn(
-                          'mt-2 px-1 text-[12.5px] font-bold leading-snug wrap-break-word',
-                          stage.status === STAGE_STATUS.PENDING ? 'text-slate-400' : 'text-slate-800',
+                          'mt-2 px-1 text-[12.5px] font-bold leading-snug wrap-break-word transition-colors duration-500',
+                          stage.status === STAGE_STATUS.PENDING
+                            ? 'text-slate-400'
+                            : stage.status === STAGE_STATUS.CURRENT
+                              ? 'text-primary-700'
+                              : 'text-slate-800',
                         )}
                       >
                         {stage.label}
@@ -160,18 +194,21 @@ export function QueryLifecycleTimeline({ stages = [] }) {
               <div className="flex flex-col items-center">
                 <div
                   className={cn(
-                    'flex h-6 w-6 shrink-0 items-center justify-center rounded-full border',
+                    'wf-node relative flex h-6 w-6 shrink-0 items-center justify-center rounded-full border transition-colors duration-500',
                     NODE_STYLES[stage.status],
                   )}
+                  style={delay(2 * index)}
                 >
+                  {stage.status === STAGE_STATUS.CURRENT && <CurrentRing />}
                   <StageIcon status={stage.status} />
                 </div>
                 {index < stages.length - 1 && (
-                  <span
-                    className={cn(
-                      'my-1.5 min-h-6 w-0.5 flex-1',
-                      stage.status === STAGE_STATUS.COMPLETE ? 'bg-emerald-400' : 'bg-slate-200',
-                    )}
+                  <Segment
+                    vertical
+                    filled={stage.status === STAGE_STATUS.COMPLETE}
+                    active={stage.status === STAGE_STATUS.CURRENT}
+                    position={2 * index}
+                    className="my-1.5 min-h-6"
                   />
                 )}
               </div>
@@ -179,8 +216,12 @@ export function QueryLifecycleTimeline({ stages = [] }) {
               <div className="min-w-0 flex-1 pb-3">
                 <p
                   className={cn(
-                    'text-[15px] font-bold',
-                    stage.status === STAGE_STATUS.PENDING ? 'text-slate-400' : 'text-slate-800',
+                    'text-[15px] font-bold transition-colors duration-500',
+                    stage.status === STAGE_STATUS.PENDING
+                      ? 'text-slate-400'
+                      : stage.status === STAGE_STATUS.CURRENT
+                        ? 'text-primary-700'
+                        : 'text-slate-800',
                   )}
                 >
                   {stage.label}

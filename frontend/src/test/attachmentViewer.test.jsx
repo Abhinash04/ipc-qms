@@ -67,14 +67,17 @@ beforeEach(async () => {
   ({ queryId } = s().ingestEmail(enquiry(ATTACHMENTS), async () => null));
 });
 
+// The case's emails list their attachments too; these tests are about the Attachments tab.
+const attachmentsTab = async () => within(await screen.findByRole('tabpanel', { name: 'Attachments' }));
+
 describe('the Attachments tab', () => {
   it('shows filename, type and size for every attachment', async () => {
     renderAs(FRONT_OFFICE, `/front-officer/queries/${queryId}`);
     fireEvent.focus(await screen.findByRole('tab', { name: 'Attachments' }));
 
-    expect(await screen.findByText('spec.pdf')).toBeInTheDocument();
-    expect(screen.getByText('photo.png')).toBeInTheDocument();
-    expect(screen.getByText('sheet.xlsx')).toBeInTheDocument();
+    expect(await (await attachmentsTab()).findByText('spec.pdf')).toBeInTheDocument();
+    expect(await (await attachmentsTab()).findByText('photo.png')).toBeInTheDocument();
+    expect(await (await attachmentsTab()).findByText('sheet.xlsx')).toBeInTheDocument();
     expect(screen.getByText('2.0 KB')).toBeInTheDocument();
   });
 
@@ -82,7 +85,7 @@ describe('the Attachments tab', () => {
     renderAs(FRONT_OFFICE, `/front-officer/queries/${queryId}`);
     fireEvent.focus(await screen.findByRole('tab', { name: 'Attachments' }));
 
-    const pngRow = (await screen.findByText('photo.png')).closest('li');
+    const pngRow = (await (await attachmentsTab()).findByText('photo.png')).closest('li');
     fireEvent.click(within(pngRow).getByRole('button', { name: /Preview/ }));
 
     const img = await screen.findByRole('img', { name: 'photo.png' });
@@ -93,7 +96,7 @@ describe('the Attachments tab', () => {
     renderAs(FRONT_OFFICE, `/front-officer/queries/${queryId}`);
     fireEvent.focus(await screen.findByRole('tab', { name: 'Attachments' }));
 
-    const xlsxRow = (await screen.findByText('sheet.xlsx')).closest('li');
+    const xlsxRow = (await (await attachmentsTab()).findByText('sheet.xlsx')).closest('li');
     fireEvent.click(within(xlsxRow).getByRole('button', { name: /Preview/ }));
 
     expect(await screen.findByText(/Preview not available for this file type/)).toBeInTheDocument();
@@ -107,7 +110,7 @@ describe('the Attachments tab', () => {
     renderAs(FRONT_OFFICE, `/front-officer/queries/${queryId}`);
     fireEvent.focus(await screen.findByRole('tab', { name: 'Attachments' }));
 
-    const pdfRow = (await screen.findByText('spec.pdf')).closest('li');
+    const pdfRow = (await (await attachmentsTab()).findByText('spec.pdf')).closest('li');
     expect(within(pdfRow).getByRole('link', { name: /Download/ })).toHaveAttribute(
       'href',
       'http://backend.test/api/v1/attachments/att_pdf?download=1',
@@ -120,7 +123,7 @@ describe('the Attachments tab', () => {
     renderAs(FRONT_OFFICE, `/front-officer/queries/${queryId}`);
     fireEvent.focus(await screen.findByRole('tab', { name: 'Attachments' }));
 
-    const pdfRow = (await screen.findByText('spec.pdf')).closest('li');
+    const pdfRow = (await (await attachmentsTab()).findByText('spec.pdf')).closest('li');
     fireEvent.click(within(pdfRow).getByRole('button', { name: /Preview/ }));
 
     expect(await screen.findByText('This attachment is no longer available.')).toBeInTheDocument();

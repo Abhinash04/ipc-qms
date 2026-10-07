@@ -2,6 +2,18 @@ import { StatusBadge } from '@/components/common/StatusBadge';
 import { findUserById } from '@/constants/mockUsers';
 import { User, Calendar } from 'lucide-react';
 
+function LabelledBadge({ label, type, value }) {
+  if (!value) return null;
+  return (
+    <div className="inline-flex items-center gap-1.5">
+      <dt className="text-[11px] font-semibold tracking-wider text-slate-400 uppercase">{label}</dt>
+      <dd className="m-0">
+        <StatusBadge type={type} value={value} />
+      </dd>
+    </div>
+  );
+}
+
 export function CaseSummaryBar({ query }) {
   if (!query) return null;
   const assignee = query.currentAssigneeId ? findUserById(query.currentAssigneeId) : null;
@@ -15,11 +27,13 @@ export function CaseSummaryBar({ query }) {
         <h1 className="mt-2 text-[26px] font-bold text-slate-900 leading-tight">
           {query.subject}
         </h1>
-        <div className="mt-3 flex flex-wrap items-center gap-2">
-          <StatusBadge type="business" value={query.businessStatus} />
-          <StatusBadge type="workflow" value={query.workflowState} />
-          <StatusBadge type="priority" value={query.priority} />
-        </div>
+        <dl className="m-0 mt-3 flex flex-wrap items-center gap-x-4 gap-y-2">
+          <LabelledBadge label="Status" type="business" value={query.businessStatus} />
+          {query.workflowState !== query.businessStatus && (
+            <LabelledBadge label="Stage" type="workflow" value={query.workflowState} />
+          )}
+          <LabelledBadge label="Priority" type="priority" value={query.priority} />
+        </dl>
       </div>
 
       <div className="flex items-center gap-6 text-sm bg-slate-50/80 p-3.5 rounded-2xl border border-slate-200/60 shrink-0">

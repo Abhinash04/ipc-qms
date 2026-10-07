@@ -52,7 +52,7 @@ function renderAs(user, path) {
 }
 
 const detailGrid = () =>
-  document.querySelector('[class*="lg:grid-cols-[minmax(0,1fr)_340px]"]');
+  document.querySelector('[data-slot="case-workspace"]');
 
 const actionsCard = () =>
   screen.getByRole('heading', { name: 'Available actions' }).closest('[data-slot="panel"]');

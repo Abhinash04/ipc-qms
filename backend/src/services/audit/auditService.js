@@ -8,6 +8,7 @@ import { AUDIT_ACTIONS, AUDIT_RESULTS } from '../../constants/auditActions.js';
 import { GENESIS_HASH, computeHash, verifyRows } from './auditChain.js';
 import { currentContext } from './requestContext.js';
 import { resolveHostname } from './hostLookup.js';
+import { currentPublicIp, isPrivateIp } from './publicIp.js';
 import { inferCaseChanges, changeKeyOf } from './caseChanges.js';
 import { refreshStaffDirectory } from './auditNarrative.js';
 import { USERS, nicFrontOfficeUser } from '../../constants/users.js';
@@ -34,7 +35,8 @@ const plain = (value) => (value === undefined || value === null ? null : JSON.pa
  * up each distinct IP address once. The stored events are not changed.
  */
 async function withDeviceNames(rows) {
-  const ips = [...new Set(rows.filter((row) => row.source?.ip && !row.source.hostname && !row.source.server).map((row) => row.source.ip))];
+  const unnamed = (row) => row.source?.ip && !row.source.hostname && !row.source.server;
+  const ips = [...new Set(rows.filter(unnamed).map((row) => lookupIpOf(row.source)))];
   if (!ips.length) return rows;
   const names = new Map();
   for (let i = 0; i < ips.length; i += 20) {
@@ -43,8 +45,8 @@ async function withDeviceNames(rows) {
     batch.forEach((ip, index) => found[index] && names.set(ip, found[index]));
   }
   return rows.map((row) =>
-    row.source?.ip && !row.source.hostname && names.has(row.source.ip)
-      ? { ...row, source: { ...row.source, hostname: names.get(row.source.ip) } }
+    unnamed(row) && names.has(lookupIpOf(row.source))
+      ? { ...row, source: { ...row.source, hostname: names.get(lookupIpOf(row.source)) } }
       : row,
   );
 }
@@ -124,6 +126,29 @@ function thisServer() {
   return serverIdentity;
 }
 
+const isLoopback = (ip) => ip === '::1' || /^127\./.test(String(ip || ''));
+
+function requestAddress(context) {
+  const loopback = isLoopback(context.ip);
+  return {
+    ...addressOf(loopback ? thisServer().ip : context.ip),
+    ...(loopback ? { hostname: thisServer().server } : {}),
+  };
+}
+
+/**
+ * A private (office network) address as the audit trail records it: the network's public IPv4,
+ * as the internet sees it, with the private address kept as `localIp`. Before the public
+ * address is known, or for an address that is already public, the address as it is.
+ */
+function addressOf(ip) {
+  const publicIp = isPrivateIp(ip) ? currentPublicIp() : null;
+  return publicIp ? { ip: publicIp, localIp: ip } : { ip };
+}
+
+// The device name comes from the computer's own (local) address, never the shared public one.
+const lookupIpOf = (source) => source?.localIp || source?.ip;
+
 /**
  * The person and the machine behind an event. Anything recorded while handling a request
  * carries that request's IP address, browser, method and path — a person's own action, or AI
@@ -138,14 +163,14 @@ function attribution(input) {
     input.source ??
     (context
       ? {
-          ip: context.ip,
+          ...requestAddress(context),
           userAgent: context.userAgent,
           method: context.method,
           path: context.path,
           host: thisServer().server,
           ...(context.user?.sessionId ? { sessionId: context.user.sessionId } : {}),
         }
-      : thisServer());
+      : { server: thisServer().server, ...addressOf(thisServer().ip) });
   return {
     ...(actorName ? { actorName } : {}),
     ...(source ? { source: plain(source) } : {}),
@@ -227,7 +252,7 @@ async function record(input) {
   const event = toRecord(input);
   // The requesting computer's network name, where DNS knows it (before hashing, so it is sealed).
   if (event.source?.ip && !event.source.hostname && !event.source.server) {
-    const hostname = await resolveHostname(event.source.ip);
+    const hostname = await resolveHostname(lookupIpOf(event.source));
     if (hostname) event.source = { ...event.source, hostname };
   }
 
