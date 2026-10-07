@@ -77,9 +77,6 @@ const inboxRows = () =>
 
 const expandedMessages = () => threadPanel().querySelectorAll('article').length;
 
-const officialsPanel = () =>
-  screen.getByRole('heading', { name: 'Officials' }).closest('[data-slot="panel"]');
-
 let queryId;
 
 function received() {
@@ -179,26 +176,14 @@ describe('the email thread reads like an email client', () => {
   });
 });
 
-describe('Officials shows who is handling the case', () => {
-  it('names the real chain with their statuses', async () => {
+describe('the page leaves out what it no longer needs', () => {
+  it('has no Officials card, no Team link and no stage-pages footer', async () => {
     await underReview();
     renderAs(REVIEWER, `/reviewer/queries/${queryId}`);
 
-    const panel = within(officialsPanel());
-    expect(panel.getByText(INQUIRER.name)).toBeInTheDocument();
-    expect(panel.getByText(FRONT_OFFICE.name)).toBeInTheDocument();
-    expect(panel.getByText(OFFICIAL.name)).toBeInTheDocument();
-    expect(panel.getByText(REVIEWER.name)).toBeInTheDocument();
-    expect(panel.getAllByText('Current').length).toBeGreaterThan(0);
-  });
-
-  it('still renders on a freshly received query, before anyone is assigned', () => {
-    received();
-    renderAs(FRONT_OFFICE, `/front-officer/queries/${queryId}`);
-
-    const panel = within(officialsPanel());
-    expect(panel.getByText('Front Office')).toBeInTheDocument();
-    expect(panel.getAllByText('Pending').length).toBeGreaterThan(0);
+    expect(screen.queryByRole('heading', { name: 'Officials' })).toBeNull();
+    expect(within(screen.getByRole('navigation', { name: 'Case sections' })).queryByRole('link', { name: /Team/ })).toBeNull();
+    expect(screen.queryByText(/Stage-specific actions also live on their dedicated pages/)).toBeNull();
   });
 });
 
@@ -213,12 +198,11 @@ describe('AI recommendations only appear while they are useful', () => {
     ).toBeInTheDocument();
   });
 
-  it('drops them once the case is assigned, leaving Officials to answer', async () => {
+  it('drops them once the case is assigned', async () => {
     await underReview();
     renderAs(REVIEWER, `/reviewer/queries/${queryId}`);
 
     expect(screen.queryByRole('heading', { name: /AI Official Recommendations/ })).toBeNull();
-    expect(officialsPanel()).not.toBeNull();
   });
 });
 

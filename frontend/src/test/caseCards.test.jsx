@@ -185,7 +185,6 @@ describe('the section bar', () => {
     const links = within(nav).getAllByRole('link');
     expect(links.map((link) => link.getAttribute('href'))).toEqual([
       '#case-summary',
-      '#case-team',
       '#case-email-thread',
       '#case-response',
       '#case-audit-history',

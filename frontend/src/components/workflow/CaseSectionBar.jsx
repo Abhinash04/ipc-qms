@@ -1,10 +1,9 @@
 import { useEffect, useState } from 'react';
-import { FileText, History, Mail, Sparkles, Users } from 'lucide-react';
+import { FileText, History, Mail, Sparkles } from 'lucide-react';
 import { cn } from '@/utils/cn';
 
 const SECTIONS = [
   { id: 'case-summary', label: 'Summary', Icon: Sparkles },
-  { id: 'case-team', label: 'Team', Icon: Users },
   { id: 'case-email-thread', label: 'Emails', Icon: Mail, count: 'emails' },
   { id: 'case-response', label: 'Response', Icon: FileText },
   { id: 'case-audit-history', label: 'History', Icon: History, count: 'events' },

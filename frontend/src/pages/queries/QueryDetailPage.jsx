@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
 import {
   Briefcase,
   CalendarClock,
@@ -41,7 +40,6 @@ import { CaseSectionBar } from '@/components/workflow/CaseSectionBar';
 import { WorkflowActionsCard } from '@/components/workflow/WorkflowActionsCard';
 import { ReviewDecisionCard } from '@/components/workflow/ReviewDecisionCard';
 import { ResubmissionCard } from '@/components/workflow/ResubmissionCard';
-import { CaseOfficialsCard } from '@/components/workflow/CaseOfficialsCard';
 import { AuditHistoryCard } from '@/components/workflow/AuditHistoryCard';
 import { EmailThread } from '@/components/email/EmailThread';
 import { AiSummaryCard } from '@/components/ai/AiSummaryCard';
@@ -398,7 +396,7 @@ function CaseWorkspaceTabs({ query, versions, latestVersion }) {
   );
 }
 
-function CaseInsightPanels({ query, steps, audit, canAssign, currentUser, assignQuery, readOnly }) {
+function CaseInsightPanels({ query, canAssign, currentUser, assignQuery, readOnly }) {
   return (
     <>
       <div id="case-summary" className="scroll-mt-36">
@@ -417,10 +415,6 @@ function CaseInsightPanels({ query, steps, audit, canAssign, currentUser, assign
             });
           }}
         />
-      </div>
-
-      <div id="case-team" className="scroll-mt-36">
-        <CaseOfficialsCard query={query} steps={steps} audit={audit} />
       </div>
 
       {canAssign && (
@@ -473,29 +467,6 @@ function WorkflowProgressCard({ stages, events, audit }) {
   );
 }
 
-const STAGE_LINKS = [
-  ['ASSIGNMENTS', 'Assignments'],
-  ['DRAFTING', 'Drafting'],
-  ['REVIEWS', 'Reviews'],
-  ['APPROVALS', 'Approvals'],
-  ['DISPATCH', 'Dispatch'],
-];
-
-function StageLinksFooter({ paths }) {
-  return (
-    <p className="mt-4 text-xs text-muted-foreground">
-      Stage-specific actions also live on their dedicated pages —{' '}
-      {STAGE_LINKS.map(([key, label], index) => (
-        <span key={key}>
-          <Link to={paths[key] || '#'} className="text-ring hover:underline">
-            {label}
-          </Link>
-          {index < STAGE_LINKS.length - 1 ? ', ' : '.'}
-        </span>
-      ))}
-    </p>
-  );
-}
 
 
 export function QueryDetailPage({ queryId: viewedQueryId = null, readOnly = false } = {}) {
@@ -569,8 +540,6 @@ export function QueryDetailPage({ queryId: viewedQueryId = null, readOnly = fals
 
           <CaseInsightPanels
             query={query}
-            steps={steps}
-            audit={audit}
             canAssign={canAssign}
             currentUser={currentUser}
             assignQuery={assignQuery}
@@ -604,7 +573,6 @@ export function QueryDetailPage({ queryId: viewedQueryId = null, readOnly = fals
         </aside>
       </div>
 
-      {!readOnly && <StageLinksFooter paths={paths} />}
     </div>
   );
 }
