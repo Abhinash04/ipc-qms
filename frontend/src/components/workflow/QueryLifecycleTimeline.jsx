@@ -1,5 +1,5 @@
 import { useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeftRight, Bot, CheckCircle2, CircleDot, Undo2 } from 'lucide-react';
+import { ArrowLeft, ArrowLeftRight, Bot, CheckCircle2, CircleDot, Undo2 } from 'lucide-react';
 import { STAGE_STATUS } from '@/constants/queryLifecycle';
 import { WORKFLOW_ITEM, WORKFLOW_VIEW, buildWorkflowSequence, selectWorkflowView } from '@/constants/workflowSequence';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -42,8 +42,8 @@ const STEP_MS = 70;
 const delay = (position) => ({ '--wf-delay': `${Math.max(0, position) * STEP_MS}ms` });
 
 // Return arcs rise above the line; each arc that overlaps an earlier one rises one step higher.
-const ARC_RISE = 28;
-const ARC_STEP = 14;
+const ARC_RISE = 32;
+const ARC_STEP = 16;
 const riseOf = (level) => ARC_RISE + (level - 1) * ARC_STEP;
 
 const isStage = (item) => item.kind === WORKFLOW_ITEM.STAGE;
@@ -105,12 +105,12 @@ export function StageActivity({ stage }) {
   const activity = stage.activity;
   const rows = activity
     ? [
-        ['Actor', actorLine(activity)],
-        ['Action', activity.action],
-        ['Version', activity.version],
-        ['Date', activity.at ? formatDate(activity.at) : null],
-        ['Time', activity.at ? formatTime(activity.at) : null],
-      ].filter(([, value]) => value)
+      ['Actor', actorLine(activity)],
+      ['Action', activity.action],
+      ['Version', activity.version],
+      ['Date', activity.at ? formatDate(activity.at) : null],
+      ['Time', activity.at ? formatTime(activity.at) : null],
+    ].filter(([, value]) => value)
     : [['Action', 'No activity recorded yet']];
 
   return (
@@ -344,8 +344,8 @@ function ReturnArcs({ arcs, markerId }) {
   return (
     <svg className="pointer-events-none absolute inset-0 h-full w-full overflow-visible" aria-hidden="true" focusable="false">
       <defs>
-        <marker id={markerId} viewBox="0 0 10 10" refX="7" refY="5" markerWidth="10" markerHeight="10" markerUnits="userSpaceOnUse" orient="auto">
-          <path d="M0,0 L10,5 L0,10 z" className="fill-amber-500" />
+        <marker id={markerId} viewBox="0 0 10 10" refX="0" refY="5" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto">
+          <path d="M0 1.5 L8 5 L0 8.5 Z" fill="#FF7300" />
         </marker>
       </defs>
       {arcs.map((arc) => {
@@ -355,12 +355,13 @@ function ReturnArcs({ arcs, markerId }) {
           <path
             key={arc.id}
             data-return-arc={arc.id}
-            d={`M ${arc.x1} ${arc.y1} C ${arc.x1} ${control}, ${arc.x2} ${control}, ${arc.x2} ${arc.y2 - 2}`}
+            d={`M ${arc.x1} ${arc.y1} C ${arc.x1} ${control}, ${arc.x2} ${control}, ${arc.x2} ${arc.y2 - 8}`}
             fill="none"
-            pathLength="1"
-            strokeWidth="2"
-            strokeLinecap="round"
-            className="wf-arc stroke-amber-500"
+            stroke="#FF7300"
+            strokeWidth="2.2"
+            strokeDasharray="6 4"
+            strokeLinecap="butt"
+            className="wf-arc"
             style={delay(2 * arc.position)}
             markerEnd={`url(#${markerId})`}
           />
@@ -392,21 +393,21 @@ function useReturnArcs(connections, trackRef, nodesRef) {
       const box = track?.getBoundingClientRect();
       const next = box
         ? connections
-            .map((connection) => {
-              const from = nodes.get(connection.from)?.getBoundingClientRect();
-              const to = nodes.get(connection.to)?.getBoundingClientRect();
-              if (!from || !to || (!from.width && !to.width)) return null;
-              return {
-                id: connection.id,
-                level: connection.level,
-                position: connection.position,
-                x1: from.left + from.width / 2 - box.left,
-                y1: from.top - box.top,
-                x2: to.left + to.width / 2 - box.left,
-                y2: to.top - box.top,
-              };
-            })
-            .filter(Boolean)
+          .map((connection) => {
+            const from = nodes.get(connection.from)?.getBoundingClientRect();
+            const to = nodes.get(connection.to)?.getBoundingClientRect();
+            if (!from || !to || (!from.width && !to.width)) return null;
+            return {
+              id: connection.id,
+              level: connection.level,
+              position: connection.position,
+              x1: from.left + from.width / 2 - box.left,
+              y1: from.top - box.top,
+              x2: to.left + to.width / 2 - box.left,
+              y2: to.top - box.top,
+            };
+          })
+          .filter(Boolean)
         : [];
       setArcs((current) => (JSON.stringify(current) === JSON.stringify(next) ? current : next));
     };
@@ -516,7 +517,7 @@ export function QueryLifecycleTimeline({ stages = NONE, events = NONE, audit = N
     );
   }
 
-  const lane = leveled.length ? riseOf(Math.max(...leveled.map((connection) => connection.level))) + 6 : 0;
+  const lane = leveled.length ? riseOf(Math.max(...leveled.map((connection) => connection.level))) + 18 : 0;
   const nodeRef = (id) => (element) => {
     if (element) nodesRef.current.set(id, element);
     else nodesRef.current.delete(id);
@@ -533,7 +534,29 @@ export function QueryLifecycleTimeline({ stages = NONE, events = NONE, audit = N
         >
           <div ref={trackRef} className="relative" style={lane ? { paddingTop: lane } : undefined}>
             <ReturnArcs arcs={arcs} markerId={markerId} />
-            <ol className="relative flex items-start gap-0">
+            {arcs.map((arc) => {
+              const base = Math.min(arc.y1, arc.y2);
+              const midX = (arc.x1 + arc.x2) / 2;
+              const midY = base - riseOf(arc.level);
+              return (
+                <div
+                  key={`arc-badge-${arc.id}`}
+                  data-arc-badge={arc.id}
+                  className="pointer-events-none absolute z-10 -translate-x-1/2 -translate-y-1/2 select-none"
+                  style={{ left: `${midX}px`, top: `${midY}px`, ...delay(2 * arc.position) }}
+                >
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-[#FFD0A6] bg-[#FFF5EA] px-3 py-1 shadow-xs ring-2 ring-orange-200/40 backdrop-blur-xs">
+                    <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-[#FF7300] text-white shadow-2xs">
+                      <ArrowLeft className="h-2.5 w-2.5 stroke-[3]" aria-hidden="true" />
+                    </span>
+                    <span className="text-[12px] font-extrabold tracking-tight text-[#FF7300] whitespace-nowrap">
+                      Pull back
+                    </span>
+                  </span>
+                </div>
+              );
+            })}
+            <ol className="relative flex items-stretch gap-0">
               {items.map((item, index) =>
                 isGap(item) ? (
                   <TrackGap key={item.id} item={item} />

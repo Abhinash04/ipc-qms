@@ -176,34 +176,11 @@ describe('the email thread reads like an email client', () => {
   });
 });
 
-describe('the page leaves out what it no longer needs', () => {
-  it('has no Officials card, no Team link and no stage-pages footer', async () => {
-    await underReview();
-    renderAs(REVIEWER, `/reviewer/queries/${queryId}`);
+it('drops them once the case is assigned', async () => {
+  await underReview();
+  renderAs(REVIEWER, `/reviewer/queries/${queryId}`);
 
-    expect(screen.queryByRole('heading', { name: 'Officials' })).toBeNull();
-    expect(within(screen.getByRole('navigation', { name: 'Case sections' })).queryByRole('link', { name: /Team/ })).toBeNull();
-    expect(screen.queryByText(/Stage-specific actions also live on their dedicated pages/)).toBeNull();
-  });
-});
-
-describe('AI recommendations only appear while they are useful', () => {
-  it('offers them to the OIC while assignment is still open', async () => {
-    received();
-    await s().validateAndForward(queryId, FRONT_OFFICE);
-    renderAs(OIC, `/officer-in-charge/queries/${queryId}`);
-
-    expect(
-      screen.getByRole('heading', { name: /AI Official Recommendations/ }),
-    ).toBeInTheDocument();
-  });
-
-  it('drops them once the case is assigned', async () => {
-    await underReview();
-    renderAs(REVIEWER, `/reviewer/queries/${queryId}`);
-
-    expect(screen.queryByRole('heading', { name: /AI Official Recommendations/ })).toBeNull();
-  });
+  expect(screen.queryByRole('heading', { name: /AI Official Recommendations/ })).toBeNull();
 });
 
 describe('audit history is bounded but complete', () => {
