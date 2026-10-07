@@ -1,7 +1,6 @@
 import { AUDIT_EVENT, SERVER_EVENTS, WORKFLOW_STATE } from './statusEnums';
 import { EMAIL_TYPE } from './emailModel';
 import { findUserById } from './mockUsers';
-import { STAGE_LABELS } from './pullbackRules';
 import { ROLE_LABELS } from './roles';
 
 export const LEVEL_NAMES = ['Reviewer I', 'Reviewer II', 'Reviewer III'];
@@ -172,25 +171,17 @@ export function buildLifecycle({
   const wasReturned = query.workflowState === WORKFLOW_STATE.RETURNED_FOR_REVISION;
   const latestReturn = [...reviews].sort(byTime).reverse().find(isSendBack);
 
-  const latestPullback = query.pullbackHistory?.length
-    ? query.pullbackHistory[query.pullbackHistory.length - 1]
-    : null;
-
   const draftLabel = versions.length
     ? `Response drafted (v${versions.length})`
     : 'Response drafted';
 
-  let returnNote =
+  // Pull backs are not noted here: they are actions on the workflow line (see workflowSequence).
+  const returnNote =
     wasReturned && latestReturn
       ? latestReturn.decision === 'REJECTED'
         ? `Rejected at final approval by ${findUserById(latestReturn.reviewerId)?.name || 'the Officer-in-Charge'}`
         : `Returned for revision — ${findUserById(latestReturn.reviewerId)?.name || 'a reviewer'} requested changes`
       : null;
-
-  if (latestPullback) {
-    const fromStageName = STAGE_LABELS[latestPullback.fromStage] || latestPullback.fromStage;
-    returnNote = `↩ Pulled back from ${fromStageName} by ${latestPullback.pulledBackByName} (${latestPullback.reason})`;
-  }
 
   const lastOf = (...events) => latest(audit.filter((entry) => events.includes(entry.event)));
   const assigneeName = findUserById(query.currentAssigneeId)?.name || 'an official';

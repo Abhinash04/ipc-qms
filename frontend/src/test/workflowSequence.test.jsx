@@ -344,21 +344,37 @@ describe('the unified workflow line', () => {
       WORKFLOW_ITEM.PULL_BACK,
       WORKFLOW_ITEM.STAGE,
     ]);
-    expect(within(track()).getAllByText('Visit 2').length).toBeGreaterThan(0);
   });
 
-  it('pins every visit tag to the bottom of its column, so tags line up however the labels wrap', () => {
-    const { container } = render(<QueryLifecycleTimeline stages={lifecycle()} events={events} audit={audit} />);
+  it('still draws a revisited stage again, without any visit badge, in every view', () => {
+    const { container, rerender } = render(<QueryLifecycleTimeline stages={lifecycle()} events={events} audit={audit} />);
+    const forwarded = () => container.querySelectorAll(`[data-stage-trigger="${STAGE.FORWARDED}"]`);
+    expect(forwarded()).toHaveLength(2);
 
-    expect(container.querySelector('ol').className).toMatch(/items-stretch/);
-    const tags = within(track()).getAllByText(/^Visit \d$/);
-    expect(tags.length).toBeGreaterThan(0);
-    for (const tag of tags) {
-      const trigger = tag.closest('[data-stage-trigger]');
-      expect(trigger.className).toMatch(/flex-1/);
-      expect(trigger.lastElementChild).toBe(tag);
-      expect(tag.previousElementSibling.className).toMatch(/flex-1/);
+    for (const view of Object.values(WORKFLOW_VIEW)) {
+      rerender(<QueryLifecycleTimeline stages={lifecycle()} events={events} audit={audit} view={view} />);
+      expect(container.textContent).not.toMatch(/visit \d/i);
     }
+    // The repeat is still known to the data, only no longer shown.
+    const { items } = buildWorkflowSequence({ stages: lifecycle(), events, audit });
+    expect(items.filter((item) => item.stage?.key === STAGE.FORWARDED).map((item) => item.visit)).toEqual([1, 2]);
+  });
+
+  it('puts no legacy pull-back note under a stage; the pull back node carries the details', async () => {
+    const stages = lifecycle(4).map((stage) => (stage.status === STAGE_STATUS.CURRENT ? { ...stage, note: 'Returned for revision — Amit Mehta requested changes' } : stage));
+    render(<QueryLifecycleTimeline stages={stages} events={events} audit={audit} />);
+
+    expect(within(track()).queryByText(/pulled back from/i)).toBeNull();
+    // A reviewer's send-back is not a pull back, and its note still shows on the current stage.
+    expect(within(track()).getByText('Returned for revision — Amit Mehta requested changes')).toBeInTheDocument();
+
+    await act(async () => within(track()).getByRole('button', { name: /^Pull back/ }).focus());
+    const tip = await screen.findByRole('tooltip');
+    for (const row of ['From:Assigned to Official · Neha Singh', 'To:Forwarded to Officer-in-Charge · Unassigned', 'By:Front Office', 'Reason:Incorrect assignment']) {
+      expect(tip).toHaveTextContent(row);
+    }
+    expect(tip).toHaveTextContent(/When:\d{2} \w{3} \d{4}/);
+    expect(tip).not.toHaveTextContent('undefined');
   });
 
   it('labels every action control for assistive tech, without relying on colour', () => {
@@ -366,6 +382,7 @@ describe('the unified workflow line', () => {
 
     const back = within(track()).getByRole('button', { name: /^Pull back: from Assigned to Official to Forwarded to Officer-in-Charge, by Front Office/ });
     expect(back).toHaveTextContent('Pull back');
+    expect(back).toHaveAccessibleName(/\. Reason: Incorrect assignment$/);
     expect(within(track()).getByRole('button', { name: /^Transfer: from Arjun Nair to Neha Singh/ })).toHaveTextContent('Transfer');
   });
 

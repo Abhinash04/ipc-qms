@@ -5,6 +5,7 @@ import { findUserById } from '@/constants/mockUsers';
 import { FRONT_OFFICE_USER as FRONT_OFFICE } from '@/test/frontOfficeUser';
 import { WORKFLOW_STATE } from '@/constants/statusEnums';
 import { buildLifecycle, STAGE, STAGE_STATUS } from '@/constants/queryLifecycle';
+import { buildSpecialEvents, SPECIAL_EVENT } from '@/constants/workflowExceptions';
 import { fakeFinalApprovalEndpoint } from '@/test/fakeFinalApprovalEndpoint';
 import { fakeCaseMail } from '@/test/fakeCaseMail';
 import { EXTERNAL_INQUIRER as INQUIRER } from '@/test/externalInquirer';
@@ -255,8 +256,8 @@ describe('a closed query reads as fully complete', () => {
   });
 });
 
-describe('a pulled back query updates workflow progress and displays a pullback note', () => {
-  it('resets current stage to target pullback stage and attaches pullback note', async () => {
+describe('a pulled back query updates workflow progress, and the pull back is an action, not a stage note', () => {
+  it('resets current stage to target pullback stage and records the pull back as an event', async () => {
     const { queryId } = s().ingestEmail(enquiry());
     s().verifyQuery(queryId, FRONT_OFFICE);
     await s().forwardToOic(queryId, FRONT_OFFICE, fakeForward);
@@ -274,7 +275,17 @@ describe('a pulled back query updates workflow progress and displays a pullback 
 
     expect(s().getQuery(queryId).workflowState).toBe(WORKFLOW_STATE.PENDING_ASSIGNMENT);
     expect(currentOf(queryId).key).toBe(STAGE.ASSIGNED);
-    expect(currentOf(queryId).note).toContain('Pulled back from Drafting Response');
+    expect(lifecycleOf(queryId).some((stage) => /pulled back/i.test(stage.note || ''))).toBe(false);
+
+    const [pullback] = buildSpecialEvents({ query: s().getQuery(queryId), audit: s().getAudit(queryId) });
+    expect(pullback).toMatchObject({
+      type: SPECIAL_EVENT.PULL_BACK,
+      from: { stage: 'Drafting Response' },
+      to: { stage: 'Forwarded to Officer-in-Charge' },
+      by: { name: ADMIN_USER.name },
+      reason: 'Incorrect assignment',
+    });
+    expect(pullback.at).toBeTruthy();
   });
 });
 

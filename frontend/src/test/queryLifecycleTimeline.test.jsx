@@ -115,4 +115,14 @@ describe('long content wraps instead of widening a column', () => {
     const label = track(container).querySelector('p');
     expect(label.className).toMatch(/wrap-break-word/);
   });
+
+  it('keeps a long label or name such as an email inside its own column', () => {
+    const email = stage('c', 'Inquirer received response', { actor: 'bhoomikamakker@gmail.com' });
+    const { container } = render(<QueryLifecycleTimeline stages={[...WORDY, email]} />);
+    for (const line of track(container).querySelectorAll('li p')) {
+      // A centred flex item sizes to its longest word unless capped at the column's width.
+      expect(line.className).toMatch(/max-w-full/);
+      expect(line.className).toMatch(/wrap-break-word/);
+    }
+  });
 });

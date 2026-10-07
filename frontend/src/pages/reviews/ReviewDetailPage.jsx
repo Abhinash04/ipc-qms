@@ -5,6 +5,7 @@ import { EmptyState } from '@/components/common/EmptyState';
 import { CaseSummaryBar } from '@/components/workflow/CaseSummaryBar';
 import { QueryLifecycleTimeline } from '@/components/workflow/QueryLifecycleTimeline';
 import { buildLifecycle } from '@/constants/queryLifecycle';
+import { buildSpecialEvents } from '@/constants/workflowExceptions';
 import { Card, CardBody, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ReviewDecisionCard } from '@/components/workflow/ReviewDecisionCard';
@@ -66,6 +67,8 @@ export function ReviewDetailPage() {
             <CardBody>
               <QueryLifecycleTimeline
                 stages={buildLifecycle({ query, steps, versions, reviews, audit, messages })}
+                events={buildSpecialEvents({ query, audit })}
+                audit={audit}
               />
             </CardBody>
           </Card>

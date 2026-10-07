@@ -4,6 +4,7 @@ import { EmptyState } from "@/components/common/EmptyState";
 import { CaseSummaryBar } from "@/components/workflow/CaseSummaryBar";
 import { QueryLifecycleTimeline } from "@/components/workflow/QueryLifecycleTimeline";
 import { buildLifecycle } from "@/constants/queryLifecycle";
+import { buildSpecialEvents } from "@/constants/workflowExceptions";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -135,6 +136,8 @@ export function ApprovalDetailPage() {
                   audit,
                   messages,
                 })}
+                events={buildSpecialEvents({ query, audit })}
+                audit={audit}
               />
               {reviews.length > 0 && (
                 <div className="space-y-2 border-t border-border pt-3">

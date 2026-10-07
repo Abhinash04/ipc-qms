@@ -101,7 +101,7 @@ function actorLine(activity) {
   return activity.actor || activity.role || null;
 }
 
-export function StageActivity({ stage, visit = 1 }) {
+export function StageActivity({ stage }) {
   const activity = stage.activity;
   const rows = activity
     ? [
@@ -115,10 +115,7 @@ export function StageActivity({ stage, visit = 1 }) {
 
   return (
     <div className="space-y-1 text-left">
-      <p className="text-[12.5px] font-bold">
-        {stage.label}
-        {visit > 1 && <span className="font-medium opacity-70"> · visit {visit}</span>}
-      </p>
+      <p className="text-[12.5px] font-bold">{stage.label}</p>
       <dl className="grid grid-cols-[auto_1fr] gap-x-2 gap-y-0.5 text-[11.5px]">
         {rows.map(([term, value]) => (
           <div key={term} className="contents">
@@ -142,21 +139,6 @@ function InlineActivity({ activity }) {
   );
 }
 
-function VisitTag({ visit, className = 'mt-1' }) {
-  if (visit < 2) return null;
-  return (
-    <span
-      data-visit-tag={visit}
-      className={cn(
-        'inline-block rounded-full bg-slate-100 px-1.5 py-px text-[10.5px] font-semibold text-slate-600 ring-1 ring-slate-200',
-        className,
-      )}
-    >
-      Visit {visit}
-    </span>
-  );
-}
-
 const personLine = (party) => [...new Set([party?.name, party?.role].filter(Boolean))].join(' — ');
 const partyLine = (party) => [party?.stage, personLine(party)].filter(Boolean).join(' · ') || null;
 const placeOf = (party) => party?.stage || party?.name || null;
@@ -173,7 +155,8 @@ function eventLabel(item) {
     personLine(event.by) && `by ${personLine(event.by)}`,
     when(event.at),
   ].filter(Boolean);
-  return [EVENT_STYLES[item.kind].title, details.join(', ')].filter(Boolean).join(': ');
+  const label = [EVENT_STYLES[item.kind].title, details.join(', ')].filter(Boolean).join(': ');
+  return event.reason ? `${label}. Reason: ${event.reason}` : label;
 }
 
 function EventDetails({ item, showTitle = true }) {
@@ -265,7 +248,7 @@ function TrackStage({ item, index, items, nodeRef }) {
           <div
             tabIndex={0}
             data-stage-trigger={stage.key}
-            className="flex w-full flex-1 cursor-default flex-col items-center rounded-lg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+            className="flex w-full cursor-default flex-col items-center rounded-lg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
           >
             <div className="flex w-full items-center">
               <Segment hidden={index === 0} filled={index > 0 && isDone(items[index - 1])} position={2 * index - 1} />
@@ -290,29 +273,24 @@ function TrackStage({ item, index, items, nodeRef }) {
 
             <p
               className={cn(
-                'mt-2 px-1 text-[12.5px] font-bold leading-snug wrap-break-word transition-colors duration-500',
+                'mt-2 max-w-full px-1 text-[12.5px] font-bold leading-snug wrap-break-word transition-colors duration-500',
                 stageTextTone(status),
               )}
             >
               {stage.label}
             </p>
-            {stage.actor && <p className="px-1 text-[11.5px] font-medium text-slate-400 wrap-break-word">{stage.actor}</p>}
+            {/* max-w-full: as a centred flex item the line would otherwise size to an unbroken word
+                such as an email address and spill into the next column instead of wrapping. */}
+            {stage.actor && <p className="max-w-full px-1 text-[11.5px] font-medium text-slate-400 wrap-break-word">{stage.actor}</p>}
             {status === STAGE_STATUS.CURRENT && stage.note && (
               <p className="mt-1.5 rounded-lg border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] font-semibold text-amber-900">
                 {stage.note}
               </p>
             )}
-            {item.visit > 1 && (
-              <>
-                {/* Labels wrap to different heights; this keeps every visit tag on one baseline. */}
-                <span className="min-h-1.5 flex-1" aria-hidden="true" />
-                <VisitTag visit={item.visit} className="" />
-              </>
-            )}
           </div>
         </TooltipTrigger>
         <TooltipContent side="bottom" sideOffset={6} className="block max-w-72 px-3 py-2">
-          <StageActivity stage={stage} visit={item.visit} />
+          <StageActivity stage={stage} />
         </TooltipContent>
       </Tooltip>
     </li>
@@ -333,7 +311,7 @@ function TrackEvent({ item, index, items, nodeRef }) {
           <EventPill kind={item.kind} />
         </span>
         {destination && (
-          <span className="mt-1 line-clamp-2 px-1 text-[11px] leading-snug text-slate-500 wrap-break-word">
+          <span className="mt-1 line-clamp-2 max-w-full px-1 text-[11px] leading-snug text-slate-500 wrap-break-word">
             <span className="rtl:inline-block rtl:rotate-180" aria-hidden="true">
               →
             </span>{' '}
@@ -489,8 +467,7 @@ function VerticalItem({ item, index, items }) {
       {stage ? (
         <div className="min-w-0 flex-1 pb-3">
           <p className={cn('text-[15px] font-bold transition-colors duration-500', stageTextTone(item.status))}>{stage.label}</p>
-          {stage.actor && <p className="mt-0.5 text-[13.5px] font-medium text-slate-400">{stage.actor}</p>}
-          <VisitTag visit={item.visit} />
+          {stage.actor && <p className="mt-0.5 text-[13.5px] font-medium text-slate-400 wrap-break-word">{stage.actor}</p>}
           <InlineActivity activity={stage.activity} />
           {item.status === STAGE_STATUS.CURRENT && stage.note && (
             <p className="mt-1.5 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-[12.5px] font-semibold text-amber-900">
@@ -556,7 +533,7 @@ export function QueryLifecycleTimeline({ stages = NONE, events = NONE, audit = N
         >
           <div ref={trackRef} className="relative" style={lane ? { paddingTop: lane } : undefined}>
             <ReturnArcs arcs={arcs} markerId={markerId} />
-            <ol className="relative flex items-stretch gap-0">
+            <ol className="relative flex items-start gap-0">
               {items.map((item, index) =>
                 isGap(item) ? (
                   <TrackGap key={item.id} item={item} />
