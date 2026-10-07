@@ -2,7 +2,7 @@ import { describe, it, expect, afterEach, vi } from 'vitest';
 import { act, render, screen, within, fireEvent } from '@testing-library/react';
 
 import { AUDIT_EVENT, WORKFLOW_STATE } from '@/constants/statusEnums';
-import { STAGE, STAGE_STATUS } from '@/constants/queryLifecycle';
+import { STAGE, STAGE_STATUS, buildLifecycle } from '@/constants/queryLifecycle';
 import { SPECIAL_EVENT, sortWorkflowEvents } from '@/constants/workflowExceptions';
 import {
   WORKFLOW_ITEM,
@@ -409,5 +409,48 @@ describe('the unified workflow line', () => {
     expect(within(track()).getAllByRole('listitem')).toHaveLength(KEYS.length);
     expect(container.querySelector('path[data-return-arc]')).toBeNull();
     expect(within(track()).queryByRole('button')).toBeNull();
+  });
+});
+
+describe('an automatically answered query on the workflow line', () => {
+  const at = (minute) => `2026-10-07T05:${String(minute).padStart(2, '0')}:00.000Z`;
+  const audit = [
+    { event: 'QUERY_RECEIVED', at: at(0) },
+    { event: 'QUERY_REGISTERED', at: at(1), actorRole: 'FRONT_OFFICE' },
+    { event: 'AI_SUMMARY_GENERATED', at: at(2) },
+    { event: 'ACKNOWLEDGEMENT_SENT', at: at(3) },
+    { event: 'AUTO_REPLY_PREPARED', at: at(4) },
+  ];
+  const query = {
+    queryId: 'QRY-2026-00090',
+    createdAt: at(0),
+    workflowState: WORKFLOW_STATE.READY_FOR_DISPATCH,
+    inquirer: { name: 'Ravi Kumar', email: 'ravi@pharma.example' },
+    autoReply: { entryId: 'AR-PARACETAMOL-USE', topic: 'Uses of paracetamol', confidence: 1 },
+  };
+  const stages = buildLifecycle({ query, audit });
+
+  it('dates each AI agent stage from its own step', () => {
+    const { items } = buildWorkflowSequence({ stages, audit });
+    const dated = Object.fromEntries(items.map((item) => [item.stage.key, item.at]));
+    expect(dated).toMatchObject({ [STAGE.FO_APPROVED]: at(1), [STAGE.AI_SUMMARY_ACK]: at(3), [STAGE.AI_REPLY]: at(4) });
+  });
+
+  it('shows the six stages, the completed ones done and the reply being sent as current', () => {
+    render(<QueryLifecycleTimeline stages={stages} audit={audit} view={WORKFLOW_VIEW.NORMAL} />);
+
+    for (const label of [
+      'Enquiry submitted',
+      'AI identified — 100% confidence (eligible for Auto Reply)',
+      'FO approved',
+      'AI Agent generated summary & acknowledgement',
+      'AI Agent generated reply',
+    ]) {
+      expect(screen.getAllByText(label).length).toBeGreaterThan(0);
+    }
+    const current = document.querySelectorAll('[aria-current="step"]');
+    expect(current.length).toBeGreaterThan(0);
+    expect([...current].every((node) => node.textContent.includes('Reply sent to external inquirer'))).toBe(true);
+    expect(screen.queryByText(/Officer-in-Charge/)).toBeNull();
   });
 });

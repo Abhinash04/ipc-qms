@@ -68,6 +68,9 @@ export const AUDIT_EVENT = {
 export const SERVER_EVENTS = {
   QUERY_AUTO_TRANSFERRED: 'QUERY_AUTO_TRANSFERRED',
   QUERY_AUTO_TRANSFER_FAILED: 'QUERY_AUTO_TRANSFER_FAILED',
+  AUTO_REPLY_PREPARED: 'AUTO_REPLY_PREPARED',
+  // Recorded by the earlier flow, where the Front Office approved an edited reply.
+  AUTO_REPLY_APPROVED: 'AUTO_REPLY_APPROVED',
 };
 
 export const AUDIT_EVENT_LABELS = {
@@ -88,6 +91,8 @@ export const AUDIT_EVENT_LABELS = {
   [AUDIT_EVENT.QUERY_TRANSFERRED]: 'Transferred',
   [SERVER_EVENTS.QUERY_AUTO_TRANSFERRED]: 'Automatically transferred',
   [SERVER_EVENTS.QUERY_AUTO_TRANSFER_FAILED]: 'Automatic transfer stopped',
+  [SERVER_EVENTS.AUTO_REPLY_PREPARED]: 'Automatic reply prepared',
+  [SERVER_EVENTS.AUTO_REPLY_APPROVED]: 'Automatic reply approved',
   [AUDIT_EVENT.QUERY_PULLED_BACK]: 'Pulled back',
   [AUDIT_EVENT.FINAL_APPROVAL_GRANTED]: 'Final approval granted',
   [AUDIT_EVENT.FINAL_APPROVAL_REJECTED]: 'Final approval rejected',

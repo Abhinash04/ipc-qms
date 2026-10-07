@@ -40,7 +40,117 @@ export const STAGE = {
   FINAL_APPROVAL: 'FINAL_APPROVAL',
   DISPATCHED: 'DISPATCHED',
   DELIVERED: 'DELIVERED',
+  // The automatic-reply path: an eligible mail the Front Office accepted, answered by the AI agent.
+  AI_IDENTIFIED: 'AI_IDENTIFIED',
+  FO_APPROVED: 'FO_APPROVED',
+  AI_SUMMARY_ACK: 'AI_SUMMARY_ACK',
+  AI_REPLY: 'AI_REPLY',
+  REPLY_SENT: 'REPLY_SENT',
 };
+
+const AI_AGENT = 'AI Agent';
+
+// The current stage is the one after the last stage done, so a later step that succeeded is
+// never held back by an earlier one that failed.
+function withStatuses(stages, done) {
+  const lastDone = done.findLastIndex(Boolean);
+  const currentIndex = lastDone + 1;
+  return stages.map((stage, index) => {
+    const status = index <= lastDone ? STAGE_STATUS.COMPLETE : index === currentIndex ? STAGE_STATUS.CURRENT : STAGE_STATUS.PENDING;
+    return { ...stage, status, note: status === STAGE_STATUS.CURRENT ? stage.note : undefined };
+  });
+}
+
+/**
+ * The automatic-reply path: the AI found the mail eligible, the Front Office accepted it, and the
+ * AI agent summarised, acknowledged, prepared the reply and sent it. Nothing goes to the OIC.
+ */
+function buildAutoReplyLifecycle({ query, audit, messages }) {
+  const lastOf = (...events) => latest(audit.filter((entry) => events.includes(entry.event)));
+  const outgoing = messages.find((m) => m.emailType === EMAIL_TYPE.OUTGOING_RESPONSE)?.timestamp || null;
+  const { confidence = 1, topic = null } = query.autoReply;
+  const inquirer = query.inquirer?.name || null;
+
+  const received = lastOf(AUDIT_EVENT.QUERY_RECEIVED);
+  const accepted = lastOf(AUDIT_EVENT.QUERY_REGISTERED);
+  const summarised = lastOf(AUDIT_EVENT.AI_SUMMARY_GENERATED);
+  const acknowledged = lastOf(AUDIT_EVENT.ACKNOWLEDGEMENT_SENT);
+  const prepared = lastOf(SERVER_EVENTS.AUTO_REPLY_PREPARED, SERVER_EVENTS.AUTO_REPLY_APPROVED);
+  const dispatched = lastOf(AUDIT_EVENT.RESPONSE_DISPATCHED);
+  const sentAt = dispatched?.at || (query.workflowState === WORKFLOW_STATE.CLOSED ? outgoing : null);
+  const submittedAt = received?.at || query.createdAt;
+
+  const stages = [
+    {
+      key: STAGE.SUBMITTED,
+      label: 'Enquiry submitted',
+      actor: inquirer,
+      at: submittedAt,
+      activity: { actor: inquirer, role: 'External inquirer', action: 'Sent the enquiry by email', at: submittedAt },
+    },
+    {
+      key: STAGE.AI_IDENTIFIED,
+      label: `AI identified — ${Math.round(confidence * 100)}% confidence (eligible for Auto Reply)`,
+      actor: AI_AGENT,
+      at: submittedAt,
+      activity: {
+        actor: AI_AGENT,
+        role: 'Auto Reply check',
+        action: topic ? `Matched the supported question on ${topic.toLowerCase()}` : 'Matched a supported question',
+        at: submittedAt,
+      },
+    },
+    {
+      key: STAGE.FO_APPROVED,
+      label: 'FO approved',
+      actor: 'Front Office',
+      at: accepted?.at || null,
+      activity: fromAudit(accepted, 'Accepted the query for an automatic reply', ROLE_LABELS.FRONT_OFFICE),
+    },
+    {
+      key: STAGE.AI_SUMMARY_ACK,
+      label: 'AI Agent generated summary & acknowledgement',
+      actor: AI_AGENT,
+      at: acknowledged?.at || null,
+      activity: acknowledged
+        ? {
+            actor: AI_AGENT,
+            role: 'On behalf of the Front Office',
+            action: summarised
+              ? 'Summarised the query and acknowledged the inquirer by email'
+              : 'Acknowledged the inquirer by email',
+            at: acknowledged.at,
+          }
+        : null,
+    },
+    {
+      key: STAGE.AI_REPLY,
+      label: 'AI Agent generated reply',
+      actor: AI_AGENT,
+      at: prepared?.at || null,
+      activity: prepared
+        ? { actor: AI_AGENT, role: 'On behalf of the Front Office', action: 'Prepared the reply from the supported question', at: prepared.at }
+        : null,
+    },
+    {
+      key: STAGE.REPLY_SENT,
+      label: 'Reply sent to external inquirer',
+      actor: inquirer,
+      at: sentAt,
+      note: prepared && !sentAt ? 'Not sent yet — retry from the mail in the IPC Mailbox' : undefined,
+      activity: sentAt
+        ? {
+            actor: inquirer,
+            role: 'External inquirer',
+            action: `Reply emailed to ${query.inquirer?.email || 'the inquirer'}`,
+            at: sentAt,
+          }
+        : null,
+    },
+  ];
+
+  return withStatuses(stages, [true, true, Boolean(accepted), Boolean(acknowledged), Boolean(prepared), Boolean(sentAt)]);
+}
 
 export function buildLifecycle({
   query,
@@ -51,6 +161,7 @@ export function buildLifecycle({
   messages = [],
 } = {}) {
   if (!query) return [];
+  if (query.autoReply) return buildAutoReplyLifecycle({ query, audit, messages });
 
   const at = (event) => audit.find((a) => a.event === event)?.at || null;
   const emailAt = (emailType) =>

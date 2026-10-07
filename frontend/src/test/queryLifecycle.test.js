@@ -277,3 +277,88 @@ describe('a pulled back query updates workflow progress and displays a pullback 
     expect(currentOf(queryId).note).toContain('Pulled back from Drafting Response');
   });
 });
+
+describe('an automatically answered query follows the AI auto-reply path', () => {
+  const AUTO_CASE = {
+    queryId: 'QRY-2026-00090',
+    createdAt: '2026-10-07T05:00:00.000Z',
+    workflowState: WORKFLOW_STATE.FRONT_OFFICE_VERIFICATION,
+    inquirer: { name: INQUIRER.name, email: INQUIRER.email },
+    autoReply: { entryId: 'AR-PARACETAMOL-USE', topic: 'Uses of paracetamol', confidence: 1 },
+  };
+  const entry = (event, minute, extra = {}) => ({
+    event,
+    queryId: AUTO_CASE.queryId,
+    at: `2026-10-07T05:${String(minute).padStart(2, '0')}:00.000Z`,
+    ...extra,
+  });
+  const ACCEPTED = [
+    entry('QUERY_RECEIVED', 0),
+    entry('QUERY_REGISTERED', 1, { actorId: FRONT_OFFICE.id, actorRole: 'FRONT_OFFICE' }),
+  ];
+  const ACKNOWLEDGED = [...ACCEPTED, entry('AI_SUMMARY_GENERATED', 2), entry('ACKNOWLEDGEMENT_SENT', 3)];
+  const PREPARED = [...ACKNOWLEDGED, entry('AUTO_REPLY_PREPARED', 4)];
+  const SENT = [...PREPARED, entry('RESPONSE_DISPATCHED', 5), entry('QUERY_CLOSED', 5)];
+
+  const rail = (audit, query = {}) => buildLifecycle({ query: { ...AUTO_CASE, ...query }, audit });
+  const statuses = (stages) => stages.map((stage) => stage.status);
+  const { COMPLETE: C, CURRENT: N, PENDING: P } = STAGE_STATUS;
+
+  it('shows its own six stages, and none of the OIC workflow', () => {
+    const stages = rail(ACCEPTED);
+    expect(stages.map((stage) => stage.label)).toEqual([
+      'Enquiry submitted',
+      'AI identified — 100% confidence (eligible for Auto Reply)',
+      'FO approved',
+      'AI Agent generated summary & acknowledgement',
+      'AI Agent generated reply',
+      'Reply sent to external inquirer',
+    ]);
+    const keys = stages.map((stage) => stage.key);
+    for (const standard of [STAGE.FORWARDED, STAGE.ASSIGNED, STAGE.DRAFTED, STAGE.FINAL_APPROVAL]) {
+      expect(keys).not.toContain(standard);
+    }
+  });
+
+  it('takes the confidence and topic from the case', () => {
+    const [, identified] = rail(ACCEPTED, { autoReply: { ...AUTO_CASE.autoReply, confidence: 0.92 } });
+    expect(identified.label).toBe('AI identified — 92% confidence (eligible for Auto Reply)');
+    expect(identified.activity).toMatchObject({ actor: 'AI Agent', action: 'Matched the supported question on uses of paracetamol' });
+  });
+
+  it('advances stage by stage as the AI agent works', () => {
+    expect(statuses(rail(ACCEPTED))).toEqual([C, C, C, N, P, P]);
+    expect(statuses(rail(ACKNOWLEDGED))).toEqual([C, C, C, C, N, P]);
+    expect(statuses(rail(PREPARED, { workflowState: WORKFLOW_STATE.READY_FOR_DISPATCH }))).toEqual([C, C, C, C, C, N]);
+    expect(statuses(rail(SENT, { workflowState: WORKFLOW_STATE.CLOSED }))).toEqual([C, C, C, C, C, C]);
+  });
+
+  it('names who did each step', () => {
+    const stages = rail(SENT, { workflowState: WORKFLOW_STATE.CLOSED });
+    expect(stages[2].activity).toMatchObject({ role: 'Front Office', action: 'Accepted the query for an automatic reply' });
+    expect(stages[3].activity).toMatchObject({ actor: 'AI Agent', action: 'Summarised the query and acknowledged the inquirer by email' });
+    expect(stages[4].activity).toMatchObject({ actor: 'AI Agent', action: 'Prepared the reply from the supported question' });
+    expect(stages[5].activity).toMatchObject({ action: `Reply emailed to ${INQUIRER.email}`, at: '2026-10-07T05:05:00.000Z' });
+  });
+
+  it('says how to finish a reply that could not be sent', () => {
+    const stages = rail(PREPARED, { workflowState: WORKFLOW_STATE.READY_FOR_DISPATCH });
+    expect(stages.at(-1)).toMatchObject({ status: N, note: 'Not sent yet — retry from the mail in the IPC Mailbox' });
+  });
+
+  it('never holds back a later step behind an earlier one that failed', () => {
+    const noAcknowledgement = [...ACCEPTED, entry('AUTO_REPLY_PREPARED', 4)];
+    expect(statuses(rail(noAcknowledgement))).toEqual([C, C, C, C, C, N]);
+  });
+
+  it('reads a case answered under the earlier flow, approved by the Front Office', () => {
+    const legacy = [...ACCEPTED, entry('AUTO_REPLY_APPROVED', 4), entry('RESPONSE_DISPATCHED', 5)];
+    expect(statuses(rail(legacy, { workflowState: WORKFLOW_STATE.CLOSED }))).toEqual([C, C, C, C, C, C]);
+  });
+
+  it('leaves a case without an automatic reply on the standard path', () => {
+    const keys = buildLifecycle({ query: { ...AUTO_CASE, autoReply: undefined }, audit: ACCEPTED }).map((stage) => stage.key);
+    expect(keys).toContain(STAGE.FORWARDED);
+    expect(keys).not.toContain(STAGE.AI_REPLY);
+  });
+});
