@@ -263,6 +263,39 @@ describe('Query Info reads as a dossier', () => {
   });
 });
 
+describe('Workflow progress switches between views of the same history', () => {
+  const COLLEAGUE = findUserById('USR-0009');
+  const progressPanel = () => screen.getByRole('heading', { name: 'Workflow progress' }).closest('[data-slot="panel"]');
+  const track = () => within(progressPanel()).getByRole('group', { name: 'Workflow progress' });
+  const viewButton = (name) => within(within(progressPanel()).getByRole('group', { name: 'Workflow view' })).getByRole('button', { name });
+  const serviceCalls = () => Object.values(mailboxService).reduce((sum, fn) => sum + (fn.mock?.calls.length || 0), 0);
+
+  it('starts on All, filters on click without fetching, and keeps the header counts for the whole case', async () => {
+    received();
+    await s().validateAndForward(queryId, FRONT_OFFICE);
+    s().assignQuery(queryId, OFFICIAL.id, OIC);
+    s().transferQuery(queryId, COLLEAGUE.id, 'Subject expertise', OFFICIAL);
+    renderAs(OIC, `/officer-in-charge/queries/${queryId}`);
+
+    const summary = within(progressPanel()).getByText(/stages complete · 1 pull backs & transfers$/).textContent;
+    expect(viewButton(/^All$/)).toHaveAttribute('aria-pressed', 'true');
+    expect(within(track()).getByRole('button', { name: /^Transfer/ })).toBeInTheDocument();
+    const calls = serviceCalls();
+
+    fireEvent.click(viewButton(/^Normal/));
+    expect(viewButton(/^Normal/)).toHaveAttribute('aria-pressed', 'true');
+    expect(viewButton(/^All$/)).toHaveAttribute('aria-pressed', 'false');
+    expect(within(track()).queryByRole('button', { name: /^Transfer/ })).toBeNull();
+
+    fireEvent.click(viewButton(/^Pull backs/));
+    expect(within(track()).getByRole('button', { name: /^Transfer/ })).toBeInTheDocument();
+    expect(within(track()).getByText('Assigned to an official')).toBeInTheDocument();
+
+    expect(within(progressPanel()).getByText(/stages complete/).textContent).toBe(summary);
+    expect(serviceCalls()).toBe(calls);
+  });
+});
+
 describe('nothing was lost to the restructure', () => {
   it('keeps every reviewer control and every tab', async () => {
     await underReview();

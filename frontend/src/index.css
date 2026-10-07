@@ -411,7 +411,7 @@ body {
   }
 }
 
-/* Workflow tracker: completed segments fill in turn, the current step pulses, exceptions slide in. */
+/* Workflow tracker: completed segments fill in turn, the current step pulses, return arcs draw in. */
 @keyframes wf-fill-x {
   from {
     transform: scaleX(0);
@@ -431,10 +431,9 @@ body {
     box-shadow: 0 0 0 9px color-mix(in oklab, var(--color-primary) 0%, transparent);
   }
 }
-@keyframes wf-rise {
+@keyframes wf-draw {
   from {
-    opacity: 0;
-    transform: translateY(6px);
+    stroke-dashoffset: 1;
   }
 }
 /* A light sweep that travels along each completed segment, one after another, on a loop. */
@@ -513,8 +512,10 @@ body {
 .wf-current {
   animation: wf-ring 1.8s ease-out infinite;
 }
-.wf-rise {
-  animation: wf-rise 0.4s ease-out both;
+/* Needs pathLength="1" on the path. */
+.wf-arc {
+  stroke-dasharray: 1;
+  animation: wf-draw 0.7s ease-out both;
   animation-delay: var(--wf-delay, 0ms);
 }
 @media (prefers-reduced-motion: reduce) {
@@ -522,7 +523,7 @@ body {
   .wf-fill-y,
   .wf-node,
   .wf-current,
-  .wf-rise,
+  .wf-arc,
   .wf-sweep-x,
   .wf-sweep-y,
   .wf-march-x,

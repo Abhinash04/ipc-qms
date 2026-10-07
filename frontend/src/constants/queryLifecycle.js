@@ -14,7 +14,7 @@ export const isSendBack = (review) => SEND_BACK_DECISIONS.includes(review?.decis
 const byTime = (a, b) => String(a.at).localeCompare(String(b.at));
 const latest = (rows) => rows.filter((row) => row?.at).sort(byTime).at(-1) || null;
 
-function auditActor(entry, fallbackRole) {
+export function auditActor(entry, fallbackRole) {
   const user = entry?.actorId ? findUserById(entry.actorId) : null;
   const roleCode = entry?.actorRole || (ROLE_LABELS[entry?.actor] ? entry.actor : null);
   const name = user?.name || (entry?.actor && !ROLE_LABELS[entry.actor] ? entry.actor : null);

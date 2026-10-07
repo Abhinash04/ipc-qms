@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { render, screen, within } from '@testing-library/react';
+import { render } from '@testing-library/react';
 
 import { useWorkflowStore } from '@/store/useWorkflowStore';
 import { findUserById } from '@/constants/mockUsers';
@@ -7,7 +7,6 @@ import { FRONT_OFFICE_USER as FRONT_OFFICE } from '@/test/frontOfficeUser';
 import { AUDIT_EVENT, WORKFLOW_STATE } from '@/constants/statusEnums';
 import { buildLifecycle, STAGE, STAGE_STATUS } from '@/constants/queryLifecycle';
 import { buildSpecialEvents, SPECIAL_EVENT } from '@/constants/workflowExceptions';
-import { WorkflowExceptions } from '@/components/workflow/WorkflowExceptions';
 import { QueryLifecycleTimeline } from '@/components/workflow/QueryLifecycleTimeline';
 import { fakeCaseMail } from '@/test/fakeCaseMail';
 import { EXTERNAL_INQUIRER as INQUIRER } from '@/test/externalInquirer';
@@ -101,20 +100,22 @@ describe('buildSpecialEvents', () => {
     { event: AUDIT_EVENT.QUERY_ASSIGNED, at: '2026-08-18T12:00:00.000Z' },
   ];
 
-  it('lists every pull back and transfer once, newest first', () => {
+  it('lists every pull back and transfer once, oldest first', () => {
     const events = buildSpecialEvents({ query, audit });
     expect(events.map((e) => [e.type, e.at])).toEqual([
-      [SPECIAL_EVENT.TRANSFER_QUERY, '2026-08-21T09:00:00.000Z'],
-      [SPECIAL_EVENT.PULL_BACK, '2026-08-20T10:00:00.000Z'],
-      [SPECIAL_EVENT.TRANSFER_QUERY, '2026-08-19T18:00:00.000Z'],
       [SPECIAL_EVENT.TRANSFER_QUERY, '2026-08-19T10:00:00.000Z'],
+      [SPECIAL_EVENT.TRANSFER_QUERY, '2026-08-19T18:00:00.000Z'],
+      [SPECIAL_EVENT.PULL_BACK, '2026-08-20T10:00:00.000Z'],
+      [SPECIAL_EVENT.TRANSFER_QUERY, '2026-08-21T09:00:00.000Z'],
     ]);
   });
 
   it('records who, from, to and why for each', () => {
-    const [auditOnly, pullback, automatic, manual] = buildSpecialEvents({ query, audit });
+    const [manual, automatic, pullback, auditOnly] = buildSpecialEvents({ query, audit });
 
     expect(pullback).toMatchObject({
+      fromState: WORKFLOW_STATE.DRAFTING,
+      toState: WORKFLOW_STATE.PENDING_ASSIGNMENT,
       by: { name: 'Super Admin' },
       from: { stage: 'Drafting Response', name: OFFICIAL.name },
       to: { stage: 'Forwarded to Officer-in-Charge' },
@@ -148,7 +149,7 @@ describe('special actions stay out of the normal progress line', () => {
     const queryId = await assignedQuery();
     s().transferQuery(queryId, COLLEAGUE.id, 'Subject expertise', OFFICIAL);
 
-    const [transfer] = specialEventsOf(queryId);
+    const transfer = specialEventsOf(queryId).at(-1);
     expect(transfer).toMatchObject({
       type: SPECIAL_EVENT.TRANSFER_QUERY,
       from: { name: OFFICIAL.name },
@@ -167,7 +168,7 @@ describe('special actions stay out of the normal progress line', () => {
     await s().generateAiDraft(queryId, OFFICIAL);
     await s().pullBackQuery(queryId, WORKFLOW_STATE.PENDING_ASSIGNMENT, 'Incorrect assignment', 'Wrong division.', ADMIN);
 
-    const [pullback] = specialEventsOf(queryId);
+    const pullback = specialEventsOf(queryId).at(-1);
     expect(pullback).toMatchObject({
       type: SPECIAL_EVENT.PULL_BACK,
       from: { stage: 'Drafting Response' },
@@ -177,64 +178,6 @@ describe('special actions stay out of the normal progress line', () => {
     });
     expect(pullback.by.name).toBeTruthy();
     expect(pullback.at).toBeTruthy();
-  });
-});
-
-// "From → To" spans a few elements; match the paragraph that holds the whole route.
-const route = (from, to) => (_, el) =>
-  el?.tagName === 'P' && el.textContent.replace(/\s+/g, ' ').trim() === `${from} → ${to}`;
-
-describe('WorkflowExceptions', () => {
-  const events = [
-    {
-      id: 'p1',
-      type: SPECIAL_EVENT.PULL_BACK,
-      at: '2026-08-20T10:00:00.000Z',
-      by: { name: 'Super Admin', role: 'Super Admin' },
-      from: { stage: 'Drafting Response', name: 'Neha Singh' },
-      to: { stage: 'Forwarded to Officer-in-Charge' },
-      reason: 'Incorrect assignment',
-      remarks: null,
-      automatic: false,
-    },
-    {
-      id: 't1',
-      type: SPECIAL_EVENT.TRANSFER_QUERY,
-      at: '2026-08-19T10:00:00.000Z',
-      by: { name: 'Neha Singh', role: 'Assigned Official' },
-      from: { name: 'Neha Singh', role: 'Assigned Official' },
-      to: { name: 'Amit Kumar', role: 'Assigned Official' },
-      reason: 'Subject expertise',
-      remarks: null,
-      automatic: false,
-    },
-  ];
-
-  it('draws the actions as their own line, oldest to newest, with actor, time and reason', () => {
-    render(<WorkflowExceptions events={events} />);
-
-    const section = screen.getByRole('region', { name: 'Pull backs & transfers' });
-    const line = within(section).getByRole('group', { name: 'Pull back and transfer history' });
-    const [transfer, pullback] = within(line).getAllByRole('listitem');
-
-    expect(transfer).toHaveAttribute('data-special-event', SPECIAL_EVENT.TRANSFER_QUERY);
-    expect(within(transfer).getByText('Transfer')).toBeInTheDocument();
-    expect(within(transfer).getByText(route('Neha Singh', 'Amit Kumar'))).toBeInTheDocument();
-    expect(within(transfer).getByText('By Neha Singh — Assigned Official')).toBeInTheDocument();
-    expect(within(transfer).queryByText('Most recent')).not.toBeInTheDocument();
-
-    expect(pullback).toHaveAttribute('data-special-event', SPECIAL_EVENT.PULL_BACK);
-    expect(within(pullback).getByText('Pull back')).toBeInTheDocument();
-    expect(within(pullback).getByText('Most recent')).toBeInTheDocument();
-    expect(within(pullback).getByText(route('Drafting Response', 'Forwarded to Officer-in-Charge'))).toBeInTheDocument();
-    expect(within(pullback).getByText('By Super Admin — Super Admin')).toBeInTheDocument();
-    expect(within(pullback).getByText('“Incorrect assignment”')).toBeInTheDocument();
-    expect(within(pullback).getByText((_, el) => el?.tagName === 'TIME')).toHaveAttribute('dateTime', events[0].at);
-  });
-
-  it('renders nothing when the query has no special actions', () => {
-    const { container } = render(<WorkflowExceptions events={[]} />);
-    expect(container).toBeEmptyDOMElement();
   });
 });
 

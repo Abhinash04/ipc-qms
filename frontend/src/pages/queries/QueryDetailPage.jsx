@@ -26,7 +26,7 @@ import {
   Tag,
   UserRound,
 } from 'lucide-react';
-import { CaseCard, Pill } from '@/components/common/CaseCard';
+import { CaseCard, Pill, Segmented } from '@/components/common/CaseCard';
 import { initials } from '@/utils/initials';
 import { formatDate } from '@/utils/dateTime';
 import { StatusBadge } from '@/components/common/StatusBadge';
@@ -37,7 +37,6 @@ import { AttachmentsPanel } from '@/components/attachments/AttachmentsPanel';
 import { CaseSummaryBar } from '@/components/workflow/CaseSummaryBar';
 import { AutoTransferTimerCard } from '@/components/workflow/AutoTransferTimerCard';
 import { QueryLifecycleTimeline } from '@/components/workflow/QueryLifecycleTimeline';
-import { WorkflowExceptions } from '@/components/workflow/WorkflowExceptions';
 import { CaseSectionBar } from '@/components/workflow/CaseSectionBar';
 import { WorkflowActionsCard } from '@/components/workflow/WorkflowActionsCard';
 import { ReviewDecisionCard } from '@/components/workflow/ReviewDecisionCard';
@@ -56,6 +55,7 @@ import { AUDIT_EVENT } from '@/constants/statusEnums';
 import { AiRecommendationCard } from '@/components/ai/AiRecommendationCard';
 import { buildLifecycle, STAGE_STATUS } from '@/constants/queryLifecycle';
 import { buildSpecialEvents } from '@/constants/workflowExceptions';
+import { WORKFLOW_VIEW } from '@/constants/workflowSequence';
 import { findUserById } from '@/constants/mockUsers';
 
 function CopyButton({ value, label }) {
@@ -437,6 +437,42 @@ function CaseInsightPanels({ query, steps, audit, canAssign, currentUser, assign
   );
 }
 
+// Full labels from `sm` up, short ones on a phone.
+const viewLabel = (full, short) => (
+  <>
+    <span className="hidden sm:inline">{full}</span>
+    <span className="sm:hidden">{short}</span>
+  </>
+);
+
+const WORKFLOW_VIEWS = [
+  { value: WORKFLOW_VIEW.ALL, label: 'All' },
+  { value: WORKFLOW_VIEW.NORMAL, label: viewLabel('Normal workflow', 'Normal') },
+  { value: WORKFLOW_VIEW.EXCEPTIONS, label: viewLabel('Pull backs & transfers', 'Exceptions') },
+];
+
+/** The header counts always describe the whole case; the toggle only changes what the line draws. */
+function WorkflowProgressCard({ stages, events, audit }) {
+  const [view, setView] = useState(WORKFLOW_VIEW.ALL);
+  const completed = stages.filter((stage) => stage.status === STAGE_STATUS.COMPLETE).length;
+
+  return (
+    <CaseCard
+      tone="progress"
+      banner
+      art={[Milestone, Flag, CircleCheckBig]}
+      icon={Route}
+      title="Workflow progress"
+      meta={`${completed} of ${stages.length} stages complete${events.length ? ` · ${events.length} pull backs & transfers` : ''}`}
+      toolbar={<Segmented label="Workflow view" options={WORKFLOW_VIEWS} value={view} onChange={setView} />}
+      className="mb-5"
+      bodyClassName="py-5"
+    >
+      <QueryLifecycleTimeline stages={stages} events={events} audit={audit} view={view} />
+    </CaseCard>
+  );
+}
+
 const STAGE_LINKS = [
   ['ASSIGNMENTS', 'Assignments'],
   ['DRAFTING', 'Drafting'],
@@ -493,7 +529,6 @@ export function QueryDetailPage({ queryId: viewedQueryId = null, readOnly = fals
 
   const stages = buildLifecycle({ query, steps, versions, reviews, audit, messages });
   const specialEvents = buildSpecialEvents({ query, audit });
-  const completedStages = stages.filter((stage) => stage.status === STAGE_STATUS.COMPLETE).length;
 
   const breadcrumbItems = [
     { label: 'Dashboard', path: paths.DASHBOARD },
@@ -511,19 +546,7 @@ export function QueryDetailPage({ queryId: viewedQueryId = null, readOnly = fals
         <AutoTransferTimerCard query={query} />
       </div>
 
-      <CaseCard
-        tone="progress"
-        banner
-        art={[Milestone, Flag, CircleCheckBig]}
-        icon={Route}
-        title="Workflow progress"
-        meta={`${completedStages} of ${stages.length} stages complete${specialEvents.length ? ` · ${specialEvents.length} pull backs & transfers` : ''}`}
-        className="mb-5"
-        bodyClassName="py-5"
-      >
-        <QueryLifecycleTimeline stages={stages} />
-        <WorkflowExceptions events={specialEvents} />
-      </CaseCard>
+      <WorkflowProgressCard stages={stages} events={specialEvents} audit={audit} />
 
       {/* Desktop: content column and a sticky context rail. Tablet and phone: the rail's two cards
           come first, side by side then stacked, and the content follows full width. */}

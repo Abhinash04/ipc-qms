@@ -25,6 +25,9 @@ function fromPullback(entry, index) {
     id: `pullback-${entry.pulledBackAt || index}`,
     type: SPECIAL_EVENT.PULL_BACK,
     at: entry.pulledBackAt || null,
+    fromState: entry.fromStage || null,
+    toState: entry.toStage || null,
+    toReviewLevel: entry.toReviewLevel || null,
     by: person(entry.pulledBackByName, entry.pulledBackByRole),
     from: { stage: stageName(entry.fromStage), ...(entry.previousAssignee ? { name: entry.previousAssignee } : {}) },
     to: { stage: stageName(entry.toStage, entry.toReviewLevel), ...(entry.newAssignee ? { name: entry.newAssignee } : {}) },
@@ -78,6 +81,21 @@ function fromTransferAudit(entry) {
 
 const near = (a, b) => Math.abs(new Date(a).getTime() - new Date(b).getTime()) <= SAME_TRANSFER_MS;
 
+/** Milliseconds since the epoch, or null for a missing or unreadable timestamp. */
+export const timeOf = (value) => {
+  const ms = value ? Date.parse(value) : NaN;
+  return Number.isFinite(ms) ? ms : null;
+};
+
+/** Oldest first; undated events last. The sort is stable, so same-instant events keep their recorded order. */
+export function sortWorkflowEvents(events = []) {
+  return [...events].sort((a, b) => {
+    const [ta, tb] = [timeOf(a.at), timeOf(b.at)];
+    if (ta === null || tb === null) return (ta === null) - (tb === null);
+    return ta - tb;
+  });
+}
+
 export function buildSpecialEvents({ query, audit = [] } = {}) {
   if (!query) return [];
 
@@ -89,5 +107,5 @@ export function buildSpecialEvents({ query, audit = [] } = {}) {
     .filter((entry) => !recorded.some((record) => record.at && entry.at && near(record.at, entry.at)))
     .map(fromTransferAudit);
 
-  return [...pullbacks, ...records, ...auditOnly].sort((a, b) => String(b.at || '').localeCompare(String(a.at || '')));
+  return sortWorkflowEvents([...pullbacks, ...records, ...auditOnly]);
 }
