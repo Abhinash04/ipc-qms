@@ -60,9 +60,35 @@ describe('how the automatic reply reads in the audit trail', () => {
     });
   });
 
-  it('counts the approved automatic replies in the period summary', () => {
-    const rows = [suggested, { ...suggested, seq: 8, action: 'AUTO_REPLY_APPROVED', queryId: 'QRY-2026-00090' }];
-    expect(periodSummary(rows).find(([label]) => label === 'Automatic replies approved')[1]).toBe(1);
+  it('names the AI preparing the reply on behalf of the Front Officer who accepted the mail', () => {
+    const view = present({
+      action: 'AUTO_REPLY_PREPARED',
+      actorType: 'agent',
+      actorId: 'USR-0014',
+      actorRole: 'FRONT_OFFICE',
+      queryId: 'QRY-2026-00090',
+      changes: { status: { from: 'FRONT_OFFICE_VERIFICATION', to: 'READY_FOR_DISPATCH' } },
+      details: { entryId: 'AR-PARACETAMOL-USE', topic: 'Uses of paracetamol', confidence: 1, threshold: 1 },
+    });
+    expect(view).toMatchObject({
+      activity: 'Automatic reply prepared',
+      did: 'Prepared the automatic reply for query QRY-2026-00090 (matched: uses of paracetamol)',
+      previousValue: 'Being checked by Front Office',
+      newValue: 'Approved, ready to send',
+      details: 'Reply on Uses of paracetamol drafted from the supported question, matched at 100%',
+    });
+    expect(view.who).toMatch(/^AI assistant, on behalf of /);
+  });
+
+  it('counts the automatic replies actually sent in the period summary', () => {
+    const rows = [
+      suggested,
+      { ...suggested, seq: 8, action: 'AUTO_REPLY_PREPARED', queryId: 'QRY-2026-00090' },
+      { ...suggested, seq: 9, action: 'RESPONSE_DISPATCHED', queryId: 'QRY-2026-00090' },
+      { ...suggested, seq: 10, action: 'AUTO_REPLY_PREPARED', queryId: 'QRY-2026-00091' },
+      { ...suggested, seq: 11, action: 'RESPONSE_DISPATCHED', queryId: 'QRY-2026-00092' },
+    ];
+    expect(periodSummary(rows).find(([label]) => label === 'Automatic replies sent')[1]).toBe(1);
   });
 
   it('works out the status an older approval left the case in', () => {

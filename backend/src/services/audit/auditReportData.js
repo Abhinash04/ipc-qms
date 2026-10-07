@@ -45,6 +45,14 @@ export function reportPeriod(filters = {}, rows = []) {
   return { from, to, label: `${words(from)} to ${words(to)}` };
 }
 
+/** Replies sent to cases answered automatically (prepared now, or approved under the earlier flow). */
+function automaticRepliesSent(rows) {
+  const automatic = new Set(
+    rows.filter((row) => ['AUTO_REPLY_PREPARED', 'AUTO_REPLY_APPROVED'].includes(row.action) && row.queryId).map((row) => row.queryId),
+  );
+  return rows.filter((row) => row.action === 'RESPONSE_DISPATCHED' && automatic.has(row.queryId)).length;
+}
+
 /** Section 2: counts for the period. */
 export function periodSummary(rows, verification = null) {
   return [
@@ -60,7 +68,7 @@ export function periodSummary(rows, verification = null) {
     ['Failed sign-in attempts', count(rows, 'LOGIN_FAILED')],
     ['Sign-outs', count(rows, 'LOGOUT')],
     ['Administrative changes', privilegedActivity(rows).filter((row) => row.action !== 'AUDIT_EXPORTED').length],
-    ['Automatic replies approved', count(rows, 'AUTO_REPLY_APPROVED')],
+    ['Automatic replies sent', automaticRepliesSent(rows)],
     ['Audit report exports', count(rows, 'AUDIT_EXPORTED')],
     ['Audit trail views', count(rows, 'AUDIT_VIEWED')],
     ['Attachments opened or downloaded', count(rows, 'ATTACHMENT_DOWNLOADED')],

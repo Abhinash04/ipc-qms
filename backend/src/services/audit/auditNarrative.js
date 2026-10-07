@@ -267,6 +267,8 @@ const SENTENCES = {
     action: `Suggested an automatic reply to an email${field(e, 'topic') ? ` on ${String(field(e, 'topic')).toLowerCase()}` : ''}`,
     other: emailFrom(e) ? from(emailFrom(e)) : null,
   }),
+  AUTO_REPLY_PREPARED: (e) =>
+    `Prepared the automatic reply for ${queryWord(e)}${field(e, 'topic') ? ` (matched: ${String(field(e, 'topic')).toLowerCase()})` : ''}`,
   AUTO_REPLY_APPROVED: (e) =>
     `Approved the automatic reply for ${queryWord(e)}${field(e, 'edited') ? ', after editing it' : ', as drafted'}`,
   AUTO_REPLY_DECLINED: (e) => withReason('Sent an email to Human Intervention instead of an automatic reply', field(e, 'reason')),

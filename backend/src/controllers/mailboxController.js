@@ -26,7 +26,7 @@ import * as decisions from '../services/email/mailbox/decisions.js';
 import * as triage from '../services/email/mailbox/triage.js';
 import * as categorizer from '../services/email/mailbox/categorizer.js';
 import * as accept from '../services/email/mailbox/acceptMessage.js';
-import * as autoReply from '../services/autoReply/approve.js';
+import * as autoReply from '../services/autoReply/send.js';
 import * as health from '../services/email/mailbox/health.js';
 import { matchesSearch, toMessageViews } from '../services/email/mailbox/messageView.js';
 import { sendAttachment } from './attachmentController.js';
@@ -46,19 +46,13 @@ async function autoReplyMessage(req, res) {
   return { box, message };
 }
 
-async function approveAutoReply(req, res, next) {
+async function retryAutoReply(req, res, next) {
   if (!requireDb(next)) return;
 
   try {
     const found = await autoReplyMessage(req, res);
     if (!found) return;
-    const result = await autoReply.approveAutoReply({
-      mailboxMessageId: req.params.messageId,
-      message: found.message,
-      body: req.body.body,
-      actor: actorOf(req),
-      sourceMailbox: { source: found.box.source, address: found.box.address },
-    });
+    const result = await autoReply.retryAutoReply({ mailboxMessageId: req.params.messageId, actor: actorOf(req) });
     res.status(HTTP_STATUS.OK).json(result);
   } catch (error) {
     next(error);
@@ -374,7 +368,7 @@ async function decideMessage(req, res, next) {
   try {
     const { decision, queryId, reason, message } = req.body;
     if ((await resolveMailbox(req)).own) {
-      await autoReply.releaseForStandardWorkflow({ mailboxMessageId: req.params.messageId, actor: actorOf(req) });
+      await autoReply.releaseForRejection({ mailboxMessageId: req.params.messageId, actor: actorOf(req) });
     }
 
     const result = await decisions.recordDecision({
@@ -413,9 +407,6 @@ async function acceptMessage(req, res, next) {
       }
       message = stored;
     }
-    // Automatic replies exist only for the NICeMail mailbox.
-    if (box.own) await autoReply.releaseForStandardWorkflow({ mailboxMessageId: req.params.messageId, actor: actorOf(req) });
-
     const result = await accept.acceptMessage({
       mailboxMessageId: req.params.messageId,
       message,
@@ -472,6 +463,6 @@ export {
   syncMailbox,
   rescueMessage,
   setMessageCategory,
-  approveAutoReply,
+  retryAutoReply,
   declineAutoReply,
 };

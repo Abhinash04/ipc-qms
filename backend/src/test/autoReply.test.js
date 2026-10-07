@@ -260,14 +260,20 @@ describe('the mailbox buckets', () => {
   });
 });
 
-describe('the Front Office approving an automatic reply', () => {
-  const approve = (id, body, user = nicFrontOfficeUser()) =>
-    request(app).post(`/api/v1/mailbox/messages/${id}/auto-reply/approve`).set(cookieFor(user)).send({ body });
+describe('accepting a mail offered an automatic reply', () => {
+  const acceptAs = (id, user = nicFrontOfficeUser()) =>
+    request(app).post(`/api/v1/mailbox/messages/${id}/accept`).set(cookieFor(user)).send({});
+  const retry = (id, user = nicFrontOfficeUser()) =>
+    request(app).post(`/api/v1/mailbox/messages/${id}/auto-reply/retry`).set(cookieFor(user)).send({});
   const decline = (id, reason) =>
     request(app).post(`/api/v1/mailbox/messages/${id}/auto-reply/decline`).set(cookieFor(nicFrontOfficeUser())).send({ reason });
-  const acceptAs = (id) =>
-    request(app).post(`/api/v1/mailbox/messages/${id}/accept`).set(cookieFor(nicFrontOfficeUser())).send({});
-  const EDITED = 'Dear Sir/Madam,\n\nParacetamol relieves mild to moderate pain and reduces fever. Edited by the Front Office.';
+  const reject = (id) =>
+    request(app)
+      .post(`/api/v1/mailbox/messages/${id}/decision`)
+      .set(cookieFor(nicFrontOfficeUser()))
+      .send({ decision: 'REJECTED', reason: 'Not an IPC query' });
+  const sentMail = () => browser.sendMail.mock.calls.map(([mail]) => mail);
+  const isReply = (mail) => /^Re: /.test(mail.subject);
 
   let id;
   beforeEach(async () => {
@@ -275,148 +281,134 @@ describe('the Front Office approving an automatic reply', () => {
     id = stored('row-1').mailboxMessageId;
   });
 
-  it('sends the Front Office’s own text to the sender, as the response of a case closed at once', async () => {
-    const res = await approve(id, EDITED);
+  it('acknowledges the inquirer and then sends the reply on its own, without forwarding to the OIC', async () => {
+    const res = await acceptAs(id);
 
     expect(res.status).toBe(200);
-    expect(res.body).toMatchObject({ sent: true, queryId: expect.stringMatching(/^QRY-\d{4}-\d{5}$/) });
+    expect(res.body).toMatchObject({
+      created: true,
+      acknowledged: true,
+      forwarded: false,
+      autoReply: { sent: true },
+      queryId: expect.stringMatching(/^QRY-\d{4}-\d{5}$/),
+    });
 
-    expect(browser.sendMail).toHaveBeenCalledTimes(1);
-    const [mail] = browser.sendMail.mock.calls[0];
-    expect(mail.to).toEqual(['ravi@pharma.example']);
-    expect(mail.subject).toBe(`Re: Enquiry row-1 [${res.body.queryId}]`);
-    expect(mail.body).toContain('Edited by the Front Office.');
+    const mails = sentMail();
+    expect(mails).toHaveLength(2);
+    expect(mails.every((mail) => mail.to.includes('ravi@pharma.example'))).toBe(true);
+    const reply = mails.find(isReply);
+    expect(reply.subject).toBe(`Re: Enquiry row-1 [${res.body.queryId}]`);
+    expect(reply.body).toContain('Paracetamol is a commonly used medicine');
 
     const [caseRow] = db.rows('QueryCase');
     expect(caseRow).toMatchObject({
       queryId: res.body.queryId,
       workflowState: 'CLOSED',
       businessStatus: 'CLOSED',
-      sourceMailboxMessageId: id,
       autoReply: { entryId: 'AR-PARACETAMOL-USE', confidence: 1 },
     });
+    expect(caseRow.aiSummary).toBeTruthy();
     expect(db.rows('ResponseVersion')).toEqual([
-      expect.objectContaining({ queryId: res.body.queryId, content: EDITED, status: 'FINAL_APPROVED', source: 'AUTO_REPLY' }),
+      expect.objectContaining({ queryId: res.body.queryId, status: 'FINAL_APPROVED', source: 'AUTO_REPLY', aiGenerated: true }),
     ]);
-    expect(db.rows('MailboxDecision')).toEqual([expect.objectContaining({ mailboxMessageId: id, decision: 'ACCEPTED' })]);
-    expect(stored('row-1').autoReply).toMatchObject({ status: 'SENT', queryId: res.body.queryId, approvedBody: EDITED });
+    expect(stored('row-1').autoReply).toMatchObject({ status: 'SENT', queryId: res.body.queryId });
   });
 
-  it('leaves an end-to-end trail on the case, with no acknowledgement and no forward', async () => {
-    const { body } = await approve(id, EDITED);
+  it('leaves an end-to-end trail with the acknowledgement, the prepared reply and no forward', async () => {
+    const { body } = await acceptAs(id);
 
     const trail = db
       .rows('AuditEvent')
       .filter((row) => row.queryId === body.queryId)
       .map((row) => row.action);
-    expect(trail).toEqual([
-      'QUERY_RECEIVED',
-      'QUERY_REGISTERED',
-      'CASE_ASSOCIATED',
-      'AUTO_REPLY_APPROVED',
-      'RESPONSE_DISPATCHED',
-      'QUERY_CLOSED',
-    ]);
-    const approved = db.rows('AuditEvent').find((row) => row.action === 'AUTO_REPLY_APPROVED');
-    expect(approved).toMatchObject({
-      actorType: 'human',
+    expect(trail).toEqual(
+      expect.arrayContaining(['QUERY_RECEIVED', 'QUERY_REGISTERED', 'AI_SUMMARY_GENERATED', 'AUTO_REPLY_PREPARED', 'RESPONSE_DISPATCHED', 'QUERY_CLOSED']),
+    );
+    expect(trail).not.toContain('QUERY_FORWARDED');
+    expect(trail.indexOf('AUTO_REPLY_PREPARED')).toBeLessThan(trail.indexOf('RESPONSE_DISPATCHED'));
+
+    const prepared = db.rows('AuditEvent').find((row) => row.action === 'AUTO_REPLY_PREPARED');
+    expect(prepared).toMatchObject({
+      actorType: 'agent',
       actorId: nicFrontOfficeUser().id,
       messageId: id,
       changes: { status: { from: 'FRONT_OFFICE_VERIFICATION', to: 'READY_FOR_DISPATCH' } },
-      details: expect.objectContaining({ entryId: 'AR-PARACETAMOL-USE', edited: true }),
+      details: expect.objectContaining({ entryId: 'AR-PARACETAMOL-USE', confidence: 1 }),
     });
   });
 
-  it('records an unedited approval as such', async () => {
-    await approve(id, stored('row-1').autoReply.draft);
-    expect(db.rows('AuditEvent').find((row) => row.action === 'AUTO_REPLY_APPROVED').details.edited).toBe(false);
-  });
-
-  it('sends once, however often it is approved', async () => {
-    const first = await approve(id, EDITED);
-    const again = await approve(id, 'Something else');
+  it('sends nothing more and forwards nothing when the mail is accepted again', async () => {
+    const first = await acceptAs(id);
+    const again = await acceptAs(id);
 
     expect(again.status).toBe(200);
-    expect(again.body).toMatchObject({ sent: true, alreadySent: true, queryId: first.body.queryId });
-    expect(browser.sendMail).toHaveBeenCalledTimes(1);
+    expect(again.body).toMatchObject({ queryId: first.body.queryId, forwarded: false, autoReply: { sent: true, alreadySent: true } });
+    expect(sentMail().filter(isReply)).toHaveLength(1);
     expect(db.rows('QueryCase')).toHaveLength(1);
+    expect(db.rows('AuditEvent').map((row) => row.action)).not.toContain('QUERY_FORWARDED');
   });
 
-  it('keeps a failed send ready to retry, and sends it once on retry', async () => {
-    browser.sendMail = vi.fn(async () => {
-      throw new Error('NICeMail refused the message');
+  it('keeps a failed reply for a retry, never forwarding it, and sends it once on retry', async () => {
+    browser.sendMail = vi.fn(async (mail) => {
+      if (/^Re: /.test(mail.subject)) throw new Error('NICeMail refused the message');
+      return { ok: true, providerMessageId: null };
     });
-    const failed = await approve(id, EDITED);
+    const failed = await acceptAs(id);
 
     expect(failed.status).toBe(200);
-    expect(failed.body).toMatchObject({ sent: false, error: expect.stringMatching(/refused/) });
+    expect(failed.body).toMatchObject({ acknowledged: true, forwarded: false, autoReply: { sent: false, error: expect.stringMatching(/refused/) } });
     expect(stored('row-1').autoReply.status).toBe('FAILED');
     expect(db.rows('QueryCase')[0].workflowState).toBe('READY_FOR_DISPATCH');
 
     browser.sendMail = vi.fn(async () => ({ ok: true, providerMessageId: null }));
-    const retried = await approve(id, 'A different text, ignored on retry');
+    const retried = await retry(id);
 
+    expect(retried.status).toBe(200);
     expect(retried.body).toMatchObject({ sent: true, queryId: failed.body.queryId });
     expect(browser.sendMail).toHaveBeenCalledTimes(1);
-    expect(browser.sendMail.mock.calls[0][0].body).toContain('Edited by the Front Office.');
-    expect(db.rows('QueryCase')).toHaveLength(1);
+    expect(db.rows('QueryCase')[0].workflowState).toBe('CLOSED');
+    expect(db.rows('AuditEvent').map((row) => row.action)).not.toContain('QUERY_FORWARDED');
   });
 
-  it('is for the Front Office only', async () => {
+  it('retries only a reply that failed, for the Front Office only', async () => {
+    expect((await retry(id)).status).toBe(409);
     const officer = { id: 'USR-0003', role: 'OFFICER_IN_CHARGE', name: 'EduTR Zairza', email: 'oic@ipc.example' };
-    expect((await approve(id, EDITED, officer)).status).toBe(403);
+    expect((await retry(id, officer)).status).toBe(403);
     expect(browser.sendMail).not.toHaveBeenCalled();
   });
 
-  it('refuses an empty reply', async () => {
-    expect((await approve(id, '   ')).status).toBe(400);
-    expect(browser.sendMail).not.toHaveBeenCalled();
+  it('runs the standard workflow for a mail below the threshold', async () => {
+    vi.stubEnv('NIC_ALLOW_INTERNAL_FORWARD', 'true');
+    await syncWith(asking('row-2', 'What is the main use case of paracetamol?'));
+    const res = await acceptAs(stored('row-2').mailboxMessageId);
+
+    expect(res.body).toMatchObject({ forwarded: true });
+    expect(res.body.autoReply).toBeUndefined();
+    expect(sentMail().filter(isReply)).toEqual([]);
+    expect(db.rows('AuditEvent').map((row) => row.action)).toContain('QUERY_FORWARDED');
   });
 
-  it('refuses a mail that was not offered a reply', async () => {
-    await syncWith(read('row-2'));
-    const res = await approve(stored('row-2').mailboxMessageId, EDITED);
-
-    expect(res.status).toBe(409);
-    expect(browser.sendMail).not.toHaveBeenCalled();
-  });
-
-  it('sends a declined mail to Human Intervention, on the record', async () => {
-    const res = await decline(id, 'Needs a pharmacist to answer');
-
-    expect(res.status).toBe(200);
-    expect(stored('row-1').autoReply).toMatchObject({ status: 'DECLINED', reason: 'Needs a pharmacist to answer' });
+  it('runs the standard workflow for a mail sent to Human Intervention', async () => {
+    vi.stubEnv('NIC_ALLOW_INTERNAL_FORWARD', 'true');
+    expect((await decline(id, 'Needs a pharmacist to answer')).status).toBe(200);
     expect(audits('AUTO_REPLY_DECLINED')).toEqual([
       expect.objectContaining({ actorType: 'human', messageId: id, details: expect.objectContaining({ reason: 'Needs a pharmacist to answer' }) }),
     ]);
-    expect((await approve(id, EDITED)).status).toBe(409);
-    expect(browser.sendMail).not.toHaveBeenCalled();
-  });
 
-  it('withdraws the suggestion when the mail is accepted through the standard workflow', async () => {
     const res = await acceptAs(id);
-
-    expect(res.status).toBe(200);
-    expect(stored('row-1').autoReply).toMatchObject({ status: 'DECLINED', reason: 'handled through the standard workflow' });
-    expect((await approve(id, EDITED)).status).toBe(409);
+    expect(res.body).toMatchObject({ forwarded: true });
+    expect(sentMail().filter(isReply)).toEqual([]);
+    expect(stored('row-1').autoReply.status).toBe('DECLINED');
   });
 
-  it('withdraws the suggestion when the mail is rejected through the standard workflow', async () => {
-    const res = await request(app)
-      .post(`/api/v1/mailbox/messages/${id}/decision`)
-      .set(cookieFor(nicFrontOfficeUser()))
-      .send({ decision: 'REJECTED', reason: 'Not an IPC query' });
-
-    expect(res.status).toBe(200);
+  it('withdraws the suggestion when the mail is rejected', async () => {
+    expect((await reject(id)).status).toBe(200);
     expect(stored('row-1').autoReply.status).toBe('DECLINED');
     expect(browser.sendMail).not.toHaveBeenCalled();
   });
 
-  it('refuses the standard workflow for a mail answered by an automatic reply', async () => {
-    await approve(id, EDITED);
-    const res = await acceptAs(id);
-
-    expect(res.status).toBe(409);
-    expect(browser.sendMail).toHaveBeenCalledTimes(1);
+  it('refuses to reject a mail already answered by an automatic reply', async () => {
+    await acceptAs(id);
+    expect((await reject(id)).status).toBe(409);
   });
 });

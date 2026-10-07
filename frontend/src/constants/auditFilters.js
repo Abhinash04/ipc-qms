@@ -54,6 +54,7 @@ export const AUDIT_ACTION_OPTIONS = [
     group: "Attachments",
   },
   { value: "AUTO_REPLY_SUGGESTED", label: "Automatic reply suggested", group: "Auto reply" },
+  { value: "AUTO_REPLY_PREPARED", label: "Automatic reply prepared", group: "Auto reply" },
   { value: "AUTO_REPLY_APPROVED", label: "Automatic reply approved", group: "Auto reply" },
   { value: "AUTO_REPLY_DECLINED", label: "Automatic reply turned down", group: "Auto reply" },
   { value: "AUDIT_EXPORTED", label: "Activity report downloaded", group: "Audit" },

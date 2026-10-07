@@ -10,6 +10,8 @@ import * as audit from '../../audit/auditService.js';
 import * as gemmaService from '../../ai/gemmaService.js';
 import { change } from '../../audit/caseChanges.js';
 import * as decisions from './decisions.js';
+import { sendAutoReply } from '../../autoReply/send.js';
+import { AUTO_REPLY_STATUS } from '../../autoReply/assess.js';
 import { ACTOR_TYPES } from '../../../constants/roles.js';
 import { AUDIT_RESULTS } from '../../../constants/auditActions.js';
 
@@ -233,9 +235,24 @@ export async function registerCase({ mailboxMessageId, message = {}, actor, sour
   return { queryId, created, known, decidedQueryId };
 }
 
+/**
+ * The Front Office accepts a message: the case is registered, summarised and acknowledged. A mail
+ * offered an automatic reply is then answered by it and closed; any other is forwarded to the
+ * Officer-in-Charge. An automatic-reply case is never forwarded, however often it is accepted.
+ */
 export async function acceptMessage({ mailboxMessageId, message = {}, actor, sourceMailbox = null }) {
   const errors = [];
-  const { queryId, created, known, decidedQueryId } = await registerCase({ mailboxMessageId, message, actor, sourceMailbox });
+  const suggestion = message.autoReply?.status === AUTO_REPLY_STATUS.SUGGESTED ? message.autoReply : null;
+  const { queryId, created, known, decidedQueryId } = await registerCase({
+    mailboxMessageId,
+    message,
+    actor,
+    sourceMailbox,
+    caseFields: suggestion
+      ? { autoReply: { entryId: suggestion.entryId, topic: suggestion.topic ?? null, confidence: suggestion.confidence } }
+      : {},
+  });
+  const automatic = created ? Boolean(suggestion) : Boolean(known?.autoReply);
 
   let aiSummary = known?.aiSummary ?? null;
 
@@ -280,9 +297,21 @@ export async function acceptMessage({ mailboxMessageId, message = {}, actor, sou
     );
   }
 
-  const fwd = await caseMail.forward({ queryId, actor, source: created ? message : null });
-  const forwarded = SENT.has(fwd.outcome);
-  if (!forwarded) errors.push(stepError('forward', fwd));
+  let forwarded = false;
+  let autoReply = null;
+  if (automatic) {
+    try {
+      autoReply = await sendAutoReply({ queryId, mailboxMessageId, actor });
+      if (!autoReply.sent) errors.push({ step: 'autoReply', outcome: autoReply.outcome, error: autoReply.error, retryable: true });
+    } catch (error) {
+      autoReply = { sent: false, error: error.message };
+      errors.push({ step: 'autoReply', error: error.message, ...(error.status === 409 ? { inProgress: true } : { retryable: true }) });
+    }
+  } else {
+    const fwd = await caseMail.forward({ queryId, actor, source: created ? message : null });
+    forwarded = SENT.has(fwd.outcome);
+    if (!forwarded) errors.push(stepError('forward', fwd));
+  }
 
   return {
     queryId,
@@ -295,6 +324,16 @@ export async function acceptMessage({ mailboxMessageId, message = {}, actor, sou
       sentAt: ack.sent?.sentAt || ack.dispatch?.sentAt || null,
     },
     forwarded,
+    ...(automatic
+      ? {
+          autoReply: {
+            sent: Boolean(autoReply?.sent),
+            alreadySent: Boolean(autoReply?.alreadySent),
+            outcome: autoReply?.outcome ?? null,
+            error: autoReply?.error ?? null,
+          },
+        }
+      : {}),
     aiSummaryStatus: aiSummary?.status ?? null,
     errors,
   };

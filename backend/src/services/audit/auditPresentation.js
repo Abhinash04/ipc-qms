@@ -65,6 +65,7 @@ const ACTIVITY = {
   QUERY_AUTO_TRANSFER_FAILED: 'Automatic handover found no officer',
   AUTO_REPLY_SUGGESTED: 'Automatic reply suggested',
   AUTO_REPLY_APPROVED: 'Automatic reply approved',
+  AUTO_REPLY_PREPARED: 'Automatic reply prepared',
   AUTO_REPLY_DECLINED: 'Automatic reply turned down',
   QUERY_PULLED_BACK: 'Moved back to an earlier step',
   DRAFT_CREATED: 'Reply started',
@@ -402,6 +403,8 @@ const PLAIN_DETAILS = {
     [`Matched the supported question on ${d.topic || 'a general topic'} at ${Math.round((d.confidence ?? 0) * 100)}%`, fromLine(d)]
       .filter(Boolean)
       .join('. '),
+  AUTO_REPLY_PREPARED: (d) =>
+    `Reply on ${d.topic || 'a general topic'} drafted from the supported question, matched at ${Math.round((d.confidence ?? 0) * 100)}%`,
   AUTO_REPLY_APPROVED: (d) =>
     `Reply on ${d.topic || 'a general topic'} ${d.edited ? 'edited by the Front Office before sending' : 'sent as drafted'}`,
   AUTO_REPLY_DECLINED: (d) => `Sent to Human Intervention${d.reason ? `: ${d.reason}` : ''}`,

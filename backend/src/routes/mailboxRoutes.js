@@ -10,7 +10,6 @@ import {
   acceptMessageSchema,
   listMessagesQuerySchema,
   mailCategorySchema,
-  approveAutoReplySchema,
   declineAutoReplySchema,
 } from '../validators/mailboxSchemas.js';
 import {
@@ -28,7 +27,7 @@ import {
   syncMailbox,
   rescueMessage,
   setMessageCategory,
-  approveAutoReply,
+  retryAutoReply,
   declineAutoReply,
 } from '../controllers/mailboxController.js';
 
@@ -69,14 +68,8 @@ router.post(
   setMessageCategory,
 );
 
-// The only way an automatic reply is sent: the Front Office approves it.
-router.post(
-  '/mailbox/messages/:messageId/auto-reply/approve',
-  verifyToken,
-  verifyRole(FRONT_OFFICE_ONLY),
-  validateBody(approveAutoReplySchema),
-  approveAutoReply,
-);
+// An automatic reply goes out when the Front Office accepts the mail; this sends one that failed.
+router.post('/mailbox/messages/:messageId/auto-reply/retry', verifyToken, verifyRole(FRONT_OFFICE_ONLY), retryAutoReply);
 
 router.post(
   '/mailbox/messages/:messageId/auto-reply/decline',
