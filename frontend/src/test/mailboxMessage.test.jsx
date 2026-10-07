@@ -15,10 +15,6 @@ vi.mock('@/services/api/mailboxService', async (importOriginal) => ({
   setMailboxMessageCategory: vi.fn(),
 }));
 
-
-const CSP =
-  "default-src 'none'; img-src data:; style-src 'unsafe-inline'; font-src data:; form-action 'none'; base-uri 'none'";
-
 const MESSAGE = {
   mailboxMessageId: 'MSG-00001',
   from: 'Ravi Kumar <ravi@pharma.example>',
@@ -88,63 +84,19 @@ describe('the message body', () => {
     expect(screen.queryByRole('button', { name: 'Formatted' })).toBeNull();
   });
 
-  it('renders HTML only inside a frame with no permissions and a no-fetch policy', async () => {
+  it('shows the plain text even when the mail also has HTML, never rendering the HTML', async () => {
     fetchMailboxMessage.mockResolvedValue({
       ...MESSAGE,
-      bodyHtml:
-        '<meta http-equiv="refresh" content="0;url=https://evil.example/">' +
-        '<p data-testid="mail-html-marker">Hello from the formatted body</p>' +
-        '<script>window.__mailLeak = 1</script>' +
-        '<img src="x" onerror="window.__mailLeak = 2">' +
-        '<a href="https://site.example/">site</a>',
+      bodyHtml: '<p data-testid="mail-html-marker">Hello from the formatted body</p><script>window.__mailLeak = 1</script>',
     });
     renderMessage();
 
-    const formatted = await screen.findByRole('button', { name: 'Formatted' });
-    expect(screen.getByRole('button', { name: 'Plain text' })).toHaveAttribute('aria-pressed', 'true');
+    expect(await screen.findByText(/Please confirm the applicable impurity limit/)).toBeInTheDocument();
     expect(document.querySelector('iframe')).toBeNull();
-
-    fireEvent.click(formatted);
-
-    const frame = screen.getByTitle('Formatted message body');
-    expect(frame.getAttribute('sandbox')).toBe('');
-
-    const srcdoc = frame.getAttribute('srcdoc');
-    expect(srcdoc).not.toMatch(/<script/i);
-    expect(srcdoc).not.toMatch(/refresh/i);
-
-    const doc = new DOMParser().parseFromString(srcdoc, 'text/html');
-    expect(doc.querySelector('meta[http-equiv="Content-Security-Policy"]').content).toBe(CSP);
-    expect(doc.querySelectorAll('meta[http-equiv]')).toHaveLength(1);
-    expect(doc.querySelector('meta[name="referrer"]').content).toBe('no-referrer');
-    expect(doc.querySelector('[data-testid="mail-html-marker"]').textContent).toBe(
-      'Hello from the formatted body',
-    );
-    expect(doc.querySelector('a').getAttribute('target')).toBe('_blank');
-
+    expect(screen.queryByRole('button', { name: 'Formatted' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Plain text' })).toBeNull();
     expect(screen.queryByTestId('mail-html-marker')).toBeNull();
     expect(window.__mailLeak).toBeUndefined();
-  });
-
-  it('drops template content, and points SVG links at a new tab too', async () => {
-    fetchMailboxMessage.mockResolvedValue({
-      ...MESSAGE,
-      bodyHtml:
-        '<p>Hello</p><template shadowrootmode="open"><a href="https://evil.example/">x</a>' +
-        '<meta http-equiv="refresh" content="0"></template>' +
-        '<svg><a xlink:href="https://site.example/"><text>svg link</text></a></svg>',
-    });
-    renderMessage();
-
-    fireEvent.click(await screen.findByRole('button', { name: 'Formatted' }));
-
-    const srcdoc = screen.getByTitle('Formatted message body').getAttribute('srcdoc');
-    expect(srcdoc).not.toMatch(/<template/i);
-    expect(srcdoc).not.toMatch(/refresh/i);
-    expect(srcdoc).not.toMatch(/evil\.example/);
-
-    const doc = new DOMParser().parseFromString(srcdoc, 'text/html');
-    expect(doc.querySelector('svg a').getAttribute('target')).toBe('_blank');
   });
 });
 

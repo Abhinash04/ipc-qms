@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -16,11 +16,10 @@ import {
 } from "lucide-react";
 
 import { Breadcrumb } from "@/components/common/Breadcrumb";
-import { CaseCard, Segmented } from "@/components/common/CaseCard";
+import { CaseCard } from "@/components/common/CaseCard";
 import { EmptyState } from "@/components/common/EmptyState";
 import { StatusBadge } from "@/components/common/StatusBadge";
 import { AttachmentList } from "@/components/attachments/AttachmentList";
-import { MailHtmlFrame } from "@/components/email/MailHtmlFrame";
 import { MailCategoryDetails } from "@/components/email/MailCategoryBadge";
 import { AutoReplyPanel } from "@/components/email/AutoReplyPanel";
 import { AutoReplyConfidenceCard } from "@/components/email/AutoReplyConfidence";
@@ -38,11 +37,6 @@ import { MAIL_CATEGORY_META } from "@/constants/mailCategories";
 import { parseSender, formatFullDate } from "@/utils/mailboxFormat";
 
 const CARD = "bg-card rounded-2xl border border-transparent p-5 shadow-card";
-
-const BODY_FORMATS = [
-  { value: false, label: "Plain text" },
-  { value: true, label: "Formatted" },
-];
 
 const UNLINKED = {
   REJECTED: ["Rejected", "No case was created for this message."],
@@ -130,34 +124,24 @@ function MessageHeader({ message }) {
 }
 
 function MessageBody({ message }) {
-  const [formatted, setFormatted] = useState(false);
-
   return (
-    <CaseCard
-      tone="email"
-      banner
-      art={[MailOpen, MailIcon, Inbox]}
-      icon={MailIcon}
-      title="Message"
-      toolbar={
-        message.bodyHtml && (
-          <Segmented label="Body format" options={BODY_FORMATS} value={formatted} onChange={setFormatted} />
-        )
-      }
-    >
-      {formatted ? (
-        <>
-          <MailHtmlFrame html={message.bodyHtml} />
-          <p className="mt-2 mb-0 text-[12px] font-medium text-slate-400">
-            Links and remote images are disabled in this view.
-          </p>
-        </>
-      ) : (
-        <div className="whitespace-pre-wrap wrap-break-word text-[13.5px] leading-relaxed text-slate-700">
-          {message.body || "(No text)"}
-        </div>
-      )}
+    <CaseCard tone="email" banner art={[MailOpen, MailIcon, Inbox]} icon={MailIcon} title="Message">
+      <div className="whitespace-pre-wrap wrap-break-word text-[13.5px] leading-relaxed text-slate-700">
+        {message.body || "(No text)"}
+      </div>
     </CaseCard>
+  );
+}
+
+function CaseStateBadge({ label, type, value }) {
+  if (!value) return null;
+  return (
+    <div className="inline-flex items-center gap-1.5">
+      <dt className="text-[11px] font-semibold tracking-wider text-slate-400 uppercase">{label}</dt>
+      <dd className="m-0">
+        <StatusBadge type={type} value={value} />
+      </dd>
+    </div>
   );
 }
 
@@ -176,10 +160,13 @@ function MessageCaseCard({ message, paths }) {
             <span>{linked.queryId}</span>
             <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
           </Link>
-          <div className="flex flex-wrap gap-2">
-            <StatusBadge type="workflow" value={linked.workflowState} />
-            <StatusBadge type="business" value={linked.businessStatus} />
-          </div>
+          {/* Status and stage read the same once a case closes, so the stage shows only when it differs. */}
+          <dl className="m-0 flex flex-wrap items-center gap-x-4 gap-y-2">
+            <CaseStateBadge label="Status" type="business" value={linked.businessStatus} />
+            {linked.workflowState !== linked.businessStatus && (
+              <CaseStateBadge label="Stage" type="workflow" value={linked.workflowState} />
+            )}
+          </dl>
         </div>
       ) : (
         <>
