@@ -57,6 +57,24 @@ const STEP_MS = 70;
 const delay = (position) => ({ '--wf-delay': `${Math.max(0, position) * STEP_MS}ms` });
 
 // Return arcs rise above the line; each arc that overlaps an earlier one rises one step higher.
+// A pull back's arc is orange; a change request's is rose, like its marker on the line.
+const ARC_STYLES = {
+  [WORKFLOW_ITEM.PULL_BACK]: {
+    marker: 'pullback-arrowhead',
+    stroke: '#FF7300',
+    badge: 'border-[#FFD0A6] bg-[#FFF5EA] ring-orange-200/40',
+    dot: 'bg-[#FF7300]',
+    text: 'text-[#FF7300]',
+  },
+  [WORKFLOW_ITEM.CHANGES_REQUESTED]: {
+    marker: 'changes-arrowhead',
+    stroke: '#F43F5E',
+    badge: 'border-rose-200 bg-rose-50 ring-rose-200/40',
+    dot: 'bg-rose-500',
+    text: 'text-rose-600',
+  },
+};
+const arcStyleOf = (arc) => ARC_STYLES[arc.kind] || ARC_STYLES[WORKFLOW_ITEM.PULL_BACK];
 const ARC_RISE = 32;
 const ARC_STEP = 16;
 const riseOf = (level) => ARC_RISE + (level - 1) * ARC_STEP;
@@ -360,32 +378,40 @@ function TrackGap({ item }) {
   );
 }
 
-/** One arc per pull back, from its marker back over the line to the visit it returned to. */
-function ReturnArcs({ arcs, markerId }) {
+/**
+ * One arc per pull back, from its marker back over the line to the visit it returned to, and one
+ * per change request, back to the draft it sent back.
+ */
+function ReturnArcs({ arcs, idSuffix }) {
   if (arcs.length === 0) return null;
+  const markerOf = (style) => `${style.marker}-${idSuffix}`;
   return (
     <svg className="pointer-events-none absolute inset-0 h-full w-full overflow-visible" aria-hidden="true" focusable="false">
       <defs>
-        <marker id={markerId} viewBox="0 0 10 10" refX="0" refY="5" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto">
-          <path d="M0 1.5 L8 5 L0 8.5 Z" fill="#FF7300" />
-        </marker>
+        {Object.values(ARC_STYLES).map((style) => (
+          <marker key={style.marker} id={markerOf(style)} viewBox="0 0 10 10" refX="0" refY="5" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto">
+            <path d="M0 1.5 L8 5 L0 8.5 Z" fill={style.stroke} />
+          </marker>
+        ))}
       </defs>
       {arcs.map((arc) => {
         const base = Math.min(arc.y1, arc.y2);
         const control = base - (riseOf(arc.level) * 4) / 3;
+        const style = arcStyleOf(arc);
         return (
           <path
             key={arc.id}
             data-return-arc={arc.id}
+            data-arc-kind={arc.kind}
             d={`M ${arc.x1} ${arc.y1} C ${arc.x1} ${control}, ${arc.x2} ${control}, ${arc.x2} ${arc.y2 - 8}`}
             fill="none"
-            stroke="#FF7300"
+            stroke={style.stroke}
             strokeWidth="2.2"
             strokeDasharray="6 4"
             strokeLinecap="butt"
             className="wf-arc"
             style={delay(2 * arc.position)}
-            markerEnd={`url(#${markerId})`}
+            markerEnd={`url(#${markerOf(style)})`}
           />
         );
       })}
@@ -421,6 +447,8 @@ function useReturnArcs(connections, trackRef, nodesRef) {
             if (!from || !to || (!from.width && !to.width)) return null;
             return {
               id: connection.id,
+              from: connection.from,
+              kind: connection.kind,
               level: connection.level,
               position: connection.position,
               x1: from.left + from.width / 2 - box.left,
@@ -518,7 +546,7 @@ function VerticalItem({ item, index, items }) {
 /**
  * The case's whole history on one line, oldest to newest: the lifecycle stages with every transfer,
  * pull back and change request where it happened. A pull back draws an arc back to the stage it returned to, and
- * the line carries on from that stage again. Without `events` it is the plain lifecycle.
+ * the line carries on from that stage again. A change request draws one back to the draft it sent back. Without `events` it is the plain lifecycle.
  * `view` only chooses what is drawn from that one sequence (see WORKFLOW_VIEW).
  */
 export function QueryLifecycleTimeline({ stages = NONE, events = NONE, audit = NONE, view = WORKFLOW_VIEW.ALL }) {
@@ -528,7 +556,8 @@ export function QueryLifecycleTimeline({ stages = NONE, events = NONE, audit = N
   const trackRef = useRef(null);
   const nodesRef = useRef(new Map());
   const arcs = useReturnArcs(leveled, trackRef, nodesRef);
-  const markerId = `pullback-arrowhead-${useId().replace(/[^a-zA-Z0-9_-]/g, '')}`;
+  const idSuffix = useId().replace(/[^a-zA-Z0-9_-]/g, '');
+  const itemsById = useMemo(() => new Map(items.map((item) => [item.id, item])), [items]);
 
   if (stages.length === 0) return null;
   if (items.length === 0) {
@@ -555,11 +584,14 @@ export function QueryLifecycleTimeline({ stages = NONE, events = NONE, audit = N
           aria-label="Workflow progress"
         >
           <div ref={trackRef} className="relative" style={lane ? { paddingTop: lane } : undefined}>
-            <ReturnArcs arcs={arcs} markerId={markerId} />
+            <ReturnArcs arcs={arcs} idSuffix={idSuffix} />
             {arcs.map((arc) => {
               const base = Math.min(arc.y1, arc.y2);
               const midX = (arc.x1 + arc.x2) / 2;
               const midY = base - riseOf(arc.level);
+              const style = arcStyleOf(arc);
+              const source = itemsById.get(arc.from);
+              const label = source && source.kind !== WORKFLOW_ITEM.PULL_BACK ? styleOf(source).pill : 'Pull back';
               return (
                 <div
                   key={`arc-badge-${arc.id}`}
@@ -567,12 +599,12 @@ export function QueryLifecycleTimeline({ stages = NONE, events = NONE, audit = N
                   className="pointer-events-none absolute z-10 -translate-x-1/2 -translate-y-1/2 select-none"
                   style={{ left: `${midX}px`, top: `${midY}px`, ...delay(2 * arc.position) }}
                 >
-                  <span className="inline-flex items-center gap-1.5 rounded-full border border-[#FFD0A6] bg-[#FFF5EA] px-3 py-1 shadow-xs ring-2 ring-orange-200/40 backdrop-blur-xs">
-                    <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-[#FF7300] text-white shadow-2xs">
+                  <span className={cn('inline-flex items-center gap-1.5 rounded-full border px-3 py-1 shadow-xs ring-2 backdrop-blur-xs', style.badge)}>
+                    <span className={cn('flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-white shadow-2xs', style.dot)}>
                       <ArrowLeft className="h-2.5 w-2.5 stroke-[3]" aria-hidden="true" />
                     </span>
-                    <span className="text-[12px] font-extrabold tracking-tight text-[#FF7300] whitespace-nowrap">
-                      Pull back
+                    <span className={cn('text-[12px] font-extrabold tracking-tight whitespace-nowrap', style.text)}>
+                      {label}
                     </span>
                   </span>
                 </div>

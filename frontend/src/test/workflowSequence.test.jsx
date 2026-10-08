@@ -515,4 +515,33 @@ describe('a change request on the workflow line', () => {
     );
     expect(within(track()).getByText('Rejected')).toBeInTheDocument();
   });
+
+  it('points back to the draft it sent back, or to the assignment when nothing was drafted yet', () => {
+    const target = (audit) => {
+      const sequence = buildWorkflowSequence({ stages: lifecycle(), events: [changeRequest()], audit });
+      const byId = new Map(sequence.items.map((item) => [item.id, item]));
+      expect(sequence.connections).toHaveLength(1);
+      const [connection] = sequence.connections;
+      expect(connection.kind).toBe(WORKFLOW_ITEM.CHANGES_REQUESTED);
+      expect(byId.get(connection.from).kind).toBe(WORKFLOW_ITEM.CHANGES_REQUESTED);
+      return byId.get(connection.to).stage.key;
+    };
+
+    const reviewed = [...AUDIT, entry(AUDIT_EVENT.REVIEW_ADDED, 8), entry(AUDIT_EVENT.REVIEW_COMPLETED, 15)];
+    expect(target(reviewed)).toBe(STAGE.DRAFTED);
+    expect(target(AUDIT)).toBe(STAGE.ASSIGNED);
+  });
+
+  it('draws a dashed return arc for it, like a pull back’s', () => {
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({
+      left: 10, top: 30, width: 24, height: 24, right: 34, bottom: 54, x: 10, y: 30, toJSON: () => ({}),
+    });
+    const { container } = render(<QueryLifecycleTimeline stages={lifecycle()} events={[changeRequest()]} audit={AUDIT} />);
+    const arcs = container.querySelectorAll('path[data-return-arc]');
+    expect(arcs).toHaveLength(1);
+    expect(arcs[0].getAttribute('data-arc-kind')).toBe(WORKFLOW_ITEM.CHANGES_REQUESTED);
+    expect(arcs[0].getAttribute('stroke-dasharray')).toBe('6 4');
+    expect(arcs[0].getAttribute('marker-end')).toMatch(/^url\(#changes-arrowhead-/);
+    vi.restoreAllMocks();
+  });
 });

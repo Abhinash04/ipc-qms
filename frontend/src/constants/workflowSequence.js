@@ -155,7 +155,8 @@ const itemKind = (event) => {
  * One chronological line for the whole case: the lifecycle stages, with every transfer, pull back
  * and change request placed where it happened. Each pull back closes a pass; the next pass starts again at the
  * stage it returned to, so a stage visited twice appears twice. `connections` pair each pull back
- * with the earlier visit it returned to, for the return arrow.
+ * with the earlier visit it returned to, and each change request with the draft it sent back, for
+ * the return arrow; `kind` says which.
  */
 export function buildWorkflowSequence({ stages = [], events = [], audit = [] } = {}) {
   if (stages.length === 0) return { items: [], connections: [] };
@@ -232,12 +233,25 @@ export function buildWorkflowSequence({ stages = [], events = [], audit = [] } =
     const item = eventItem(pullback, { returnsTo: returnStage.label });
     const target = items.findLast((entry) => entry.kind === WORKFLOW_ITEM.STAGE && entry.stage.key === returnStage.key);
     items.push(item);
-    if (target) connections.push({ id: `${item.id}->${target.id}`, from: item.id, to: target.id });
+    if (target) connections.push({ id: `${item.id}->${target.id}`, from: item.id, to: target.id, kind: item.kind });
 
     start = returnIndex;
     lower = upper;
     reopenedBy = pullback;
   });
+
+  // A change request sends the draft back to the assigned official without closing the pass, so
+  // its arrow returns to the latest draft before it (or the assignment, when there was no draft yet).
+  items.forEach((item, index) => {
+    if (item.kind !== WORKFLOW_ITEM.CHANGES_REQUESTED) return;
+    const earlier = items.slice(0, index).filter(isStageItem);
+    const target =
+      earlier.findLast((entry) => entry.stage.key === STAGE.DRAFTED) ||
+      earlier.findLast((entry) => entry.stage.key === STAGE.ASSIGNED);
+    if (target) connections.push({ id: `${item.id}->${target.id}`, from: item.id, to: target.id, kind: item.kind });
+  });
+  const position = new Map(items.map((item, index) => [item.id, index]));
+  connections.sort((a, b) => position.get(a.from) - position.get(b.from));
 
   return { items, connections };
 }

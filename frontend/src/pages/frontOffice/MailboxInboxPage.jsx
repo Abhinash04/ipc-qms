@@ -70,14 +70,16 @@ const SYNC_POLL_MS = 3000;
 const PAGE_SIZE = 50;
 const SEARCH_DEBOUNCE_MS = 300;
 
+// The purge deletes only this app's copy of a mail; the original stays in the mailbox it arrived in.
 function describePurge(purgesAt, now = Date.now()) {
   if (!purgesAt) return null;
   const at = Date.parse(purgesAt);
   if (Number.isNaN(at)) return null;
   const hours = Math.round((at - now) / 3600000);
-  if (hours <= 0) return "purges next sweep";
-  if (hours < 48) return `purges in ${hours}h`;
-  return `purges in ${Math.round(hours / 24)}d`;
+  if (hours <= 0) return { label: "Removed from app soon", when: "shortly" };
+  if (hours < 48) return { label: `Removed from app in ${hours}h`, when: `in about ${hours} hour${hours === 1 ? "" : "s"}` };
+  const days = Math.round(hours / 24);
+  return { label: `Removed from app in ${days}d`, when: `in about ${days} days` };
 }
 
 function useDebouncedValue(value, ms) {
@@ -443,16 +445,28 @@ function MailboxRowTags({ message, known, junk, purge, onCorrectCategory, correc
           </span>
         )}
         {purge && !known ? (
-          <span
-            className={cn(
-              "inline-flex items-center whitespace-nowrap border",
-              TAG_CHIP,
-              junk ? "border-amber-200 bg-amber-100 text-amber-700" : "border-slate-200 bg-slate-100 text-slate-500",
-            )}
-          >
-            <Clock aria-hidden="true" />
-            {purge}
-          </span>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span
+                  tabIndex={0}
+                  className={cn(
+                    "inline-flex cursor-help items-center whitespace-nowrap border focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary",
+                    TAG_CHIP,
+                    junk ? "border-amber-200 bg-amber-100 text-amber-700" : "border-slate-200 bg-slate-100 text-slate-500",
+                  )}
+                >
+                  <Clock aria-hidden="true" />
+                  {purge.label}
+                </span>
+              </TooltipTrigger>
+              <TooltipContent className="max-w-70 wrap-break-word">
+                {junk ? "Marked as junk, so this" : "This"} copy will be removed from this app {purge.when}. The
+                original email is not deleted — it stays in the IPC mailbox.
+                {junk ? " Choose “Not junk” to keep it here." : ""}
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
         ) : null}
       </div>
       <AutoReplyConfidence message={message} className={TAG_CHIP} />
@@ -558,7 +572,7 @@ function RowValidationControls({ message, decision, junk, pending, confirming, o
               </Button>
             </TooltipTrigger>
             <TooltipContent className="max-w-70 wrap-break-word">
-              Not junk. Clears the verdict so it is never purged, without opening
+              Not junk. Keeps it in this app instead of removing it, without opening
               a Query Case the way accepting would.
             </TooltipContent>
           </Tooltip>
@@ -954,7 +968,7 @@ export function MailboxInboxPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["mailbox"] });
       notify.success("Kept", {
-        description: "The junk verdict is cleared. This message will not be purged.",
+        description: "It is no longer marked as junk and will stay in this app.",
       });
     },
     onError: (error) => {

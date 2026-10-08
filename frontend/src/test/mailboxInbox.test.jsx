@@ -936,7 +936,7 @@ describe('junk mail in the feed', () => {
     fetchMailboxMessages.mockResolvedValue({ messages: [junkMessage(9, 'Half price reagents')] });
     renderInbox();
 
-    expect(await screen.findByText('purges in 12h')).toBeInTheDocument();
+    expect(await screen.findByText('Removed from app in 12h')).toBeInTheDocument();
   });
 
   it('counts a long window in days rather than a three-figure number of hours', async () => {
@@ -945,7 +945,7 @@ describe('junk mail in the feed', () => {
     });
     renderInbox();
 
-    expect(await screen.findByText('purges in 14d')).toBeInTheDocument();
+    expect(await screen.findByText('Removed from app in 14d')).toBeInTheDocument();
   });
 
   it('shows no countdown on a genuine message, which is never purged by age', async () => {
@@ -955,7 +955,7 @@ describe('junk mail in the feed', () => {
     renderInbox();
     await findListed('Unactioned enquiry');
 
-    expect(screen.queryByText(/purges in/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Removed from app/)).not.toBeInTheDocument();
   });
 
   it('says nothing about purging for a message with no verdict at all', async () => {
@@ -963,7 +963,7 @@ describe('junk mail in the feed', () => {
     renderInbox();
     await findListed('Ordinary enquiry');
 
-    expect(screen.queryByText(/purges in/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Removed from app/)).not.toBeInTheDocument();
   });
 
   it('offers Rescue on a junk row and clears the verdict without opening a case', async () => {
@@ -995,7 +995,7 @@ describe('junk mail in the feed', () => {
     await findListed('Half price reagents');
 
     expect(screen.queryByRole('button', { name: /Rescue message/ })).not.toBeInTheDocument();
-    expect(screen.queryByText(/purges in/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Removed from app/)).not.toBeInTheDocument();
   });
 
   it('tells the Front Officer when a rescue could not be recorded', async () => {
