@@ -285,3 +285,108 @@ describe('Sign Up page and navigation', () => {
     expect(await screen.findByText('An account with this email already exists. Please sign in.')).toBeInTheDocument();
   });
 });
+
+describe('expertise for an Assigned Official request', () => {
+  async function fillForm(designation) {
+    renderApp(ROUTE_PATHS.SIGNUP);
+    await screen.findByRole('heading', { name: 'Sign Up' });
+    fireEvent.change(screen.getByLabelText('Full Name'), { target: { value: 'Ravi Kumar' } });
+    fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'ravi@ipc.example' } });
+    await act(async () => {
+      fireEvent.click(screen.getByLabelText('Department'));
+    });
+    fireEvent.click(screen.getByRole('option', { name: 'Analytical & Quality Control' }));
+    await chooseDesignation(designation);
+    fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'password123' } });
+    fireEvent.change(screen.getByLabelText('Confirm Password'), { target: { value: 'password123' } });
+  }
+
+  async function chooseDesignation(designation) {
+    await act(async () => {
+      fireEvent.click(screen.getByLabelText('Designation'));
+    });
+    fireEvent.click(screen.getByRole('option', { name: designation }));
+  }
+
+  const submit = () =>
+    act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /Create Account/i }));
+    });
+
+  const addOther = (text) => {
+    fireEvent.change(screen.getByLabelText('Other area (optional)'), { target: { value: text } });
+    fireEvent.click(screen.getByRole('button', { name: 'Add' }));
+  };
+
+  it('is asked for only when the designation is Assigned Official', async () => {
+    await fillForm('Reviewer');
+    expect(screen.queryByRole('group', { name: 'Areas of expertise' })).not.toBeInTheDocument();
+
+    await chooseDesignation('Assigned Official');
+    const group = screen.getByRole('group', { name: 'Areas of expertise' });
+    for (const area of ['Pharmaceutical Analysis', 'Quality Control', 'Microbiology', 'Toxicology']) {
+      expect(screen.getByRole('button', { name: area, pressed: false })).toBeInTheDocument();
+    }
+    expect(group).toBeInTheDocument();
+  });
+
+  it('needs at least one area before the request is sent', async () => {
+    const { register } = await import('@/services/api/authService');
+    await fillForm('Assigned Official');
+
+    await submit();
+
+    expect(await screen.findByText('Choose at least one area of expertise.')).toBeInTheDocument();
+    expect(register).not.toHaveBeenCalled();
+  });
+
+  it('sends the chosen areas and any other area, lowercased and without repeats', async () => {
+    const { register } = await import('@/services/api/authService');
+    await fillForm('Assigned Official');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Microbiology' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Toxicology' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Toxicology' })); // unselected again
+    fireEvent.click(screen.getByRole('button', { name: 'Pharmacology' }));
+    addOther('Nitrosamine  Impurities');
+    addOther('nitrosamine impurities'); // already there
+    addOther('MICROBIOLOGY'); // a listed area is selected, not added twice
+
+    expect(screen.getByRole('button', { name: 'Microbiology', pressed: true })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Toxicology', pressed: false })).toBeInTheDocument();
+    expect(screen.getByRole('list', { name: 'Other areas of expertise' })).toHaveTextContent('Nitrosamine Impurities');
+
+    await submit();
+
+    await waitFor(() => expect(register).toHaveBeenCalledTimes(1));
+    expect(vi.mocked(register).mock.calls[0][0]).toMatchObject({
+      designation: 'Assigned Official',
+      expertise: ['microbiology', 'pharmacology', 'nitrosamine impurities'],
+    });
+  });
+
+  it('refuses an other area longer than the server accepts', async () => {
+    await fillForm('Assigned Official');
+    addOther('x'.repeat(61));
+    expect(screen.getByText('Keep each area to 60 characters.')).toBeInTheDocument();
+    expect(screen.queryByRole('list', { name: 'Other areas of expertise' })).not.toBeInTheDocument();
+  });
+
+  it('drops the expertise when the designation changes away from Assigned Official', async () => {
+    const { register } = await import('@/services/api/authService');
+    await fillForm('Assigned Official');
+    fireEvent.click(screen.getByRole('button', { name: 'Microbiology' }));
+
+    await chooseDesignation('Reviewer');
+    expect(screen.queryByRole('group', { name: 'Areas of expertise' })).not.toBeInTheDocument();
+
+    // Coming back starts from nothing rather than the earlier picks.
+    await chooseDesignation('Assigned Official');
+    expect(screen.getByRole('button', { name: 'Microbiology', pressed: false })).toBeInTheDocument();
+
+    await chooseDesignation('Reviewer');
+    await submit();
+    await waitFor(() => expect(register).toHaveBeenCalledTimes(1));
+    expect(vi.mocked(register).mock.calls[0][0]).not.toHaveProperty('expertise');
+  });
+});

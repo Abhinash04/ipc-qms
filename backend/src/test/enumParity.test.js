@@ -18,6 +18,9 @@ import * as clientCategories from '../../../frontend/src/constants/mailCategorie
 import * as clientCycle from '../../../frontend/src/constants/reviewCycle.js';
 import { AUDIT_ACTION_OPTIONS } from '../../../frontend/src/constants/auditFilters.js';
 import { PULLBACK_RANK, STEP_STATUS } from '../services/workflow/pullbackPlan.js';
+import { EXPERTISE_AREAS, OFFICER_DESIGNATION } from '../constants/expertise.js';
+import * as clientExpertise from '../../../frontend/src/constants/expertise.js';
+import { ROLE_LABELS as CLIENT_ROLE_LABELS } from '../../../frontend/src/constants/roles.js';
 
 describe('workflow vocabulary parity with the client', () => {
   it.each([
@@ -75,5 +78,13 @@ describe('pull back rule parity with the client', () => {
   it('ranks the same stages and names the same step statuses on both sides', () => {
     expect(PULLBACK_RANK).toEqual(clientCycle.PULLBACK_RANK);
     expect(STEP_STATUS).toEqual(clientCycle.STEP_STATUS);
+  });
+});
+
+describe('expertise vocabulary parity with the client', () => {
+  it('offers the same areas, expanded the same way, for the same sign-up designation', () => {
+    expect(EXPERTISE_AREAS).toEqual(clientExpertise.EXPERTISE_AREAS);
+    expect(OFFICER_DESIGNATION).toBe(clientExpertise.OFFICER_DESIGNATION);
+    expect(OFFICER_DESIGNATION).toBe(CLIENT_ROLE_LABELS[ROLES.ASSIGNED_OFFICIAL]);
   });
 });

@@ -63,6 +63,7 @@ import {
   resetAccountPassword,
 } from '@/services/api/userAdminService';
 import { formatTime, relativeTime } from '@/components/admin/auditFormat';
+import { EXPERTISE_AREAS } from '@/constants/expertise';
 
 const ROLE_BADGE_STYLE = {
   [ROLES.SUPER_ADMIN]: { bg: 'bg-purple-100/90 text-purple-700 border-purple-200/80', icon: Crown },
@@ -465,7 +466,10 @@ export function AdminUsersPage() {
 
   const all = accounts.data?.accounts || [];
   const counts = accounts.data?.counts || {};
-  const suggestions = [...new Set(all.flatMap((account) => account.expertise || []))].sort();
+  // Offer the sign-up areas too, so an approval uses the words the applicant picked from.
+  const suggestions = [
+    ...new Set([...EXPERTISE_AREAS.map((area) => area.label.toLowerCase()), ...all.flatMap((account) => account.expertise || [])]),
+  ].sort();
   const needle = search.trim().toLowerCase();
   const rows = all
     .filter((account) => account.status === status)

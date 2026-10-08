@@ -19,11 +19,14 @@ import * as audit from '../services/audit/auditService.js';
 import { AUDIT_ACTIONS, AUDIT_RESULTS } from '../constants/auditActions.js';
 import { ACTOR_TYPES, ACCOUNT_STATUS } from '../constants/roles.js';
 import { nicFrontOfficeUser } from '../constants/users.js';
+import { OFFICER_DESIGNATION } from '../constants/expertise.js';
+import { expertiseSchema } from '../validators/userAdminSchemas.js';
 import { verifyGoogleToken } from '../services/auth/googleAuthService.js';
 import { User } from '../models/User.js';
 import { isConnected } from '../config/db.js';
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const NO_EXPERTISE = 'Please choose at least one area of expertise';
 const PENDING_APPROVAL = 'Your account is awaiting approval by an administrator.';
 const CONTACT_ADMINISTRATION = 'Please contact the IPC administration team.';
 
@@ -263,7 +266,7 @@ async function googleLogin(req, res, next) {
  */
 async function register(req, res, next) {
   try {
-    const { name, email, department, designation, password, confirmPassword } = req.body || {};
+    const { name, email, department, designation, password, confirmPassword, expertise } = req.body || {};
     const text = (value) => (typeof value === 'string' ? value.trim() : '');
 
     if (!text(name) || !text(email) || !text(department) || !text(designation) || !password || !confirmPassword) {
@@ -281,6 +284,15 @@ async function register(req, res, next) {
     if (password !== confirmPassword) {
       return badRequest(res, 'Password and confirm password must match');
     }
+
+    // Only someone asking to be an Assigned Official names their expertise; it is what the
+    // Recommendation Engine matches queries against once an administrator approves them.
+    const officer = text(designation) === OFFICER_DESIGNATION;
+    const requestedExpertise = officer ? expertiseSchema.safeParse(expertise ?? []) : null;
+    if (requestedExpertise && !requestedExpertise.success) {
+      return badRequest(res, 'Each area of expertise must be 1 to 60 characters, at most 20 areas');
+    }
+    if (requestedExpertise && requestedExpertise.data.length === 0) return badRequest(res, NO_EXPERTISE);
 
     if (!isConnected()) {
       return res
@@ -304,6 +316,7 @@ async function register(req, res, next) {
       role: null,
       active: true,
       status: ACCOUNT_STATUS.PENDING,
+      ...(requestedExpertise && { expertise: requestedExpertise.data }),
       createdAt: new Date().toISOString(),
     };
     await User.create({ ...account, password: await bcrypt.hash(password, BCRYPT_ROUNDS) });
@@ -318,6 +331,7 @@ async function register(req, res, next) {
         targetEmail: account.email,
         requestedDesignation: account.designation,
         department: account.department,
+        ...(account.expertise && { requestedExpertise: account.expertise }),
       },
     });
 

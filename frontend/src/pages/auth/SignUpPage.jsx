@@ -15,6 +15,8 @@ import {
   Zap,
   ChevronDown,
   Check,
+  Plus,
+  X,
 } from "lucide-react";
 
 import { ROUTE_PATHS, roleHome } from "@/constants/routePaths";
@@ -23,6 +25,7 @@ import { HeroBackdrop } from "@/components/common/HeroBackdrop";
 import { PageBackdrop } from "@/components/common/PageBackdrop";
 import { notify } from "@/services/notify";
 import { register } from "@/services/api/authService";
+import { EXPERTISE_AREAS, OFFICER_DESIGNATION } from "@/constants/expertise";
 
 const FIELD_BASE =
   "w-full rounded-lg border bg-surface py-2 ps-9 text-[13px] text-ink placeholder:text-ink-muted outline-none transition-colors focus:ring-2";
@@ -45,11 +48,132 @@ const DEPARTMENTS = [
 
 const DESIGNATIONS = [
   "Officer-in-Charge",
-  "Assigned Official",
+  OFFICER_DESIGNATION,
   "Reviewer",
   "Admin",
   "Super Admin",
 ];
+
+// Same limit as the server for one phrase; a few "Other" entries keep the list focused.
+const MAX_EXPERTISE_CHARS = 60;
+const MAX_OTHER_EXPERTISE = 5;
+const AREA_LABELS = EXPERTISE_AREAS.map((area) => area.label);
+const sameText = (a, b) => a.trim().toLowerCase() === b.trim().toLowerCase();
+
+/** The areas an Assigned Official applicant works in: listed areas to pick, plus their own. */
+function ExpertiseField({ value, error, onChange }) {
+  const [draft, setDraft] = useState("");
+  const [draftError, setDraftError] = useState(null);
+  const others = value.filter((entry) => !AREA_LABELS.some((label) => sameText(label, entry)));
+
+  const toggle = (label) =>
+    onChange(value.some((entry) => sameText(entry, label)) ? value.filter((entry) => !sameText(entry, label)) : [...value, label]);
+
+  const addOther = () => {
+    const phrase = draft.trim().replace(/\s+/g, " ");
+    if (!phrase) return;
+    if (phrase.length > MAX_EXPERTISE_CHARS) {
+      setDraftError(`Keep each area to ${MAX_EXPERTISE_CHARS} characters.`);
+      return;
+    }
+    const listed = AREA_LABELS.find((label) => sameText(label, phrase));
+    if (!value.some((entry) => sameText(entry, phrase))) {
+      if (!listed && others.length >= MAX_OTHER_EXPERTISE) {
+        setDraftError(`Add at most ${MAX_OTHER_EXPERTISE} other areas.`);
+        return;
+      }
+      onChange([...value, listed || phrase]);
+    }
+    setDraft("");
+    setDraftError(null);
+  };
+
+  return (
+    <fieldset className="m-0 min-w-0 border-0 p-0" aria-describedby="signup-expertise-hint">
+      <legend className="mb-1 block p-0 text-[13px] font-medium text-ink-soft">Areas of expertise</legend>
+      <p id="signup-expertise-hint" className="mb-2 text-[12px] text-ink-muted">
+        Choose every area you work in. They are used to suggest you for matching queries once an administrator approves your account.
+      </p>
+      <div className="flex flex-wrap gap-1.5">
+        {AREA_LABELS.map((label) => {
+          const selected = value.some((entry) => sameText(entry, label));
+          return (
+            <button
+              key={label}
+              type="button"
+              aria-pressed={selected}
+              onClick={() => toggle(label)}
+              className={`inline-flex cursor-pointer items-center gap-1 rounded-full border px-2.5 py-1 text-[12px] font-medium transition-colors ${
+                selected
+                  ? "border-primary bg-primary-50 text-primary"
+                  : "border-line bg-surface text-ink-soft hover:bg-surface-muted"
+              }`}
+            >
+              {selected && <Check className="h-3 w-3" aria-hidden="true" />}
+              {label}
+            </button>
+          );
+        })}
+      </div>
+
+      {others.length > 0 && (
+        <ul className="m-0 mt-2 flex list-none flex-wrap gap-1.5 p-0" aria-label="Other areas of expertise">
+          {others.map((entry) => (
+            <li
+              key={entry}
+              className="inline-flex items-center gap-1 rounded-full border border-primary bg-primary-50 py-0.5 ps-2.5 pe-1 text-[12px] font-medium text-primary"
+            >
+              {entry}
+              <button
+                type="button"
+                aria-label={`Remove ${entry}`}
+                onClick={() => onChange(value.filter((item) => item !== entry))}
+                className="cursor-pointer rounded-full p-0.5 hover:bg-primary/10"
+              >
+                <X className="h-3 w-3" aria-hidden="true" />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <label htmlFor="signup-expertise-other" className="mb-1 mt-2.5 block text-[12px] font-medium text-ink-soft">
+        Other area (optional)
+      </label>
+      <div className="flex gap-2">
+        <input
+          id="signup-expertise-other"
+          type="text"
+          value={draft}
+          onChange={(event) => {
+            setDraft(event.target.value);
+            setDraftError(null);
+          }}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              event.preventDefault();
+              addOther();
+            }
+          }}
+          placeholder="e.g. Nitrosamine impurities"
+          className={`${FIELD_BASE} ${draftError ? FIELD_ERROR : FIELD_NORMAL} ps-3 pe-3`}
+        />
+        <button
+          type="button"
+          onClick={addOther}
+          disabled={!draft.trim()}
+          className="inline-flex shrink-0 cursor-pointer items-center gap-1 rounded-lg border border-line bg-surface px-3 text-[12.5px] font-semibold text-ink-soft transition-colors hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          <Plus className="h-3.5 w-3.5" aria-hidden="true" />
+          Add
+        </button>
+      </div>
+      {(draftError || error) && (
+        <p className="mt-1 text-[12px] font-medium text-red-600">{draftError || error}</p>
+      )}
+    </fieldset>
+  );
+}
 
 function CustomSelect({
   id,
@@ -154,6 +278,7 @@ export function SignUpPage() {
     email: "",
     department: "",
     designation: "",
+    expertise: [],
     password: "",
     confirmPassword: "",
   });
@@ -167,9 +292,16 @@ export function SignUpPage() {
   const home = currentUser ? roleHome(currentUser.role) : null;
   if (home && home !== ROUTE_PATHS.LOGIN) return <Navigate to={home} replace />;
 
+  const isOfficer = formData.designation === OFFICER_DESIGNATION;
+
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
+    setFormData((prev) => ({
+      ...prev,
+      [name]: value,
+      // Expertise belongs to an Assigned Official request only.
+      ...(name === "designation" && value !== OFFICER_DESIGNATION && { expertise: [] }),
+    }));
     if (errors[name]) {
       setErrors((prev) => ({ ...prev, [name]: null }));
     }
@@ -197,6 +329,10 @@ export function SignUpPage() {
 
     if (!formData.designation.trim()) {
       newErrors.designation = "Designation is required.";
+    }
+
+    if (isOfficer && formData.expertise.length === 0) {
+      newErrors.expertise = "Choose at least one area of expertise.";
     }
 
     if (!formData.password) {
@@ -234,6 +370,9 @@ export function SignUpPage() {
         email: formData.email.trim(),
         department: formData.department.trim(),
         designation: formData.designation.trim(),
+        ...(isOfficer && {
+          expertise: [...new Set(formData.expertise.map((entry) => entry.trim().toLowerCase()))],
+        }),
         password: formData.password,
         confirmPassword: formData.confirmPassword,
       };
@@ -413,6 +552,14 @@ export function SignUpPage() {
                   onChange={handleChange}
                 />
               </div>
+
+              {isOfficer && (
+                <ExpertiseField
+                  value={formData.expertise}
+                  error={errors.expertise}
+                  onChange={(expertise) => handleChange({ target: { name: "expertise", value: expertise } })}
+                />
+              )}
 
               <div>
                 <label

@@ -17,6 +17,7 @@ vi.mock('../models/AuditEvent.js', async () => ({
 import app from '../app.js';
 import authConfig from '../config/authConfig.js';
 import { User } from '../models/User.js';
+import { AuditEvent } from '../models/AuditEvent.js';
 import { ROLES } from '../constants/roles.js';
 import PASSWORDS from './fixtures/passwords.json' with { type: 'json' };
 
@@ -106,6 +107,50 @@ describe('POST /api/v1/auth/register', () => {
   it('is served only under /api/v1, where the rate limits apply', async () => {
     expect((await request(app).post('/api/auth/register').send(applicant())).status).toBe(404);
     expect((await request(app).post('/api/auth/login').send({ email: 'x@y.z', password: 'x' })).status).toBe(404);
+  });
+});
+
+describe('expertise requested at sign-up', () => {
+  const officer = (overrides = {}) => applicant({ designation: 'Assigned Official', ...overrides });
+
+  it('stores an Assigned Official applicant’s expertise lowercased and without repeats, and audits it', async () => {
+    const body = officer({ expertise: ['Microbiology', ' microbiology ', 'Nitrosamine Impurities'] });
+    expect((await register(body)).status).toBe(201);
+
+    const stored = await User.findOne({ email: body.email }).lean();
+    expect(stored).toMatchObject({ role: null, expertise: ['microbiology', 'nitrosamine impurities'] });
+
+    const [event] = (await AuditEvent.find({ action: 'USER_REGISTRATION_REQUESTED' }).lean()).filter(
+      (row) => row.details?.targetUserId === stored.userId,
+    );
+    expect(event.details.requestedExpertise).toEqual(['microbiology', 'nitrosamine impurities']);
+  });
+
+  it.each([
+    ['missing', undefined],
+    ['empty', []],
+    ['only blanks', ['   ']],
+  ])('refuses an Assigned Official applicant whose expertise is %s', async (_label, expertise) => {
+    const body = officer({ expertise });
+    const res = await register(body);
+    expect(res.status).toBe(400);
+    expect(await User.exists({ email: body.email })).toBeFalsy();
+  });
+
+  it.each([
+    ['a phrase over 60 characters', ['x'.repeat(61)]],
+    ['more than 20 areas', Array.from({ length: 21 }, (_, i) => `area ${i}`)],
+    ['not a list', 'microbiology'],
+  ])('refuses expertise with %s', async (_label, expertise) => {
+    const res = await register(officer({ expertise }));
+    expect(res.status).toBe(400);
+    expect(res.body.message).toMatch(/expertise/i);
+  });
+
+  it('ignores expertise sent with any other designation', async () => {
+    const body = applicant({ designation: 'Reviewer', expertise: ['microbiology'] });
+    expect((await register(body)).status).toBe(201);
+    expect((await User.findOne({ email: body.email }).lean()).expertise).toBeUndefined();
   });
 });
 
