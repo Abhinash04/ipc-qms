@@ -168,20 +168,12 @@ export function buildLifecycle({
 
   const reviewSteps = steps.filter((s) => s.stepType === 'REVIEW');
   const finalStep = steps.find((s) => s.stepType === 'FINAL_APPROVAL');
-  const wasReturned = query.workflowState === WORKFLOW_STATE.RETURNED_FOR_REVISION;
-  const latestReturn = [...reviews].sort(byTime).reverse().find(isSendBack);
-
   const draftLabel = versions.length
     ? `Response drafted (v${versions.length})`
     : 'Response drafted';
 
-  // Pull backs are not noted here: they are actions on the workflow line (see workflowSequence).
-  const returnNote =
-    wasReturned && latestReturn
-      ? latestReturn.decision === 'REJECTED'
-        ? `Rejected at final approval by ${findUserById(latestReturn.reviewerId)?.name || 'the Officer-in-Charge'}`
-        : `Returned for revision — ${findUserById(latestReturn.reviewerId)?.name || 'a reviewer'} requested changes`
-      : null;
+  // Pull backs and change requests are not noted here: they are actions on the workflow line
+  // (see workflowSequence).
 
   const lastOf = (...events) => latest(audit.filter((entry) => events.includes(entry.event)));
   const assigneeName = findUserById(query.currentAssigneeId)?.name || 'an official';
@@ -278,7 +270,6 @@ export function buildLifecycle({
       label: draftLabel,
       actor: findUserById(query.currentAssigneeId)?.name || null,
       at: at(AUDIT_EVENT.DRAFT_GENERATED),
-      note: returnNote,
       activity: draftActivity,
     },
   ];
@@ -431,7 +422,7 @@ export function buildLifecycle({
         : isCurrent
           ? STAGE_STATUS.CURRENT
           : STAGE_STATUS.PENDING,
-      note: isCurrent ? (stage.note || returnNote) : undefined,
+      note: isCurrent ? stage.note : undefined,
     };
   });
 }

@@ -56,7 +56,7 @@ export function ApprovalDetailPage() {
 
   const canApprove = can(WORKFLOW_ACTION.FINAL_APPROVE);
   const stages = buildLifecycle({ query, steps, versions, reviews, audit, messages });
-  const specialEvents = buildSpecialEvents({ query, audit });
+  const specialEvents = buildSpecialEvents({ query, audit, reviews });
   const completedStages = stages.filter((stage) => stage.status === STAGE_STATUS.COMPLETE).length;
   const openDialog = (decision) => {
     clearError();
@@ -131,7 +131,7 @@ export function ApprovalDetailPage() {
             icon={Route}
             title="Review history"
             meta={`${completedStages} of ${stages.length} stages complete${
-              specialEvents.length ? ` · ${specialEvents.length} pull backs & transfers` : ""
+              specialEvents.length ? ` · ${specialEvents.length} pull backs, transfers & change requests` : ""
             }`}
             bodyClassName="space-y-4 py-5"
           >

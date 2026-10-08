@@ -2,10 +2,12 @@ import { AUDIT_EVENT } from './statusEnums';
 import { findUserById } from './mockUsers';
 import { STAGE_LABELS } from './pullbackRules';
 import { ROLE_LABELS } from './roles';
+import { isSendBack } from './queryLifecycle';
 
 export const SPECIAL_EVENT = Object.freeze({
   PULL_BACK: 'pull_back',
   TRANSFER_QUERY: 'transfer_query',
+  CHANGES_REQUESTED: 'changes_requested',
 });
 
 const SAME_TRANSFER_MS = 2 * 60 * 1000;
@@ -79,6 +81,22 @@ function fromTransferAudit(entry) {
   };
 }
 
+/** A reviewer, or the Officer-in-Charge, sending the response back to the assigned official. */
+function fromSendBack(review, index) {
+  return {
+    id: `changes-${review.reviewId || review.at || index}`,
+    type: SPECIAL_EVENT.CHANGES_REQUESTED,
+    at: review.at || null,
+    by: userParty(review.reviewerId),
+    from: review.version ? { stage: review.version } : null,
+    to: { stage: 'Assigned official' },
+    reason: review.comment || null,
+    remarks: null,
+    rejected: review.decision === 'REJECTED',
+    automatic: false,
+  };
+}
+
 const near = (a, b) => Math.abs(new Date(a).getTime() - new Date(b).getTime()) <= SAME_TRANSFER_MS;
 
 /** Milliseconds since the epoch, or null for a missing or unreadable timestamp. */
@@ -96,10 +114,11 @@ export function sortWorkflowEvents(events = []) {
   });
 }
 
-export function buildSpecialEvents({ query, audit = [] } = {}) {
+export function buildSpecialEvents({ query, audit = [], reviews = [] } = {}) {
   if (!query) return [];
 
   const pullbacks = (query.pullbackHistory || []).map(fromPullback);
+  const sendBacks = reviews.filter(isSendBack).map(fromSendBack);
   const records = (query.transferHistory || []).map(fromTransferRecord);
   const recorded = records.filter((record) => !record.automatic);
   const auditOnly = audit
@@ -107,5 +126,5 @@ export function buildSpecialEvents({ query, audit = [] } = {}) {
     .filter((entry) => !recorded.some((record) => record.at && entry.at && near(record.at, entry.at)))
     .map(fromTransferAudit);
 
-  return sortWorkflowEvents([...pullbacks, ...records, ...auditOnly]);
+  return sortWorkflowEvents([...pullbacks, ...records, ...auditOnly, ...sendBacks]);
 }

@@ -317,7 +317,7 @@ describe('the three views come from the one sequence', () => {
 
     it('says so, instead of an empty line, when there are no actions to show', () => {
       render(<QueryLifecycleTimeline stages={stages} audit={AUDIT} view={WORKFLOW_VIEW.EXCEPTIONS} />);
-      expect(screen.getByText('No pull backs or transfers recorded.')).toBeInTheDocument();
+      expect(screen.getByText('No pull backs, transfers or change requests recorded.')).toBeInTheDocument();
       expect(screen.queryByRole('group', { name: 'Workflow progress' })).toBeNull();
     });
   });
@@ -365,7 +365,7 @@ describe('the unified workflow line', () => {
     render(<QueryLifecycleTimeline stages={stages} events={events} audit={audit} />);
 
     expect(within(track()).queryByText(/pulled back from/i)).toBeNull();
-    // A reviewer's send-back is not a pull back, and its note still shows on the current stage.
+    // A note the current stage carries still shows under it; it is not a pull back.
     expect(within(track()).getByText('Returned for revision — Amit Mehta requested changes')).toBeInTheDocument();
 
     await act(async () => within(track()).getByRole('button', { name: /^Pull back/ }).focus());
@@ -469,5 +469,50 @@ describe('an automatically answered query on the workflow line', () => {
     expect(current.length).toBeGreaterThan(0);
     expect([...current].every((node) => node.textContent.includes('Reply sent to external inquirer'))).toBe(true);
     expect(screen.queryByText(/Officer-in-Charge/)).toBeNull();
+  });
+});
+
+describe('a change request on the workflow line', () => {
+  const track = () => screen.getByRole('group', { name: 'Workflow progress' });
+  const changeRequest = (extra = {}) => ({
+    id: 'c1',
+    type: SPECIAL_EVENT.CHANGES_REQUESTED,
+    at: at(20),
+    by: { name: 'Amit Mehta', role: 'Reviewer' },
+    from: { stage: 'v1' },
+    to: { stage: 'Assigned official' },
+    reason: 'Cite the monograph edition.',
+    remarks: null,
+    rejected: false,
+    automatic: false,
+    ...extra,
+  });
+
+  it('is an exception, so the pull backs & transfers view keeps it', () => {
+    const sequence = buildWorkflowSequence({ stages: lifecycle(4), events: [changeRequest()], audit: AUDIT });
+    const { items } = selectWorkflowView(sequence, lifecycle(4), WORKFLOW_VIEW.EXCEPTIONS);
+    expect(items.map((item) => item.kind)).toContain(WORKFLOW_ITEM.CHANGES_REQUESTED);
+  });
+
+  it('shows who asked for what, and labels an OIC rejection as one', async () => {
+    const { rerender } = render(
+      <QueryLifecycleTimeline stages={lifecycle(4)} events={[changeRequest()]} audit={AUDIT} view={WORKFLOW_VIEW.EXCEPTIONS} />,
+    );
+    expect(within(track()).getByText('Changes requested')).toBeInTheDocument();
+    await act(async () => within(track()).getByRole('button', { name: /^Changes requested/ }).focus());
+    const tip = await screen.findByRole('tooltip');
+    for (const row of ['By:Amit Mehta — Reviewer', 'Reason:Cite the monograph edition.']) {
+      expect(tip).toHaveTextContent(row);
+    }
+
+    rerender(
+      <QueryLifecycleTimeline
+        stages={lifecycle(4)}
+        events={[changeRequest({ rejected: true })]}
+        audit={AUDIT}
+        view={WORKFLOW_VIEW.EXCEPTIONS}
+      />,
+    );
+    expect(within(track()).getByText('Rejected')).toBeInTheDocument();
   });
 });

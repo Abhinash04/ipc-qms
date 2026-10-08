@@ -61,8 +61,19 @@ const message = (n, subject, from = 'Abhinash Pritiraj <abhinash.pritiraj@pharma
   ingested: false,
 });
 
-const acceptFor = (id) => screen.getByRole('button', { name: `Accept message ${id}` });
-const rejectFor = (id) => screen.getByRole('button', { name: `Reject message ${id}` });
+// The list only selects; a message's actions live in the detail pane, so each helper opens it first.
+const mailList = () => within(screen.getByRole('list', { name: 'Mailbox messages' }));
+const detail = () => within(screen.getByRole('region', { name: 'Message details' }));
+const listed = (text) => mailList().getByText(text);
+const findListed = async (text) => within(await screen.findByRole('list', { name: 'Mailbox messages' })).findByText(text);
+const rowButton = (id) => screen.getByRole('list', { name: 'Mailbox messages' }).querySelector(`[data-message-id="${id}"]`);
+const select = (id) => fireEvent.click(rowButton(id));
+const opened = (action) => (id) => {
+  select(id);
+  return screen.getByRole('button', { name: `${action} message ${id}` });
+};
+const acceptFor = opened('Accept');
+const rejectFor = opened('Reject');
 const confirm = () => screen.getByRole('button', { name: 'Yes' });
 
 function renderInbox() {
@@ -76,7 +87,7 @@ function renderInbox() {
   );
 }
 
-const trashFor = (id) => screen.getByRole('button', { name: `Delete message ${id}` });
+const trashFor = opened('Delete');
 
 beforeEach(async () => {
   vi.clearAllMocks();
@@ -100,19 +111,20 @@ describe('the inbox lists real mailbox messages', () => {
   it('renders a row per message with a delete control', async () => {
     renderInbox();
 
-    expect(await screen.findByText('Doomed enquiry')).toBeInTheDocument();
-    expect(screen.getByText('Keep this one')).toBeInTheDocument();
+    expect(await findListed('Doomed enquiry')).toBeInTheDocument();
+    expect(listed('Keep this one')).toBeInTheDocument();
     expect(trashFor('MSG-00001')).toBeInTheDocument();
     expect(trashFor('MSG-00002')).toBeInTheDocument();
   });
 
   it('offers accept and reject on every undecided message, and registers none of them', async () => {
     renderInbox();
-    await screen.findByText('Doomed enquiry');
+    await findListed('Doomed enquiry');
 
     expect(acceptFor('MSG-00001')).toBeInTheDocument();
     expect(rejectFor('MSG-00001')).toBeInTheDocument();
-    expect(screen.getAllByText('Awaiting validation')).toHaveLength(2);
+    expect(mailList().getAllByText('Awaiting')).toHaveLength(2);
+    expect(detail().getByText('Awaiting validation')).toBeInTheDocument();
 
     expect(useWorkflowStore.getState().queries).toHaveLength(0);
     expect(recordMailboxDecision).not.toHaveBeenCalled();
@@ -128,7 +140,7 @@ describe('mail discarded on the server', () => {
       await act(async () => {
         await vi.advanceTimersByTimeAsync(0);
       });
-      expect(screen.getByText('Doomed enquiry')).toBeInTheDocument();
+      expect(listed('Doomed enquiry')).toBeInTheDocument();
 
       fetchMailboxMessages.mockResolvedValue({ messages: [message(1, 'Keep this one')] });
       await act(async () => {
@@ -142,7 +154,7 @@ describe('mail discarded on the server', () => {
       }
 
       expect(screen.queryByText('Doomed enquiry')).toBeNull();
-      expect(screen.getByText('Keep this one')).toBeInTheDocument();
+      expect(listed('Keep this one')).toBeInTheDocument();
     } finally {
       vi.clearAllTimers();
       vi.useRealTimers();
@@ -156,7 +168,7 @@ describe('Scenario A — the Front Officer accepts a genuine enquiry', () => {
       messages: [message(1, 'Monograph query', 'Ravi Kumar <ravi@pharma.example>')],
     });
     renderInbox();
-    await screen.findByText('Monograph query');
+    await findListed('Monograph query');
 
     fireEvent.click(acceptFor('MSG-00001'));
     expect(screen.getByText('Register & forward?')).toBeInTheDocument();
@@ -181,7 +193,7 @@ describe('Scenario A — the Front Officer accepts a genuine enquiry', () => {
     expect(recordMailboxDecision).not.toHaveBeenCalled();
     expect(sendAcknowledgement).not.toHaveBeenCalled();
 
-    expect(await screen.findByText('QRY-2026-00001')).toBeInTheDocument();
+    expect(await screen.findByRole('link', { name: 'QRY-2026-00001' })).toBeInTheDocument();
     expect(useWorkflowStore.getState().queries.map((q) => q.queryId)).toEqual([
       'QRY-2026-00001',
     ]);
@@ -189,7 +201,7 @@ describe('Scenario A — the Front Officer accepts a genuine enquiry', () => {
 
   it('lands the case at pending assignment — accepting forwards it too', async () => {
     renderInbox();
-    await screen.findByText('Keep this one');
+    await findListed('Keep this one');
 
     fireEvent.click(acceptFor('MSG-00001'));
     fireEvent.click(confirm());
@@ -210,7 +222,7 @@ describe('Scenario A — the Front Officer accepts a genuine enquiry', () => {
     );
     const failed = vi.spyOn(notify, 'error').mockImplementation(() => {});
     renderInbox();
-    await screen.findByText('Keep this one');
+    await findListed('Keep this one');
 
     fireEvent.click(acceptFor('MSG-00001'));
     fireEvent.click(confirm());
@@ -227,7 +239,7 @@ describe('Scenario B — the Front Officer rejects an unwanted email', () => {
       messages: [message(1, 'WIN A FREE HOLIDAY', 'Spam <spam@example.com>')],
     });
     renderInbox();
-    await screen.findByText('WIN A FREE HOLIDAY');
+    await findListed('WIN A FREE HOLIDAY');
 
     fireEvent.click(rejectFor('MSG-00001'));
     expect(screen.getByText('Reject?')).toBeInTheDocument();
@@ -251,7 +263,7 @@ describe('Scenario B — the Front Officer rejects an unwanted email', () => {
     renderInbox();
 
     expect(await screen.findByText('Rejected')).toBeInTheDocument();
-    expect(screen.getByText('Doomed enquiry')).toBeInTheDocument();
+    expect(listed('Doomed enquiry')).toBeInTheDocument();
     expect(deleteMailboxMessage).not.toHaveBeenCalled();
   });
 
@@ -261,6 +273,7 @@ describe('Scenario B — the Front Officer rejects an unwanted email', () => {
     });
     renderInbox();
     await screen.findByText('Rejected');
+    select('MSG-00002');
 
     expect(screen.queryByRole('button', { name: 'Accept message MSG-00002' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Reject message MSG-00002' })).toBeNull();
@@ -282,20 +295,21 @@ describe('a message someone else has already decided', () => {
       ],
     });
     renderInbox();
-    await screen.findByText('Still waiting');
+    await findListed('Still waiting');
 
     for (const id of ['MSG-00001', 'MSG-00002']) {
+      select(id);
       expect(screen.queryByRole('button', { name: `Accept message ${id}` })).toBeNull();
       expect(screen.queryByRole('button', { name: `Reject message ${id}` })).toBeNull();
     }
-    expect(screen.getByText('Rejected')).toBeInTheDocument();
+    expect(mailList().getByText('Rejected')).toBeInTheDocument();
     expect(acceptFor('MSG-00003')).toBeInTheDocument();
     expect(rejectFor('MSG-00003')).toBeInTheDocument();
   });
 
   it('takes the controls away once a refetch shows the message was decided', async () => {
     renderInbox();
-    await screen.findByText('Doomed enquiry');
+    await findListed('Doomed enquiry');
     expect(acceptFor('MSG-00002')).toBeInTheDocument();
 
     fetchMailboxMessages.mockResolvedValue({
@@ -309,7 +323,7 @@ describe('a message someone else has already decided', () => {
       expect(screen.queryByRole('button', { name: 'Accept message MSG-00002' })).toBeNull(),
     );
     expect(screen.queryByRole('button', { name: 'Reject message MSG-00002' })).toBeNull();
-    expect(screen.getByText('Rejected')).toBeInTheDocument();
+    expect(mailList().getByText('Rejected')).toBeInTheDocument();
     expect(acceptFor('MSG-00001')).toBeInTheDocument();
   });
 
@@ -321,7 +335,7 @@ describe('a message someone else has already decided', () => {
     const warning = vi.spyOn(notify, 'warning').mockImplementation(() => {});
     const info = vi.spyOn(notify, 'info').mockImplementation(() => {});
     renderInbox();
-    await screen.findByText('Keep this one');
+    await findListed('Keep this one');
 
     fireEvent.click(rejectFor('MSG-00001'));
     fireEvent.click(confirm());
@@ -349,7 +363,7 @@ describe('Scenario C — many inquirers, one mailbox', () => {
       ],
     });
     renderInbox();
-    await screen.findByText('Third query');
+    await findListed('Third query');
 
     for (const [id, caseId] of [
       ['MSG-00001', 'QRY-2026-00001'],
@@ -358,7 +372,7 @@ describe('Scenario C — many inquirers, one mailbox', () => {
     ]) {
       fireEvent.click(acceptFor(id));
       fireEvent.click(confirm());
-      expect(await screen.findByText(caseId)).toBeInTheDocument();
+      expect(await screen.findByRole('link', { name: caseId })).toBeInTheDocument();
     }
 
     expect(acceptMailboxMessage.mock.calls.map(([id, sent]) => [id, sent.from])).toEqual([
@@ -374,11 +388,11 @@ describe('Scenario D — the same message accepted twice', () => {
   it('is answered from the stored decision, and nothing is created a second time', async () => {
     fetchMailboxMessages.mockResolvedValue({ messages: [message(1, 'Only once')] });
     renderInbox();
-    await screen.findByText('Only once');
+    await findListed('Only once');
 
     fireEvent.click(acceptFor('MSG-00001'));
     fireEvent.click(confirm());
-    expect(await screen.findByText('QRY-2026-00001')).toBeInTheDocument();
+    expect(await screen.findByRole('link', { name: 'QRY-2026-00001' })).toBeInTheDocument();
     await waitFor(() => expect(fetchMailboxMessages).toHaveBeenCalledTimes(2));
 
     const [first] = useWorkflowStore.getState().queries;
@@ -404,7 +418,7 @@ describe('Scenario D — the same message accepted twice', () => {
 describe('deleting a message is a two-step confirm', () => {
   it('asks before deleting and sends nothing on the first click', async () => {
     renderInbox();
-    await screen.findByText('Doomed enquiry');
+    await findListed('Doomed enquiry');
 
     fireEvent.click(trashFor('MSG-00002'));
 
@@ -415,7 +429,7 @@ describe('deleting a message is a two-step confirm', () => {
 
   it('cancelling puts the row back and still sends nothing', async () => {
     renderInbox();
-    await screen.findByText('Doomed enquiry');
+    await findListed('Doomed enquiry');
 
     fireEvent.click(trashFor('MSG-00002'));
     fireEvent.click(screen.getByRole('button', { name: 'Cancel delete' }));
@@ -427,7 +441,7 @@ describe('deleting a message is a two-step confirm', () => {
 
   it('confirming deletes that message and only that message', async () => {
     renderInbox();
-    await screen.findByText('Doomed enquiry');
+    await findListed('Doomed enquiry');
 
     fireEvent.click(trashFor('MSG-00002'));
     fireEvent.click(screen.getByRole('button', { name: 'Yes' }));
@@ -438,7 +452,7 @@ describe('deleting a message is a two-step confirm', () => {
 
   it('drops the row once the server confirms', async () => {
     renderInbox();
-    await screen.findByText('Doomed enquiry');
+    await findListed('Doomed enquiry');
 
     fetchMailboxMessages.mockResolvedValue({ messages: [message(1, 'Keep this one')] });
 
@@ -446,19 +460,19 @@ describe('deleting a message is a two-step confirm', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Yes' }));
 
     await waitFor(() => expect(screen.queryByText('Doomed enquiry')).toBeNull());
-    expect(screen.getByText('Keep this one')).toBeInTheDocument();
+    expect(listed('Keep this one')).toBeInTheDocument();
   });
 
   it('reports a failure without pretending the message is gone', async () => {
     deleteMailboxMessage.mockRejectedValue(new Error('Network Error'));
     renderInbox();
-    await screen.findByText('Doomed enquiry');
+    await findListed('Doomed enquiry');
 
     fireEvent.click(trashFor('MSG-00002'));
     fireEvent.click(screen.getByRole('button', { name: 'Yes' }));
 
     expect(await screen.findByText(/Could not delete that message/)).toBeInTheDocument();
-    expect(screen.getByText('Doomed enquiry')).toBeInTheDocument();
+    expect(listed('Doomed enquiry')).toBeInTheDocument();
   });
 });
 
@@ -469,9 +483,9 @@ describe('a message that already opened a Query Case', () => {
     fetchMailboxMessages.mockResolvedValue({ messages: [source] });
 
     renderInbox();
-    await screen.findByText('Keep this one');
+    await findListed('Keep this one');
 
-    expect(screen.getByText(queryId)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: queryId })).toBeInTheDocument();
     fireEvent.click(trashFor('MSG-00001'));
     fireEvent.click(screen.getByRole('button', { name: 'Yes' }));
 
@@ -497,7 +511,7 @@ describe('an acknowledgement that may already have been sent', () => {
   async function acceptAndReadToast() {
     const success = vi.spyOn(notify, 'success');
     renderInbox();
-    await screen.findByText('Keep this one');
+    await findListed('Keep this one');
 
     fireEvent.click(acceptFor('MSG-00001'));
     fireEvent.click(confirm());
@@ -561,7 +575,7 @@ describe('a NICeMail mailbox that could not be read', () => {
 
   it('never appears for a mailbox that is not NICeMail', async () => {
     renderInbox();
-    await screen.findByText('Keep this one');
+    await findListed('Keep this one');
 
     expect(screen.queryByText(/The mailbox could not be read/)).toBeNull();
   });
@@ -584,7 +598,7 @@ describe('finding mail', () => {
 
   it('searches on the server once typing pauses, not on every keystroke', async () => {
     renderInbox();
-    await screen.findByText('Keep this one');
+    await findListed('Keep this one');
 
     fireEvent.change(searchBox(), { target: { value: 'mono' } });
     fireEvent.change(searchBox(), { target: { value: 'monograph' } });
@@ -599,7 +613,7 @@ describe('finding mail', () => {
 
   it('says nothing matches, rather than that the mailbox is empty', async () => {
     renderInbox();
-    await screen.findByText('Keep this one');
+    await findListed('Keep this one');
 
     fetchMailboxMessages.mockResolvedValue({ messages: [], total: 0, limit: 50, offset: 0 });
     fireEvent.change(searchBox(), { target: { value: 'nothing like this' } });
@@ -610,7 +624,7 @@ describe('finding mail', () => {
 
   it('shows every message, with no All mail / Awaiting / Junk filter', async () => {
     renderInbox();
-    await screen.findByText('Keep this one');
+    await findListed('Keep this one');
 
     expect(fetchMailboxMessages).toHaveBeenLastCalledWith(expect.objectContaining({ unreadOnly: false }));
     expect(fetchMailboxMessages.mock.calls.at(-1)[0]).not.toHaveProperty('junkOnly');
@@ -656,7 +670,7 @@ describe('finding mail', () => {
     );
     renderInbox();
     fireEvent.click(await screen.findByRole('button', { name: 'Next' }));
-    await screen.findByText('Only mail on page two');
+    await findListed('Only mail on page two');
 
     fetchMailboxMessages.mockImplementation(async ({ offset }) =>
       offset === 0 ? page(50, [message(1, 'First page mail')]) : page(50, []),
@@ -664,7 +678,7 @@ describe('finding mail', () => {
     fireEvent.click(trashFor('MSG-00002'));
     fireEvent.click(screen.getByRole('button', { name: 'Yes' }));
 
-    expect(await screen.findByText('First page mail')).toBeInTheDocument();
+    expect(await findListed('First page mail')).toBeInTheDocument();
     expect(screen.queryByText('No Mail in the IPC Mailbox')).toBeNull();
     expect(fetchMailboxMessages).toHaveBeenLastCalledWith(expect.objectContaining({ offset: 0 }));
   });
@@ -684,7 +698,7 @@ describe('what each row shows', () => {
       ],
     });
     renderInbox();
-    await screen.findByText('Not yet opened');
+    await findListed('Not yet opened');
 
     expect(screen.getAllByText('Unread')).toHaveLength(1);
     expect(screen.getByText('Unread').parentElement).toHaveTextContent('Ravi Kumar');
@@ -732,38 +746,61 @@ describe('opening a message', () => {
     );
   }
 
-  it('opens from the subject, which is a real link', async () => {
+  it('opens the full message from the subject in the detail pane, which is a real link', async () => {
     renderInboxRoutes();
+    await findListed('Doomed enquiry');
+    select('MSG-00002');
 
-    const subject = await screen.findByRole('link', { name: 'Doomed enquiry' });
+    const subject = detail().getByRole('link', { name: 'Doomed enquiry' });
     expect(subject).toHaveAttribute('href', '/front-officer/inbox/MSG-00002');
 
     fireEvent.click(subject);
     expect(await screen.findByText('Opened MSG-00002')).toBeInTheDocument();
   });
 
-  it('opens from anywhere else on the row, but not from a control on it', async () => {
+  it('shows the message picked from the list beside it, without leaving the inbox or fetching again', async () => {
     fetchMailboxMessages.mockResolvedValue({
       messages: [
+        message(1, 'Keep this one'),
         { ...message(2, 'Doomed enquiry', 'Ravi Kumar <ravi@pharma.example>'), body: 'Row body to click.' },
       ],
     });
     renderInboxRoutes();
-    await screen.findByText('Doomed enquiry');
+    await findListed('Doomed enquiry');
+    expect(detail().getByRole('heading', { name: 'Keep this one' })).toBeInTheDocument();
+
+    fireEvent.click(listed('Row body to click.'));
+
+    expect(screen.queryByText(/^Opened/)).toBeNull();
+    expect(rowButton('MSG-00002')).toHaveAttribute('aria-current', 'true');
+    expect(detail().getByRole('heading', { name: 'Doomed enquiry' })).toBeInTheDocument();
+    expect(detail().getByText('Row body to click.')).toBeInTheDocument();
+    expect(fetchMailboxMessages).toHaveBeenCalledTimes(1);
 
     fireEvent.click(trashFor('MSG-00002'));
-    expect(screen.getByText('Delete?')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Cancel delete' }));
     expect(screen.queryByText(/^Opened/)).toBeNull();
 
-    fireEvent.click(screen.getByText('Row body to click.'));
+    fireEvent.click(detail().getByRole('link', { name: 'Open full message' }));
     expect(await screen.findByText('Opened MSG-00002')).toBeInTheDocument();
+  });
+
+  it('moves the selection with the arrow keys', async () => {
+    renderInboxRoutes();
+    await findListed('Doomed enquiry');
+
+    fireEvent.keyDown(rowButton('MSG-00001'), { key: 'ArrowDown' });
+
+    expect(rowButton('MSG-00002')).toHaveAttribute('aria-current', 'true');
+    expect(rowButton('MSG-00001')).not.toHaveAttribute('aria-current');
+    expect(detail().getByRole('heading', { name: 'Doomed enquiry' })).toBeInTheDocument();
   });
 
   it('does not open from a click on a tooltip', async () => {
     renderInboxRoutes();
-    await screen.findByText('Doomed enquiry');
+    await findListed('Doomed enquiry');
 
+    select('MSG-00002');
     act(() => rejectFor('MSG-00002').focus());
     fireEvent.click(await screen.findByRole('tooltip'));
 
@@ -780,7 +817,7 @@ describe('Sync now', () => {
 
   it('is offered only for the NICeMail mailbox', async () => {
     renderInbox();
-    await screen.findByText('Keep this one');
+    await findListed('Keep this one');
 
     expect(screen.queryByRole('button', { name: 'Sync now' })).toBeNull();
   });
@@ -791,7 +828,7 @@ describe('Sync now', () => {
       sync: { ...nicInbox(false).sync, ok: null, viewer: true },
     });
     renderInbox();
-    await screen.findByText('Keep this one');
+    await findListed('Keep this one');
 
     expect(screen.queryByRole('button', { name: 'Sync now' })).toBeNull();
     expect(screen.getByText(/read by the mailbox host/)).toBeInTheDocument();
@@ -916,7 +953,7 @@ describe('junk mail in the feed', () => {
       messages: [junkMessage(9, 'Unactioned enquiry', { verdict: 'GENUINE', confidence: 0, purgesAt: null })],
     });
     renderInbox();
-    await screen.findByText('Unactioned enquiry');
+    await findListed('Unactioned enquiry');
 
     expect(screen.queryByText(/purges in/)).not.toBeInTheDocument();
   });
@@ -924,7 +961,7 @@ describe('junk mail in the feed', () => {
   it('says nothing about purging for a message with no verdict at all', async () => {
     fetchMailboxMessages.mockResolvedValue({ messages: [message(1, 'Ordinary enquiry')] });
     renderInbox();
-    await screen.findByText('Ordinary enquiry');
+    await findListed('Ordinary enquiry');
 
     expect(screen.queryByText(/purges in/)).not.toBeInTheDocument();
   });
@@ -932,7 +969,7 @@ describe('junk mail in the feed', () => {
   it('offers Rescue on a junk row and clears the verdict without opening a case', async () => {
     fetchMailboxMessages.mockResolvedValue({ messages: [junkMessage(9, 'Half price reagents')] });
     renderInbox();
-    await screen.findByText('Half price reagents');
+    await findListed('Half price reagents');
 
     fireEvent.click(screen.getByRole('button', { name: 'Rescue message MSG-00009' }));
 
@@ -945,7 +982,7 @@ describe('junk mail in the feed', () => {
   it('offers no Rescue on a message that was never judged junk', async () => {
     fetchMailboxMessages.mockResolvedValue({ messages: [message(1, 'Ordinary enquiry')] });
     renderInbox();
-    await screen.findByText('Ordinary enquiry');
+    await findListed('Ordinary enquiry');
 
     expect(screen.queryByRole('button', { name: /Rescue message/ })).not.toBeInTheDocument();
   });
@@ -955,7 +992,7 @@ describe('junk mail in the feed', () => {
       messages: [junkMessage(9, 'Half price reagents', { rescuedAt: '2026-08-19T09:00:00.000Z', purgesAt: null })],
     });
     renderInbox();
-    await screen.findByText('Half price reagents');
+    await findListed('Half price reagents');
 
     expect(screen.queryByRole('button', { name: /Rescue message/ })).not.toBeInTheDocument();
     expect(screen.queryByText(/purges in/)).not.toBeInTheDocument();
@@ -966,7 +1003,7 @@ describe('junk mail in the feed', () => {
     rescueMailboxMessage.mockRejectedValueOnce({ response: { data: { error: 'Mailbox unavailable' } } });
     const failed = vi.spyOn(notify, 'error');
     renderInbox();
-    await screen.findByText('Half price reagents');
+    await findListed('Half price reagents');
 
     fireEvent.click(screen.getByRole('button', { name: 'Rescue message MSG-00009' }));
 
@@ -1018,18 +1055,27 @@ describe('email categories in the feed', () => {
     });
   });
 
-  it('shows a category badge on every row, and says when one is not classified yet', async () => {
+  it('labels every row with its category, says when one is not classified yet, and offers the details on the open message', async () => {
     renderInbox();
-    await screen.findByText('Assay of metformin');
+    await findListed('Assay of metformin');
 
-    expect(screen.getByRole('button', { name: 'Category: Official Queries. Show details' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Category: Other / Unclassified, needs review. Show details' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Category: Not classified yet. Show details' })).toBeInTheDocument();
+    expect(listed('Official query')).toBeInTheDocument();
+    expect(listed('Other')).toBeInTheDocument();
+    expect(listed('Not classified')).toBeInTheDocument();
+
+    for (const [id, name] of [
+      ['MSG-00001', 'Category: Official Queries. Show details'],
+      ['MSG-00002', 'Category: Other / Unclassified, needs review. Show details'],
+      ['MSG-00003', 'Category: Not classified yet. Show details'],
+    ]) {
+      select(id);
+      expect(detail().getByRole('button', { name })).toBeInTheDocument();
+    }
   });
 
   it('offers a card per category with its count, and filters the feed by it', async () => {
     renderInbox();
-    await screen.findByText('Assay of metformin');
+    await findListed('Assay of metformin');
 
     const cards = screen.getByRole('group', { name: 'Filter by category' });
     expect(within(cards).getAllByRole('button')).toHaveLength(8);
@@ -1050,7 +1096,7 @@ describe('email categories in the feed', () => {
 
   it('offers Registered queries as its own bucket', async () => {
     renderInbox();
-    await screen.findByText('Assay of metformin');
+    await findListed('Assay of metformin');
 
     const registered = screen.getByRole('button', { name: 'Registered queries, 2 messages' });
     expect(registered).toHaveAccessibleDescription('Accepted, with a Query ID');
@@ -1063,7 +1109,7 @@ describe('email categories in the feed', () => {
 
   it('describes each category card', async () => {
     renderInbox();
-    await screen.findByText('Assay of metformin');
+    await findListed('Assay of metformin');
 
     expect(screen.getByRole('button', { name: 'Official queries, 4 messages' })).toHaveAccessibleDescription(
       'Queries, RTIs and official notices',
@@ -1074,7 +1120,7 @@ describe('email categories in the feed', () => {
 
   it('says how many messages are still being classified, and only when there are some', async () => {
     renderInbox();
-    await screen.findByText('Assay of metformin');
+    await findListed('Assay of metformin');
     expect(screen.getByText('1 being classified')).toBeInTheDocument();
 
     fetchMailboxMessages.mockResolvedValue({
@@ -1084,14 +1130,14 @@ describe('email categories in the feed', () => {
     });
     cleanup();
     renderInbox();
-    await screen.findByText('All sorted');
+    await findListed('All sorted');
     expect(screen.queryByText(/being classified/)).toBeNull();
   });
 
   it('hides the category cards for a mailbox that is not categorised', async () => {
     fetchMailboxMessages.mockResolvedValue({ backend: 'mongo', messages: [message(1, 'Plain one')] });
     renderInbox();
-    await screen.findByText('Plain one');
+    await findListed('Plain one');
 
     expect(screen.queryByRole('group', { name: 'Filter by category' })).toBeNull();
   });
@@ -1107,6 +1153,8 @@ describe('email categories in the feed', () => {
 
   it('shows what the AI suggested when it was unsure', async () => {
     renderInbox();
+    await findListed('Assay of metformin');
+    select('MSG-00002');
     fireEvent.click(await screen.findByRole('button', { name: /Other \/ Unclassified, needs review/ }));
 
     expect(await screen.findByText('Needs review')).toBeInTheDocument();
@@ -1115,6 +1163,8 @@ describe('email categories in the feed', () => {
 
   it('lets the Front Officer correct a category without accepting, rejecting or opening the message', async () => {
     renderInbox();
+    await findListed('Assay of metformin');
+    select('MSG-00002');
     fireEvent.click(await screen.findByRole('button', { name: /Other \/ Unclassified, needs review/ }));
     fireEvent.click(await screen.findByRole('button', { name: 'Move to Events and Invitations' }));
 

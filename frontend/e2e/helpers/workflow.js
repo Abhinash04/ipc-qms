@@ -46,6 +46,8 @@ export async function accept(page, message) {
   await signInAs(page, SUPER_ADMIN_USER.email);
   await page.goto(INBOX_PATH);
 
+  // The inbox list only selects a message; its actions are in the detail pane beside it.
+  await page.locator(`[data-message-id="${message.mailboxMessageId}"]`).click();
   await page
     .getByRole('button', { name: `Accept message ${message.mailboxMessageId}`, exact: true })
     .click();

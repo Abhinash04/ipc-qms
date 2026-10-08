@@ -457,7 +457,7 @@ function WorkflowProgressCard({ stages, events, audit }) {
       art={[Milestone, Flag, CircleCheckBig]}
       icon={Route}
       title="Workflow progress"
-      meta={`${completed} of ${stages.length} stages complete${events.length ? ` · ${events.length} pull backs & transfers` : ''}`}
+      meta={`${completed} of ${stages.length} stages complete${events.length ? ` · ${events.length} pull backs, transfers & change requests` : ''}`}
       toolbar={<Segmented label="Workflow view" options={WORKFLOW_VIEWS} value={view} onChange={setView} />}
       className="mb-5"
       bodyClassName="py-5"
@@ -499,7 +499,7 @@ export function QueryDetailPage({ queryId: viewedQueryId = null, readOnly = fals
   }
 
   const stages = buildLifecycle({ query, steps, versions, reviews, audit, messages });
-  const specialEvents = buildSpecialEvents({ query, audit });
+  const specialEvents = buildSpecialEvents({ query, audit, reviews });
 
   const breadcrumbItems = [
     { label: 'Dashboard', path: paths.DASHBOARD },

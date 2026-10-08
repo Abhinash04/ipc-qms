@@ -51,7 +51,7 @@ export function ReviewDetailPage() {
 
   const reviewSteps = steps.filter((s) => s.stepType === 'REVIEW');
   const stages = buildLifecycle({ query, steps, versions, reviews, audit, messages });
-  const specialEvents = buildSpecialEvents({ query, audit });
+  const specialEvents = buildSpecialEvents({ query, audit, reviews });
   const completedStages = stages.filter((stage) => stage.status === STAGE_STATUS.COMPLETE).length;
   const roundOf = (review) =>
     1 + reviews.filter((r) => isSendBack(r) && String(r.at) < String(review.at)).length;
@@ -83,7 +83,7 @@ export function ReviewDetailPage() {
             icon={Route}
             title="Workflow progress"
             meta={`${completedStages} of ${stages.length} stages complete${
-              specialEvents.length ? ` · ${specialEvents.length} pull backs & transfers` : ''
+              specialEvents.length ? ` · ${specialEvents.length} pull backs, transfers & change requests` : ''
             }`}
             bodyClassName="py-5"
           >

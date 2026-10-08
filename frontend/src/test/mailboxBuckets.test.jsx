@@ -58,8 +58,19 @@ const message = (n, subject, from = 'Ravi Kumar <ravi@pharma.example>') => ({
   ingested: false,
 });
 
-const acceptFor = (id) => screen.getByRole('button', { name: `Accept message ${id}` });
-const rejectFor = (id) => screen.getByRole('button', { name: `Reject message ${id}` });
+// The list only selects; a message's actions live in the detail pane, so each helper opens it first.
+const mailList = () => within(screen.getByRole('list', { name: 'Mailbox messages' }));
+const detail = () => within(screen.getByRole('region', { name: 'Message details' }));
+const listed = (text) => mailList().getByText(text);
+const findListed = async (text) => within(await screen.findByRole('list', { name: 'Mailbox messages' })).findByText(text);
+const rowButton = (id) => screen.getByRole('list', { name: 'Mailbox messages' }).querySelector(`[data-message-id="${id}"]`);
+const select = (id) => fireEvent.click(rowButton(id));
+const opened = (action) => (id) => {
+  select(id);
+  return screen.getByRole('button', { name: `${action} message ${id}` });
+};
+const acceptFor = opened('Accept');
+const rejectFor = opened('Reject');
 
 function renderInbox() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -109,7 +120,7 @@ const pick = (name) => fireEvent.click(bucket(name));
 describe('the mailbox buckets', () => {
   it('offers All Mails, Auto Reply and Human Intervention with their counts, All Mails first', async () => {
     renderInbox();
-    await screen.findByText('Paracetamol');
+    await findListed('Paracetamol');
 
     const views = screen.getByRole('group', { name: 'Mailbox views' });
     expect(within(views).getAllByRole('button').map((b) => b.getAttribute('aria-label'))).toEqual([
@@ -125,7 +136,7 @@ describe('the mailbox buckets', () => {
 
   it('keeps All Mails as it was: category cards, and accept and reject on every row', async () => {
     renderInbox();
-    await screen.findByText('Paracetamol');
+    await findListed('Paracetamol');
 
     expect(screen.getByRole('group', { name: 'Filter by category' })).toBeInTheDocument();
     expect(acceptFor('MSG-00001')).toBeInTheDocument();
@@ -135,7 +146,7 @@ describe('the mailbox buckets', () => {
 
   it('lists the Auto Reply bucket without category cards, each mail with Accept and Reject', async () => {
     renderInbox();
-    await screen.findByText('Paracetamol');
+    await findListed('Paracetamol');
 
     pick('Auto Reply');
 
@@ -158,7 +169,7 @@ describe('the mailbox buckets', () => {
       errors: [],
     });
     renderInbox();
-    await screen.findByText('Paracetamol');
+    await findListed('Paracetamol');
 
     fireEvent.click(acceptFor('MSG-00001'));
     expect(screen.getByText('Register & auto-reply?')).toBeInTheDocument();
@@ -173,7 +184,7 @@ describe('the mailbox buckets', () => {
 
   it('asks to register and forward a mail left to a person', async () => {
     renderInbox();
-    await screen.findByText('Paracetamol');
+    await findListed('Paracetamol');
 
     fireEvent.click(acceptFor('MSG-00002'));
     expect(screen.getByText('Register & forward?')).toBeInTheDocument();
@@ -181,7 +192,7 @@ describe('the mailbox buckets', () => {
 
   it('lists Human Intervention with its category cards and the standard controls', async () => {
     renderInbox();
-    await screen.findByText('Paracetamol');
+    await findListed('Paracetamol');
 
     pick('Human Intervention');
 
@@ -193,39 +204,44 @@ describe('the mailbox buckets', () => {
   it('shows no buckets for a mailbox that does not offer them', async () => {
     fetchMailboxMessages.mockResolvedValue({ messages: [message(1, 'Plain inbox')] });
     renderInbox();
-    await screen.findByText('Plain inbox');
+    await findListed('Plain inbox');
 
     expect(screen.queryByRole('group', { name: 'Mailbox views' })).toBeNull();
   });
 });
 
 describe('the confidence on every mail', () => {
-  const rowOf = (subject) => screen.getByRole('link', { name: subject }).closest('div.group');
+  const rowOf = (subject) => listed(subject).closest('li');
+  const REASON = 'Closest supported question matched 87%, below 100%';
 
-  it('shows the score and the decision on each row', async () => {
+  it('shows the score and the decision on each row, and in full on the open message', async () => {
     renderInbox();
-    await screen.findByText('Paracetamol');
+    await findListed('Paracetamol');
 
-    expect(rowOf('Paracetamol')).toHaveTextContent('Confidence: 100%·Auto Reply');
-    expect(rowOf('Dissolution limits')).toHaveTextContent('Confidence: 87%·Human Intervention');
-    expect(screen.getByText('Confidence: 87%', { exact: false }).closest('span')).toHaveAttribute(
-      'title',
-      'Closest supported question matched 87%, below 100%',
-    );
+    expect(rowOf('Paracetamol')).toHaveTextContent('AI 100% · Auto Reply');
+    expect(rowOf('Dissolution limits')).toHaveTextContent('AI 87% · Human Intervention');
+    expect(within(rowOf('Dissolution limits')).getByTitle(REASON)).toHaveTextContent('87% · Human Intervention');
+
+    select('MSG-00002');
+    expect(screen.getByRole('region', { name: 'Message details' })).toHaveTextContent('Confidence 87% · Human Intervention');
+    expect(detail().getByTitle(REASON)).toHaveTextContent('87% · Human Intervention');
   });
 
   it('says when a mail has not been checked yet', async () => {
     renderInbox();
-    await screen.findByText('Paracetamol');
+    await findListed('Paracetamol');
 
-    expect(rowOf('Not yet looked at')).toHaveTextContent('Confidence: not checked yet');
+    expect(rowOf('Not yet looked at')).toHaveTextContent('AI not checked yet');
+    select('MSG-00003');
+    expect(screen.getByRole('region', { name: 'Message details' })).toHaveTextContent('Confidence Not checked yet');
   });
 
   it('shows no score for a mailbox the check does not cover', async () => {
     fetchMailboxMessages.mockResolvedValue({ messages: [message(1, 'Plain inbox')] });
     renderInbox();
-    await screen.findByText('Plain inbox');
+    await findListed('Plain inbox');
 
     expect(screen.queryByText(/Confidence:/)).toBeNull();
+    expect(screen.queryByText(/^AI /)).toBeNull();
   });
 });

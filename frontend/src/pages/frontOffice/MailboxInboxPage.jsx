@@ -92,7 +92,18 @@ function useDebouncedValue(value, ms) {
   return debounced;
 }
 
-const ROW_GRID = "xl:grid-cols-[60px_220px_1fr_200px_160px_150px]";
+// The header and every row share this one template, so the columns line up.
+// Columns: S.No · Sender · Subject & Content · Classification · Received On · Query Case · Actions.
+// It switches on the list's own width (a container query), so a collapsed sidebar
+// counts. Fixed columns grow to their maximum first; whatever is left goes to the subject.
+const ROW_GRID =
+  "@5xl:grid-cols-[44px_minmax(168px,208px)_minmax(200px,1fr)_minmax(268px,296px)_112px_minmax(152px,176px)_152px]";
+// The columns' minimum widths added up. A narrower list scrolls sideways instead of squeezing them.
+const ROW_MIN_WIDTH = "@5xl:min-w-[1210px]";
+const ROW_PADDING = "@5xl:pl-5 @5xl:pr-4";
+
+// Every chip in the Classification column has the same height, radius, type and icon size.
+const TAG_CHIP = "h-6 gap-1 rounded-lg px-2 py-0 text-[11px] font-bold [&>svg]:size-3.5!";
 
 function describeMailboxCheck(result) {
   const waiting = result.fetched || 0;
@@ -348,21 +359,22 @@ function EmptyInbox() {
 }
 
 const COLUMN_HEADERS = [
-  { label: "S.No.", center: true },
+  { label: "S.No.", align: "text-center" },
   { label: "From / Sender" },
   { label: "Subject & Content" },
+  { label: "Classification" },
   { label: "Received On" },
-  { label: "Query Case", center: true },
-  { label: "Actions", center: true },
+  { label: "Query Case" },
+  { label: "Actions", align: "text-right" },
 ];
 
 function MailboxColumnHeader() {
   return (
     <div
-      className={`hidden xl:grid ${ROW_GRID} gap-4 px-5 py-3.5 bg-slate-50/80 border border-slate-100 rounded-2xl text-[11px] font-semibold text-slate-400 tracking-wider uppercase mb-3`}
+      className={`hidden @5xl:grid ${ROW_GRID} ${ROW_PADDING} gap-x-3 items-center py-3.5 bg-slate-50/80 border border-slate-100 rounded-2xl text-[11px] font-semibold text-slate-400 tracking-wider uppercase mb-3`}
     >
-      {COLUMN_HEADERS.map(({ label, center }) => (
-        <span key={label} className={center ? "text-center" : undefined}>
+      {COLUMN_HEADERS.map(({ label, align }) => (
+        <span key={label} className={cn("truncate", align)}>
           {label}
         </span>
       ))}
@@ -375,7 +387,7 @@ function QueryCaseCell({ known, queryId, detailPath, rejected }) {
     return (
       <Link
         to={detailPath}
-        className="inline-flex items-center gap-1.5 rounded-xl bg-linear-to-r from-primary to-primary-700 hover:from-primary-600 hover:to-primary-700 text-white px-3.5 py-1.5 xl:px-4 xl:py-2 text-[11.5px] xl:text-[12px] font-bold shadow-sm transition-transform hover:scale-105"
+        className="inline-flex h-8 items-center gap-1.5 rounded-xl bg-linear-to-r from-primary to-primary-700 hover:from-primary-600 hover:to-primary-700 text-white px-3.5 text-[12px] font-bold tabular-nums shadow-sm transition-transform hover:scale-105"
       >
         <span>{queryId}</span>
         <ArrowRight className="h-3.5 w-3.5" />
@@ -385,7 +397,7 @@ function QueryCaseCell({ known, queryId, detailPath, rejected }) {
 
   if (rejected) {
     return (
-      <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200 px-3 py-1 xl:px-3.5 xl:py-1.5 text-[10.5px] xl:text-[11.5px] font-semibold shadow-2xs">
+      <span className="inline-flex h-8 items-center gap-1.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200 px-3.5 text-[11.5px] font-semibold shadow-2xs">
         <Ban className="h-3 w-3 shrink-0" aria-hidden="true" />
         Rejected
       </span>
@@ -393,10 +405,58 @@ function QueryCaseCell({ known, queryId, detailPath, rejected }) {
   }
 
   return (
-    <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200/80 px-3 py-1 xl:px-3.5 xl:py-1.5 text-[10.5px] xl:text-[11.5px] font-semibold shadow-2xs">
+    <span className="inline-flex h-8 items-center gap-1.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200/80 px-3.5 text-[11.5px] font-semibold whitespace-nowrap shadow-2xs">
       <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse shrink-0" />
       Awaiting validation
     </span>
+  );
+}
+
+/**
+ * Line 1: the category, then what has happened to the mail (auto reply, attachments, purge).
+ * Line 2: the AI confidence. That chip is too wide to share a line, so it gets its own
+ * and starts at the same place on every row.
+ */
+function MailboxRowTags({ message, known, junk, purge, onCorrectCategory, correctingCategory, caseHref, messageHref }) {
+  return (
+    <div className="flex min-w-0 flex-col items-start gap-1.5">
+      <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+        <MailCategoryBadge
+          triage={message.triage}
+          onCorrect={onCorrectCategory}
+          correcting={correctingCategory}
+          caseHref={caseHref}
+          messageHref={messageHref}
+          className={TAG_CHIP}
+        />
+        {/* "Auto Reply" already shows in the confidence chip; this adds sending, failed or sent. */}
+        {message.autoReply?.status !== AUTO_REPLY_STATUS.SUGGESTED && (
+          <AutoReplyBadge autoReply={message.autoReply} className={TAG_CHIP} />
+        )}
+        {message.attachments?.length > 0 && (
+          <span
+            title={`${message.attachments.length} attachment${message.attachments.length === 1 ? "" : "s"}`}
+            className={cn("inline-flex items-center border border-slate-200 bg-slate-100 text-slate-500", TAG_CHIP)}
+          >
+            <PaperclipIcon aria-hidden="true" />
+            {message.attachments.length}
+          </span>
+        )}
+        {purge && !known ? (
+          <span
+            className={cn(
+              "inline-flex items-center whitespace-nowrap border",
+              TAG_CHIP,
+              junk ? "border-amber-200 bg-amber-100 text-amber-700" : "border-slate-200 bg-slate-100 text-slate-500",
+            )}
+          >
+            <Clock aria-hidden="true" />
+            {purge}
+          </span>
+        ) : null}
+      </div>
+      <AutoReplyConfidence message={message} className={TAG_CHIP} />
+    </div>
   );
 }
 
@@ -406,8 +466,8 @@ function RowValidationControls({ message, decision, junk, pending, confirming, o
   if (confirming) {
     const accepting = confirming === "accept";
     return (
-      <div className="flex flex-col items-center gap-1.5">
-        <span className="hidden xl:block text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
+      <div className="flex flex-col items-end gap-1.5">
+        <span className="hidden @5xl:block text-right text-[11px] leading-tight font-semibold text-slate-500 uppercase tracking-wider">
           {accepting
             ? message.autoReply?.status === AUTO_REPLY_STATUS.SUGGESTED
               ? "Register & auto-reply?"
@@ -442,7 +502,7 @@ function RowValidationControls({ message, decision, junk, pending, confirming, o
   }
 
   return (
-    <div className="flex items-center gap-1.5">
+    <div className="flex items-center gap-2">
       <TooltipProvider>
         <Tooltip>
           <TooltipTrigger asChild>
@@ -520,8 +580,8 @@ function RowDeleteControls({
 }) {
   if (confirming) {
     return (
-      <div className="flex flex-col items-center gap-1.5">
-        <span className="hidden xl:block text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
+      <div className="flex flex-col items-end gap-1.5">
+        <span className="hidden @5xl:block text-right text-[11px] leading-tight font-semibold text-slate-500 uppercase tracking-wider">
           Delete?
         </span>
         <div className="flex items-center gap-1.5">
@@ -551,14 +611,15 @@ function RowDeleteControls({
     <TooltipProvider>
       <Tooltip>
         <TooltipTrigger asChild>
-          <button
-            type="button"
+          <Button
+            variant="ghost"
+            size="icon-sm"
             aria-label={`Delete message ${message.mailboxMessageId}`}
             onClick={onAskConfirm}
-            className="rounded-xl border border-rose-200 bg-rose-50 hover:bg-rose-100 text-rose-600 p-2 transition-[background-color,transform] active:scale-95 cursor-pointer"
+            className="border border-rose-200 bg-rose-50 text-rose-600 hover:bg-rose-100 hover:text-rose-700"
           >
-            <Trash2Icon className="h-4 w-4" />
-          </button>
+            <Trash2Icon className="h-4 w-4" aria-hidden="true" />
+          </Button>
         </TooltipTrigger>
         <TooltipContent className="max-w-70 wrap-break-word">
           {known
@@ -613,6 +674,7 @@ function MailboxRow({
   const unread = message.isRead === false;
   const junk = message.triage?.verdict === "JUNK" && !message.triage?.rescuedAt;
   const purge = describePurge(message.triage?.purgesAt);
+  const snippet = toSnippet(message.body);
 
   const openFromRow = (event) => {
     if (
@@ -628,19 +690,19 @@ function MailboxRow({
   return (
     <div
       onClick={openFromRow}
-      className={`group relative flex flex-col xl:grid ${ROW_GRID} items-start xl:items-center gap-3 xl:gap-4 ${unread ? "bg-primary-50/40" : "bg-card"} rounded-2xl border border-slate-200/70 p-4 shadow-2xs hover:shadow-md hover:border-purple-300 transition-[border-color,box-shadow] duration-200 cursor-pointer`}
+      className={`group relative flex flex-col @5xl:grid ${ROW_GRID} ${ROW_PADDING} items-start @5xl:items-center gap-3 @5xl:gap-x-3 @5xl:min-h-20 ${unread ? "bg-primary-50/40" : "bg-card"} rounded-2xl border border-slate-200/70 p-4 @5xl:py-3 shadow-2xs hover:shadow-md hover:border-purple-300 transition-[border-color,box-shadow] duration-200 cursor-pointer`}
     >
       <div
         className={`absolute left-0 top-0 bottom-0 w-1.5 rounded-l-2xl ${railColour(known, rejected)}`}
       />
 
-      <div className="hidden xl:flex justify-center pl-2">
-        <span className="flex h-7 w-7 items-center justify-center rounded-full bg-slate-100 font-semibold text-[12px] text-slate-700">
+      <div className="hidden @5xl:flex justify-center">
+        <span className="flex h-7 w-7 items-center justify-center rounded-full bg-slate-100 font-semibold text-[12px] tabular-nums text-slate-700">
           {index + 1}
         </span>
       </div>
 
-      <div className="flex items-center justify-between xl:justify-start w-full xl:w-auto gap-3 min-w-0">
+      <div className="flex items-center justify-between @5xl:justify-start w-full gap-3 min-w-0">
         <div className="flex items-center gap-3 min-w-0">
           <div className="relative flex h-9.5 w-9.5 shrink-0 items-center justify-center rounded-xl bg-purple-50 text-purple-700 font-semibold text-[12px] border border-purple-100">
             {sender.initials}
@@ -652,19 +714,19 @@ function MailboxRow({
             )}
           </div>
           <div className="min-w-0">
-            <div className="text-[13.5px] font-semibold text-slate-900 truncate">
+            <div title={sender.name} className="text-[13.5px] font-semibold text-slate-900 truncate">
               {unread && <span className="sr-only">Unread </span>}
               {sender.name}
             </div>
             {sender.email && (
-              <div className="text-[11px] font-medium text-slate-400 truncate">
+              <div title={sender.email} className="text-[11px] font-medium text-slate-400 truncate">
                 {sender.email}
               </div>
             )}
           </div>
         </div>
 
-        <div className="xl:hidden flex flex-col items-end shrink-0 text-right pl-2">
+        <div className="@5xl:hidden flex flex-col items-end shrink-0 text-right pl-2 tabular-nums">
           <div className="text-[12px] font-bold text-slate-800">
             {received.date}
           </div>
@@ -674,72 +736,55 @@ function MailboxRow({
         </div>
       </div>
 
-      <div className="min-w-0 w-full xl:w-auto px-1 xl:px-0">
-        <div className="flex min-w-0 items-center gap-2">
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Link
-                  to={openPath}
-                  className="block min-w-0 text-[14px] font-semibold text-slate-900 truncate group-hover:text-purple-700 transition-colors"
-                >
-                  {message.subject || "(No Subject)"}
-                </Link>
-              </TooltipTrigger>
-              <TooltipContent className="max-w-100 wrap-break-word">
-                {message.subject}
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-          <AutoReplyConfidence message={message} />
-        </div>
-        <div className="flex items-center gap-1.5 text-[11.5px] font-medium text-slate-400 mt-0.5">
-          <MailCategoryBadge
-            triage={message.triage}
-            onCorrect={onCorrectCategory}
-            correcting={correctingCategory}
-            caseHref={caseHref}
-            messageHref={messageHref}
-            className="me-0.5"
-          />
-          {/* "Auto Reply" already shows beside the subject; the badge adds sending, failed or sent. */}
-          {message.autoReply?.status !== AUTO_REPLY_STATUS.SUGGESTED && <AutoReplyBadge autoReply={message.autoReply} />}
-          <MailIcon className="h-3.5 w-3.5 text-purple-500 shrink-0" />
-          <span className="truncate">
-            {toSnippet(message.body) || "Email Enquiry"}
+      <div className="min-w-0 w-full px-1 @5xl:px-0">
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Link
+                to={openPath}
+                className="block min-w-0 text-[14px] font-semibold text-slate-900 truncate group-hover:text-purple-700 transition-colors"
+              >
+                {message.subject || "(No Subject)"}
+              </Link>
+            </TooltipTrigger>
+            <TooltipContent className="max-w-100 wrap-break-word">
+              {message.subject}
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+        <div className="flex min-w-0 items-center gap-1.5 text-[12px] font-medium text-slate-400 mt-1">
+          <MailIcon className="h-3.5 w-3.5 text-purple-500 shrink-0" aria-hidden="true" />
+          <span title={snippet || undefined} className="truncate">
+            {snippet || "Email Enquiry"}
           </span>
-          {message.attachments?.length > 0 && (
-            <span className="ml-1 inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[10.5px] font-bold text-slate-500">
-              <PaperclipIcon className="h-3 w-3" aria-hidden="true" />
-              {message.attachments.length}
-            </span>
-          )}
-          {purge && !known ? (
-            <span
-              className={cn(
-                "ml-1 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10.5px] font-bold",
-                junk ? "bg-amber-100 text-amber-700" : "bg-slate-100 text-slate-500",
-              )}
-            >
-              <Clock className="h-3 w-3" aria-hidden="true" />
-              {purge}
-            </span>
-          ) : null}
         </div>
       </div>
 
-      <div className="hidden xl:block">
-        <div className="text-[13px] font-bold text-slate-800">
+      <div className="min-w-0 w-full px-1 @5xl:px-0">
+        <MailboxRowTags
+          message={message}
+          known={known}
+          junk={junk}
+          purge={purge}
+          onCorrectCategory={onCorrectCategory}
+          correctingCategory={correctingCategory}
+          caseHref={caseHref}
+          messageHref={messageHref}
+        />
+      </div>
+
+      <div className="hidden @5xl:block tabular-nums">
+        <div className="text-[13px] font-bold text-slate-800 whitespace-nowrap">
           {received.date}
         </div>
-        <div className="text-[11.5px] font-medium text-slate-400 mt-0.5">
+        <div className="text-[11.5px] font-medium text-slate-400 mt-0.5 whitespace-nowrap">
           {received.time}
         </div>
       </div>
 
-      <div className="flex items-center justify-between xl:justify-center w-full xl:w-auto mt-2 xl:mt-0 pt-3 xl:pt-0 border-t border-slate-100 xl:border-0">
+      <div className="flex items-center w-full min-w-0 mt-2 @5xl:mt-0 pt-3 @5xl:pt-0 border-t border-slate-100 @5xl:border-0">
         <div className="flex items-center gap-2">
-          <span className="xl:hidden text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+          <span className="@5xl:hidden text-[11px] font-bold text-slate-500 uppercase tracking-wider">
             Query Case:
           </span>
           <QueryCaseCell
@@ -751,7 +796,7 @@ function MailboxRow({
         </div>
       </div>
 
-      <div className="flex items-center justify-center gap-2 w-full xl:w-auto">
+      <div className="flex items-center justify-end gap-2 w-full">
         <RowValidationControls
           message={message}
           decision={decision}
@@ -1098,73 +1143,78 @@ export function MailboxInboxPage() {
         ) : (
           <div
             aria-busy={inbox.isPlaceholderData}
-            className={inbox.isPlaceholderData ? "opacity-60" : undefined}
+            className={cn("@container", inbox.isPlaceholderData && "opacity-60")}
           >
-            <MailboxColumnHeader />
+            {/* The padding keeps row shadows and focus rings from being clipped by the scroller. */}
+            <div className="-m-1 overflow-x-auto p-1">
+              <div className={ROW_MIN_WIDTH}>
+                <MailboxColumnHeader />
 
-            <div className="space-y-3">
-              {messages.map((message, index) => {
-                const queryId =
-                  message.linkedCase?.queryId ||
-                  queryIdFor(message.mailboxMessageId);
-                const known =
-                  Boolean(message.linkedCase) ||
-                  (queryId && queries.some((q) => q.queryId === queryId));
+                <div className="space-y-3">
+                  {messages.map((message, index) => {
+                    const queryId =
+                      message.linkedCase?.queryId ||
+                      queryIdFor(message.mailboxMessageId);
+                    const known =
+                      Boolean(message.linkedCase) ||
+                      (queryId && queries.some((q) => q.queryId === queryId));
 
-                return (
-                  <MailboxRow
-                    key={message.mailboxMessageId}
-                    message={message}
-                    index={offset + index}
-                    openPath={buildPath(paths.INBOX_DETAIL, {
-                      messageId: encodeURIComponent(message.mailboxMessageId),
-                    })}
-                    known={known}
-                    queryId={queryId}
-                    detailPath={
-                      queryId && paths.QUERY_DETAIL
-                        ? getQueryDetailPath(queryId)
-                        : null
-                    }
-                    decision={decisionFor(message.mailboxMessageId) || decisionFromRow(message)}
-                    confirming={
-                      confirming?.id === message.mailboxMessageId
-                        ? confirming
-                        : null
-                    }
-                    pending={deciding}
-                    deleting={deleteMessage.isPending}
-                    onAskConfirm={() =>
-                      setConfirming({
-                        id: message.mailboxMessageId,
-                        action: "delete",
-                      })
-                    }
-                    onCancel={() => setConfirming(null)}
-                    onDelete={() =>
-                      deleteMessage.mutate(message.mailboxMessageId)
-                    }
-                    onRescue={() => rescueMessage.mutate(message.mailboxMessageId)}
-                    onCorrectCategory={(next) =>
-                      correctCategory.mutate({ mailboxMessageId: message.mailboxMessageId, category: next })
-                    }
-                    correctingCategory={correctCategory.isPending}
-                    caseHref={paths.QUERY_DETAIL ? getQueryDetailPath : null}
-                    messageHref={(mailboxMessageId) =>
-                      buildPath(paths.INBOX_DETAIL, { messageId: encodeURIComponent(mailboxMessageId) })
-                    }
-                    onAskDecision={(action) =>
-                      setConfirming({ id: message.mailboxMessageId, action })
-                    }
-                    onCancelDecision={() => setConfirming(null)}
-                    onConfirmDecision={() =>
-                      confirming?.action === "accept"
-                        ? onAcceptMessage(message)
-                        : onRejectMessage(message)
-                    }
-                  />
-                );
-              })}
+                    return (
+                      <MailboxRow
+                        key={message.mailboxMessageId}
+                        message={message}
+                        index={offset + index}
+                        openPath={buildPath(paths.INBOX_DETAIL, {
+                          messageId: encodeURIComponent(message.mailboxMessageId),
+                        })}
+                        known={known}
+                        queryId={queryId}
+                        detailPath={
+                          queryId && paths.QUERY_DETAIL
+                            ? getQueryDetailPath(queryId)
+                            : null
+                        }
+                        decision={decisionFor(message.mailboxMessageId) || decisionFromRow(message)}
+                        confirming={
+                          confirming?.id === message.mailboxMessageId
+                            ? confirming
+                            : null
+                        }
+                        pending={deciding}
+                        deleting={deleteMessage.isPending}
+                        onAskConfirm={() =>
+                          setConfirming({
+                            id: message.mailboxMessageId,
+                            action: "delete",
+                          })
+                        }
+                        onCancel={() => setConfirming(null)}
+                        onDelete={() =>
+                          deleteMessage.mutate(message.mailboxMessageId)
+                        }
+                        onRescue={() => rescueMessage.mutate(message.mailboxMessageId)}
+                        onCorrectCategory={(next) =>
+                          correctCategory.mutate({ mailboxMessageId: message.mailboxMessageId, category: next })
+                        }
+                        correctingCategory={correctCategory.isPending}
+                        caseHref={paths.QUERY_DETAIL ? getQueryDetailPath : null}
+                        messageHref={(mailboxMessageId) =>
+                          buildPath(paths.INBOX_DETAIL, { messageId: encodeURIComponent(mailboxMessageId) })
+                        }
+                        onAskDecision={(action) =>
+                          setConfirming({ id: message.mailboxMessageId, action })
+                        }
+                        onCancelDecision={() => setConfirming(null)}
+                        onConfirmDecision={() =>
+                          confirming?.action === "accept"
+                            ? onAcceptMessage(message)
+                            : onRejectMessage(message)
+                        }
+                      />
+                    );
+                  })}
+                </div>
+              </div>
             </div>
           </div>
         )}

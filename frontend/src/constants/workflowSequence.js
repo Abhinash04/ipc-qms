@@ -7,6 +7,7 @@ export const WORKFLOW_ITEM = Object.freeze({
   TRANSFER: 'transfer',
   AUTOMATIC_TRANSFER: 'automatic-transfer',
   PULL_BACK: 'pullback',
+  CHANGES_REQUESTED: 'changes-requested',
   // Stands for stages left out of a filtered view.
   GAP: 'gap',
 });
@@ -144,16 +145,15 @@ function earlierVisit(stage, { actor, marker, reopenedBy }) {
   return { ...stage, actor, activity, note: undefined };
 }
 
-const itemKind = (event) =>
-  event.type === SPECIAL_EVENT.PULL_BACK
-    ? WORKFLOW_ITEM.PULL_BACK
-    : event.automatic
-      ? WORKFLOW_ITEM.AUTOMATIC_TRANSFER
-      : WORKFLOW_ITEM.TRANSFER;
+const itemKind = (event) => {
+  if (event.type === SPECIAL_EVENT.PULL_BACK) return WORKFLOW_ITEM.PULL_BACK;
+  if (event.type === SPECIAL_EVENT.CHANGES_REQUESTED) return WORKFLOW_ITEM.CHANGES_REQUESTED;
+  return event.automatic ? WORKFLOW_ITEM.AUTOMATIC_TRANSFER : WORKFLOW_ITEM.TRANSFER;
+};
 
 /**
- * One chronological line for the whole case: the lifecycle stages, with every transfer and pull
- * back placed where it happened. Each pull back closes a pass; the next pass starts again at the
+ * One chronological line for the whole case: the lifecycle stages, with every transfer, pull back
+ * and change request placed where it happened. Each pull back closes a pass; the next pass starts again at the
  * stage it returned to, so a stage visited twice appears twice. `connections` pair each pull back
  * with the earlier visit it returned to, for the return arrow.
  */

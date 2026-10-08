@@ -238,7 +238,7 @@ describe('Workflow progress switches between views of the same history', () => {
     s().transferQuery(queryId, COLLEAGUE.id, 'Subject expertise', OFFICIAL);
     renderAs(OIC, `/officer-in-charge/queries/${queryId}`);
 
-    const summary = within(progressPanel()).getByText(/stages complete · 1 pull backs & transfers$/).textContent;
+    const summary = within(progressPanel()).getByText(/stages complete · 1 pull backs, transfers & change requests$/).textContent;
     expect(viewButton(/^All$/)).toHaveAttribute('aria-pressed', 'true');
     expect(within(track()).getByRole('button', { name: /^Transfer/ })).toBeInTheDocument();
     const calls = serviceCalls();

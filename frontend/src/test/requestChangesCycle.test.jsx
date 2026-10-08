@@ -27,6 +27,9 @@ vi.mock('@/services/api/mailboxService', () => ({
 
 const s = () => useWorkflowStore.getState();
 
+// The comment also appears on the workflow line's change-request event, so look inside the card.
+const resubmissionCard = (title) => screen.getByRole('heading', { name: title }).closest('[data-slot="panel"]');
+
 const OIC = findUserById('USR-0003');
 const OFFICIAL = findUserById('USR-0004');
 const REVIEWER = findUserById('USR-0005');
@@ -155,10 +158,10 @@ describe('resubmitting after changes were requested', () => {
     s().submitForReview(queryId, OFFICIAL, { changeSummary: NOTE });
     renderAs(REVIEWER, `/reviewer/queries/${queryId}`);
 
-    expect(screen.getByText('Resubmitted after changes requested')).toBeInTheDocument();
-    expect(screen.getByText('Round 2')).toBeInTheDocument();
-    expect(screen.getByText(REQUEST)).toBeInTheDocument();
-    expect(screen.getByText(NOTE)).toBeInTheDocument();
+    const card = resubmissionCard('Resubmitted after changes requested');
+    expect(within(card).getByText('Round 2')).toBeInTheDocument();
+    expect(within(card).getByText(REQUEST)).toBeInTheDocument();
+    expect(within(card).getByText(NOTE)).toBeInTheDocument();
 
     const compare = screen.getByRole('button', { name: 'Compare v1 → v2' });
     expect(compare).toHaveAttribute('aria-expanded', 'false');
@@ -273,9 +276,9 @@ describe('an OIC rejection', () => {
     s().submitForReview(queryId, OFFICIAL, { changeSummary: NOTE });
     renderAs(REVIEWER, `/reviewer/queries/${queryId}`);
 
-    expect(screen.getByText('Resubmitted after rejection')).toBeInTheDocument();
-    expect(screen.getByText('Rejection reason')).toBeInTheDocument();
-    expect(screen.getByText(REJECTION)).toBeInTheDocument();
+    const card = resubmissionCard('Resubmitted after rejection');
+    expect(within(card).getByText('Rejection reason')).toBeInTheDocument();
+    expect(within(card).getByText(REJECTION)).toBeInTheDocument();
   });
 });
 

@@ -1,5 +1,5 @@
 import { useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, ArrowLeftRight, Bot, CheckCircle2, CircleDot, Undo2 } from 'lucide-react';
+import { ArrowLeft, ArrowLeftRight, Bot, CheckCircle2, CircleDot, MessageSquareWarning, Undo2 } from 'lucide-react';
 import { STAGE_STATUS } from '@/constants/queryLifecycle';
 import { WORKFLOW_ITEM, WORKFLOW_VIEW, buildWorkflowSequence, selectWorkflowView } from '@/constants/workflowSequence';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -34,6 +34,21 @@ const EVENT_STYLES = {
     node: 'bg-amber-500 border-amber-600 text-white',
     badge: 'bg-amber-100 text-amber-900 ring-amber-200',
   },
+  [WORKFLOW_ITEM.CHANGES_REQUESTED]: {
+    title: 'Changes requested',
+    pill: 'Changes requested',
+    Icon: MessageSquareWarning,
+    node: 'bg-rose-500 border-rose-600 text-white',
+    badge: 'bg-rose-100 text-rose-900 ring-rose-200',
+  },
+};
+
+// A send-back at final approval can be a rejection rather than a request for changes.
+const REJECTED_STYLE = { title: 'Rejected at final approval', pill: 'Rejected' };
+
+const styleOf = (item) => {
+  const style = EVENT_STYLES[item.kind];
+  return item.event?.rejected ? { ...style, ...REJECTED_STYLE } : style;
 };
 
 const NONE = [];
@@ -155,7 +170,7 @@ function eventLabel(item) {
     personLine(event.by) && `by ${personLine(event.by)}`,
     when(event.at),
   ].filter(Boolean);
-  const label = [EVENT_STYLES[item.kind].title, details.join(', ')].filter(Boolean).join(': ');
+  const label = [styleOf(item).title, details.join(', ')].filter(Boolean).join(': ');
   return event.reason ? `${label}. Reason: ${event.reason}` : label;
 }
 
@@ -172,7 +187,7 @@ function EventDetails({ item, showTitle = true }) {
 
   return (
     <div className="space-y-1 text-left">
-      {showTitle && <p className="text-[12.5px] font-bold">{EVENT_STYLES[item.kind].title}</p>}
+      {showTitle && <p className="text-[12.5px] font-bold">{styleOf(item).title}</p>}
       <dl className="grid grid-cols-[auto_1fr] gap-x-2 gap-y-0.5 text-[11.5px]">
         {rows.map(([term, value]) => (
           <div key={term} className="contents">
@@ -185,8 +200,8 @@ function EventDetails({ item, showTitle = true }) {
   );
 }
 
-function EventPill({ kind }) {
-  const style = EVENT_STYLES[kind];
+function EventPill({ item }) {
+  const style = styleOf(item);
   return (
     <span className={cn('inline-block rounded-full px-2 py-0.5 text-[11px] font-bold whitespace-nowrap ring-1', style.badge)}>
       {style.pill}
@@ -300,7 +315,14 @@ function TrackStage({ item, index, items, nodeRef }) {
 function TrackEvent({ item, index, items, nodeRef }) {
   const destination = destinationOf(item);
   return (
-    <li className="flex w-24 shrink-0 flex-col items-center text-center" data-workflow-item={item.kind}>
+    <li
+      className={cn(
+        'flex shrink-0 flex-col items-center text-center',
+        // "Changes requested" is the longest pill; it needs a wider column to clear its neighbours.
+        item.kind === WORKFLOW_ITEM.CHANGES_REQUESTED ? 'w-36' : 'w-24',
+      )}
+      data-workflow-item={item.kind}
+    >
       <EventTooltip item={item}>
         <span className="flex h-7 w-full items-center">
           <Segment hidden={index === 0} filled={index > 0 && isDone(items[index - 1])} position={2 * index - 1} />
@@ -308,7 +330,7 @@ function TrackEvent({ item, index, items, nodeRef }) {
           <Segment hidden={index === items.length - 1} filled position={2 * index} />
         </span>
         <span className="mt-2">
-          <EventPill kind={item.kind} />
+          <EventPill item={item} />
         </span>
         {destination && (
           <span className="mt-1 line-clamp-2 max-w-full px-1 text-[11px] leading-snug text-slate-500 wrap-break-word">
@@ -478,7 +500,7 @@ function VerticalItem({ item, index, items }) {
         </div>
       ) : (
         <div className="min-w-0 flex-1 pb-3" aria-label={eventLabel(item)} role="group">
-          <EventPill kind={item.kind} />
+          <EventPill item={item} />
           {item.kind === WORKFLOW_ITEM.PULL_BACK && item.returnsTo && (
             <p className="mt-1 flex items-center gap-1 text-[12.5px] font-semibold text-amber-900">
               <Undo2 className="h-3.5 w-3.5" aria-hidden="true" /> Returned to {item.returnsTo}
@@ -494,8 +516,8 @@ function VerticalItem({ item, index, items }) {
 }
 
 /**
- * The case's whole history on one line, oldest to newest: the lifecycle stages with every transfer
- * and pull back where it happened. A pull back draws an arc back to the stage it returned to, and
+ * The case's whole history on one line, oldest to newest: the lifecycle stages with every transfer,
+ * pull back and change request where it happened. A pull back draws an arc back to the stage it returned to, and
  * the line carries on from that stage again. Without `events` it is the plain lifecycle.
  * `view` only chooses what is drawn from that one sequence (see WORKFLOW_VIEW).
  */
@@ -512,7 +534,7 @@ export function QueryLifecycleTimeline({ stages = NONE, events = NONE, audit = N
   if (items.length === 0) {
     return (
       <p className="m-0 rounded-lg border border-dashed border-slate-200 bg-slate-50/60 px-4 py-6 text-center text-[13px] font-medium text-slate-500">
-        No pull backs or transfers recorded.
+        No pull backs, transfers or change requests recorded.
       </p>
     );
   }

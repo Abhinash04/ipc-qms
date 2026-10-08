@@ -56,6 +56,11 @@ function lifecycleOf(queryId) {
   });
 }
 
+const changeRequestsOf = (queryId) =>
+  buildSpecialEvents({ query: s().getQuery(queryId), audit: s().getAudit(queryId), reviews: s().getReviews(queryId) }).filter(
+    (event) => event.type === SPECIAL_EVENT.CHANGES_REQUESTED,
+  );
+
 const currentOf = (queryId) =>
   lifecycleOf(queryId).find((stage) => stage.status === STAGE_STATUS.CURRENT);
 
@@ -202,11 +207,19 @@ describe('a returned revision sends the rail back to the assigned official', () 
     ]);
   });
 
-  it('names the reviewer who asked for the changes', async () => {
+  it('records the request as a change-request event by the reviewer, not as a note on the stage', async () => {
     const queryId = await toReview();
     s().requestRevision(queryId, 'Cite the monograph edition.', REVIEWER_A);
 
-    expect(currentOf(queryId).note).toContain(REVIEWER_A.name);
+    expect(currentOf(queryId).note).toBeUndefined();
+    expect(changeRequestsOf(queryId)).toEqual([
+      expect.objectContaining({
+        type: SPECIAL_EVENT.CHANGES_REQUESTED,
+        by: expect.objectContaining({ name: REVIEWER_A.name }),
+        reason: 'Cite the monograph edition.',
+        rejected: false,
+      }),
+    ]);
   });
 
   it('reverts even from Reviewer II, rather than continuing forward', async () => {
@@ -215,7 +228,7 @@ describe('a returned revision sends the rail back to the assigned official', () 
     s().requestRevision(queryId, 'Add the method.', REVIEWER_B);
 
     expect(currentOf(queryId).key).toBe(STAGE.DRAFTED);
-    expect(currentOf(queryId).note).toContain(REVIEWER_B.name);
+    expect(changeRequestsOf(queryId).map((event) => event.by.name)).toEqual([REVIEWER_B.name]);
   });
 
   it('tracks the version count across v2 and v3 cycles', async () => {
