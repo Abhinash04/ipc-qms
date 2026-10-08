@@ -9,6 +9,7 @@ import nicRoutes from './nicRoutes.js';
 import auditRoutes from './auditRoutes.js';
 import pullbackRoutes from './pullbackRoutes.js';
 import queryRoutes from './queryRoutes.js';
+import userAdminRoutes from './userAdminRoutes.js';
 
 const router = express.Router();
 router.use(healthRoutes);
@@ -21,6 +22,7 @@ router.use(nicRoutes);
 router.use(auditRoutes);
 router.use(pullbackRoutes);
 router.use(queryRoutes);
+router.use(userAdminRoutes);
 
 export default router;
 
