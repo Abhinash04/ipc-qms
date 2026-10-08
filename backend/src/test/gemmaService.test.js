@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { generateSummary } from '../services/ai/gemmaService.js';
+import { generateSummary, status } from '../services/ai/gemmaService.js';
 import env from '../config/env.js';
 
 describe('Gemma AI Service Unit Tests', () => {
@@ -8,10 +8,6 @@ describe('Gemma AI Service Unit Tests', () => {
 
   beforeEach(() => {
     vi.restoreAllMocks();
-    // The suite pins GEMMA_API_URL blank so nothing reaches the live endpoint,
-    // which makes gemmaService short-circuit to its fallback before fetching.
-    // These tests exercise the AI parsing path deliberately, so they opt back in
-    // with an unroutable address — `fetch` is mocked, so no request is made.
     env.GEMMA_API_URL = 'http://gemma.test.invalid/api';
   });
 
@@ -85,5 +81,39 @@ describe('Gemma AI Service Unit Tests', () => {
     expect(result.topics).toContain('certificate');
     expect(result.aiGenerated).toBe(false);
     expect(result.fallback).toBe(true);
+  });
+
+  it('logs why the call failed, not just that it did', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    global.fetch = vi.fn().mockRejectedValue(
+      Object.assign(new Error('fetch failed'), {
+        cause: Object.assign(new Error('getaddrinfo ENOTFOUND pravahai.aicte-india.org'), { code: 'ENOTFOUND' }),
+      }),
+    );
+
+    await generateSummary({ subject: 'x', body: 'y' });
+
+    expect(warn.mock.calls.some(([line]) => String(line).includes('ENOTFOUND'))).toBe(true);
+  });
+
+  it('remembers the last failure, so a deployment running on fallbacks can be seen', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    global.fetch = vi.fn().mockRejectedValue(new Error('Network error or timeout'));
+
+    await generateSummary({ subject: 'x', body: 'y' });
+
+    expect(status()).toMatchObject({ configured: true, endpoint: 'gemma.test.invalid' });
+    expect(status().lastFailureAt).toBeTruthy();
+    expect(status().lastError).toMatch(/summary/);
+
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ answer: JSON.stringify({ text: 'ok', keyPoints: [], topics: [] }) }),
+    });
+
+    await generateSummary({ subject: 'x', body: 'y' });
+
+    expect(status().lastSuccessAt).toBeTruthy();
+    expect(status().lastError).toBeNull();
   });
 });

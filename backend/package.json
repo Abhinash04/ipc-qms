@@ -9,8 +9,20 @@
     "lint": "eslint .",
     "test": "vitest run",
     "test:watch": "vitest",
-    "gmail:preflight": "node src/scripts/gmailPreflight.js",
-    "ingest:ipc": "node scripts/ingestIpcDocs.mjs"
+    "test:auto-transfer": "vitest run src/test/autoTransfer.test.js",
+    "nic:preflight": "node src/scripts/nicPreflight.js",
+    "nic:verify": "node src/scripts/nicVerify.js",
+    "nic:browser:discover": "node src/scripts/nicBrowserDiscover.js",
+    "nic:browser:calibrate": "node src/scripts/nicBrowserCalibrate.js",
+    "ingest:ipc": "node scripts/ingestIpcDocs.mjs",
+    "db:reset": "node scripts/resetWorkflowState.mjs",
+    "db:provision": "node scripts/provisionAtlas.mjs",
+    "db:check": "node scripts/checkAtlas.mjs",
+    "mailbox:purge": "node scripts/purgeMailboxJunk.mjs",
+    "cleanup:awaiting": "node scripts/discardAwaitingMail.mjs",
+    "draft:trace": "node src/scripts/testDraftLive.js",
+    "draft:eval": "node src/scripts/evalDraft.js",
+    "triage:eval": "node src/scripts/evalTriage.js"
   },
   "keywords": [],
   "author": "",
@@ -18,20 +30,32 @@
   "type": "module",
   "dependencies": {
     "bcryptjs": "^3.0.3",
+    "compression": "^1.8.2",
+    "cookie-parser": "^1.4.7",
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
-    "googleapis": "^174.0.1",
+    "express-rate-limit": "^8.7.0",
+    "google-auth-library": "^11.1.0",
     "helmet": "^8.3.0",
+    "imapflow": "^2.0.0",
+    "jsonwebtoken": "^9.0.3",
+    "mailparser": "^3.9.23",
     "mongoose": "^9.9.2",
-    "morgan": "^1.11.0"
+    "morgan": "^1.11.0",
+    "multer": "^2.2.0",
+    "nodemailer": "^10.0.1",
+    "pdfkit": "^0.20.2",
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "eslint": "^10.8.1",
     "globals": "^17.11.0",
+    "jsdom": "^30.1.0",
     "nodemon": "^3.1.14",
     "supertest": "^7.2.2",
+    "unpdf": "^1.8.1",
     "vitest": "^4.1.10"
   }
 }

@@ -11,15 +11,25 @@ import { Breadcrumb } from "@/components/common/Breadcrumb";
 import { PageHeader } from "@/components/common/PageHeader";
 import { useWorkflowStore } from "@/store/useWorkflowStore";
 import { ROLE_LABELS } from "@/constants/roles";
+import { findUserById } from "@/constants/mockUsers";
 import { buildPath } from "@/constants/routePaths";
 import { useRoutePaths } from "@/hooks/useRoutePaths";
+import { stableKey } from "@/utils/stableKey";
 
 export function NotificationsPage() {
   const paths = useRoutePaths();
   const notifications = useWorkflowStore((state) => state.notifications);
 
+  const getNotificationTimestamp = (notif) => {
+    if (!notif) return 0;
+    const iso = notif.at || notif.createdAt || notif.timestamp || notif.time;
+    if (!iso) return 0;
+    const ms = Date.parse(iso);
+    return Number.isNaN(ms) ? 0 : ms;
+  };
+
   const storeOrdered = [...notifications].sort(
-    (a, b) => new Date(b.at) - new Date(a.at),
+    (a, b) => getNotificationTimestamp(b) - getNotificationTimestamp(a),
   );
   const displayList = storeOrdered;
 
@@ -38,9 +48,9 @@ export function NotificationsPage() {
     if (item.type === "user" || msg.includes("assigned to")) {
       return {
         icon: User,
-        boxBg: "bg-blue-50 text-blue-600 border-blue-200/60",
-        dotBg: "bg-blue-600",
-        badgeBg: "bg-blue-100/80 text-blue-700 border-blue-200/80",
+        boxBg: "bg-primary-50 text-primary border-primary-200/60",
+        dotBg: "bg-primary",
+        badgeBg: "bg-primary-100/80 text-primary-700 border-primary-200/80",
       };
     }
     if (
@@ -63,9 +73,12 @@ export function NotificationsPage() {
     };
   };
 
-  const formatTimestamp = (isoString) => {
+  const formatTimestamp = (raw) => {
     try {
+      const isoString = typeof raw === "object" ? (raw?.at || raw?.createdAt || raw?.timestamp || raw?.time) : raw;
+      if (!isoString) return "Just now";
       const d = new Date(isoString);
+      if (Number.isNaN(d.getTime())) return "Just now";
       const dateStr = d.toLocaleDateString("en-GB", {
         day: "2-digit",
         month: "short",
@@ -74,12 +87,11 @@ export function NotificationsPage() {
       const timeStr = d.toLocaleTimeString("en-US", {
         hour: "2-digit",
         minute: "2-digit",
-        second: "2-digit",
         hour12: true,
       });
       return `${dateStr}, ${timeStr}`;
     } catch {
-      return "19 Aug 2026, 03:10:19 PM";
+      return "Just now";
     }
   };
 
@@ -98,17 +110,19 @@ export function NotificationsPage() {
         purpose="Workflow events raised for the cases you are involved in"
       />
 
-      <div className="bg-white rounded-3xl border border-slate-200/70 p-6 shadow-sm">
+      <div  data-slot="panel" className="bg-card rounded-2xl border border-transparent p-6 shadow-card">
         <div className="relative pl-3 space-y-6 my-2">
           {displayList.map((item, index) => {
             const config = getNodeConfig(item);
             const Icon = config.icon;
             const roleLabel =
-              ROLE_LABELS[item.recipientRole] || item.recipientRole;
+              ROLE_LABELS[item.recipientRole] ||
+              item.recipientRole ||
+              findUserById(item.recipientUserId)?.name;
 
             return (
               <div
-                key={item.notificationId || index}
+                key={item.notificationId || stableKey(item)}
                 className="relative flex items-center gap-4 group"
               >
                 {index < displayList.length - 1 && (
@@ -124,14 +138,14 @@ export function NotificationsPage() {
                   className={`relative z-10 h-2.5 w-2.5 shrink-0 rounded-full ${config.dotBg} ring-4 ring-white`}
                 />
 
-                <div className="flex-1 bg-white rounded-2xl border border-slate-200/80 p-4 shadow-2xs hover:shadow-md hover:border-purple-200 transition-all flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <div className="flex-1 bg-card rounded-2xl border border-slate-200/80 p-4 shadow-2xs hover:shadow-md hover:border-purple-200 transition-[border-color,box-shadow] flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                   <div>
-                    <p className="font-extrabold text-slate-900 text-[14.5px] leading-snug m-0">
+                    <p className="font-semibold text-slate-900 text-[14.5px] leading-snug m-0">
                       {item.message}
                     </p>
                     <div className="flex items-center gap-2 mt-1.5">
                       <span
-                        className={`inline-flex items-center rounded-full px-3 py-0.5 text-[11px] font-extrabold border ${config.badgeBg}`}
+                        className={`inline-flex items-center rounded-full px-3 py-0.5 text-[11px] font-semibold border ${config.badgeBg}`}
                       >
                         {roleLabel}
                       </span>
@@ -141,7 +155,7 @@ export function NotificationsPage() {
                           to={buildPath(paths.QUERY_DETAIL, {
                             queryId: item.queryId,
                           })}
-                          className="font-extrabold text-blue-600 hover:underline text-[12.5px]"
+                          className="font-semibold text-primary hover:underline text-[12.5px]"
                         >
                           {item.queryId}
                         </Link>
@@ -151,7 +165,7 @@ export function NotificationsPage() {
 
                   <div className="flex items-center gap-1.5 text-[12px] font-medium text-slate-400 shrink-0 self-start sm:self-center">
                     <Calendar className="h-3.5 w-3.5 text-slate-400" />
-                    <span>{formatTimestamp(item.at)}</span>
+                    <span>{formatTimestamp(item)}</span>
                   </div>
                 </div>
               </div>
@@ -159,8 +173,8 @@ export function NotificationsPage() {
           })}
         </div>
 
-        <div className="mt-8 rounded-2xl bg-blue-50/50 p-4 flex items-start gap-3 border border-blue-100/60">
-          <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-blue-100 text-blue-600">
+        <div className="mt-8 rounded-2xl bg-primary-50/50 p-4 flex items-start gap-3 border border-primary-100/60">
+          <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary-100 text-primary">
             <Info className="h-3.5 w-3.5" strokeWidth={2.5} />
           </div>
           <div>

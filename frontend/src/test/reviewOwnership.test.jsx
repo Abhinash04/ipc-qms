@@ -7,47 +7,40 @@ import { AppRoutes } from '@/routes/AppRoutes';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useWorkflowStore } from '@/store/useWorkflowStore';
 import { findUserById } from '@/constants/mockUsers';
+import { FRONT_OFFICE_USER as FRONT_OFFICE } from '@/test/frontOfficeUser';
+import { fakeCaseMail } from '@/test/fakeCaseMail';
 
 vi.mock('@/services/api/healthService', () => ({
   fetchHealth: vi.fn().mockResolvedValue({ status: 'healthy' }),
 }));
 
 vi.mock('@/services/api/mailboxService', () => ({
+  rescueMailboxMessage: vi.fn().mockResolvedValue({ rescued: true }),
   fetchEmailConfig: vi.fn().mockResolvedValue({
     transport: 'mock',
     ipcQueryEmail: 'ipc-query-mock@example.com',
-    ipcReplyFrom: { email: 'arnd@example.com', name: 'AR&D Division' },
-    inquirer: { email: 'abhinash.pritiraj@gmail.com', name: 'Abhinash Pritiraj' },
   }),
   fetchMailboxMessages: vi.fn().mockResolvedValue({ messages: [] }),
+  fetchMailboxDecisions: vi.fn().mockResolvedValue({ decisions: [] }),
+  recordMailboxDecision: vi.fn().mockResolvedValue({ alreadyDecided: false }),
   markMessageIngested: vi.fn().mockResolvedValue({ ingested: true }),
-  sendEnquiry: vi.fn().mockResolvedValue({ providerMessageId: 'mock-msg-1' }),
   sendAcknowledgement: vi.fn().mockResolvedValue({ providerMessageId: 'mock-msg-2' }),
 }));
 
 const s = () => useWorkflowStore.getState();
 
-const FRONT_OFFICE = findUserById('USR-0002');
 const OIC = findUserById('USR-0003');
 const OFFICIAL = findUserById('USR-0004');
 const REVIEWER_A = findUserById('USR-0005');
 const REVIEWER_B = findUserById('USR-0006');
 
-const fakeForward = (payload) =>
-  Promise.resolve({
-    from: 'Test Front Officer <front-office@test.invalid>',
-    to: ['officer@test.invalid'],
-    subject: `Fwd: ${payload.subject}`,
-    body: payload.body,
-    providerMessageId: 'mock-msg-forward',
-    providerThreadId: payload.providerThreadId || 'mock-thread-1',
-    sentAt: '2026-08-18T10:00:00.000Z',
-  });
+const caseMail = fakeCaseMail();
+const fakeForward = caseMail.forwardQuery;
 
 const enquiry = () => ({
   mailboxMessageId: 'MSG-00001',
   to: 'ipc-query-mock@example.com',
-  from: 'Abhinash Pritiraj <abhinash.pritiraj@gmail.com>',
+  from: 'Abhinash Pritiraj <abhinash.pritiraj@pharma.example>',
   subject: 'Clarification on monograph revision',
   body: 'Please clarify the applicable monograph.',
   receivedAt: '2026-08-18T09:00:00.000Z',
@@ -111,6 +104,12 @@ describe('the review detail page only offers a decision to the assigned reviewer
     const [approve, ret] = decisionButtons();
     expect(approve).toBeInTheDocument();
     expect(ret).toBeInTheDocument();
+  });
+
+  it('never offers a reviewer the control to delete a review level', () => {
+    renderAs(REVIEWER_B, `/reviewer/reviews/${queryId}`);
+
+    expect(screen.queryByRole('button', { name: /Delete review level/ })).not.toBeInTheDocument();
   });
 
   it('takes the controls away from Reviewer I once they have approved', () => {

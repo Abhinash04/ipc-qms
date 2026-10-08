@@ -9,18 +9,23 @@ import { useWorkflowStore } from '@/store/useWorkflowStore';
 import { useAuthStore } from '@/store/useAuthStore';
 import { buildPath } from '@/constants/routePaths';
 import { findUserById } from '@/constants/mockUsers';
+import { FRONT_OFFICE_USER } from '@/test/frontOfficeUser';
 
 vi.mock('@/services/api/mailboxService', () => ({
+  rescueMailboxMessage: vi.fn().mockResolvedValue({ rescued: true }),
   fetchEmailConfig: vi.fn().mockResolvedValue({
     transport: 'mock',
     ipcQueryEmail: 'ipc-query-mock@example.com',
-    ipcReplyFrom: { email: 'arnd-ipc-mock@example.com', name: 'AR&D Division' },
-    inquirer: { email: 'abhinash.pritiraj@gmail.com', name: 'Abhinash Pritiraj' },
   }),
   fetchMailboxMessages: vi.fn().mockResolvedValue({ messages: [] }),
+  fetchMailboxMessage: vi.fn().mockResolvedValue(null),
+  markMailboxMessageRead: vi.fn().mockResolvedValue({}),
+  syncMailbox: vi.fn().mockResolvedValue({ supported: false, started: false, sync: null }),
+  mailboxAttachmentUrl: vi.fn(),
+  fetchMailboxDecisions: vi.fn().mockResolvedValue({ decisions: [] }),
+  recordMailboxDecision: vi.fn().mockResolvedValue({ alreadyDecided: false }),
   markMessageIngested: vi.fn().mockResolvedValue({ ingested: true }),
   deleteMailboxMessage: vi.fn().mockResolvedValue({ deleted: true }),
-  sendEnquiry: vi.fn().mockResolvedValue({ providerMessageId: 'mock-msg-1' }),
   sendAcknowledgement: vi.fn().mockResolvedValue({ providerMessageId: 'mock-msg-2' }),
 }));
 
@@ -28,8 +33,7 @@ let WALKTHROUGH_ID;
 let ADVANCED_ID;
 
 const USER_FOR_ROLE = Object.fromEntries(
-  ['USR-0001', 'USR-0002', 'USR-0003', 'USR-0004', 'USR-0005', 'USR-0007', 'USR-0008']
-    .map(findUserById)
+  [...['USR-0003', 'USR-0004', 'USR-0005', 'USR-0007', 'USR-0008'].map(findUserById), FRONT_OFFICE_USER]
     .map((user) => [user.role, user]),
 );
 
@@ -55,7 +59,7 @@ beforeAll(async () => {
   WALKTHROUGH_ID = store.ingestEmail({
     mailboxMessageId: 'MSG-00001',
     to: 'ipc-query-mock@example.com',
-    from: 'Abhinash Pritiraj <abhinash.pritiraj@gmail.com>',
+    from: 'Abhinash Pritiraj <abhinash.pritiraj@pharma.example>',
     subject: 'Clarification on monograph revision timelines',
     body: 'Please confirm the revised submission window.',
     receivedAt: '2026-08-17T09:00:00.000Z',
@@ -64,7 +68,7 @@ beforeAll(async () => {
   ADVANCED_ID = store.ingestEmail({
     mailboxMessageId: 'MSG-00002',
     to: 'ipc-query-mock@example.com',
-    from: 'Abhinash Pritiraj <abhinash.pritiraj@gmail.com>',
+    from: 'Abhinash Pritiraj <abhinash.pritiraj@pharma.example>',
     subject: 'Query on impurity threshold reporting',
     body: 'Seeking guidance on reporting thresholds.',
     receivedAt: '2026-08-17T10:00:00.000Z',

@@ -4,7 +4,27 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Query Management System</title>
+    <meta
+      name="description"
+      content="AI-powered IP Stakeholders’ BRIDGETECH for the Indian Pharmacopoeia Commission — track, assign, review and dispatch pharmacopoeial enquiries."
+    />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>AI-powered IP Stakeholders’ BRIDGETECH</title>
+    <script>
+      (function () {
+        try {
+          var saved =
+            JSON.parse(localStorage.getItem("qms.theme") || "{}").state || {};
+          var root = document.documentElement;
+          if (saved.preset) root.dataset.preset = saved.preset;
+          if (saved.sidebarColor)
+            root.dataset.sidebarColor = saved.sidebarColor;
+          if (saved.sidebarActive)
+            root.dataset.sidebarActive = saved.sidebarActive;
+          if (saved.dir === "rtl") root.dir = "rtl";
+        } catch (e) {}
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

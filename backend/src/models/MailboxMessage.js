@@ -13,8 +13,37 @@ const mailboxMessageSchema = new mongoose.Schema(
     receivedAt: { type: String, required: true },
     ingested: { type: Boolean, default: false, index: true },
     aiSummary: { type: Object, default: null },
+
+    source: { type: String, default: 'local', index: true },
+    providerMessageId: { type: String, default: null },
+    removedAt: { type: String, default: null },
+
+    purgedAt: { type: String, default: null },
+
+    toAddresses: { type: [String], default: [] },
+    providerThreadId: { type: String, default: null },
+    bodyHtml: { type: String, default: null },
+    providerUnread: { type: Boolean, default: null },
+    receivedAtSource: { type: String, default: null },
+    readAt: { type: String, default: null },
+    readByUserId: { type: String, default: null },
+    createdAt: { type: String, default: null },
+    mailCategory: { type: String, default: null },
+    // Whether the mail can be offered an automatic reply, and what became of it (services/autoReply).
+    autoReply: { type: Object, default: null },
   },
   { versionKey: false },
+);
+
+mailboxMessageSchema.index({ to: 1, source: 1, removedAt: 1, receivedAt: -1, mailboxMessageId: -1 });
+
+mailboxMessageSchema.index({ to: 1, source: 1, removedAt: 1, mailCategory: 1, receivedAt: -1 });
+
+mailboxMessageSchema.index({ to: 1, source: 1, removedAt: 1, 'autoReply.status': 1, receivedAt: -1 });
+
+mailboxMessageSchema.index(
+  { providerMessageId: 1 },
+  { unique: true, partialFilterExpression: { providerMessageId: { $type: 'string' } } },
 );
 
 const counterSchema = new mongoose.Schema(

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
@@ -7,47 +7,41 @@ import { AppRoutes } from '@/routes/AppRoutes';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useWorkflowStore } from '@/store/useWorkflowStore';
 import { findUserById } from '@/constants/mockUsers';
+import { FRONT_OFFICE_USER as FRONT_OFFICE } from '@/test/frontOfficeUser';
+import { fakeCaseMail } from '@/test/fakeCaseMail';
+import { AUDIT_EVENT } from '@/constants/statusEnums';
 
 vi.mock('@/services/api/healthService', () => ({
   fetchHealth: vi.fn().mockResolvedValue({ status: 'healthy' }),
 }));
 
 vi.mock('@/services/api/mailboxService', () => ({
+  rescueMailboxMessage: vi.fn().mockResolvedValue({ rescued: true }),
   fetchEmailConfig: vi.fn().mockResolvedValue({
     transport: 'mock',
     ipcQueryEmail: 'ipc-query-mock@example.com',
-    ipcReplyFrom: { email: 'arnd@example.com', name: 'AR&D Division' },
-    inquirer: { email: 'abhinash.pritiraj@gmail.com', name: 'Abhinash Pritiraj' },
   }),
   fetchMailboxMessages: vi.fn().mockResolvedValue({ messages: [] }),
+  fetchMailboxDecisions: vi.fn().mockResolvedValue({ decisions: [] }),
+  recordMailboxDecision: vi.fn().mockResolvedValue({ alreadyDecided: false }),
   markMessageIngested: vi.fn().mockResolvedValue({ ingested: true }),
-  sendEnquiry: vi.fn().mockResolvedValue({ providerMessageId: 'mock-msg-1' }),
   sendAcknowledgement: vi.fn().mockResolvedValue({ providerMessageId: 'mock-msg-2' }),
 }));
 
 const s = () => useWorkflowStore.getState();
 
-const FRONT_OFFICE = findUserById('USR-0002');
 const OIC = findUserById('USR-0003');
 const OFFICIAL = findUserById('USR-0004');
 const REVIEWER_A = findUserById('USR-0005');
 const REVIEWER_B = findUserById('USR-0006');
 
-const fakeForward = (payload) =>
-  Promise.resolve({
-    from: 'Test Front Officer <front-office@test.invalid>',
-    to: ['officer@test.invalid'],
-    subject: `Fwd: ${payload.subject}`,
-    body: payload.body,
-    providerMessageId: 'mock-msg-forward',
-    providerThreadId: payload.providerThreadId || 'mock-thread-1',
-    sentAt: '2026-08-18T10:00:00.000Z',
-  });
+const caseMail = fakeCaseMail();
+const fakeForward = caseMail.forwardQuery;
 
 const enquiry = () => ({
   mailboxMessageId: 'MSG-00001',
   to: 'ipc-query-mock@example.com',
-  from: 'Abhinash Pritiraj <abhinash.pritiraj@gmail.com>',
+  from: 'Abhinash Pritiraj <abhinash.pritiraj@pharma.example>',
   subject: 'Clarification on monograph revision',
   body: 'Please clarify the applicable monograph.',
   receivedAt: '2026-08-18T09:00:00.000Z',
@@ -110,5 +104,36 @@ describe('the drafting page gates submission on a review chain', () => {
     expect(screen.getByText('Reviewer II')).toBeInTheDocument();
     expect(screen.getByText(REVIEWER_B.name)).toBeInTheDocument();
     expect(screen.getByText('Add Reviewer III')).toBeInTheDocument();
+  });
+});
+
+describe('removing a review level', () => {
+  it('lets the assigned official remove a level that has not started, and records it', () => {
+    s().addReviewLevel(queryId, REVIEWER_A.id, OFFICIAL);
+    renderAt(`/assigned-official/drafting/${queryId}`);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Remove Reviewer I' }));
+
+    expect(s().getSteps(queryId).filter((step) => step.stepType === 'REVIEW')).toHaveLength(0);
+    expect(s().getAudit(queryId).at(-1).event).toBe(AUDIT_EVENT.REVIEW_REMOVED);
+  });
+
+  it('offers another official neither the remove control nor drafting', () => {
+    s().addReviewLevel(queryId, REVIEWER_A.id, OFFICIAL);
+    useAuthStore.setState({ currentUser: findUserById('USR-0009') });
+    renderAt(`/assigned-official/drafting/${queryId}`);
+
+    expect(screen.queryByRole('button', { name: 'Remove Reviewer I' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Generate AI draft/ })).not.toBeInTheDocument();
+  });
+
+  it('refuses a reviewer who calls the store directly', () => {
+    s().addReviewLevel(queryId, REVIEWER_A.id, OFFICIAL);
+    const [level] = s().getSteps(queryId).filter((step) => step.stepType === 'REVIEW');
+
+    expect(() => s().deleteReviewLevel(queryId, level.stepId, REVIEWER_A)).toThrow(
+      /may not perform DELETE_REVIEW_LEVEL/,
+    );
+    expect(s().getSteps(queryId).some((step) => step.stepId === level.stepId)).toBe(true);
   });
 });

@@ -1,10 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import request from 'supertest';
+import { AUTH } from './helpers/auth.js';
 import app from '../app.js';
 
 describe('GET /api/v1/health', () => {
   it('returns 200 with a healthy payload', async () => {
-    const res = await request(app).get('/api/v1/health');
+    const res = await request(app).get('/api/v1/health').set(AUTH);
 
     expect(res.status).toBe(200);
     expect(res.body.status).toBe('healthy');
@@ -15,7 +16,7 @@ describe('GET /api/v1/health', () => {
 
 describe('unknown routes', () => {
   it('returns 404 with the requested path', async () => {
-    const res = await request(app).get('/api/v1/does-not-exist');
+    const res = await request(app).get('/api/v1/does-not-exist').set(AUTH);
 
     expect(res.status).toBe(404);
     expect(res.body.error).toBe('Not Found');

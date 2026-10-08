@@ -12,7 +12,6 @@ import {
 
 import { WORKFLOW_STATE, BUSINESS_STATUS } from "@/constants/statusEnums";
 import { ROLES } from "@/constants/roles";
-import { isQueryOwnedBy } from "@/utils/queryOwnership";
 
 const ACTIVE_WORK_STATES = [
   WORKFLOW_STATE.ASSIGNED,
@@ -39,9 +38,11 @@ export const STATE_GROUPS = {
 
 const APPROVED = "APPROVED";
 const CHANGES_REQUESTED = "CHANGES_REQUESTED";
+const actsOnEveryCase = (user) => user?.role === ROLES.SUPER_ADMIN;
 
 function ownsCurrentStep(query, workflowSteps, user) {
   if (!user) return false;
+  if (actsOnEveryCase(user)) return true;
   const step = (workflowSteps || []).find(
     (s) => s.stepId === query.currentWorkflowStepId,
   );
@@ -55,6 +56,21 @@ export function isAssignedTo(query, workflowSteps, user) {
     ownsCurrentStep(query, workflowSteps, user)
   );
 }
+
+function hasWorkedOn(query, { workflowSteps = [], user }) {
+  if (!user) return false;
+  return (
+    isAssignedTo(query, workflowSteps, user) ||
+    workflowSteps.some(
+      (s) => s.queryId === query.queryId && s.assignedUserId === user.id,
+    )
+  );
+}
+
+const heldNow =
+  (predicate) =>
+  (query, ctx) =>
+    isAssignedTo(query, ctx.workflowSteps, ctx.user) && predicate(query, ctx);
 
 export function isActiveWorkFor(query, workflowSteps, user) {
   if (!ACTIVE_WORK_STATES.includes(query.workflowState)) return false;
@@ -70,6 +86,7 @@ export function isAwaitingReviewBy(query, workflowSteps, user) {
 function involvesReviewer(query, { workflowSteps = [], reviews = [], user }) {
   if (!user) return false;
   return (
+    actsOnEveryCase(user) ||
     workflowSteps.some(
       (s) => s.queryId === query.queryId && s.assignedUserId === user.id,
     ) ||
@@ -104,34 +121,6 @@ const totalBucket = (caption) => ({
 });
 
 export const ROLE_BUCKETS = {
-  [ROLES.INQUIRER]: {
-    scope: (query, { user }) => isQueryOwnedBy(query, user),
-    defaultKey: "total",
-    buckets: [
-      totalBucket("Everything you raised"),
-      {
-        key: "open",
-        label: "Open Queries",
-        caption: "Received, not yet picked up",
-        icon: Inbox,
-        predicate: inBusinessStatus(BUSINESS_STATUS.OPEN),
-      },
-      {
-        key: "inProgress",
-        label: "In Progress",
-        caption: "Being worked on by IPC",
-        icon: Clock,
-        predicate: inBusinessStatus(BUSINESS_STATUS.IN_PROGRESS),
-      },
-      {
-        key: "closed",
-        label: "Closed",
-        caption: "Answered and closed",
-        icon: CheckCircle2,
-        predicate: inBusinessStatus(BUSINESS_STATUS.CLOSED),
-      },
-    ],
-  },
 
   [ROLES.FRONT_OFFICE]: {
     scope: everything,
@@ -140,6 +129,7 @@ export const ROLE_BUCKETS = {
       totalBucket("Every query within your permitted scope"),
       {
         key: "incoming",
+        higherIsWorse: true,
         label: "New / Incoming",
         caption: "Awaiting your verification",
         icon: Inbox,
@@ -150,6 +140,7 @@ export const ROLE_BUCKETS = {
       },
       {
         key: "pendingAssignment",
+        higherIsWorse: true,
         label: "Pending Assignment",
         caption: "Forwarded, awaiting the OIC",
         icon: UserCheck,
@@ -179,6 +170,7 @@ export const ROLE_BUCKETS = {
       totalBucket("Every query within your permitted scope"),
       {
         key: "awaitingAssignment",
+        higherIsWorse: true,
         label: "Awaiting Assignment",
         caption: "Needs an official",
         icon: UserCheck,
@@ -197,6 +189,7 @@ export const ROLE_BUCKETS = {
       },
       {
         key: "awaitingFinalApproval",
+        higherIsWorse: true,
         label: "Awaiting Final Approval",
         caption: "Your decision needed",
         icon: ClipboardCheck,
@@ -211,6 +204,7 @@ export const ROLE_BUCKETS = {
       },
       {
         key: "returned",
+        higherIsWorse: true,
         label: "Returned",
         caption: "Sent back for revision",
         icon: XCircle,
@@ -220,48 +214,50 @@ export const ROLE_BUCKETS = {
   },
 
   [ROLES.ASSIGNED_OFFICIAL]: {
-    scope: (query, { workflowSteps, user }) =>
-      isAssignedTo(query, workflowSteps, user),
+    scope: hasWorkedOn,
     defaultKey: "assigned",
     buckets: [
-      totalBucket("Every case assigned to you"),
+      totalBucket("Every case you hold or have worked on"),
       {
         key: "assigned",
         label: "Assigned to me",
         caption: "Not started yet",
         icon: UserCheck,
-        predicate: inState(WORKFLOW_STATE.ASSIGNED),
+        predicate: heldNow(inState(WORKFLOW_STATE.ASSIGNED)),
       },
       {
         key: "drafting",
         label: "Drafting",
         caption: "Response in progress",
         icon: FileText,
-        predicate: inState(WORKFLOW_STATE.DRAFTING),
+        predicate: heldNow(inState(WORKFLOW_STATE.DRAFTING)),
       },
       {
         key: "submitted",
         label: "Submitted for Review",
         caption: "Waiting on reviewers",
         icon: ClipboardCheck,
-        predicate: inState(
-          WORKFLOW_STATE.UNDER_REVIEW,
-          WORKFLOW_STATE.PENDING_FINAL_APPROVAL,
+        predicate: heldNow(
+          inState(
+            WORKFLOW_STATE.UNDER_REVIEW,
+            WORKFLOW_STATE.PENDING_FINAL_APPROVAL,
+          ),
         ),
       },
       {
         key: "returned",
+        higherIsWorse: true,
         label: "Returned for Revision",
         caption: "Changes requested",
         icon: XCircle,
-        predicate: inState(WORKFLOW_STATE.RETURNED_FOR_REVISION),
+        predicate: heldNow(inState(WORKFLOW_STATE.RETURNED_FOR_REVISION)),
       },
       {
         key: "completed",
         label: "Completed",
         caption: "Approved, dispatched or closed",
         icon: CheckCircle2,
-        predicate: inState(...FINISHED_STATES),
+        predicate: heldNow(inState(...FINISHED_STATES)),
       },
     ],
   },
@@ -273,6 +269,7 @@ export const ROLE_BUCKETS = {
       totalBucket("Every case you review"),
       {
         key: "awaitingReview",
+        higherIsWorse: true,
         label: "Awaiting My Review",
         caption: "Your review queue",
         icon: ClipboardCheck,
@@ -288,6 +285,7 @@ export const ROLE_BUCKETS = {
       },
       {
         key: "returnedByMe",
+        higherIsWorse: true,
         label: "Returned by me",
         caption: "You sent these back",
         icon: XCircle,
@@ -353,7 +351,8 @@ export function bucketRecords(queries, role, bucketKey, ctx) {
 
 export function anyBucket(role, keys, ctx) {
   const config = configForRole(role);
-  const buckets = config.buckets.filter((b) => keys.includes(b.key));
+  const wanted = new Set(keys);
+  const buckets = config.buckets.filter((b) => wanted.has(b.key));
   return (query) =>
     config.scope(query, ctx) &&
     buckets.some((bucket) => bucket.predicate(query, ctx));

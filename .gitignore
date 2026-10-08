@@ -1,17 +1,18 @@
 .claude/
-
 node_modules/
 dist/
 .env
-.env.local
-.env.*.local
-
+.env.*
+!.env.example
+!backend/.env.e2e
 frontend/node_modules/
 frontend/dist/
+coverage/
 docs/markdown/
 
 backend/node_modules/
 backend/.env
+backend/storage/
 
 credentials.json
 token.json
@@ -20,9 +21,5 @@ token.json
 *service-account*.json
 *.pem
 *.p12
-
 *.log
 .DS_Store
-
-frontend/package-lock.json
-backend/package-lock.json

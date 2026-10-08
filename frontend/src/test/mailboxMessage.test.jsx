@@ -1,0 +1,323 @@
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+
+import { MailboxMessagePage } from '@/pages/frontOffice/MailboxMessagePage';
+import { useAuthStore } from '@/store/useAuthStore';
+import { FRONT_OFFICE_USER as FRONT_OFFICE } from '@/test/frontOfficeUser';
+import { fetchMailboxMessage, markMailboxMessageRead, setMailboxMessageCategory } from '@/services/api/mailboxService';
+
+vi.mock('@/services/api/mailboxService', async (importOriginal) => ({
+  ...(await importOriginal()),
+  fetchMailboxMessage: vi.fn(),
+  markMailboxMessageRead: vi.fn(),
+  setMailboxMessageCategory: vi.fn(),
+}));
+
+const MESSAGE = {
+  mailboxMessageId: 'MSG-00001',
+  from: 'Ravi Kumar <ravi@pharma.example>',
+  to: 'ipc-mailbox@example.invalid',
+  toAddresses: ['ipc-mailbox@example.invalid', 'registry@example.invalid'],
+  cc: ['copy@pharma.example'],
+  bcc: [],
+  subject: 'Impurity limit for Paracetamol tablets',
+  body: 'Please confirm the applicable impurity limit.\n\nRegards,\nRavi',
+  bodyHtml: null,
+  receivedAt: '2026-09-21T09:00:00.000Z',
+  attachments: [],
+  ingested: false,
+  isRead: true,
+  status: 'READ',
+  linkedCase: null,
+  createdAt: '2026-09-21T09:00:05.000Z',
+};
+
+function renderMessage(id = MESSAGE.mailboxMessageId) {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  render(
+    <QueryClientProvider client={queryClient}>
+      <MemoryRouter initialEntries={[`/front-officer/inbox/${id}`]}>
+        <Routes>
+          <Route path="/front-officer/inbox/:messageId" element={<MailboxMessagePage />} />
+        </Routes>
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
+  return queryClient;
+}
+
+const field = (label) => screen.getByText(label, { selector: 'dt' }).parentElement;
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  fetchMailboxMessage.mockResolvedValue(MESSAGE);
+  markMailboxMessageRead.mockResolvedValue({ ...MESSAGE, isRead: true });
+  useAuthStore.setState({ currentUser: FRONT_OFFICE });
+});
+
+describe('the message header', () => {
+  it('shows the subject, focused, and every address the mail carried', async () => {
+    renderMessage();
+
+    const heading = await screen.findByRole('heading', { level: 1, name: MESSAGE.subject });
+    expect(heading).toHaveFocus();
+    expect(field('From')).toHaveTextContent('Ravi Kumar <ravi@pharma.example>');
+    expect(field('To')).toHaveTextContent('ipc-mailbox@example.invalid, registry@example.invalid');
+    expect(field('CC')).toHaveTextContent('copy@pharma.example');
+    expect(screen.queryByText('BCC', { selector: 'dt' })).toBeNull();
+    expect(field('Date').querySelector('time')).toHaveAttribute('datetime', MESSAGE.receivedAt);
+    expect(screen.getByRole('link', { name: 'Back to IPC Mailbox' })).toHaveAttribute(
+      'href',
+      '/front-officer/inbox',
+    );
+  });
+});
+
+describe('the message body', () => {
+  it('is plain text, with no frame and no Formatted choice when there is no HTML', async () => {
+    renderMessage();
+
+    expect(await screen.findByText(/Please confirm the applicable impurity limit/)).toBeInTheDocument();
+    expect(document.querySelector('iframe')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Formatted' })).toBeNull();
+  });
+
+  it('shows the plain text even when the mail also has HTML, never rendering the HTML', async () => {
+    fetchMailboxMessage.mockResolvedValue({
+      ...MESSAGE,
+      bodyHtml: '<p data-testid="mail-html-marker">Hello from the formatted body</p><script>window.__mailLeak = 1</script>',
+    });
+    renderMessage();
+
+    expect(await screen.findByText(/Please confirm the applicable impurity limit/)).toBeInTheDocument();
+    expect(document.querySelector('iframe')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Formatted' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Plain text' })).toBeNull();
+    expect(screen.queryByTestId('mail-html-marker')).toBeNull();
+    expect(window.__mailLeak).toBeUndefined();
+  });
+});
+
+describe('attachments', () => {
+  it('downloads through the message, and names a file that could not be saved', async () => {
+    fetchMailboxMessage.mockResolvedValue({
+      ...MESSAGE,
+      attachments: [
+        { attachmentId: 'att_1', filename: 'monograph.pdf', mimeType: 'application/pdf', size: 2048 },
+        { attachmentId: null, filename: 'macro.xlsm', materializeError: 'unsupported file type' },
+      ],
+    });
+    renderMessage();
+
+    expect(await screen.findByRole('heading', { name: 'Attachments (2)' })).toBeInTheDocument();
+    expect(screen.getByText('2.0 KB')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Download' }).getAttribute('href')).toMatch(
+      /\/mailbox\/messages\/MSG-00001\/attachments\/att_1\?download=1$/,
+    );
+    expect(screen.getByText('macro.xlsm')).toBeInTheDocument();
+    expect(screen.getByText('Unavailable: unsupported file type')).toBeInTheDocument();
+  });
+});
+
+describe('the query case', () => {
+  it('links the case the message opened, with its statuses, and offers no decision', async () => {
+    fetchMailboxMessage.mockResolvedValue({
+      ...MESSAGE,
+      status: 'ACCEPTED',
+      ingested: true,
+      linkedCase: { queryId: 'QRY-2026-00007', workflowState: 'PENDING_ASSIGNMENT', businessStatus: 'OPEN' },
+    });
+    renderMessage();
+
+    expect(await screen.findByRole('link', { name: 'QRY-2026-00007' })).toHaveAttribute(
+      'href',
+      '/front-officer/queries/QRY-2026-00007',
+    );
+    expect(screen.getByText('PENDING ASSIGNMENT')).toBeInTheDocument();
+    expect(screen.getByText('OPEN')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^(Accept|Reject|Delete) message/ })).toBeNull();
+  });
+
+  it.each([
+    ['NEW', 'Awaiting validation'],
+    ['REJECTED', 'Rejected'],
+  ])('says what became of a %s message with no case', async (status, text) => {
+    fetchMailboxMessage.mockResolvedValue({ ...MESSAGE, status });
+    renderMessage();
+
+    expect(await screen.findByText(text)).toBeInTheDocument();
+  });
+});
+
+describe('read state', () => {
+  it('marks an unread message read once, even when it is fetched again', async () => {
+    fetchMailboxMessage.mockResolvedValue({ ...MESSAGE, isRead: false, status: 'NEW' });
+    const queryClient = renderMessage();
+    const key = ['mailbox', 'message', MESSAGE.mailboxMessageId];
+
+    await waitFor(() => expect(queryClient.getQueryData(key).isRead).toBe(true));
+    expect(markMailboxMessageRead).toHaveBeenCalledWith('MSG-00001');
+
+    await act(() => queryClient.refetchQueries({ queryKey: key }));
+    expect(fetchMailboxMessage).toHaveBeenCalledTimes(2);
+    expect(markMailboxMessageRead).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([true, null])('never marks a message whose isRead is %s', async (isRead) => {
+    fetchMailboxMessage.mockResolvedValue({ ...MESSAGE, isRead });
+    renderMessage();
+
+    await screen.findByRole('heading', { level: 1 });
+    expect(markMailboxMessageRead).not.toHaveBeenCalled();
+  });
+});
+
+describe('a message that cannot be shown', () => {
+  it('says it was not found, with a way back to the inbox', async () => {
+    fetchMailboxMessage.mockRejectedValue(
+      Object.assign(new Error('Request failed with status code 404'), {
+        response: { status: 404, data: { error: 'Message not found', messageId: 'MSG-09999' } },
+      }),
+    );
+    renderMessage('MSG-09999');
+
+    expect(await screen.findByText('Message not found')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Back to IPC Mailbox' })).toHaveAttribute(
+      'href',
+      '/front-officer/inbox',
+    );
+  });
+
+  it('reports any other failure with the server reason', async () => {
+    fetchMailboxMessage.mockRejectedValue(
+      Object.assign(new Error('Request failed with status code 503'), {
+        response: { status: 503, data: { error: 'MongoDB is not connected' } },
+      }),
+    );
+    renderMessage();
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('MongoDB is not connected');
+  });
+});
+
+describe('the category card', () => {
+  const triage = {
+    verdict: 'GENUINE',
+    category: 'DUPLICATE',
+    categoryConfidence: 0.99,
+    categoryReason: 'identical to an earlier email from the same sender',
+    categorySource: 'history',
+    predictedCategory: 'DUPLICATE',
+    predictedConfidence: 0.99,
+    needsReview: false,
+    related: [{ kind: 'EXACT_DUPLICATE', mailboxMessageId: 'MSG-00000', queryId: 'QRY-2026-00003', score: 1 }],
+  };
+
+  it('explains the category and links the earlier email and its case', async () => {
+    fetchMailboxMessage.mockResolvedValue({ ...MESSAGE, triage });
+    renderMessage();
+
+    const card = (await screen.findByRole('heading', { name: 'Category' })).closest('section');
+    expect(card).toHaveTextContent('Duplicate or Similar Emails');
+    expect(card).toHaveTextContent('Confidence 99% · Mail history');
+    expect(card).toHaveTextContent('Identical to an earlier email');
+    expect(screen.getByRole('link', { name: '(open)' })).toHaveAttribute('href', '/front-officer/inbox/MSG-00000');
+  });
+
+  it('records a correction', async () => {
+    fetchMailboxMessage.mockResolvedValue({ ...MESSAGE, triage });
+    setMailboxMessageCategory.mockResolvedValue({ corrected: true });
+    renderMessage();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Move to Official Queries' }));
+
+    await waitFor(() => expect(setMailboxMessageCategory).toHaveBeenCalledWith('MSG-00001', 'OFFICIAL_QUERY'));
+  });
+
+  it('shows a corrected category as corrected, with the prediction it replaced', async () => {
+    fetchMailboxMessage.mockResolvedValue({
+      ...MESSAGE,
+      triage: { ...triage, category: 'OFFICIAL_QUERY', categorySource: 'human', related: [] },
+    });
+    renderMessage();
+
+    const card = (await screen.findByRole('heading', { name: 'Category' })).closest('section');
+    expect(card).toHaveTextContent('Corrected');
+    expect(card).toHaveTextContent('Corrected by the Front Office');
+    expect(card).toHaveTextContent('AI had predicted Duplicate or Similar Emails (99%)');
+  });
+
+  it('says plainly when the message has not been classified yet', async () => {
+    renderMessage();
+
+    const card = (await screen.findByRole('heading', { name: 'Category' })).closest('section');
+    expect(card).toHaveTextContent('Not classified yet');
+  });
+});
+
+describe('the automatic reply', () => {
+  it('shows the reply that accepting the mail will send, on a mail in the Auto Reply bucket', async () => {
+    fetchMailboxMessage.mockResolvedValue({
+      ...MESSAGE,
+      autoReply: { status: 'SUGGESTED', confidence: 1, question: 'What is the use case of paracetamol?', draft: 'Dear Sir/Madam,\n\nAnswer.' },
+    });
+    renderMessage();
+
+    expect(await screen.findByRole('heading', { name: 'Automatic reply' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Reply to ravi@pharma.example' }).nextElementSibling).toHaveTextContent('Answer.');
+    expect(screen.queryByRole('textbox')).toBeNull();
+  });
+
+  it('shows no automatic reply on a mail left to the standard workflow', async () => {
+    fetchMailboxMessage.mockResolvedValue({ ...MESSAGE, autoReply: { status: 'NOT_ELIGIBLE' } });
+    renderMessage();
+
+    await screen.findByText(MESSAGE.subject, { selector: 'h1' });
+    expect(screen.queryByRole('heading', { name: 'Automatic reply' })).toBeNull();
+  });
+});
+
+describe('the AI confidence card', () => {
+  it('shows the score, the decision, the bar it had to reach and why, for a mail left to a person', async () => {
+    fetchMailboxMessage.mockResolvedValue({
+      ...MESSAGE,
+      source: 'nic-browser',
+      autoReply: {
+        status: 'NOT_ELIGIBLE',
+        confidence: 0.87,
+        threshold: 1,
+        question: 'What is the use case of paracetamol?',
+        reason: 'closest supported question matched 87%, below 100%',
+      },
+    });
+    renderMessage();
+
+    const card = (await screen.findByRole('heading', { name: 'AI confidence' })).closest('section');
+    expect(card).toHaveTextContent('87%');
+    expect(card).toHaveTextContent('Human Intervention');
+    expect(card).toHaveTextContent('Auto Reply needs: 100%');
+    expect(card).toHaveTextContent('Closest supported question: “What is the use case of paracetamol?”');
+    expect(card).toHaveTextContent('Why: Closest supported question matched 87%, below 100%');
+    expect(screen.getByRole('meter', { name: 'Confidence' })).toHaveAttribute('aria-valuetext', '87%, Human Intervention');
+  });
+
+  it('shows 100% and Auto Reply for a mail offered a reply', async () => {
+    fetchMailboxMessage.mockResolvedValue({
+      ...MESSAGE,
+      autoReply: { status: 'SUGGESTED', confidence: 1, threshold: 1, question: 'What is the use case of paracetamol?', draft: 'Dear Sir/Madam,\n\nAnswer.' },
+    });
+    renderMessage();
+
+    expect(await screen.findByRole('meter', { name: 'Confidence' })).toHaveAttribute('aria-valuetext', '100%, Auto Reply');
+  });
+
+  it('says when the mail has not been checked yet', async () => {
+    fetchMailboxMessage.mockResolvedValue({ ...MESSAGE, source: 'nic-browser' });
+    renderMessage();
+
+    const card = (await screen.findByRole('heading', { name: 'AI confidence' })).closest('section');
+    expect(card).toHaveTextContent('has not been checked yet');
+  });
+});

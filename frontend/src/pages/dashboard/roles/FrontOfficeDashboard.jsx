@@ -17,15 +17,8 @@ export function FrontOfficeDashboard({
       workflowSteps={workflowSteps}
       reviews={reviews}
       title="Front Office Dashboard"
-      purpose={
-        <>
-          Overview ·{" "}
-          <span className="font-medium text-slate-500">
-            {currentUser?.name} ({ROLE_LABELS[currentUser?.role]})
-          </span>
-        </>
-      }
-      sidePanel={<DashboardActivity auditEvents={auditEvents} />}
+      purpose={`Overview for ${currentUser?.name} · ${ROLE_LABELS[currentUser?.role]}`}
+      belowVolumePanel={<DashboardActivity auditEvents={auditEvents} />}
     />
   );
 }

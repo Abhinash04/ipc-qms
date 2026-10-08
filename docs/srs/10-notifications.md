@@ -12,7 +12,7 @@
 | Final approval granted | Front Office |
 | Final approval rejected / returned | Assigned official |
 | Response dispatched | Inquirer (external), audit log |
-| Query transferred | New assignee, previous assignee (informational) |
+| Query transferred | New assignee only |
 | Query pulled back | Relevant stage owner |
 
 This is a **proposed design**, not a confirmed requirement — see open items below.

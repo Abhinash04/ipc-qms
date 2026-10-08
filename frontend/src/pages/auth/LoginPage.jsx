@@ -1,343 +1,475 @@
 import { useState } from "react";
-import { Navigate, useNavigate } from "react-router-dom";
+import { Navigate, useNavigate, Link } from "react-router-dom";
 import {
   Mail,
   Lock,
   Eye,
   EyeOff,
   LogIn,
-  LayoutGrid,
-  ChevronDown,
-  CheckCircle2,
   Loader2,
+  ChevronDown,
+  Zap,
+  Sparkles,
+  ShieldCheck,
 } from "lucide-react";
 
-import {
-  MOCK_USERS,
-  MOCK_PASSWORD,
-  findUserByEmail,
-} from "@/constants/mockUsers";
-import { ROLE_LABELS } from "@/constants/roles";
-import { roleHome } from "@/constants/routePaths";
+import { ROUTE_PATHS, roleHome } from "@/constants/routePaths";
 import { useAuthStore } from "@/store/useAuthStore";
+import { MOCK_USERS } from "@/constants/mockUsers";
+import { HeroBackdrop } from "@/components/common/HeroBackdrop";
+import { PageBackdrop } from "@/components/common/PageBackdrop";
+import { GoogleSignInButton } from "@/components/auth/GoogleSignInButton";
+import { IPC_FRONT_OFFICE_NAME } from "@/constants/orgBranding";
+import { notify } from "@/services/notify";
 
-const roleColors = {
-  Inquirer: { bg: "#eff6ff", text: "#2563eb", border: "#bfdbfe" },
-  "Front Office": { bg: "#f0fdf4", text: "#16a34a", border: "#bbf7d0" },
-  "Officer-in-Charge": { bg: "#fffbeb", text: "#d97706", border: "#fde68a" },
-  "Assigned Official": { bg: "#f5f3ff", text: "#7c3aed", border: "#ddd6fe" },
-  Reviewer: { bg: "#fdf2f8", text: "#db2777", border: "#fbcfe8" },
-  Admin: { bg: "#fff1f2", text: "#e11d48", border: "#fecdd3" },
-  "Super Admin": { bg: "#fff7ed", text: "#ea580c", border: "#fed7aa" },
-};
+const FIELD =
+  "w-full rounded-lg border border-line bg-surface py-3 ps-11 text-[15px] text-ink placeholder:text-ink-muted outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary/20";
 
-function getInitials(name) {
-  return (name || "")
-    .split(" ")
-    .map((n) => n[0])
-    .slice(0, 2)
-    .join("");
+/** The three ways to sign in, sharing one loading flag and one error message. */
+function useLoginActions() {
+  const login = useAuthStore((state) => state.login);
+  const devLogin = useAuthStore((state) => state.devLogin);
+  const googleLogin = useAuthStore((state) => state.googleLogin);
+  const navigate = useNavigate();
+
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  const submit = async (email, password) => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      const user = await login(email, password);
+      notify.success(`Welcome back, ${user.name || user.email}`);
+      navigate(roleHome(user.role), { replace: true });
+    } catch (caught) {
+      const message =
+        caught?.response?.data?.error || "Incorrect email or password.";
+      setError(message);
+      notify.error("Sign-in failed", message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const googleSubmit = async (credential) => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      const user = await googleLogin(credential);
+      notify.success(`Welcome back, ${user.name || user.email}`);
+      navigate(roleHome(user.role), { replace: true });
+    } catch (caught) {
+      const message =
+        caught?.response?.data?.error ||
+        "Google sign-in failed. Please try again.";
+      setError(message);
+      notify.error("Sign-in failed", message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const quickLogin = async (accountEmail) => {
+    if (!accountEmail) return;
+    setLoading(true);
+    setError(null);
+
+    try {
+      const user = await devLogin(accountEmail);
+      notify.success(`Signed in as ${user.name}`);
+      navigate(roleHome(user.role), { replace: true });
+    } catch (caught) {
+      const message = caught?.response?.data?.error || "Dev sign-in failed.";
+      setError(message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return { loading, error, setError, submit, googleSubmit, quickLogin };
+}
+
+function LoginHero() {
+  return (
+    <aside className="relative hidden w-1/2 overflow-hidden bg-primary text-white lg:flex lg:flex-col lg:items-center lg:justify-center lg:py-12">
+      <HeroBackdrop />
+
+      <div className="relative z-10 max-w-xl px-10 text-center xl:px-12">
+        <div className="flex flex-col items-center justify-center gap-3">
+          <img
+            src="/imageFile1.png"
+            alt="IPC Emblem Logo"
+            width="103"
+            height="199"
+            className="h-24 w-auto object-contain drop-shadow-lg brightness-110"
+          />
+          <div className="text-center leading-tight">
+            <div className="text-[17px] font-semibold tracking-wide text-white/95 xl:text-[18px]">
+              भारतीय भेषज संहिता आयोग
+            </div>
+            <div className="mt-1 font-heading text-[19px] font-extrabold uppercase tracking-wider text-white xl:text-[21px]">
+              Indian Pharmacopoeia Commission
+            </div>
+          </div>
+        </div>
+
+        <h1 className="mt-9 font-heading text-[40px] font-extrabold leading-[1.15] tracking-tight text-white xl:text-[46px]">
+          <span className="block">AI-powered IP</span>{" "}
+          <span className="block">Stakeholders’</span>{" "}
+          <span className="block bg-linear-to-r from-sky-200 via-cyan-200 to-indigo-200 bg-clip-text text-transparent">
+            BRIDGETECH
+          </span>
+        </h1>
+
+        <p className="mx-auto mt-6 max-w-lg text-[15.5px] leading-relaxed text-white/90">
+          Indian Pharmacopoeia Commission — official AI-powered IP Stakeholders’ BRIDGETECH for handling technical enquiries, monograph reviews, reference standards, and automated dispatch operations.
+        </p>
+
+        <div className="mx-auto mt-8 flex max-w-lg flex-wrap items-center justify-center gap-3.5">
+          <div className="flex items-center gap-2.5 rounded-full border border-white/25 bg-white/10 px-5 py-3 text-[15px] font-bold text-white shadow-sm backdrop-blur-md transition-transform hover:scale-105">
+            <Sparkles className="h-5 w-5 text-amber-300" />
+            <span>IP 2026 Monographs</span>
+          </div>
+          <div className="flex items-center gap-2.5 rounded-full border border-white/25 bg-white/10 px-5 py-3 text-[15px] font-bold text-white shadow-sm backdrop-blur-md transition-transform hover:scale-105">
+            <ShieldCheck className="h-5 w-5 text-emerald-300" />
+            <span>ISO 17025 Certified</span>
+          </div>
+          <div className="flex items-center gap-2.5 rounded-full border border-white/25 bg-white/10 px-5 py-3 text-[15px] font-bold text-white shadow-sm backdrop-blur-md transition-transform hover:scale-105">
+            <Zap className="h-5 w-5 text-sky-300" />
+            <span>24H SLA Protocol</span>
+          </div>
+        </div>
+      </div>
+    </aside>
+  );
+}
+
+function PasswordField({ password, onChange }) {
+  const [showPassword, setShowPassword] = useState(false);
+
+  return (
+    <div>
+      <label
+        htmlFor="login-password"
+        className="mb-2 block text-[14px] font-medium text-ink-soft"
+      >
+        Password
+      </label>
+      <div className="relative">
+        <Lock
+          className="pointer-events-none absolute inset-s-3.5 top-1/2 h-5 w-5 -translate-y-1/2 text-ink-muted"
+          strokeWidth={2}
+        />
+        <input
+          id="login-password"
+          type={showPassword ? "text" : "password"}
+          value={password}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder="••••••••"
+          required
+          className={`${FIELD} pe-12`}
+        />
+        <button
+          type="button"
+          aria-label={
+            showPassword ? "Hide password" : "Show password"
+          }
+          onClick={() => setShowPassword(!showPassword)}
+          className="absolute inset-e-2 top-1/2 -translate-y-1/2 cursor-pointer p-2 text-ink-muted transition-colors hover:text-ink"
+        >
+          {showPassword ? (
+            <EyeOff className="h-5 w-5" />
+          ) : (
+            <Eye className="h-5 w-5" />
+          )}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function SubmitButton({ loading }) {
+  return (
+    <button
+      type="submit"
+      disabled={loading}
+      className="flex w-full cursor-pointer items-center justify-center gap-2.5 rounded-lg bg-primary px-8 py-3 text-[15px] font-semibold text-white shadow-[0_10px_20px_-8px] shadow-primary/60 transition-[background-color,transform] hover:bg-primary-hover active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-70"
+    >
+      {loading ? (
+        <>
+          <Loader2 className="h-5 w-5 animate-spin" />
+          <span>Signing in…</span>
+        </>
+      ) : (
+        <>
+          <LogIn
+            className="h-5 w-5 rtl:rotate-180"
+            strokeWidth={2.2}
+          />
+          <span>Sign in</span>
+        </>
+      )}
+    </button>
+  );
+}
+
+function DevQuickLogin({ loading, nicFrontOfficeEmail, onPickNicAccount, onQuickLogin }) {
+  const [devOpen, setDevOpen] = useState(false);
+
+  return (
+    <div className="mt-7 border-t border-dashed border-line pt-5">
+      <div className="mb-2.5 flex items-center justify-center gap-1.5">
+        <Zap className="h-3.5 w-3.5 text-primary" strokeWidth={2.5} />
+        <span className="text-[11.5px] font-semibold uppercase tracking-widest text-ink-muted">
+          Dev quick login
+        </span>
+      </div>
+
+      <div className="relative">
+        {devOpen && (
+          <button
+            type="button"
+            aria-label="Close dev quick login menu"
+            className="fixed inset-0 z-20 cursor-default"
+            onClick={() => setDevOpen(false)}
+          />
+        )}
+
+        <button
+          type="button"
+          disabled={loading}
+          onClick={() => setDevOpen((open) => !open)}
+          className="flex w-full cursor-pointer items-center justify-between gap-3 rounded-lg border border-line bg-surface-muted py-3 ps-4 pe-3 text-[14px] font-medium text-ink-muted outline-none transition-colors hover:border-primary-300 focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          <span>Sign in as…</span>
+          <ChevronDown
+            className={`h-5 w-5 transition-transform ${devOpen ? "rotate-180" : ""}`}
+            strokeWidth={2.2}
+          />
+        </button>
+
+        {devOpen && (
+          <div className="absolute inset-x-0 bottom-full z-30 mb-2 max-h-72 overflow-y-auto rounded-xl border border-line bg-surface p-1.5 shadow-2xl">
+            {nicFrontOfficeEmail && (
+              <button
+                type="button"
+                onClick={() => {
+                  setDevOpen(false);
+                  onPickNicAccount();
+                }}
+                className="group mb-1.5 flex w-full cursor-pointer items-center gap-3 rounded-lg border border-emerald-200 bg-emerald-50/60 px-3 py-2.5 text-start transition-colors hover:bg-emerald-50"
+              >
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-emerald-500 text-[12.5px] font-semibold text-white">
+                  IPC
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="truncate text-[14px] font-semibold text-ink group-hover:text-emerald-700">
+                      {IPC_FRONT_OFFICE_NAME}
+                    </span>
+                    <span className="shrink-0 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-700">
+                      NICeMail
+                    </span>
+                  </div>
+                  <div className="truncate text-[12.5px] text-ink-muted">
+                    {nicFrontOfficeEmail} · needs its password
+                  </div>
+                </div>
+              </button>
+            )}
+
+            {MOCK_USERS.map((user) => (
+              <button
+                key={user.id}
+                type="button"
+                onClick={() => {
+                  if (!user.email) return;
+                  setDevOpen(false);
+                  onQuickLogin(user.email);
+                }}
+                className="group flex w-full cursor-pointer items-center gap-3 rounded-lg px-3 py-2.5 text-start transition-colors hover:bg-primary-50"
+              >
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary-100 text-[12.5px] font-semibold text-primary">
+                  {user.name
+                    .split(" ")
+                    .map((part) => part[0])
+                    .slice(0, 2)
+                    .join("")}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="truncate text-[14px] font-semibold text-ink group-hover:text-primary">
+                      {user.name}
+                    </span>
+                    <span className="shrink-0 rounded-full bg-primary-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary">
+                      {user.role.replaceAll("_", " ")}
+                    </span>
+                  </div>
+                  <div className="truncate text-[12.5px] text-ink-muted">
+                    {user.email}
+                  </div>
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function LoginFooter() {
+  return (
+    <footer className="mt-6 flex flex-col items-center gap-2 text-center">
+      <p className="text-[12px] text-ink-muted">
+        © 2026 Integrated Processing Centre · Indian Pharmacopoeia
+        Commission
+      </p>
+      <div className="flex items-center gap-2.5">
+        <span className="text-[13.5px] font-semibold text-ink-soft">
+          Powered by
+        </span>
+        <span className="brand-plate">
+          <img
+            src="/anuvadini_new_logo 2.png"
+            alt="Anuvadini"
+            width="512"
+            height="288"
+            className="h-11 w-36 object-cover"
+          />
+        </span>
+      </div>
+    </footer>
+  );
 }
 
 export function LoginPage() {
   const currentUser = useAuthStore((state) => state.currentUser);
-  const login = useAuthStore((state) => state.login);
-  const navigate = useNavigate();
+  const { loading, error, setError, submit, googleSubmit, quickLogin } = useLoginActions();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [activeUser, setActiveUser] = useState(null);
-  const [error, setError] = useState(null);
-  const [showMocks, setShowMocks] = useState(false);
 
-  if (currentUser) return <Navigate to={roleHome(currentUser.role)} replace />;
+  const nicFrontOfficeEmail = (
+    import.meta.env.VITE_NIC_FRONT_OFFICE_EMAIL || ""
+  ).trim();
+  const googleEnabled = Boolean(
+    (import.meta.env.VITE_GOOGLE_CLIENT_ID || "").trim(),
+  );
 
-  const submit = (event) => {
+  const home = currentUser ? roleHome(currentUser.role) : null;
+  if (home && home !== ROUTE_PATHS.LOGIN) return <Navigate to={home} replace />;
+
+  const onSubmit = (event) => {
     event.preventDefault();
-    setLoading(true);
-    setError(null);
-
-    setTimeout(() => {
-      setLoading(false);
-      const user = findUserByEmail(email);
-
-      if (!user || password !== MOCK_PASSWORD) {
-        setError("Incorrect email or password.");
-        return;
-      }
-
-      login(user.id);
-      navigate(roleHome(user.role), { replace: true });
-    }, 600);
+    return submit(email, password);
   };
 
-  const applyCredentials = (user) => {
-    setEmail(user.email);
-    setPassword(MOCK_PASSWORD);
-    setActiveUser(user.name);
+  const pickNicAccount = () => {
+    setEmail(nicFrontOfficeEmail);
+    setPassword("");
     setError(null);
-    setShowMocks(false);
+    document.getElementById("login-password")?.focus();
   };
 
   return (
-    <div className="h-screen w-screen flex flex-col md:flex-row overflow-hidden bg-white select-none">
-      <div className="hidden md:flex w-full md:w-5/12 lg:w-5/12 h-full bg-linear-to-br from-[#0f172a] via-[#1e1b4b] to-[#312e81] text-white p-8 sm:p-12 lg:p-16 flex-col justify-between items-center text-center relative overflow-hidden shrink-0 shadow-2xl z-10">
-        <div className="pointer-events-none absolute -top-32 -left-32 w-96 h-96 rounded-full bg-indigo-500/15 blur-3xl" />
-        <div className="pointer-events-none absolute -bottom-32 -right-32 w-96 h-96 rounded-full bg-purple-500/15 blur-3xl" />
+    <div className="flex min-h-screen w-full bg-surface-muted text-ink">
+      <LoginHero />
 
-        <div className="relative z-10 w-full flex flex-col items-center text-center my-auto">
-          <div className="text-[13.5px] font-black tracking-[0.3em] text-indigo-300 uppercase mb-3 text-center">
-            Query Management System
-          </div>
+      <main className="relative isolate flex w-full flex-col items-center justify-center overflow-y-auto px-5 py-10 sm:px-10 lg:w-1/2">
+        <PageBackdrop />
 
-          <h1 className="font-heading text-[52px] sm:text-[62px] font-black tracking-tight text-white leading-none mb-5 text-center drop-shadow-md">
-            Welcome back!
-          </h1>
-
-          <p className="text-[17.5px] font-medium text-slate-300/90 leading-relaxed max-w-120 mx-auto text-center mb-10">
-            Sign in to access your dashboard, track query workflows, review
-            drafting documents, and manage Indian Pharmacopoeia Commission
-            operations.
-          </p>
-
-          <div className="w-full max-w-115 mx-auto space-y-4 border-t border-white/10 pt-8 text-left">
-            <div className="flex items-center gap-3.5 bg-white/10 backdrop-blur-md p-4 rounded-2xl border border-white/10 shadow-lg">
-              <div className="w-8.5 h-8.5 rounded-full bg-indigo-500/30 text-indigo-300 border border-indigo-400/30 flex items-center justify-center shrink-0 shadow-inner">
-                <CheckCircle2
-                  className="h-5 w-5 text-indigo-300"
-                  strokeWidth={2.5}
-                />
-              </div>
-              <span className="text-[16px] font-bold text-white">
-                Real-time multi-role workflow tracking
-              </span>
+        <div className="w-full max-w-md">
+          <div className="rounded-2xl border border-transparent bg-surface p-6 pt-5 shadow-card sm:p-8 sm:pt-5">
+            <div className="flex items-center justify-center gap-4">
+              <h2 className="font-heading text-[28px] font-bold leading-tight text-center text-primary sm:text-[30px]">
+                Sign in
+              </h2>
             </div>
-
-            <div className="flex items-center gap-3.5 bg-white/10 backdrop-blur-md p-4 rounded-2xl border border-white/10 shadow-lg">
-              <div className="w-8.5 h-8.5 rounded-full bg-indigo-500/30 text-indigo-300 border border-indigo-400/30 flex items-center justify-center shrink-0 shadow-inner">
-                <CheckCircle2
-                  className="h-5 w-5 text-indigo-300"
-                  strokeWidth={2.5}
-                />
-              </div>
-              <span className="text-[16px] font-bold text-white">
-                Role-based access control (RBAC) security
-              </span>
-            </div>
-
-            <div className="flex items-center gap-3.5 bg-white/10 backdrop-blur-md p-4 rounded-2xl border border-white/10 shadow-lg">
-              <div className="w-8.5 h-8.5 rounded-full bg-indigo-500/30 text-indigo-300 border border-indigo-400/30 flex items-center justify-center shrink-0 shadow-inner">
-                <CheckCircle2
-                  className="h-5 w-5 text-indigo-300"
-                  strokeWidth={2.5}
-                />
-              </div>
-              <span className="text-[16px] font-bold text-white">
-                Automated dispatch & audit trail history
-              </span>
-            </div>
-          </div>
-        </div>
-
-        <div className="relative z-10 pt-6 border-t border-white/10 text-[13.5px] font-semibold text-slate-400/80 text-center w-full">
-          © 2026 Integrated Processing Centre • Indian Pharmacopoeia Commission
-        </div>
-      </div>
-
-      <div className="w-full md:w-7/12 lg:w-7/12 h-full bg-white p-5 sm:p-12 lg:p-16 flex flex-col justify-center items-center overflow-y-auto">
-        <div className="w-full max-w-120 my-auto space-y-5 sm:space-y-7">
-          <div className="text-center">
-            <h2 className="font-heading text-4xl sm:text-[52px] font-black text-slate-900 leading-none mb-2 sm:mb-3 tracking-tight text-center">
-              Sign in
-            </h2>
-            <p className="text-[15px] sm:text-[17.5px] font-bold text-slate-500 text-center px-1 sm:px-0">
+            <p className="mt-1.5 text-[13.5px] text-center text-ink-muted">
               Enter your credentials to continue to your workspace.
             </p>
-          </div>
 
-          <div className="relative z-30">
-            <button
-              type="button"
-              onClick={() => setShowMocks(!showMocks)}
-              className="w-full flex items-center justify-between px-3 sm:px-4.5 py-3.5 sm:py-4 rounded-2xl bg-indigo-50/70 hover:bg-indigo-100/70 border border-indigo-200/90 text-[14px] sm:text-[15.5px] font-black text-slate-800 transition-all shadow-2xs cursor-pointer"
-            >
-              <div className="flex items-center gap-3">
-                <div className="w-8.5 h-8.5 rounded-xl bg-indigo-600 text-white flex items-center justify-center shrink-0 shadow-xs">
-                  <LayoutGrid className="w-5 h-5" strokeWidth={2.2} />
-                </div>
-                <div className="flex items-center gap-1.5 sm:gap-2">
-                  <span>Mock Credentials</span>
-                  <span className="text-[10px] sm:text-[11.5px] font-black uppercase px-2 py-0.5 rounded-full bg-indigo-200/80 text-indigo-900 tracking-wider">
-                    Dev Only
-                  </span>
-                </div>
-              </div>
-              <ChevronDown
-                className={`w-5.5 h-5.5 text-indigo-600 transition-transform duration-200 ${showMocks ? "rotate-180" : ""}`}
-              />
-            </button>
-
-            {showMocks && (
-              <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-2xl border border-slate-200/90 shadow-2xl p-3.5 z-50 animate-in fade-in-50 zoom-in-95">
-                <div className="p-2 border-b border-slate-100 mb-2 flex justify-between items-center">
-                  <span className="text-[13px] font-extrabold text-slate-600">
-                    Quick select demo user:
-                  </span>
-                  <span className="text-[12px] font-mono font-black bg-slate-100 px-2.5 py-1 rounded-lg text-indigo-700">
-                    Password: {MOCK_PASSWORD}
-                  </span>
-                </div>
-
-                <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
-                  {MOCK_USERS.map((user) => {
-                    const roleLabel = ROLE_LABELS[user.role] || user.role;
-                    const c = roleColors[roleLabel] ?? {
-                      bg: "#f8fafc",
-                      text: "#64748b",
-                      border: "#e2e8f0",
-                    };
-                    const isActive = activeUser === user.name;
-
-                    return (
-                      <div
-                        key={user.id}
-                        className={`flex items-center justify-between p-3 rounded-xl border transition-all ${
-                          isActive
-                            ? "bg-indigo-50/90 border-indigo-200 shadow-2xs"
-                            : "bg-white border-slate-200/60 hover:border-slate-300 hover:bg-slate-50"
-                        }`}
-                      >
-                        <div className="flex items-center gap-3 min-w-0">
-                          <span
-                            className="w-8.5 h-8.5 rounded-full flex items-center justify-center font-black text-[12.5px] shrink-0 border shadow-2xs"
-                            style={{
-                              backgroundColor: c.bg,
-                              color: c.text,
-                              borderColor: c.border,
-                            }}
-                          >
-                            {getInitials(user.name)}
-                          </span>
-                          <div className="min-w-0 flex-1 truncate">
-                            <div className="text-[14.5px] font-black text-slate-800 truncate leading-tight">
-                              {user.name}
-                            </div>
-                            <div className="text-[12.5px] font-bold text-slate-500 truncate mt-0.5">
-                              {roleLabel}
-                            </div>
-                          </div>
-                        </div>
-
-                        <button
-                          type="button"
-                          onClick={() => applyCredentials(user)}
-                          aria-label={`Use Credentials for ${user.name}`}
-                          className={`px-3.5 py-1.5 rounded-lg text-[12.5px] font-black transition-all shrink-0 ml-2 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
-                            isActive
-                              ? "bg-indigo-600 text-white shadow-xs"
-                              : "bg-slate-100 text-slate-700 hover:bg-slate-200"
-                          }`}
-                        >
-                          {isActive ? "✓ Selected" : "Use"}
-                        </button>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-          </div>
-
-          <form onSubmit={submit} className="space-y-4 sm:space-y-6 pt-1 sm:pt-0">
-            <div>
-              <label
-                htmlFor="login-email"
-                className="block text-[15px] sm:text-[16px] font-black text-slate-800 mb-1.5 sm:mb-2.5"
-              >
-                Email
-              </label>
-              <div className="relative">
-                <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">
-                  <Mail className="w-5.5 h-5.5" strokeWidth={2.2} />
-                </div>
-                <input
-                  id="login-email"
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="you@ipc.example"
-                  required
-                  className="w-full pl-11 sm:pl-13 pr-4 py-3.5 sm:py-4.5 rounded-2xl border border-slate-200/90 bg-slate-50/50 hover:bg-white focus:bg-white text-base sm:text-[18px] font-bold text-slate-900 placeholder-slate-400 outline-none transition-all focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 shadow-2xs"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label
-                htmlFor="login-password"
-                className="block text-[15px] sm:text-[16px] font-black text-slate-800 mb-1.5 sm:mb-2.5"
-              >
-                Password
-              </label>
-              <div className="relative">
-                <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">
-                  <Lock className="w-5.5 h-5.5" strokeWidth={2.2} />
-                </div>
-                <input
-                  id="login-password"
-                  type={showPassword ? "text" : "password"}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••"
-                  required
-                  className="w-full pl-11 sm:pl-13 pr-12 py-3.5 sm:py-4.5 rounded-2xl border border-slate-200/90 bg-slate-50/50 hover:bg-white focus:bg-white text-base sm:text-[18px] font-bold text-slate-900 placeholder-slate-400 outline-none transition-all focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 shadow-2xs"
-                />
-                <button
-                  type="button"
-                  aria-label={showPassword ? "Hide password" : "Show password"}
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-2 sm:right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors cursor-pointer p-2"
+            <form onSubmit={onSubmit} className="mt-7 space-y-5">
+              <div>
+                <label
+                  htmlFor="login-email"
+                  className="mb-2 block text-[14px] font-medium text-ink-soft"
                 >
-                  {showPassword ? (
-                    <EyeOff className="w-5.5 h-5.5" />
-                  ) : (
-                    <Eye className="w-5.5 h-5.5" />
-                  )}
-                </button>
+                  Email
+                </label>
+                <div className="relative">
+                  <Mail
+                    className="pointer-events-none absolute inset-s-3.5 top-1/2 h-5 w-5 -translate-y-1/2 text-ink-muted"
+                    strokeWidth={2}
+                  />
+                  <input
+                    id="login-email"
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="you@ipc.example"
+                    required
+                    className={`${FIELD} pe-4`}
+                  />
+                </div>
               </div>
-            </div>
 
-            {error && (
-              <div
-                role="alert"
-                className="p-4 rounded-2xl bg-red-50 border border-red-200 text-red-600 text-[13.5px] font-bold"
-              >
-                {error}
+              <PasswordField password={password} onChange={setPassword} />
+
+              {error && (
+                <div
+                  role="alert"
+                  className="rounded-lg border border-red-200 bg-red-50 p-3.5 text-[13.5px] font-medium text-red-700"
+                >
+                  {error}
+                </div>
+              )}
+
+              <SubmitButton loading={loading} />
+            </form>
+
+            {googleEnabled && (
+              <div className="mt-5">
+                <div className="mb-4 flex items-center gap-3 text-[12px] font-medium uppercase tracking-widest text-ink-muted">
+                  <span className="h-px flex-1 bg-line" aria-hidden="true" />
+                  or
+                  <span className="h-px flex-1 bg-line" aria-hidden="true" />
+                </div>
+                <GoogleSignInButton
+                  onCredential={googleSubmit}
+                  onError={setError}
+                />
               </div>
             )}
 
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full py-3.5 sm:py-4.5 px-8 rounded-2xl bg-linear-to-r from-[#4f46e5] via-ring to-[#8b5cf6] text-white font-black text-base sm:text-[17px] shadow-xl shadow-indigo-500/30 hover:opacity-95 active:scale-[0.99] transition-all cursor-pointer flex items-center justify-center gap-3 mt-4 sm:mt-5 disabled:opacity-70 disabled:cursor-not-allowed"
-            >
-              {loading ? (
-                <>
-                  <Loader2 className="w-5.5 h-5.5 animate-spin" />
-                  <span>Signing in…</span>
-                </>
-              ) : (
-                <>
-                  <LogIn className="w-5.5 h-5.5" strokeWidth={2.2} />
-                  <span>Sign in</span>
-                </>
-              )}
-            </button>
-          </form>
+            <div className="mt-6 border-t border-line/60 pt-5 text-center text-[14px] text-ink-muted">
+              Don&apos;t have an account?{" "}
+              <Link
+                to={ROUTE_PATHS.SIGNUP}
+                className="font-semibold text-primary transition-colors hover:text-primary-hover hover:underline"
+              >
+                Sign Up
+              </Link>
+            </div>
+
+            {import.meta.env.DEV && (
+              <DevQuickLogin
+                loading={loading}
+                nicFrontOfficeEmail={nicFrontOfficeEmail}
+                onPickNicAccount={pickNicAccount}
+                onQuickLogin={quickLogin}
+              />
+            )}
+          </div>
+
+          <LoginFooter />
         </div>
-      </div>
+      </main>
+
     </div>
   );
 }

@@ -127,6 +127,12 @@ describe('formatPassagesForPrompt', () => {
     expect(formatted).toContain(hits[0].section);
   });
 
+  it('shows the passage id, which is the token the model must cite', () => {
+    const hits = retrieveContext('What is the legal status of the Indian Pharmacopoeia?');
+    const formatted = formatPassagesForPrompt(hits);
+    hits.forEach((chunk) => expect(formatted).toContain(`[${chunk.id}]`));
+  });
+
   it('warns that an amendment passage is a correction, not the whole requirement', () => {
     const amendment = IPC_KNOWLEDGE_CHUNKS.find((chunk) => chunk.kind === 'AMENDMENT');
     expect(formatPassagesForPrompt([amendment])).toContain('AMENDMENT');

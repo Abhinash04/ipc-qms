@@ -41,14 +41,7 @@ export function ReviewerDashboard({
       workflowSteps={workflowSteps}
       reviews={reviews}
       title="Reviewer Dashboard"
-      purpose={
-        <>
-          Overview ·{" "}
-          <span className="font-medium text-slate-500">
-            {currentUser?.name} ({ROLE_LABELS[currentUser?.role]})
-          </span>
-        </>
-      }
+      purpose={`Overview for ${currentUser?.name} · ${ROLE_LABELS[currentUser?.role]}`}
       emptyTextFor={(bucket) =>
         bucket?.key === "awaitingReview"
           ? "Your review queue is empty."

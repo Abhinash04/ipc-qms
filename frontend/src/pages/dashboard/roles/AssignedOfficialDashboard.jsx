@@ -17,14 +17,7 @@ export function AssignedOfficialDashboard({
       workflowSteps={workflowSteps}
       reviews={reviews}
       title="Officer Dashboard"
-      purpose={
-        <>
-          Overview ·{" "}
-          <span className="font-medium text-slate-500">
-            {currentUser?.name} ({ROLE_LABELS[currentUser?.role]})
-          </span>
-        </>
-      }
+      purpose={`Overview for ${currentUser?.name} · ${ROLE_LABELS[currentUser?.role]}`}
       emptyTextFor={(bucket) =>
         `Nothing in ${bucket?.label || "this list"}. Cases appear here when they reach a stage you own.`
       }

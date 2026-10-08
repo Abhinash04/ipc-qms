@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { replaceEqualDeep } from '@tanstack/react-query';
 
 import {
   BUSINESS_STATUS,
@@ -8,16 +9,46 @@ import {
   RESPONSE_SOURCE,
   RESPONSE_STATUS,
 } from '@/constants/statusEnums';
-import { deriveBusinessStatus, canPerform, WORKFLOW_ACTION } from '@/constants/workflowRules';
+import {
+  deriveBusinessStatus,
+  canPerform,
+  WORKFLOW_ACTION,
+  ASSIGNEE_ONLY_ACTIONS,
+  isCaseAssignee,
+} from '@/constants/workflowRules';
 import { ROLES, ROLE_LABELS } from '@/constants/roles';
 import { MOCK_USERS, findUserById, findUserByEmail } from '@/constants/mockUsers';
 import { createEmailMessage, EMAIL_DIRECTION, EMAIL_TYPE } from '@/constants/emailModel';
 import { buildSeedState } from '@/constants/mockDomain';
 import { summarise, recommendAssignee, draftResponse } from '@/services/ai/mockAiService';
-import { loadAll, replaceAll, persistTransition, isEmpty } from '@/services/db/db';
-import { sendResponse, forwardQuery, sendAcknowledgement } from '@/services/api/mailboxService';
+let db = null;
+const dbModule = async () => {
+  db ??= await import('@/services/persistence/queryState');
+  return db;
+};
+import {
+  sendResponse,
+  forwardQuery,
+  sendAcknowledgement,
+  acceptMailboxMessage as acceptOnServer,
+} from '@/services/api/mailboxService';
+import {
+  grantFinalApproval as approveOnServer,
+  resolveOutboundEmail as resolveOutboundOnServer,
+  pullBackQuery as pullBackOnServer,
+} from '@/services/api/queryCaseService';
+import {
+  PULLBACK_RANK,
+  activeSteps,
+  cycleOfQuery,
+  cycleOfStep,
+  isPullbackSource,
+  reviewLevelTargets,
+} from '@/constants/reviewCycle';
+import { pendingChangeRequest } from '@/constants/reviewRounds';
 import { fetchGemmaAiSummary, fetchGemmaAiDraft } from '@/services/api/aiService';
 import { assembleDraftEmail } from '@/services/ai/draftComposer';
+import { notify, beginBatch, endBatch } from '@/services/notify';
 
 const pad = (n) => String(n).padStart(5, '0');
 
@@ -38,27 +69,8 @@ const actorName = (user) => user?.name || 'System';
 
 const byQuery = (rows, queryId) => rows.filter((r) => r.queryId === queryId);
 
-const QUERY_SOURCE = { EMAIL: 'Email', PORTAL: 'Portal' };
+const QUERY_SOURCE = { EMAIL: 'Email' };
 
-/** Enquiries reach IPC by two channels; the mail copy of a portal enquiry may
- *  arrive minutes later and must attach to the case rather than open a new one. */
-const PORTAL_CLAIM_WINDOW_MS = 24 * 60 * 60 * 1000;
-
-const sameEmail = (a, b) =>
-  Boolean(a) && Boolean(b) && String(a).trim().toLowerCase() === String(b).trim().toLowerCase();
-
-/** "Re: Fwd: Monograph  query " and "monograph query" are the same subject. */
-const normaliseSubject = (subject) =>
-  String(subject || '')
-    .replace(/^(\s*(re|fwd|fw)\s*:\s*)+/i, '')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .toLowerCase();
-
-/**
- * Builds every record a new Query Case needs. Shared by both intake channels so
- * a portal enquiry and an ingested email produce structurally identical cases.
- */
 function buildNewCase(state, { subject, body, from, to, inquirer, attachments, timestamp, source, providerMessageId, providerThreadId, sourceMessageId, sourceMailboxMessageId }) {
   let counters = state.counters;
   const queryMint = mintYearScopedId(counters, 'QRY', timestamp);
@@ -150,7 +162,16 @@ function assertCan(state, action, queryId, actor) {
     );
   }
 
+  if (ASSIGNEE_ONLY_ACTIONS.includes(action)) assertAssignee(query, actor, action);
   return query;
+}
+
+function assertAssignee(query, actor, action) {
+  if (isCaseAssignee(actor, query)) return;
+  const assignee = findUserById(query.currentAssigneeId);
+  throw new Error(
+    `Only the currently assigned official (${assignee?.name || query.currentAssigneeId || 'none'}) may perform ${action} on ${query.queryId}.`,
+  );
 }
 
 function assertOwnsStep(step, actor, action) {
@@ -165,16 +186,29 @@ function assertOwnsStep(step, actor, action) {
 const officerInChargeId = () =>
   MOCK_USERS.find((u) => u.role === ROLES.OFFICER_IN_CHARGE)?.id || null;
 
-function reopenReviewCycle(steps, queryId) {
+function reopenReviewCycle(steps, query) {
+  const cycle = cycleOfQuery(query);
   return steps.map((step) =>
-    step.queryId === queryId && (step.stepType === 'REVIEW' || step.stepType === 'FINAL_APPROVAL')
+    step.queryId === query?.queryId &&
+    cycleOfStep(step) === cycle &&
+    (step.stepType === 'REVIEW' || step.stepType === 'FINAL_APPROVAL')
       ? { ...step, status: 'PENDING', startedAt: null, completedAt: null }
       : step,
   );
 }
 
+const queryIn = (base, queryId) => base.queries.find((q) => q.queryId === queryId);
+
 function computeTransition(state, { queryId, event, actor, patch = {}, details, actorLabel, notify, mutate }) {
+  if (!event) {
+    throw new Error(
+      `applyTransition(${queryId}): every transition must name an audit event — ` +
+        'see AUDIT_EVENT in constants/statusEnums.js',
+    );
+  }
+
   const timestamp = now();
+  const baseRevision = state.queries.find((q) => q.queryId === queryId)?.revision ?? 0;
   const minted = mintId(state.counters, 'AUD');
   let counters = { ...state.counters, ...minted.bump };
 
@@ -193,6 +227,8 @@ function computeTransition(state, { queryId, event, actor, patch = {}, details, 
     queryId,
     event,
     actor: actorLabel || actorName(actor),
+    actorId: actorLabel ? null : actor?.id || null,
+    actorRole: actorLabel ? null : actor?.role || null,
     at: timestamp,
     details,
   };
@@ -207,6 +243,7 @@ function computeTransition(state, { queryId, event, actor, patch = {}, details, 
       notificationId: notifMint.id,
       queryId,
       recipientRole: notify.recipientRole,
+      ...(notify.recipientUserId ? { recipientUserId: notify.recipientUserId } : {}),
       message: notify.message,
       at: timestamp,
     };
@@ -214,47 +251,115 @@ function computeTransition(state, { queryId, event, actor, patch = {}, details, 
   }
 
   const base = { ...state, queries, auditEvents, notifications, counters };
-  const next = mutate ? { ...base, ...mutate(base) } : base;
-  return { next, auditEvent, notification };
+  const mutated = mutate ? { ...base, ...mutate(base) } : base;
+  const next = {
+    ...mutated,
+    queries: mutated.queries.map((q) => (q.queryId === queryId ? { ...q, revision: baseRevision + 1 } : q)),
+  };
+  return { next, auditEvent, notification, baseRevision };
 }
 
-async function persistDelta(prev, next, queryId, auditEvent, notification) {
-  const prevStepIds = byQuery(prev.workflowSteps, queryId).map((s) => s.stepId);
+async function persistDelta(prev, next, queryId, auditEvent, notification, baseRevision) {
+  const prevSteps = new Map(byQuery(prev.workflowSteps, queryId).map((s) => [s.stepId, s]));
+  const prevStepIds = [...prevSteps.keys()];
   const nextSteps = byQuery(next.workflowSteps, queryId);
   const nextStepIds = new Set(nextSteps.map((s) => s.stepId));
 
   const prevReviewIds = new Set(byQuery(prev.reviews, queryId).map((r) => r.reviewId));
-  const prevVersionIds = new Set(byQuery(prev.responseVersions, queryId).map((v) => v.responseId));
 
   const prevMessageIds = new Set(prev.emailMessages.map((m) => m.messageId));
   const prevThreadIds = new Set(prev.emailThreads.map((t) => t.threadId));
 
-  await persistTransition({
+  const prevVersions = new Map(
+    byQuery(prev.responseVersions, queryId).map((v) => [v.responseId, v]),
+  );
+  const nextVersions = byQuery(next.responseVersions, queryId);
+
+  const addVersions = nextVersions.filter((v) => !prevVersions.has(v.responseId));
+  const upsertVersions = nextVersions.filter((v) => {
+    const before = prevVersions.get(v.responseId);
+    return before && before !== v;
+  });
+
+  const { persistTransition } = db ?? (await dbModule());
+  return persistTransition({
     query: next.queries.find((q) => q.queryId === queryId) || null,
+    baseRevision,
     auditEvent,
     notification,
     counters: next.counters,
-    upsertSteps: nextSteps,
+    upsertSteps: nextSteps.filter((s) => prevSteps.get(s.stepId) !== s),
     deleteStepIds: prevStepIds.filter((id) => !nextStepIds.has(id)),
     addReviews: byQuery(next.reviews, queryId).filter((r) => !prevReviewIds.has(r.reviewId)),
-    addVersions: byQuery(next.responseVersions, queryId).filter((v) => !prevVersionIds.has(v.responseId)),
+    addVersions,
+    upsertVersions,
     addThreads: next.emailThreads.filter((t) => !prevThreadIds.has(t.threadId)),
     addMessages: next.emailMessages.filter((m) => !prevMessageIds.has(m.messageId)),
   });
 }
+
+async function writesSettled() {
+  const { settled } = db ?? (await dbModule());
+  return settled();
+}
+
+function describeSendFailure(error) {
+  const data = error?.response?.data;
+  return {
+    outcome: data?.outcome ?? null,
+    error: data?.error || error?.message || String(error),
+    ...(data?.unconfirmed ? { unconfirmed: true } : {}),
+    ...(data?.retryable ? { retryable: true } : {}),
+  };
+}
+
+function sendFailure(error) {
+  const described = describeSendFailure(error);
+  if (!error?.response?.data?.error) return error;
+  return Object.assign(new Error(described.error), {
+    outcome: described.outcome,
+    unconfirmed: Boolean(described.unconfirmed),
+    retryable: Boolean(described.retryable),
+    cause: error,
+  });
+}
+
+const approvalsInFlight = new Map();
+
+const pullbacksInFlight = new Map();
+
+function serverRefusal(error) {
+  const message = error?.response?.data?.error;
+  return message ? Object.assign(new Error(message), { code: error.response.data.code ?? null, cause: error }) : error;
+}
+
+const SERVER_COLLECTIONS = [
+  'queries',
+  'workflowSteps',
+  'reviews',
+  'responseVersions',
+  'auditEvents',
+  'notifications',
+  'emailMessages',
+  'emailThreads',
+  'outboundEmails',
+];
+
+let revalidating = null;
 
 export const useWorkflowStore = create((set, get) => ({
   ...buildSeedState(),
 
   hydrated: false,
   persistenceError: null,
+  refreshedAt: 0,
 
   getQuery: (queryId) => get().queries.find((q) => q.queryId === queryId) || null,
 
-  getSteps: (queryId) =>
-    get()
-      .workflowSteps.filter((s) => s.queryId === queryId)
-      .sort((a, b) => a.sequence - b.sequence),
+  getOutbound: (queryId, emailType) =>
+    get().outboundEmails.find((row) => row.queryId === queryId && row.emailType === emailType) || null,
+
+  getSteps: (queryId) => activeSteps(get().workflowSteps, get().getQuery(queryId)),
 
   getCurrentStep: (queryId) => {
     const query = get().getQuery(queryId);
@@ -282,13 +387,28 @@ export const useWorkflowStore = create((set, get) => ({
 
   applyTransition: (options) => {
     const prev = get();
-    const { next, auditEvent, notification } = computeTransition(prev, options);
+    const { next, auditEvent, notification, baseRevision } = computeTransition(prev, options);
     set(next);
 
-    persistDelta(prev, next, options.queryId, auditEvent, notification).catch((error) => {
-      console.error('[qms] failed to persist workflow transition', error);
-      set({ persistenceError: String(error?.message || error) });
-    });
+    persistDelta(prev, next, options.queryId, auditEvent, notification, baseRevision)
+      .then(async (outcome) => {
+        await get().revalidate();
+        if (!outcome?.conflict) return;
+        const stale = outcome.conflict === 'STALE_CASE';
+        notify.error(
+          stale
+            ? `${options.queryId} was changed by someone else`
+            : `${options.queryId} clashed with a teammate's change`,
+          stale
+            ? 'Showing the latest; redo your last step.'
+            : 'Record ids were reused; the latest is shown — please retry.',
+          { id: `case-conflict-${options.queryId}` },
+        );
+      })
+      .catch((error) => {
+        console.error('[qms] failed to persist workflow transition', error);
+        set({ persistenceError: String(error?.message || error) });
+      });
   },
 
   findQueryBySourceMessage: (sourceMessageId) => {
@@ -332,32 +452,6 @@ export const useWorkflowStore = create((set, get) => ({
       email: inquirerEmail,
     };
 
-    // The inquirer may have raised this through the portal moments ago. Gmail
-    // ids are per-mailbox, so the sender's id never equals the id of the copy
-    // read from the Front Office inbox — match on content instead, or we mint a
-    // second case for the same enquiry.
-    const claimable = state.queries.find(
-      (q) =>
-        q.source === QUERY_SOURCE.PORTAL &&
-        !q.sourceMailboxMessageId &&
-        sameEmail(q.inquirer?.email, inquirerEmail) &&
-        normaliseSubject(q.subject) === normaliseSubject(mailboxMessage.subject) &&
-        new Date(timestamp) - new Date(q.createdAt) < PORTAL_CLAIM_WINDOW_MS,
-    );
-
-    if (claimable) {
-      const attached = get().attachToThread(claimable.queryId, mailboxMessage);
-      get().applyTransition({
-        queryId: claimable.queryId,
-        actor: null,
-        actorLabel: 'System',
-        event: AUDIT_EVENT.QUERY_RECEIVED,
-        patch: { sourceMailboxMessageId: sourceMessageId },
-        details: 'Mailbox copy of this portal enquiry matched to the existing case.',
-      });
-      return { ...attached, created: false, reason: 'claimed-by-portal-case' };
-    }
-
     return get().createCase({
       subject: mailboxMessage.subject,
       body: mailboxMessage.body,
@@ -372,38 +466,6 @@ export const useWorkflowStore = create((set, get) => ({
       sourceMessageId,
       sourceMailboxMessageId: sourceMessageId,
       detail: `Query created from email "${mailboxMessage.subject || '(no subject)'}" received from ${inquirer.email}.`,
-      fetchSummary,
-    });
-  },
-
-  /**
-   * The portal intake channel: the signed-in Inquirer raises an enquiry and the
-   * case exists immediately, carrying their real identity rather than one
-   * parsed from a mail header.
-   */
-  raiseEnquiry: (
-    { subject, body, inquirer, providerMessageId, providerThreadId, attachments, to },
-    fetchSummary = fetchGemmaAiSummary,
-  ) => {
-    if (!inquirer?.email) {
-      throw new Error('raiseEnquiry: an inquirer with an email address is required');
-    }
-
-    return get().createCase({
-      subject,
-      body,
-      from: `${inquirer.name} <${inquirer.email}>`,
-      to: to || null,
-      inquirer,
-      attachments,
-      timestamp: now(),
-      source: QUERY_SOURCE.PORTAL,
-      providerMessageId,
-      providerThreadId,
-      sourceMessageId: providerMessageId || null,
-      // Left null so the inbound mail copy can still be claimed onto this case.
-      sourceMailboxMessageId: null,
-      detail: `Query raised through the inquirer portal by ${inquirer.name || inquirer.email}.`,
       fetchSummary,
     });
   },
@@ -509,89 +571,25 @@ export const useWorkflowStore = create((set, get) => ({
     };
   },
 
-  recordAcknowledgement: ({ queryId, from, to, subject, body, timestamp, providerMessageId }) => {
-    const state = get();
-    const query = state.queries.find((q) => q.queryId === queryId);
-    if (!query) return { messageId: null, created: false, reason: 'unknown-query' };
-
-    const already = state.emailMessages.find(
-      (m) => m.queryId === queryId && m.emailType === EMAIL_TYPE.ACKNOWLEDGEMENT,
-    );
-    if (already) {
-      return { messageId: already.messageId, created: false, reason: 'already-acknowledged' };
-    }
-
-    const at = timestamp || now();
-    const messageMint = mintId(state.counters, 'MSG');
-    const message = createEmailMessage({
-      messageId: messageMint.id,
-      threadId: query.threadId,
-      queryId,
-      direction: EMAIL_DIRECTION.OUTBOUND,
-      emailType: EMAIL_TYPE.ACKNOWLEDGEMENT,
-      from,
-      to,
-      subject,
-      body,
-      timestamp: at,
-      providerMessageId: providerMessageId || null,
-    });
-
-    get().applyTransition({
-      queryId,
-      actor: null,
-      actorLabel: 'System',
-      event: AUDIT_EVENT.ACKNOWLEDGEMENT_SENT,
-      details: `Acknowledgement email sent to ${message.to.join(', ')}.`,
-      mutate: (base) => ({
-        counters: { ...base.counters, ...messageMint.bump },
-        emailMessages: [...base.emailMessages, message],
-      }),
-    });
-
-    return { messageId: message.messageId, created: true };
-  },
-
-  /**
-   * The one place an acknowledgement is sent. Never rejects — callers such as
-   * verifyQuery hand the promise on to code that does not await it, so a
-   * rejection would surface as an unhandled rejection.
-   */
   acknowledgeInquirer: async (queryId, actor, send = sendAcknowledgement) => {
-    const state = get();
-    const query = state.queries.find((q) => q.queryId === queryId);
-    if (!query) return { acknowledged: false, error: `${queryId} does not exist` };
-
-    // Ingestion may already have acknowledged this one. recordAcknowledgement
-    // guards the store; this guards the mail, so the inquirer is never emailed
-    // twice for the same query.
-    const already = state.emailMessages.find(
-      (m) => m.queryId === queryId && m.emailType === EMAIL_TYPE.ACKNOWLEDGEMENT,
-    );
-    if (already) return { acknowledged: true, alreadySent: true };
+    if (!get().queries.some((q) => q.queryId === queryId)) {
+      return { acknowledged: false, error: `${queryId} does not exist` };
+    }
 
     try {
-      const sent = await send({ to: query.inquirer?.email, queryId });
-      get().recordAcknowledgement({
-        queryId,
-        from: sent.from,
-        to: sent.to,
-        subject: sent.subject,
-        body: sent.body,
-        timestamp: sent.sentAt,
-        providerMessageId: sent.providerMessageId,
-      });
-      return { acknowledged: true };
+      const result = await send({ queryId });
+      await get().refreshFromServer();
+      return {
+        acknowledged: true,
+        alreadySent: result?.outcome === 'ALREADY_SENT',
+        outcome: result?.outcome ?? null,
+      };
     } catch (error) {
-      return { acknowledged: false, error: error?.message || String(error) };
+      await get().refreshFromServer();
+      return { acknowledged: false, ...describeSendFailure(error) };
     }
   },
 
-  /**
-   * Deliberately not `async`: assertCan must keep throwing synchronously for
-   * callers that expect it to. The email work is the returned promise, so the
-   * workflow transition lands before any mail is attempted.
-   */
   verifyQuery: (queryId, actor, send = sendAcknowledgement) => {
     assertCan(get(), WORKFLOW_ACTION.VERIFY, queryId, actor);
     get().applyTransition({
@@ -604,19 +602,29 @@ export const useWorkflowStore = create((set, get) => ({
     return get().acknowledgeInquirer(queryId, actor, send);
   },
 
-  /**
-   * The Front Office point-of-contact action, as one click: register the query,
-   * acknowledge the inquirer, forward the enquiry on.
-   *
-   * Composes the existing primitives rather than replacing them — verifyQuery
-   * sets FRONT_OFFICE_VERIFICATION synchronously, which is exactly the state
-   * forwardToOic requires, so no workflow rule changes.
-   */
+  acceptMailboxMessage: async (message, accept = acceptOnServer) => {
+    const mailboxMessageId = message?.mailboxMessageId || message?.providerMessageId;
+    if (!mailboxMessageId) {
+      throw new Error('acceptMailboxMessage: message must carry a mailboxMessageId');
+    }
+
+    await writesSettled();
+    const result = await accept(mailboxMessageId, message);
+
+    if (result?.queryId) await get().refreshFromServer();
+
+    return {
+      ...result,
+      accepted: Boolean(result?.created),
+      acknowledged: Boolean(result?.acknowledged),
+      forwarded: Boolean(result?.forwarded),
+      errors: result?.errors || [],
+    };
+  },
+
   validateAndForward: async (queryId, actor) => {
     const ack = await get().verifyQuery(queryId, actor);
 
-    // The acknowledgement and the forward are independent obligations: a failed
-    // email to the inquirer must not stop the query reaching the OIC.
     let forwarded = false;
     let forwardError = null;
     try {
@@ -635,66 +643,22 @@ export const useWorkflowStore = create((set, get) => ({
   },
 
   forwardToOic: async (queryId, actor, forward = forwardQuery) => {
-    const query = assertCan(get(), WORKFLOW_ACTION.FORWARD, queryId, actor);
+    assertCan(get(), WORKFLOW_ACTION.FORWARD, queryId, actor);
 
-    const original = get().emailMessages.find(
-      (m) => m.queryId === queryId && m.emailType === EMAIL_TYPE.INCOMING_QUERY,
-    );
+    await writesSettled();
+    try {
+      const result = await forward({ queryId });
+      await get().refreshFromServer();
 
-    const body = [
-      `Forwarded by ${actorName(actor)} for assignment.`,
-      '',
-      `Query: ${queryId}`,
-      `Received from: ${query.inquirer?.name || ''} <${query.inquirer?.email || ''}>`,
-      '',
-      '---------- Original enquiry ----------',
-      `Subject: ${query.subject}`,
-      '',
-      original?.body || query.description || '',
-    ].join('\n');
-
-    const sent = await forward({
-      queryId,
-      subject: query.subject,
-      body,
-      providerThreadId: original?.providerThreadId || null,
-    });
-
-    const timestamp = sent?.sentAt || now();
-    const messageMint = mintId(get().counters, 'MSG');
-
-    const message = createEmailMessage({
-      messageId: messageMint.id,
-      threadId: query.threadId,
-      queryId,
-      direction: EMAIL_DIRECTION.OUTBOUND,
-      emailType: EMAIL_TYPE.FORWARD,
-      from: sent?.from || actorName(actor),
-      to: sent?.to || [],
-      subject: sent?.subject || `Fwd: ${query.subject} [${queryId}]`,
-      body: sent?.body || body,
-      timestamp,
-      providerMessageId: sent?.providerMessageId || null,
-      providerThreadId: sent?.providerThreadId || null,
-    });
-
-    get().applyTransition({
-      queryId,
-      actor,
-      event: AUDIT_EVENT.QUERY_FORWARDED,
-      patch: { workflowState: WORKFLOW_STATE.PENDING_ASSIGNMENT },
-      details: `Forwarded by ${actorName(actor)} to ${message.to.join(', ')} for assignment.`,
-      notify: {
-        recipientRole: 'OFFICER_IN_CHARGE',
-        message: `${queryId} is awaiting assignment.`,
-      },
-      mutate: (base) => ({
-        counters: { ...base.counters, ...messageMint.bump },
-        emailMessages: [...base.emailMessages, message],
-      }),
-    });
-
-    return { queryId, messageId: message.messageId, forwarded: true };
+      return {
+        queryId,
+        forwarded: result?.outcome === 'SENT',
+        ...(result?.outcome === 'ALREADY_SENT' ? { reason: 'already-forwarded' } : {}),
+      };
+    } catch (error) {
+      await get().refreshFromServer();
+      throw sendFailure(error);
+    }
   },
 
   recommendAssigneeFor: (queryId) => {
@@ -705,11 +669,15 @@ export const useWorkflowStore = create((set, get) => ({
     return recommendAssignee(query, MOCK_USERS, open);
   },
 
-  assignQuery: (queryId, assigneeId, actor) => {
+  assignQuery: (queryId, assigneeId, actor, ranking = null) => {
     assertCan(get(), WORKFLOW_ACTION.ASSIGN, queryId, actor);
-    const recommendation = get().recommendAssigneeFor(queryId);
+    // The ranking the Officer-in-Charge was shown is the recommendation they followed or overrode;
+    // it also names an official an administrator approved, whom the built-in directory does not know.
+    const ranked = Array.isArray(ranking) && ranking[0]?.userId ? ranking : null;
+    const recommendation = ranked ? ranked[0] : get().recommendAssigneeFor(queryId);
     const acceptedAi = recommendation?.userId === assigneeId;
-    const assignee = findUserById(assigneeId);
+    const nameOf = (id) => findUserById(id)?.name || ranked?.find((entry) => entry?.userId === id)?.name;
+    const assignee = { name: nameOf(assigneeId) };
 
     if (recommendation) {
       get().applyTransition({
@@ -717,7 +685,7 @@ export const useWorkflowStore = create((set, get) => ({
         actor: null,
         actorLabel: 'AI Assignment Assistant',
         event: AUDIT_EVENT.AI_ASSIGNMENT_RECOMMENDED,
-        details: `Recommended ${findUserById(recommendation.userId)?.name || recommendation.userId} (${recommendation.matchPercent}% match). ${recommendation.reason}`,
+        details: `Recommended ${nameOf(recommendation.userId) || recommendation.userId} (${recommendation.matchPercent}% match). ${recommendation.reason || ''}`.trim(),
       });
     }
 
@@ -732,6 +700,13 @@ export const useWorkflowStore = create((set, get) => ({
           assigneeId,
           acceptedAiRecommendation: acceptedAi,
           decidedAt: now(),
+          ...(Array.isArray(ranking) && ranking.length
+            ? {
+                ranking: ranking
+                  .filter((entry) => entry?.userId)
+                  .map(({ userId, matchPercent }) => ({ userId, matchPercent: matchPercent ?? null })),
+              }
+            : {}),
         },
       },
       details: `Assigned to ${assignee?.name || assigneeId}.`,
@@ -742,12 +717,11 @@ export const useWorkflowStore = create((set, get) => ({
     });
 
     if (!acceptedAi && recommendation) {
-      const recommended = findUserById(recommendation.userId);
       get().applyTransition({
         queryId,
         actor,
         event: AUDIT_EVENT.ASSIGNMENT_OVERRIDDEN,
-        details: `AI recommended ${recommended?.name}; OIC assigned ${assignee?.name || assigneeId} instead.`,
+        details: `AI recommended ${nameOf(recommendation.userId) || recommendation.userId}; OIC assigned ${assignee?.name || assigneeId} instead.`,
       });
     }
   },
@@ -772,7 +746,14 @@ export const useWorkflowStore = create((set, get) => ({
     const composed = draft ? assembleDraftEmail({ query: get().getQuery(queryId), draft }) : '';
     const content = composed || draftResponse(get().getQuery(queryId));
     const fromGemma = Boolean(composed) && draft?.fallback !== true;
-    const createdBy = fromGemma ? 'Gemma AI Draft Assistant' : 'AI Draft Assistant';
+    const createdBy = fromGemma ? 'Pravah AI Draft Assistant' : 'AI Draft Assistant';
+
+    if (!fromGemma) {
+      notify.warning(
+        'AI assistant unavailable',
+        'A standard template was used instead — review the draft carefully before sending.',
+      );
+    }
 
     const state = get();
     const versionNumber = state.getVersions(queryId).length + 1;
@@ -851,7 +832,7 @@ export const useWorkflowStore = create((set, get) => ({
     });
   },
 
-  submitForReview: (queryId, actor) => {
+  submitForReview: (queryId, actor, { changeSummary = '' } = {}) => {
     assertCan(get(), WORKFLOW_ACTION.SUBMIT_FOR_REVIEW, queryId, actor);
     const state = get();
     const steps = state.getSteps(queryId);
@@ -862,9 +843,30 @@ export const useWorkflowStore = create((set, get) => ({
       );
     }
 
+    const submitted = state.getLatestVersion(queryId);
+    const answered = pendingChangeRequest({
+      reviews: state.getReviews(queryId),
+      versions: state.getVersions(queryId),
+      query: state.getQuery(queryId),
+    });
+    const resubmission = Boolean(answered);
+    const summary = String(changeSummary || '').trim();
+
+    if (resubmission) {
+      if (!summary) {
+        throw new Error('Resubmitting requires a note describing the changes you implemented');
+      }
+      if (submitted?.responseId === answered.responseId) {
+        throw new Error(
+          `${submitted.version} is the version that was returned — save a new version with the requested changes first`,
+        );
+      }
+    }
+
     let stepCounter = state.counters.STEP || 0;
     const newSteps = [];
     const timestamp = now();
+    const cycle = cycleOfQuery(state.getQuery(queryId));
 
     if (!steps.some((s) => s.stepType === 'DRAFT')) {
       const draftMint = mintId({ STEP: stepCounter }, 'STEP');
@@ -876,6 +878,7 @@ export const useWorkflowStore = create((set, get) => ({
         sequence: 1,
         assignedUserId: state.getQuery(queryId)?.currentAssigneeId || null,
         status: 'COMPLETED',
+        cycle,
         createdAt: timestamp,
         startedAt: timestamp,
         completedAt: timestamp,
@@ -892,6 +895,7 @@ export const useWorkflowStore = create((set, get) => ({
         sequence: 1000,
         assignedUserId: officerInChargeId(),
         status: 'PENDING',
+        cycle,
         createdAt: timestamp,
         startedAt: null,
         completedAt: null,
@@ -911,13 +915,30 @@ export const useWorkflowStore = create((set, get) => ({
         workflowState: WORKFLOW_STATE.UNDER_REVIEW,
         currentWorkflowStepId: firstPendingReview?.stepId || null,
       },
-      details: 'Draft submitted for review.',
+      details: answered
+        ? `${submitted?.version} resubmitted for review after changes requested by ${
+            findUserById(answered.reviewerId)?.name || 'a reviewer'
+          } on ${answered.version}. Changes implemented: ${summary}`
+        : `${submitted?.version || 'Draft'} submitted for review.`,
       notify: {
         recipientRole: 'REVIEWER',
-        message: `${queryId} is awaiting review.`,
+        message: answered
+          ? `${queryId} ${submitted?.version} was resubmitted after changes were requested.`
+          : `${queryId} is awaiting review.`,
       },
       mutate: (base) => ({
         counters: { ...base.counters, STEP: stepCounter },
+        responseVersions: base.responseVersions.map((v) =>
+          v.responseId === submitted?.responseId
+            ? {
+                ...v,
+                status: RESPONSE_STATUS.SUBMITTED,
+                submittedAt: timestamp,
+                submittedBy: actor?.id || null,
+                ...(resubmission ? { changeSummary: summary, respondsToReviewId: answered?.reviewId || null } : {}),
+              }
+            : v,
+        ),
         workflowSteps: [...base.workflowSteps, ...newSteps].map((s) =>
           s.stepId === firstPendingReview?.stepId
             ? { ...s, status: 'IN_PROGRESS', startedAt: s.startedAt || timestamp }
@@ -954,6 +975,7 @@ export const useWorkflowStore = create((set, get) => ({
             sequence,
             assignedUserId: reviewerId,
             status: 'PENDING',
+            cycle: cycleOfQuery(state.getQuery(queryId)),
             createdAt: timestamp,
             startedAt: null,
             completedAt: null,
@@ -964,9 +986,10 @@ export const useWorkflowStore = create((set, get) => ({
   },
 
   deleteReviewLevel: (queryId, stepId, actor) => {
+    assertCan(get(), WORKFLOW_ACTION.DELETE_REVIEW_LEVEL, queryId, actor);
     const state = get();
-    const step = state.workflowSteps.find((s) => s.stepId === stepId);
-    if (!step || step.status !== 'PENDING') {
+    const step = state.getSteps(queryId).find((s) => s.stepId === stepId);
+    if (!step || step.stepType !== 'REVIEW' || step.status !== 'PENDING') {
       return { ok: false, reason: 'Only a PENDING review level can be deleted.' };
     }
     const reviewer = findUserById(step.assignedUserId);
@@ -974,7 +997,7 @@ export const useWorkflowStore = create((set, get) => ({
     state.applyTransition({
       queryId,
       actor,
-      event: AUDIT_EVENT.REVIEW_ADDED,
+      event: AUDIT_EVENT.REVIEW_REMOVED,
       details: `Review level for ${reviewer?.name || step.assignedUserId} removed (was pending).`,
       mutate: (base) => ({
         workflowSteps: base.workflowSteps.filter((s) => s.stepId !== stepId),
@@ -1002,6 +1025,7 @@ export const useWorkflowStore = create((set, get) => ({
       : { step: finalStep, workflowState: WORKFLOW_STATE.PENDING_FINAL_APPROVAL };
 
     const reviewMint = mintId(state.counters, 'REV');
+    const stageAtDecision = state.getQuery(queryId)?.workflowState || null;
     const timestamp = now();
 
     state.applyTransition({
@@ -1030,6 +1054,8 @@ export const useWorkflowStore = create((set, get) => ({
             responseId: approvedVersion?.responseId || null,
             version: approvedVersion?.version || null,
             reviewerId: actor?.id || null,
+            reviewerRole: actor?.role || null,
+            workflowState: stageAtDecision,
             at: timestamp,
           },
         ],
@@ -1048,7 +1074,6 @@ export const useWorkflowStore = create((set, get) => ({
 
   requestRevision: (queryId, comment, actor) => {
     assertCan(get(), WORKFLOW_ACTION.REQUEST_REVISION, queryId, actor);
-    // A rejection without a reason is not actionable by the drafter.
     if (!String(comment || '').trim()) {
       throw new Error('Requesting changes requires a comment explaining what must change');
     }
@@ -1059,6 +1084,7 @@ export const useWorkflowStore = create((set, get) => ({
     assertOwnsStep(current, actor, WORKFLOW_ACTION.REQUEST_REVISION);
 
     const reviewMint = mintId(state.counters, 'REV');
+    const stageAtDecision = state.getQuery(queryId)?.workflowState || null;
     const timestamp = now();
 
     state.applyTransition({
@@ -1084,65 +1110,88 @@ export const useWorkflowStore = create((set, get) => ({
             stepId: current.stepId,
             decision: 'CHANGES_REQUESTED',
             comment,
-            // Bind the comment to the text it was written about, so it stays
-            // meaningful after later revisions supersede that version.
             responseId: reviewed?.responseId || null,
             version: reviewed?.version || null,
             reviewerId: actor?.id || null,
+            reviewerRole: actor?.role || null,
+            workflowState: stageAtDecision,
             at: timestamp,
           },
         ],
-        workflowSteps: reopenReviewCycle(base.workflowSteps, queryId),
+        workflowSteps: reopenReviewCycle(base.workflowSteps, queryIn(base, queryId)),
       }),
     });
   },
 
-  grantFinalApproval: async (queryId, actor, send = sendResponse) => {
+  grantFinalApproval: async (queryId, actor, approve = approveOnServer, { comment } = {}) => {
     assertCan(get(), WORKFLOW_ACTION.FINAL_APPROVE, queryId, actor);
-    const state = get();
-    const current = state.getCurrentStep(queryId);
-    const approved = state.getLatestVersion(queryId);
-    const timestamp = now();
 
-    state.applyTransition({
-      queryId,
-      actor,
-      event: AUDIT_EVENT.FINAL_APPROVAL_GRANTED,
-      patch: { workflowState: WORKFLOW_STATE.READY_FOR_DISPATCH },
-      details: `Final approval granted; ${approved ? `${approved.version} locked` : 'no draft to lock'} and ready for dispatch.`,
-      notify: {
-        recipientRole: 'FRONT_OFFICE',
-        message: `${queryId} is approved and ready for dispatch.`,
-      },
-      mutate: (base) => ({
-        workflowSteps: base.workflowSteps.map((s) =>
-          s.stepId === current?.stepId ? { ...s, status: 'COMPLETED', completedAt: timestamp } : s,
-        ),
-        responseVersions: base.responseVersions.map((v) =>
-          v.responseId === approved?.responseId
-            ? { ...v, status: RESPONSE_STATUS.FINAL_APPROVED, approvedAt: timestamp }
-            : v,
-        ),
-      }),
-    });
+    const running = approvalsInFlight.get(queryId);
+    if (running) return running;
 
-    return get().dispatchResponse(queryId, null, send);
+    const work = (async () => {
+      await writesSettled();
+      try {
+        return await approve(queryId, { comment });
+      } finally {
+        await get().refreshFromServer();
+      }
+    })().finally(() => approvalsInFlight.delete(queryId));
+
+    approvalsInFlight.set(queryId, work);
+    return work;
+  },
+
+  resolveOutboundEmail: async (queryId, { emailType, outcome }, resolve = resolveOutboundOnServer) => {
+    await writesSettled();
+    try {
+      return await resolve(queryId, { emailType, outcome });
+    } finally {
+      await get().refreshFromServer();
+    }
   },
 
   rejectFinalApproval: (queryId, reason, actor) => {
     assertCan(get(), WORKFLOW_ACTION.FINAL_REJECT, queryId, actor);
-    return get().applyTransition({
+    if (!String(reason || '').trim()) {
+      throw new Error('Rejecting requires a reason the assigned official can act on');
+    }
+
+    const state = get();
+    const rejected = state.getLatestVersion(queryId);
+    const reviewMint = mintId(state.counters, 'REV');
+    const stageAtDecision = state.getQuery(queryId)?.workflowState || null;
+    const timestamp = now();
+
+    return state.applyTransition({
       queryId,
       actor,
       event: AUDIT_EVENT.FINAL_APPROVAL_REJECTED,
       patch: { workflowState: WORKFLOW_STATE.RETURNED_FOR_REVISION },
-      details: reason ? `Final approval rejected: ${reason}` : 'Final approval rejected.',
+      details: `Final approval rejected on ${rejected?.version || 'the response'}: ${reason}`,
       notify: {
         recipientRole: 'ASSIGNED_OFFICIAL',
         message: `${queryId} was rejected at final approval.`,
       },
       mutate: (base) => ({
-        workflowSteps: reopenReviewCycle(base.workflowSteps, queryId),
+        counters: { ...base.counters, ...reviewMint.bump },
+        reviews: [
+          ...base.reviews,
+          {
+            reviewId: reviewMint.id,
+            queryId,
+            stepId: null,
+            decision: 'REJECTED',
+            comment: reason,
+            responseId: rejected?.responseId || null,
+            version: rejected?.version || null,
+            reviewerId: actor?.id || null,
+            reviewerRole: actor?.role || null,
+            workflowState: stageAtDecision,
+            at: timestamp,
+          },
+        ],
+        workflowSteps: reopenReviewCycle(base.workflowSteps, queryIn(base, queryId)),
       }),
     });
   },
@@ -1156,6 +1205,7 @@ export const useWorkflowStore = create((set, get) => ({
     const state = get();
     const reviewed = state.getLatestVersion(queryId);
     const reviewMint = mintId(state.counters, 'REV');
+    const stageAtDecision = state.getQuery(queryId)?.workflowState || null;
     const timestamp = now();
 
     return get().applyTransition({
@@ -1184,167 +1234,240 @@ export const useWorkflowStore = create((set, get) => ({
             responseId: reviewed?.responseId || null,
             version: reviewed?.version || null,
             reviewerId: actor?.id || null,
+            reviewerRole: actor?.role || null,
+            workflowState: stageAtDecision,
             at: timestamp,
           },
         ],
-        workflowSteps: reopenReviewCycle(base.workflowSteps, queryId),
+        workflowSteps: reopenReviewCycle(base.workflowSteps, queryIn(base, queryId)),
       }),
     });
   },
 
   dispatchResponse: async (queryId, actor, send = sendResponse) => {
     const state = get();
-    const query = state.queries.find((q) => q.queryId === queryId);
-    if (!query) throw new Error(`DISPATCH: query ${queryId} does not exist`);
-
-    // Order matters, and each step guards something different.
-    //
-    // 1. PERMISSION first, so an unauthorised caller is refused outright and
-    //    never receives the benign "already dispatched" shape instead.
-    //    A human retry from the Dispatch page passes an actor and is gated
-    //    exactly as before. The automatic dispatch that follows final approval
-    //    passes NO actor: it is the system acting on the READY_FOR_DISPATCH
-    //    transition. Recorded in docs/srs/14 as a deliberate widening.
-    if (actor) {
-      assertCan(state, WORKFLOW_ACTION.DISPATCH, queryId, actor);
+    if (!state.queries.some((q) => q.queryId === queryId)) {
+      throw new Error(`DISPATCH: query ${queryId} does not exist`);
     }
 
-    // 2. IDEMPOTENCY next, so a duplicate trigger is a harmless no-op rather
-    //    than an error — a refresh, a retry or a double click must not send a
-    //    second response, and must not look like a failure either. The guard is
-    //    the stored OUTGOING_RESPONSE message, which lives in IndexedDB and so
-    //    survives a reload and a backend restart.
-    const already = state.emailMessages.find(
-      (m) => m.queryId === queryId && m.emailType === EMAIL_TYPE.OUTGOING_RESPONSE,
-    );
-    if (already) {
-      return { queryId, messageId: already.messageId, dispatched: false, reason: 'already-dispatched' };
+    if (actor) assertCan(state, WORKFLOW_ACTION.DISPATCH, queryId, actor);
+
+    await writesSettled();
+    try {
+      const result = await send({ queryId });
+      await get().refreshFromServer();
+
+      return {
+        queryId,
+        dispatched: result?.outcome === 'SENT',
+        alreadyDispatched: result?.outcome === 'ALREADY_SENT',
+        outcome: result?.outcome ?? null,
+      };
+    } catch (error) {
+      await get().refreshFromServer();
+      throw sendFailure(error);
+    }
+  },
+
+  // `official`: the chosen official's record, for one an administrator approved, whom only the server lists.
+  transferQuery: (queryId, newAssigneeId, reason, actor, official = null) => {
+    const query = assertCan(get(), WORKFLOW_ACTION.TRANSFER, queryId, actor);
+
+    if (!newAssigneeId) {
+      throw new Error('A colleague/official must be selected for transfer.');
     }
 
-    // 3. STATE last, for the system path: nothing may be sent before the
-    //    Officer-in-Charge has granted final approval.
-    if (!actor && query.workflowState !== WORKFLOW_STATE.READY_FOR_DISPATCH) {
-      throw new Error(
-        `DISPATCH refused: ${queryId} is ${query.workflowState}, not ${WORKFLOW_STATE.READY_FOR_DISPATCH}`,
-      );
+    if (newAssigneeId === query.currentAssigneeId) {
+      throw new Error('Cannot transfer a query to the currently assigned official.');
     }
 
-    const approved = get().getLatestVersion(queryId);
-    if (!approved) {
-      throw new Error(`${queryId}: there is no approved response to dispatch`);
+    const trimmedReason = String(reason || '').trim();
+    if (!trimmedReason) {
+      throw new Error('A reason for transfer is required.');
     }
 
-    const subject = `Re: ${query.subject} [${queryId}]`;
-    const sent = await send({
-      to: query.inquirer.email,
-      subject,
-      body: approved.content,
-      attachments: [],
-      providerThreadId: query.providerThreadId || null,
-    });
+    const prevAssignee = findUserById(query.currentAssigneeId);
+    const newAssignee = findUserById(newAssigneeId) || (official?.id === newAssigneeId ? official : null);
+    if (newAssignee?.role !== ROLES.ASSIGNED_OFFICIAL) {
+      throw new Error('A query can only be transferred to an Assigned Official.');
+    }
+    const prevName = prevAssignee?.name || query.currentAssigneeId || 'Unassigned';
+    const newName = newAssignee?.name || newAssigneeId;
+    const actorLabelStr = actorName(actor);
 
-    const timestamp = sent?.sentAt || now();
     const messageMint = mintId(get().counters, 'MSG');
-    const message = createEmailMessage({
+    const timestamp = now();
+
+    const transferMessage = createEmailMessage({
       messageId: messageMint.id,
       threadId: query.threadId,
       queryId,
       direction: EMAIL_DIRECTION.OUTBOUND,
-      emailType: EMAIL_TYPE.OUTGOING_RESPONSE,
-      from: sent?.from || 'Indian Pharmacopoeia Commission',
-      to: sent?.to || [query.inquirer.email],
-      subject: sent?.subject || subject,
-      body: sent?.body || approved.content,
+      emailType: EMAIL_TYPE.TRANSFER_NOTIFICATION,
+      from: actorLabelStr,
+      to: [newAssignee?.email || `${newAssigneeId}@ipc.example`],
+      subject: `Query ${queryId} Transferred: ${query.subject}`,
+      body: `Query ${queryId} ("${query.subject}") has been transferred to you by ${actorLabelStr}.\n\nPrevious Assignee: ${prevName}\nTransfer Reason: ${trimmedReason}\nDate & Time: ${new Date(timestamp).toLocaleString()}`,
       timestamp,
-      providerMessageId: sent?.providerMessageId || null,
-      providerThreadId: sent?.providerThreadId || null,
     });
 
-    get().applyTransition({
-      queryId,
-      actor,
-      event: AUDIT_EVENT.RESPONSE_DISPATCHED,
-      patch: { workflowState: WORKFLOW_STATE.DISPATCHED },
-      details: `Approved response ${approved.version} emailed to ${query.inquirer.email}.`,
-      mutate: (base) => ({
-        counters: { ...base.counters, ...messageMint.bump },
-        emailMessages: [...base.emailMessages, message],
-      }),
-    });
+    const auditDetails = `Case ID: ${query.queryId} | Transferred From: ${prevName} | Transferred To: ${newName} | Transferred By: ${actorLabelStr} | Reason: ${trimmedReason}`;
 
-    get().applyTransition({
-      queryId,
-      actor,
-      event: AUDIT_EVENT.QUERY_CLOSED,
-      patch: { workflowState: WORKFLOW_STATE.CLOSED },
-      details: 'Query closed following dispatch.',
-      notify: {
-        recipientRole: 'FRONT_OFFICE',
-        message: `${queryId} has been dispatched and closed.`,
-      },
-    });
-
-    return { messageId: message.messageId, dispatched: true };
-  },
-
-  transferQuery: (queryId, newAssigneeId, actor) => {
-    const assignee = findUserById(newAssigneeId);
     get().applyTransition({
       queryId,
       actor,
       event: AUDIT_EVENT.QUERY_TRANSFERRED,
       patch: { currentAssigneeId: newAssigneeId },
-      details: `Query transferred to ${assignee?.name || newAssigneeId}.`,
+      details: auditDetails,
+      notify: {
+        recipientRole: null,
+        recipientUserId: newAssigneeId,
+        message: `${queryId} (${query.subject}) was transferred to ${newName} by ${actorLabelStr}. Reason: ${trimmedReason}`,
+      },
+      mutate: (base) => ({
+        counters: { ...base.counters, ...messageMint.bump },
+        emailMessages: [...base.emailMessages, transferMessage],
+      }),
     });
+
+    return { queryId, transferredTo: newName, success: true };
   },
 
-  pullBackQuery: (queryId, actor, reason) =>
-    get().applyTransition({
-      queryId,
-      actor,
-      event: AUDIT_EVENT.QUERY_PULLED_BACK,
-      details: reason ? `Query pulled back: ${reason}` : 'Query pulled back.',
-    }),
+  pullBackQuery: (queryId, targetStage, reason, remarks = '', actor, { reviewStepId = null } = {}, pull = pullBackOnServer) => {
+    const query = get().getQuery(queryId);
+    if (!query) throw new Error(`PULLBACK: query ${queryId} does not exist`);
+
+    if (!isPullbackSource(query.workflowState)) {
+      throw new Error(
+        `${queryId} is ${query.workflowState} — a query cannot be pulled back once it has been finally approved or dispatched.`,
+      );
+    }
+
+    if (!canPerform(actor?.role, WORKFLOW_ACTION.PULLBACK, query.workflowState)) {
+      throw new Error('You do not have permission to pull back this query.');
+    }
+
+    if (!targetStage) {
+      throw new Error('A target stage must be selected for pullback.');
+    }
+
+    const reReview = targetStage === WORKFLOW_STATE.UNDER_REVIEW;
+    if (targetStage === query.workflowState && !reReview) {
+      throw new Error('Cannot pull back a query to its current workflow stage.');
+    }
+
+    if (!(targetStage in PULLBACK_RANK) || (!reReview && PULLBACK_RANK[targetStage] >= PULLBACK_RANK[query.workflowState])) {
+      throw new Error(`${queryId} can only be pulled back to an earlier stage than ${query.workflowState}.`);
+    }
+
+    if (reReview && !reviewLevelTargets(query, get().workflowSteps).some((step) => step.stepId === reviewStepId)) {
+      throw new Error('Choose an earlier review level to return the query to.');
+    }
+
+    const trimmedReason = String(reason || '').trim();
+    if (!trimmedReason) {
+      throw new Error('A reason for pullback is required.');
+    }
+
+    const running = pullbacksInFlight.get(queryId);
+    if (running) return running;
+
+    const work = (async () => {
+      await writesSettled();
+      try {
+        const result = await pull(
+          queryId,
+          { targetStage, reviewStepId: reReview ? reviewStepId : null, reason: trimmedReason, remarks: String(remarks || '').trim() },
+          actor,
+        );
+        return { ...result, queryId, prevStage: query.workflowState, targetStage, success: true };
+      } catch (error) {
+        throw serverRefusal(error);
+      } finally {
+        await get().refreshFromServer();
+      }
+    })().finally(() => pullbacksInFlight.delete(queryId));
+
+    pullbacksInFlight.set(queryId, work);
+    return work;
+  },
 
   hydrate: async () => {
-if (get().hydrated) return;
-try {
-  if (await isEmpty()) {
-    const seed = buildSeedState();
-    await replaceAll(seed);
-    set({ ...seed, hydrated: true, persistenceError: null });
-    return;
-  }
-  const stored = await loadAll();
-  set({
-    queries: stored.queries,
-    workflowSteps: stored.workflowSteps,
-    reviews: stored.reviews,
-    responseVersions: stored.responseVersions,
-    auditEvents: stored.auditEvents,
-    notifications: stored.notifications,
-    emailMessages: stored.emailMessages || [],
-    emailThreads: stored.emailThreads || [],
-    counters: stored.counters || buildSeedState().counters,
-    hydrated: true,
-    persistenceError: null,
-  });
-} catch (error) {
-  console.error('[qms] IndexedDB unavailable — running from in-memory seed', error);
-  set({ hydrated: true, persistenceError: String(error?.message || error) });
-}
+    if (get().hydrated) return;
+    try {
+      const { isEmpty, loadAll } = await dbModule();
+      if (await isEmpty()) {
+        set({ ...buildSeedState(), hydrated: true, persistenceError: null, refreshedAt: Date.now() });
+        return;
+      }
+      const stored = await loadAll();
+      set({
+        queries: stored.queries,
+        workflowSteps: stored.workflowSteps,
+        reviews: stored.reviews,
+        responseVersions: stored.responseVersions,
+        auditEvents: stored.auditEvents,
+        notifications: stored.notifications,
+        emailMessages: stored.emailMessages || [],
+        emailThreads: stored.emailThreads || [],
+        outboundEmails: stored.outboundEmails || [],
+        counters: stored.counters || buildSeedState().counters,
+        hydrated: true,
+        persistenceError: null,
+        refreshedAt: Date.now(),
+      });
+    } catch (error) {
+      set({ hydrated: true, persistenceError: String(error?.message || error) });
+    }
   },
 
+  refreshFromServer: async ({ quiet = false } = {}) => {
+    try {
+      const { loadAll } = db ?? (await dbModule());
+      const stored = await loadAll();
+      const current = get();
+      if (quiet && !current.hydrated) return false;
+      const fresh = {
+        ...Object.fromEntries(
+          SERVER_COLLECTIONS.map((key) => [key, replaceEqualDeep(current[key], stored[key] || [])]),
+        ),
+        counters: stored.counters || current.counters,
+        persistenceError: null,
+        refreshedAt: Date.now(),
+      };
+      if (quiet) beginBatch();
+      try {
+        set(fresh);
+      } finally {
+        if (quiet) endBatch();
+      }
+      return true;
+    } catch (error) {
+      if (!quiet) set({ persistenceError: String(error?.message || error) });
+      return false;
+    }
+  },
+
+  revalidate: () => {
+    revalidating ??= get()
+      .refreshFromServer({ quiet: true })
+      .finally(() => {
+        revalidating = null;
+      });
+    return revalidating;
+  },
+
+  resetHydration: () => set({ ...buildSeedState(), hydrated: false, persistenceError: null }),
+
   resetDemo: async () => {
-const seed = buildSeedState();
-set({ ...seed });
-try {
-  await replaceAll(seed);
-  set({ persistenceError: null });
-} catch (error) {
-  console.error('[qms] failed to reset demo data', error);
-  set({ persistenceError: String(error?.message || error) });
-}
+    const seed = buildSeedState();
+    try {
+      const { replaceAll } = await dbModule();
+      await replaceAll(seed);
+      set({ ...seed, persistenceError: null });
+    } catch (error) {
+      set({ persistenceError: String(error?.message || error) });
+    }
   },
 }));
 

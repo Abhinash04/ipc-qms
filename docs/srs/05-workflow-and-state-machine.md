@@ -2,7 +2,7 @@
 
 ## 5.1 Business Status vs Workflow State
 
-QMS tracks two **separate** fields on every query — never derive one by parsing the other:
+BRIDGETECH tracks two **separate** fields on every query — never derive one by parsing the other:
 
 - **Business Status** — the coarse, client-facing lifecycle summary:
   `OPEN`, `IN_PROGRESS`, `CLOSED`.
@@ -18,11 +18,36 @@ state.
 
 ## 5.2 Primary Illustrative Workflow
 
-The diagram below walks the primary dummy query, `QRY-2026-00427`, through the full lifecycle.
+The diagram below walks an illustrative query, `QRY-2026-00427`, through the full lifecycle. It is
+narrative only — nothing is seeded, and a fresh install starts with no cases at all.
 **It illustrates a sample workflow with two review levels — the actual system supports a
 dynamic number of review levels** (see [architecture/workflow-engine.md](../architecture/workflow-engine.md)),
 so a real query might have one review level, four, or any other count without changing the
 underlying model.
+
+> **Phase 1 is one action, not four.** Nodes C through F — create the Query Case, store the email
+> and attachments, verify, forward to the Officer-in-Charge — are drawn as separate steps because
+> they are separate *events* in the audit trail, but they all happen in a single server call when
+> the Front Officer accepts the message (`POST /api/v1/mailbox/messages/:messageId/accept`). The
+> case therefore passes through `RECEIVED` and `FRONT_OFFICE_VERIFICATION` and comes to rest at
+> `PENDING_ASSIGNMENT`. `FRONT_OFFICE_VERIFICATION` is only a resting state when the forward
+> failed, and the manual **Forward to Officer-in-Charge** action then exists to recover it.
+
+> **Phase 6 is no longer a Front Office action, and it is part of the approval.** Nodes AJ through
+> AN — Front Office receives the approved response, verifies the recipient, sends it, delivery is
+> recorded, the query closes — are drawn as a Front Office phase because that is what the reference
+> workflow describes. The user has since directed that the response go out automatically, and it now
+> happens inside node AF's *Approve* branch: one server call
+> (`POST /api/v1/queries/:queryId/final-approval`) records the approval, emails the response to the
+> address the enquiry arrived from, and closes the case, writing
+> `FINAL_APPROVAL_GRANTED → RESPONSE_DISPATCHED → QUERY_CLOSED`. Nobody presses send.
+>
+> The case reaches `CLOSED` only after a send that actually happened. If the send fails the approval
+> still stands and the case waits at `READY_FOR_DISPATCH` — there is no dispatch-failure state, and
+> none was invented — where the Front Office **Retry sending response** control, still gated on the
+> `DISPATCH` permission, completes it. That retry is all node AJ means now. See
+> [14-open-questions-and-client-clarifications.md](./14-open-questions-and-client-clarifications.md#dispatch)
+> for the requirement this supersedes.
 
 ```mermaid
 flowchart TD
@@ -30,14 +55,14 @@ flowchart TD
     START([Incoming Query Email])
 
     subgraph INQUIRER["Inquirer"]
-        A["Rajesh Kumar<br/><br/>
+        A["Abhinash Pritiraj<br/><br/>
         Sends Email Query<br/>
         Subject: Clarification regarding eligibility criteria<br/>
         for Government Training Programme"]
     end
 
     subgraph FO1["Phase 1 — Front Office: Query Intake"]
-        B["Priya Sharma<br/><b>Front Office</b><br/><br/>
+        B["Bhumika Makker<br/><b>Front Office</b><br/><br/>
         Receives Email"]
 
         C["System creates Query Case<br/><br/>
@@ -57,7 +82,7 @@ flowchart TD
     end
 
     subgraph ASSIGN["Phase 2 — Assignment"]
-        G["Anil Verma<br/><b>Officer-in-Charge</b><br/><br/>
+        G["EduTR Zairza<br/><b>Officer-in-Charge</b><br/><br/>
         Receives Query"]
 
         H["AI Assignment Assistant<br/><br/>
@@ -136,7 +161,7 @@ flowchart TD
     end
 
     subgraph APPROVAL["Phase 5 — Final Approval"]
-        AE["Anil Verma<br/><b>Officer-in-Charge</b><br/><br/>
+        AE["EduTR Zairza<br/><b>Officer-in-Charge</b><br/><br/>
         Receives Reviewed Draft"]
 
         AF{"Final Approval Decision"}
@@ -151,14 +176,14 @@ flowchart TD
     end
 
     subgraph DISPATCH["Phase 6 — Response & Closure"]
-        AJ["Priya Sharma<br/><b>Front Office</b><br/><br/>
+        AJ["Bhumika Makker<br/><b>Front Office</b><br/><br/>
         Receives Approved Response"]
 
         AK["Final Response Preview<br/>
         Verify Recipient & Attachments"]
 
         AL["Send Response to<br/>
-        Rajesh Kumar"]
+        Abhinash Pritiraj"]
 
         AM["Outgoing Email +<br/>
         Delivery Details Stored"]

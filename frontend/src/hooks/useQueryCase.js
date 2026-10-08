@@ -1,13 +1,19 @@
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import { useWorkflowStore } from "@/store/useWorkflowStore";
 import { useAuthStore } from "@/store/useAuthStore";
-import { canPerform } from "@/constants/workflowRules";
+import {
+  canPerform,
+  ASSIGNEE_ONLY_ACTIONS,
+  isCaseAssignee,
+} from "@/constants/workflowRules";
 import { findUserById } from "@/constants/mockUsers";
+import { activeSteps, historicalSteps } from "@/constants/reviewCycle";
 
-export function useQueryCase() {
+/** The case named in the route, or `queryIdOverride` when it is shown outside its own page. */
+export function useQueryCase(queryIdOverride = null) {
   const params = useParams();
-  const queryId = params.queryId || null;
+  const queryId = queryIdOverride || params.queryId || null;
   const currentUser = useAuthStore((state) => state.currentUser);
   const query = useWorkflowStore(
     (state) => state.queries.find((q) => q.queryId === queryId) || null,
@@ -17,14 +23,28 @@ export function useQueryCase() {
   const allReviews = useWorkflowStore((state) => state.reviews);
   const allAudit = useWorkflowStore((state) => state.auditEvents);
   const allMessages = useWorkflowStore((state) => state.emailMessages);
+  const [checkedId, setCheckedId] = useState(null);
+  const missing = Boolean(queryId) && !query;
 
-  const steps = useMemo(
-    () =>
-      allSteps
-        .filter((s) => s.queryId === queryId)
-        .sort((a, b) => a.sequence - b.sequence),
-    [allSteps, queryId],
-  );
+  useEffect(() => {
+    if (!missing || checkedId === queryId) return undefined;
+    let live = true;
+    useWorkflowStore
+      .getState()
+      .revalidate()
+      .finally(() => {
+        if (live) setCheckedId(queryId);
+      });
+    return () => {
+      live = false;
+    };
+  }, [missing, checkedId, queryId]);
+
+  const resolving = missing && checkedId !== queryId;
+
+  const steps = useMemo(() => activeSteps(allSteps, query), [allSteps, query]);
+
+  const stepHistory = useMemo(() => historicalSteps(allSteps, query), [allSteps, query]);
 
   const versions = useMemo(
     () => allVersions.filter((v) => v.queryId === queryId),
@@ -65,8 +85,9 @@ export function useQueryCase() {
   const can = useCallback(
     (action) =>
       Boolean(query) &&
-      canPerform(currentUser?.role, action, query.workflowState),
-    [query, currentUser?.role],
+      canPerform(currentUser?.role, action, query.workflowState) &&
+      (!ASSIGNEE_ONLY_ACTIONS.includes(action) || isCaseAssignee(currentUser, query)),
+    [query, currentUser],
   );
 
   return useMemo(
@@ -74,6 +95,7 @@ export function useQueryCase() {
       queryId,
       query,
       steps,
+      stepHistory,
       reviews,
       versions,
       latestVersion,
@@ -83,11 +105,13 @@ export function useQueryCase() {
       assignee,
       currentUser,
       can,
+      resolving,
     }),
     [
       queryId,
       query,
       steps,
+      stepHistory,
       reviews,
       versions,
       latestVersion,
@@ -97,6 +121,7 @@ export function useQueryCase() {
       assignee,
       currentUser,
       can,
+      resolving,
     ],
   );
 }

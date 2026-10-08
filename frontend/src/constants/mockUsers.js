@@ -2,24 +2,10 @@ import { ROLES } from './roles';
 
 export const MOCK_USERS = [
   {
-    id: 'USR-0001',
-    name: 'Abhinash Pritiraj',
-    role: ROLES.INQUIRER,
-    email: 'abhinash.pritiraj@gmail.com',
-    divisionId: null,
-  },
-  {
-    id: 'USR-0002',
-    name: 'Bhumika Makker',
-    role: ROLES.FRONT_OFFICE,
-    email: 'bhoomikamakker@gmail.com',
-    divisionId: 'DIV-004',
-  },
-  {
     id: 'USR-0003',
-    name: 'Jatin Rawat',
+    name: 'EduTR Zairza',
     role: ROLES.OFFICER_IN_CHARGE,
-    email: 'rawatjatin436@gmail.com',
+    email: 'edutr.zairza@ipc.example',
     divisionId: 'DIV-001',
   },
   {
@@ -99,8 +85,6 @@ export const MOCK_USERS = [
     divisionId: 'DIV-004',
   },
 ];
-
-export const MOCK_PASSWORD = 'ipc@1234';
 
 export function findUserById(id) {
   return MOCK_USERS.find((user) => user.id === id) || null;

@@ -163,7 +163,7 @@ export function formatPassagesForPrompt(chunks = []) {
         chunk.kind === 'AMENDMENT'
           ? ' [AMENDMENT — a correction to a monograph, not the complete requirement; always state the amendment list and page]'
           : '';
-      return `- [${ref} › ${chunk.section}]${caution}\n${chunk.text}`;
+      return `- [${chunk.id}] ${ref} › ${chunk.section}${caution}\n${chunk.text}`;
     })
     .join('\n\n');
 }

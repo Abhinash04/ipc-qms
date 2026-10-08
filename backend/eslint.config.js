@@ -21,12 +21,31 @@ export default defineConfig([
       // `const { _id, ...rest } = doc` is how a field is dropped from an object.
       // The binding is the mechanism, not dead code.
       'no-unused-vars': ['error', { ignoreRestSiblings: true }],
+      // An empty `catch` is a deliberate "this failure is not worth reporting",
+      // and there are several: closing a socket that is already gone, reading a
+      // title off a page mid-navigation, a log line that must never be the
+      // reason a send failed. They used to carry a comment saying so, and read
+      // as empty once the comments were removed. Every other empty block — an
+      // `if`, a loop — is still an error.
+      'no-empty': ['error', { allowEmptyCatch: true }],
     },
   },
   {
     files: ['src/test/**/*.js', 'vitest.config.mjs'],
     languageOptions: {
       globals: { ...globals.node, ...globals.vitest },
+    },
+  },
+  {
+    /**
+     * The browser agent is two languages in one directory: most of it runs on
+     * Node, and the functions it hands to `session.evaluate` are serialised and
+     * run inside the NICeMail tab, where `document` and `location` are exactly
+     * as defined as `process` is here.
+     */
+    files: ['src/services/email/nic/browser/*.js', 'src/scripts/nicBrowserDiscover.js', 'src/scripts/nicBrowserCalibrate.js'],
+    languageOptions: {
+      globals: { ...globals.node, ...globals.browser },
     },
   },
 ]);

@@ -49,8 +49,6 @@ function remove(recipient, mailboxMessageId) {
   const index = messages.findIndex((m) => m.mailboxMessageId === mailboxMessageId);
   if (index === -1) return null;
 
-  // The counter is deliberately left alone: ids stay monotonic so a deleted
-  // message's id is never handed to a later one.
   const [removed] = messages.splice(index, 1);
   return removed;
 }

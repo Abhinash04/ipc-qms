@@ -7,16 +7,22 @@ import { AppRoutes } from '@/routes/AppRoutes';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useWorkflowStore } from '@/store/useWorkflowStore';
 import { findUserById } from '@/constants/mockUsers';
+import { FRONT_OFFICE_USER as FRONT_OFFICE } from '@/test/frontOfficeUser';
+import * as mailboxService from '@/services/api/mailboxService';
+import { installFakeCaseMail } from '@/test/fakeCaseMail';
+import { EXTERNAL_INQUIRER as INQUIRER } from '@/test/externalInquirer';
 
 vi.mock('@/services/api/mailboxService', () => ({
+  rescueMailboxMessage: vi.fn().mockResolvedValue({ rescued: true }),
   fetchEmailConfig: vi.fn().mockResolvedValue({}),
   fetchMailboxMessages: vi.fn().mockResolvedValue({ messages: [] }),
+  fetchMailboxDecisions: vi.fn().mockResolvedValue({ decisions: [] }),
+  recordMailboxDecision: vi.fn().mockResolvedValue({ alreadyDecided: false }),
   markMessageIngested: vi.fn().mockResolvedValue({ ingested: true }),
   deleteMailboxMessage: vi.fn().mockResolvedValue({ deleted: true }),
-  sendEnquiry: vi.fn().mockResolvedValue({}),
   sendAcknowledgement: vi.fn().mockResolvedValue({
     from: 'fo@test.invalid',
-    to: ['abhinash.pritiraj@gmail.com'],
+    to: ['abhinash.pritiraj@pharma.example'],
     subject: 'Acknowledgement of Query Received',
     body: 'Received.',
     sentAt: '2026-08-26T09:30:00.000Z',
@@ -33,8 +39,6 @@ vi.mock('@/services/api/mailboxService', () => ({
   sendResponse: vi.fn().mockResolvedValue({}),
 }));
 
-const INQUIRER = findUserById('USR-0001');
-const FRONT_OFFICE = findUserById('USR-0002');
 const OIC = findUserById('USR-0003');
 const OFFICIAL = findUserById('USR-0004');
 const REVIEWER = findUserById('USR-0005');
@@ -63,33 +67,23 @@ function renderAs(user, path) {
 }
 
 const grid = () =>
-  document.querySelector('[class*="lg:grid-cols-[minmax(0,1fr)_340px]"]');
+  document.querySelector('[data-slot="case-workspace"]');
 
 const threadPanel = () =>
-  screen.getByRole('heading', { name: 'Email thread' }).closest('div.rounded-3xl');
+  screen.getByRole('heading', { name: 'Email thread' }).closest('[data-slot="panel"]');
 
-const collapsedRows = () =>
-  within(threadPanel()).queryAllByRole('button', { expanded: false });
+const inboxRows = () =>
+  within(within(threadPanel()).getByRole('list', { name: 'Messages' })).getAllByRole('button');
 
-/**
- * Count rendered messages structurally. The enquiry body text is quoted inside
- * the forwarded email and repeated in the Query Info tab, so matching on it
- * cannot tell you what is expanded.
- */
 const expandedMessages = () => threadPanel().querySelectorAll('article').length;
-
-const officialsPanel = () =>
-  screen.getByRole('heading', { name: 'Officials' }).closest('div.rounded-3xl');
 
 let queryId;
 
-/** A freshly received query: still with Front Office, nothing assigned. */
 function received() {
   ({ queryId } = s().ingestEmail(enquiry(), async () => null));
   return queryId;
 }
 
-/** Drive the case to UNDER_REVIEW so the full chain exists. */
 async function underReview() {
   received();
   await s().validateAndForward(queryId, FRONT_OFFICE);
@@ -102,6 +96,7 @@ async function underReview() {
 
 beforeEach(async () => {
   vi.clearAllMocks();
+  installFakeCaseMail(mailboxService);
   await s().hydrate();
   await s().resetDemo();
 });
@@ -112,7 +107,6 @@ describe('the page is one workspace, not a long document', () => {
     renderAs(REVIEWER, `/reviewer/queries/${queryId}`);
 
     expect(grid()).not.toBeNull();
-    // minmax(0,1fr) stops wide children blowing the column out.
     expect(grid().className).toMatch(/items-start/);
   });
 
@@ -127,121 +121,66 @@ describe('the page is one workspace, not a long document', () => {
     expect(panel.className).toMatch(/overflow-y-auto/);
   });
 
-  it('keeps the inquirer on a single column with no action panel', async () => {
-    await underReview();
-    renderAs(INQUIRER, `/inquirer/queries/${queryId}`);
-
-    expect(grid()).toBeNull();
-    expect(screen.queryByRole('heading', { name: 'Available actions' })).toBeNull();
-    expect(screen.queryByRole('heading', { name: 'Audit history' })).toBeNull();
-  });
 });
 
-describe('the email thread reads like a conversation', () => {
-  it('expands only the newest message and collapses the rest', async () => {
+describe('the email thread reads like an email client', () => {
+  const caseEmails = () => s().emailMessages.filter((m) => m.queryId === queryId);
+  const openSubject = () => within(threadPanel().querySelector('article')).getByRole('heading').textContent;
+
+  it('lists every email, newest first, and opens the newest in the reading pane', async () => {
     await underReview();
     renderAs(REVIEWER, `/reviewer/queries/${queryId}`);
 
-    const total = s().emailMessages.filter((m) => m.queryId === queryId).length;
+    const total = caseEmails().length;
     expect(total).toBeGreaterThan(1);
 
+    expect(inboxRows()).toHaveLength(total);
     expect(expandedMessages()).toBe(1);
-    expect(
-      within(threadPanel()).getByRole('button', { name: /Show \d+ previous messages?/ }),
-    ).toBeInTheDocument();
+    expect(inboxRows()[0]).toHaveAttribute('aria-current', 'true');
   });
 
-  it('reveals earlier messages, then expands one on click', async () => {
+  it('opens an earlier email in the reading pane when it is chosen', async () => {
     await underReview();
     renderAs(REVIEWER, `/reviewer/queries/${queryId}`);
 
-    fireEvent.click(
-      within(threadPanel()).getByRole('button', { name: /Show \d+ previous messages?/ }),
-    );
-    const rows = collapsedRows();
-    expect(rows.length).toBeGreaterThan(0);
-    expect(expandedMessages()).toBe(1);
+    const oldest = inboxRows().at(-1);
+    fireEvent.click(oldest);
 
-    fireEvent.click(rows[0]);
-    expect(expandedMessages()).toBe(2);
-    expect(collapsedRows()).toHaveLength(rows.length - 1);
+    expect(expandedMessages()).toBe(1);
+    expect(oldest).toHaveAttribute('aria-current', 'true');
+    expect(openSubject()).toBe(caseEmails()[0].subject);
   });
 
-  it('collapses an opened message again', async () => {
+  it('steps through the thread with Older and Newer', async () => {
     await underReview();
     renderAs(REVIEWER, `/reviewer/queries/${queryId}`);
 
-    fireEvent.click(
-      within(threadPanel()).getByRole('button', { name: /Show \d+ previous messages?/ }),
-    );
-    fireEvent.click(collapsedRows()[0]);
-    expect(expandedMessages()).toBe(2);
-
-    fireEvent.click(
-      within(threadPanel()).getAllByRole('button', { name: 'Collapse message' })[0],
-    );
-    expect(expandedMessages()).toBe(1);
+    expect(within(threadPanel()).getByRole('button', { name: /Newer/ })).toBeDisabled();
+    fireEvent.click(within(threadPanel()).getByRole('button', { name: /Older/ }));
+    expect(inboxRows()[1]).toHaveAttribute('aria-current', 'true');
+    expect(within(threadPanel()).getByRole('button', { name: /Newer/ })).toBeEnabled();
   });
 
-  it('keeps the direction filter working alongside collapse', async () => {
+  it('filters the inbox by direction', async () => {
     await underReview();
     renderAs(REVIEWER, `/reviewer/queries/${queryId}`);
 
-    const inbound = s().emailMessages.filter(
-      (m) => m.queryId === queryId && m.direction === 'INBOUND',
-    ).length;
+    const inbound = caseEmails().filter((m) => m.direction === 'INBOUND').length;
 
-    fireEvent.click(screen.getByRole('button', { name: 'Received Only' }));
-    // Filtering narrows the set; collapse still applies within it.
+    fireEvent.click(screen.getByRole('button', { name: 'Received' }));
+    expect(inboxRows()).toHaveLength(inbound);
     expect(expandedMessages()).toBe(1);
-    expect(collapsedRows().length + expandedMessages()).toBeLessThanOrEqual(inbound + 1);
 
     fireEvent.click(screen.getByRole('button', { name: 'All Emails' }));
-    expect(expandedMessages()).toBe(1);
+    expect(inboxRows()).toHaveLength(caseEmails().length);
   });
 });
 
-describe('Officials shows who is handling the case', () => {
-  it('names the real chain with their statuses', async () => {
-    await underReview();
-    renderAs(REVIEWER, `/reviewer/queries/${queryId}`);
+it('drops them once the case is assigned', async () => {
+  await underReview();
+  renderAs(REVIEWER, `/reviewer/queries/${queryId}`);
 
-    const panel = within(officialsPanel());
-    expect(panel.getByText(INQUIRER.name)).toBeInTheDocument();
-    expect(panel.getByText(FRONT_OFFICE.name)).toBeInTheDocument();
-    expect(panel.getByText(OFFICIAL.name)).toBeInTheDocument();
-    expect(panel.getByText(REVIEWER.name)).toBeInTheDocument();
-    expect(panel.getAllByText('Current').length).toBeGreaterThan(0);
-  });
-
-  it('still renders on a freshly received query, before anyone is assigned', () => {
-    received();
-    renderAs(FRONT_OFFICE, `/front-officer/queries/${queryId}`);
-
-    const panel = within(officialsPanel());
-    expect(panel.getByText('Front Office')).toBeInTheDocument();
-    expect(panel.getAllByText('Pending').length).toBeGreaterThan(0);
-  });
-});
-
-describe('AI recommendations only appear while they are useful', () => {
-  it('offers them to the OIC while assignment is still open', async () => {
-    received();
-    await s().validateAndForward(queryId, FRONT_OFFICE);
-    renderAs(OIC, `/officer-in-charge/queries/${queryId}`);
-
-    expect(
-      screen.getByRole('heading', { name: /AI Official Recommendations/ }),
-    ).toBeInTheDocument();
-  });
-
-  it('drops them once the case is assigned, leaving Officials to answer', async () => {
-    await underReview();
-    renderAs(REVIEWER, `/reviewer/queries/${queryId}`);
-
-    expect(screen.queryByRole('heading', { name: /AI Official Recommendations/ })).toBeNull();
-    expect(officialsPanel()).not.toBeNull();
-  });
+  expect(screen.queryByRole('heading', { name: /AI Official Recommendations/ })).toBeNull();
 });
 
 describe('audit history is bounded but complete', () => {
@@ -254,11 +193,67 @@ describe('audit history is bounded but complete', () => {
 
     const auditCard = screen
       .getByRole('heading', { name: 'Audit history' })
-      .closest('div.rounded-3xl');
-    expect(within(auditCard).getAllByRole('row')).toHaveLength(8 + 1); // + header
+      .closest('[data-slot="panel"]');
+    const events = () => within(within(auditCard).getByRole('list', { name: 'Audit events' })).getAllByRole('listitem');
+    expect(events()).toHaveLength(8);
 
     fireEvent.click(screen.getByRole('button', { name: new RegExp(`Show all ${total} events`) }));
-    expect(within(auditCard).getAllByRole('row')).toHaveLength(total + 1);
+    expect(events()).toHaveLength(total);
+  });
+});
+
+describe('Query Info reads as a dossier', () => {
+  it('shows the inquirer, the key dates, the facts and the original enquiry', async () => {
+    await underReview();
+    renderAs(REVIEWER, `/reviewer/queries/${queryId}`);
+
+    fireEvent.mouseDown(screen.getByRole('tab', { name: 'Query Info' }));
+    fireEvent.focus(screen.getByRole('tab', { name: 'Query Info' }));
+    const info = within(await screen.findByRole('tabpanel', { name: 'Query Info' }));
+
+    const inquirerCard = within(info.getByRole('region', { name: 'Inquirer' }));
+    expect(inquirerCard.getByText(INQUIRER.name)).toBeInTheDocument();
+    expect(inquirerCard.getByRole('link', { name: INQUIRER.email })).toHaveAttribute('href', `mailto:${INQUIRER.email}`);
+
+    const dates = within(info.getByRole('region', { name: 'Key dates' }));
+    expect(dates.getByText('Received')).toBeInTheDocument();
+    expect(dates.getByText('Due')).toBeInTheDocument();
+
+    expect(info.getByText('Assigned to')).toBeInTheDocument();
+    expect(info.getByRole('region', { name: 'Original enquiry' })).toHaveTextContent(s().getQuery(queryId).description);
+  });
+});
+
+describe('Workflow progress switches between views of the same history', () => {
+  const COLLEAGUE = findUserById('USR-0009');
+  const progressPanel = () => screen.getByRole('heading', { name: 'Workflow progress' }).closest('[data-slot="panel"]');
+  const track = () => within(progressPanel()).getByRole('group', { name: 'Workflow progress' });
+  const viewButton = (name) => within(within(progressPanel()).getByRole('group', { name: 'Workflow view' })).getByRole('button', { name });
+  const serviceCalls = () => Object.values(mailboxService).reduce((sum, fn) => sum + (fn.mock?.calls.length || 0), 0);
+
+  it('starts on All, filters on click without fetching, and keeps the header counts for the whole case', async () => {
+    received();
+    await s().validateAndForward(queryId, FRONT_OFFICE);
+    s().assignQuery(queryId, OFFICIAL.id, OIC);
+    s().transferQuery(queryId, COLLEAGUE.id, 'Subject expertise', OFFICIAL);
+    renderAs(OIC, `/officer-in-charge/queries/${queryId}`);
+
+    const summary = within(progressPanel()).getByText(/stages complete · 1 pull backs, transfers & change requests$/).textContent;
+    expect(viewButton(/^All$/)).toHaveAttribute('aria-pressed', 'true');
+    expect(within(track()).getByRole('button', { name: /^Transfer/ })).toBeInTheDocument();
+    const calls = serviceCalls();
+
+    fireEvent.click(viewButton(/^Normal/));
+    expect(viewButton(/^Normal/)).toHaveAttribute('aria-pressed', 'true');
+    expect(viewButton(/^All$/)).toHaveAttribute('aria-pressed', 'false');
+    expect(within(track()).queryByRole('button', { name: /^Transfer/ })).toBeNull();
+
+    fireEvent.click(viewButton(/^Pull backs/));
+    expect(within(track()).getByRole('button', { name: /^Transfer/ })).toBeInTheDocument();
+    expect(within(track()).getByText('Assigned to an official')).toBeInTheDocument();
+
+    expect(within(progressPanel()).getByText(/stages complete/).textContent).toBe(summary);
+    expect(serviceCalls()).toBe(calls);
   });
 });
 
@@ -268,8 +263,7 @@ describe('nothing was lost to the restructure', () => {
     renderAs(REVIEWER, `/reviewer/queries/${queryId}`);
 
     expect(screen.getByRole('button', { name: /Review draft/ })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Transfer query/ })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Pull back query/ })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Delete review level/ })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Approve' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Request changes' })).toBeInTheDocument();
 
@@ -281,16 +275,4 @@ describe('nothing was lost to the restructure', () => {
     expect(screen.getByRole('heading', { name: 'Workflow progress' })).toBeInTheDocument();
   });
 
-  it('still refuses another inquirers case', async () => {
-    await underReview();
-    useAuthStore.setState({
-      currentUser: { ...INQUIRER, id: 'USR-OTHER', email: 'other@example.com' },
-    });
-    renderAs(
-      { ...INQUIRER, id: 'USR-OTHER', email: 'other@example.com' },
-      `/inquirer/queries/${queryId}`,
-    );
-
-    expect(screen.getByText('Query not found')).toBeInTheDocument();
-  });
 });

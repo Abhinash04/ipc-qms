@@ -5,11 +5,48 @@ export async function fetchEmailConfig() {
   return data;
 }
 
-export async function fetchMailboxMessages({ recipient, unreadOnly = true } = {}) {
+export async function fetchMailboxMessages({
+  recipient,
+  unreadOnly = true,
+  category,
+  bucket,
+  q,
+  limit,
+  offset,
+} = {}) {
   const { data } = await axiosClient.get('/mailbox/messages', {
-    params: { ...(recipient ? { recipient } : {}), unreadOnly: String(unreadOnly) },
+    params: {
+      ...(recipient ? { recipient } : {}),
+      unreadOnly: String(unreadOnly),
+      ...(category ? { category } : {}),
+      ...(bucket ? { bucket } : {}),
+      ...(q ? { q } : {}),
+      ...(limit ? { limit, offset: offset ?? 0 } : {}),
+    },
   });
   return data;
+}
+
+export async function fetchMailboxMessage(mailboxMessageId) {
+  const { data } = await axiosClient.get(`/mailbox/messages/${encodeURIComponent(mailboxMessageId)}`);
+  return data ?? null;
+}
+
+export async function markMailboxMessageRead(mailboxMessageId) {
+  const { data } = await axiosClient.post(
+    `/mailbox/messages/${encodeURIComponent(mailboxMessageId)}/read`,
+  );
+  return data;
+}
+
+export async function syncMailbox() {
+  const { data } = await axiosClient.post('/mailbox/sync');
+  return data;
+}
+
+export function mailboxAttachmentUrl(mailboxMessageId, attachmentId) {
+  const base = (axiosClient.defaults.baseURL || '').replace(/\/$/, '');
+  return `${base}/mailbox/messages/${encodeURIComponent(mailboxMessageId)}/attachments/${encodeURIComponent(attachmentId)}?download=1`;
 }
 
 export async function markMessageIngested(mailboxMessageId, { recipient } = {}) {
@@ -17,6 +54,59 @@ export async function markMessageIngested(mailboxMessageId, { recipient } = {}) 
     `/mailbox/messages/${encodeURIComponent(mailboxMessageId)}/ingested`,
     {},
     { params: recipient ? { recipient } : {} },
+  );
+  return data;
+}
+
+export async function recordMailboxDecision(mailboxMessageId, { decision, queryId, reason, message } = {}) {
+  const { data } = await axiosClient.post(
+    `/mailbox/messages/${encodeURIComponent(mailboxMessageId)}/decision`,
+    { decision, queryId, reason, message },
+  );
+  return data;
+}
+
+export async function acceptMailboxMessage(mailboxMessageId, message) {
+  const { data } = await axiosClient.post(
+    `/mailbox/messages/${encodeURIComponent(mailboxMessageId)}/accept`,
+    message,
+  );
+  return data;
+}
+
+export async function fetchMailboxDecisions() {
+  const { data } = await axiosClient.get('/mailbox/decisions');
+  return data;
+}
+
+export async function rescueMailboxMessage(mailboxMessageId) {
+  const { data } = await axiosClient.post(
+    `/mailbox/messages/${encodeURIComponent(mailboxMessageId)}/triage/rescue`,
+  );
+  return data;
+}
+
+export async function setMailboxMessageCategory(mailboxMessageId, category) {
+  const { data } = await axiosClient.post(
+    `/mailbox/messages/${encodeURIComponent(mailboxMessageId)}/category`,
+    { category },
+  );
+  return data;
+}
+
+/** Sends again an automatic reply that could not be sent when the mail was accepted. */
+export async function retryAutoReply(mailboxMessageId) {
+  const { data } = await axiosClient.post(
+    `/mailbox/messages/${encodeURIComponent(mailboxMessageId)}/auto-reply/retry`,
+  );
+  return data;
+}
+
+/** Sends a mail offered an automatic reply to Human Intervention instead. */
+export async function declineAutoReply(mailboxMessageId, reason) {
+  const { data } = await axiosClient.post(
+    `/mailbox/messages/${encodeURIComponent(mailboxMessageId)}/auto-reply/decline`,
+    reason ? { reason } : {},
   );
   return data;
 }
@@ -29,34 +119,26 @@ export async function deleteMailboxMessage(mailboxMessageId, { recipient } = {})
   return data;
 }
 
-export async function sendEnquiry({ subject, body, attachments = [], cc = [] }) {
-  const { data } = await axiosClient.post('/emails/enquiry', { subject, body, attachments, cc });
+export async function sendAcknowledgement({ queryId }) {
+  const { data } = await axiosClient.post('/emails/acknowledgement', { queryId });
   return data;
 }
 
-export async function sendAcknowledgement({ to, queryId }) {
-  const { data } = await axiosClient.post('/emails/acknowledgement', { to, queryId });
+export async function sendResponse({ queryId }) {
+  const { data } = await axiosClient.post('/emails/response', { queryId });
   return data;
 }
 
-export async function sendResponse({ to, subject, body, attachments = [], cc = [], providerThreadId }) {
-  const { data } = await axiosClient.post('/emails/response', {
-    to,
-    subject,
-    body,
-    attachments,
-    cc,
-    providerThreadId,
-  });
-  return data;
-}
-
-export async function forwardQuery({ queryId, subject, body, providerThreadId }) {
-  const { data } = await axiosClient.post('/emails/forward', {
-    queryId,
-    subject,
-    body,
-    providerThreadId,
-  });
-  return data;
+export async function forwardQuery({ queryId }) {
+  try {
+    const { data } = await axiosClient.post('/emails/forward', { queryId });
+    return data;
+  } catch (error) {
+    const unavailable = error?.response?.data?.unavailableAttachments;
+    if (unavailable?.length) {
+      const names = unavailable.map((u) => u.filename || u.attachmentId).join(', ');
+      throw new Error(`Missing attachment(s): ${names}`, { cause: error });
+    }
+    throw error;
+  }
 }

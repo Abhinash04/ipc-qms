@@ -1,7 +1,11 @@
 import express from 'express';
+import verifyToken from '../middleware/verifyToken.js';
+import { verifyRole, verifyAction } from '../middleware/verifyRole.js';
+import { ROLES } from '../constants/roles.js';
+import { WORKFLOW_ACTION } from '../constants/workflowActions.js';
 import {
   getConfig,
-  sendEnquiry,
+
   sendAcknowledgement,
   forwardQuery,
   sendResponse,
@@ -9,10 +13,14 @@ import {
 
 const router = express.Router();
 
-router.get('/emails/config', getConfig);
-router.post('/emails/enquiry', sendEnquiry);
-router.post('/emails/acknowledgement', sendAcknowledgement);
-router.post('/emails/forward', forwardQuery);
-router.post('/emails/response', sendResponse);
+router.get('/emails/config', verifyToken, getConfig);
+router.post(
+  '/emails/acknowledgement',
+  verifyToken,
+  verifyRole(ROLES.FRONT_OFFICE),
+  sendAcknowledgement,
+);
+router.post('/emails/forward', verifyToken, verifyAction(WORKFLOW_ACTION.FORWARD), forwardQuery);
+router.post('/emails/response', verifyToken, verifyAction(WORKFLOW_ACTION.DISPATCH), sendResponse);
 
 export default router;

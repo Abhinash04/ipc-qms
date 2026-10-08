@@ -13,14 +13,130 @@ import { useRoutePaths } from '@/hooks/useRoutePaths';
 import { useWorkflowAction } from '@/hooks/useWorkflowAction';
 import { ActionError } from '@/components/workflow/ActionError';
 
+function ResponsePreviewCard({ latestVersion }) {
+  return (
+    <Card>
+      <CardHeader>
+        <h2 className="text-sm font-semibold text-foreground">Final response preview</h2>
+        {latestVersion && (
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            {latestVersion.version} — approved and locked
+          </p>
+        )}
+      </CardHeader>
+      <CardBody>
+        {latestVersion ? (
+          <pre className="rounded-md border border-border bg-muted/40 p-4 font-sans text-sm whitespace-pre-wrap text-foreground">
+            {latestVersion.content}
+          </pre>
+        ) : (
+          <EmptyState title="No approved response yet" />
+        )}
+      </CardBody>
+    </Card>
+  );
+}
+
+function AttachmentsCard({ attachments }) {
+  return (
+    <Card>
+      <CardHeader>
+        <h2 className="text-sm font-semibold text-foreground">Attachments</h2>
+      </CardHeader>
+      <CardBody>
+        {attachments.length === 0 ? (
+          <EmptyState icon={PaperclipIcon} title="No attachments" />
+        ) : (
+          <ul className="space-y-2">
+            {attachments.map((att) => (
+              <li
+                key={att.id}
+                className="flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm"
+              >
+                <PaperclipIcon className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+                <span className="flex-1 text-foreground">{att.name}</span>
+                <span className="text-xs text-muted-foreground">{att.sizeKb} KB</span>
+              </li>
+            ))}
+          </ul>
+        )}
+        <p className="mt-3 text-xs text-muted-foreground">
+          Whether attachments are carried through automatically is a proposed design, not yet confirmed with the client.
+        </p>
+      </CardBody>
+    </Card>
+  );
+}
+
+function DispatchStatus({ dispatched, isClosed, canDispatch, uncertain, lastError, running, onResolve, onResend, onRetry }) {
+  if (dispatched) {
+    return (
+      <div className="rounded-md border border-status-green-line bg-status-green-bg px-3 py-2 text-sm text-status-green-fg">
+        <p className="font-medium">Response sent automatically</p>
+        <p className="mt-0.5">
+          Sent {new Date(dispatched.timestamp).toLocaleString()} to{' '}
+          {dispatched.to.join(', ')}.
+        </p>
+        {isClosed && <p className="mt-0.5">Query closed.</p>}
+      </div>
+    );
+  }
+
+  if (canDispatch && uncertain) {
+    return (
+      <>
+        <p className="rounded-md border border-status-amber-line bg-status-amber-bg px-3 py-2 text-sm text-status-amber-fg">
+          The response may already have been sent — the mailbox never confirmed it.
+          Check the Sent folder before doing anything else. {lastError}
+        </p>
+        <Button className="w-full" disabled={running} onClick={() => onResolve('SENT')}>
+          It was sent — record it and close the case
+        </Button>
+        <Button variant="secondary" className="w-full" disabled={running} onClick={onResend}>
+          <SendIcon className="h-4 w-4" aria-hidden="true" />
+          It was not sent — send it
+        </Button>
+      </>
+    );
+  }
+
+  if (canDispatch) {
+    return (
+      <>
+        <p className="rounded-md border border-status-amber-line bg-status-amber-bg px-3 py-2 text-sm text-status-amber-fg">
+          The automatic dispatch did not complete. The response is approved and locked — retrying sends it without creating a second response.
+        </p>
+        <Button className="w-full" disabled={running} onClick={onRetry}>
+          <SendIcon className="h-4 w-4" aria-hidden="true" />
+          {running ? 'Sending…' : 'Retry sending response'}
+        </Button>
+      </>
+    );
+  }
+
+  return (
+    <p className="rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
+      The response is sent automatically when the Officer-in-Charge grants final approval. Nothing to do here.
+    </p>
+  );
+}
+
 export function DispatchDetailPage() {
   const paths = useRoutePaths();
-  const { queryId, query, latestVersion, messages, currentUser, can } = useQueryCase();
+  const { queryId, query, latestVersion, messages, currentUser, can, resolving } = useQueryCase();
   const dispatched = messages.find((m) => m.emailType === EMAIL_TYPE.OUTGOING_RESPONSE);
-  const { run, error, clearError } = useWorkflowAction();
+  const { run, running, error, clearError } = useWorkflowAction();
   const dispatchResponse = useWorkflowStore((state) => state.dispatchResponse);
+  const resolveOutboundEmail = useWorkflowStore((state) => state.resolveOutboundEmail);
 
-  if (!query) return <EmptyState title="Query not found" />;
+  const outbound = useWorkflowStore((state) =>
+    state.outboundEmails.find(
+      (row) => row.queryId === queryId && row.emailType === EMAIL_TYPE.OUTGOING_RESPONSE,
+    ),
+  );
+  const uncertain = outbound?.status === 'UNCERTAIN';
+
+  if (!query) return <EmptyState title={resolving ? 'Loading case…' : 'Query not found'} />;
 
   const canDispatch = can(WORKFLOW_ACTION.DISPATCH);
   const isClosed = query.workflowState === WORKFLOW_STATE.CLOSED;
@@ -40,52 +156,9 @@ export function DispatchDetailPage() {
       <ActionError message={error} onDismiss={clearError} />
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="space-y-6 lg:col-span-2">
-          <Card>
-            <CardHeader>
-              <h2 className="text-sm font-semibold text-foreground">Final response preview</h2>
-              {latestVersion && (
-                <p className="mt-0.5 text-xs text-muted-foreground">
-                  {latestVersion.version} — approved and locked
-                </p>
-              )}
-            </CardHeader>
-            <CardBody>
-              {latestVersion ? (
-                <pre className="rounded-md border border-border bg-muted/40 p-4 font-sans text-sm whitespace-pre-wrap text-foreground">
-                  {latestVersion.content}
-                </pre>
-              ) : (
-                <EmptyState title="No approved response yet" />
-              )}
-            </CardBody>
-          </Card>
+          <ResponsePreviewCard latestVersion={latestVersion} />
 
-          <Card>
-            <CardHeader>
-              <h2 className="text-sm font-semibold text-foreground">Attachments</h2>
-            </CardHeader>
-            <CardBody>
-              {query.attachments.length === 0 ? (
-                <EmptyState icon={PaperclipIcon} title="No attachments" />
-              ) : (
-                <ul className="space-y-2">
-                  {query.attachments.map((att) => (
-                    <li
-                      key={att.id}
-                      className="flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm"
-                    >
-                      <PaperclipIcon className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
-                      <span className="flex-1 text-foreground">{att.name}</span>
-                      <span className="text-xs text-muted-foreground">{att.sizeKb} KB</span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-              <p className="mt-3 text-xs text-muted-foreground">
-                Whether attachments are carried through automatically is a proposed design, not yet confirmed with the client.
-              </p>
-            </CardBody>
-          </Card>
+          <AttachmentsCard attachments={query.attachments} />
         </div>
 
         <div className="lg:col-span-1">
@@ -101,30 +174,32 @@ export function DispatchDetailPage() {
                 <p className="text-sm text-muted-foreground">{query.inquirer.email}</p>
               </div>
 
-              {dispatched ? (
-                <div className="rounded-md border border-status-green-line bg-status-green-bg px-3 py-2 text-sm text-status-green-fg">
-                  <p className="font-medium">Response sent automatically</p>
-                  <p className="mt-0.5">
-                    Sent {new Date(dispatched.timestamp).toLocaleString()} to{' '}
-                    {dispatched.to.join(', ')}.
-                  </p>
-                  {isClosed && <p className="mt-0.5">Query closed.</p>}
-                </div>
-              ) : canDispatch ? (
-                <>
-                  <p className="rounded-md border border-status-amber-line bg-status-amber-bg px-3 py-2 text-sm text-status-amber-fg">
-                    The automatic dispatch did not complete. The response is approved and locked — retrying sends it without creating a second response.
-                  </p>
-                  <Button className="w-full" onClick={() => run(() => dispatchResponse(queryId, currentUser))}>
-                    <SendIcon className="h-4 w-4" aria-hidden="true" />
-                    Retry sending response
-                  </Button>
-                </>
-              ) : (
-                <p className="rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
-                  The response is sent automatically when the Officer-in-Charge grants final approval. Nothing to do here.
-                </p>
-              )}
+              <DispatchStatus
+                dispatched={dispatched}
+                isClosed={isClosed}
+                canDispatch={canDispatch}
+                uncertain={uncertain}
+                lastError={outbound?.lastError}
+                running={running}
+                onResolve={(outcome) =>
+                  run(() =>
+                    resolveOutboundEmail(queryId, {
+                      emailType: EMAIL_TYPE.OUTGOING_RESPONSE,
+                      outcome,
+                    }),
+                  )
+                }
+                onResend={() =>
+                  run(async () => {
+                    await resolveOutboundEmail(queryId, {
+                      emailType: EMAIL_TYPE.OUTGOING_RESPONSE,
+                      outcome: 'NOT_SENT',
+                    });
+                    return dispatchResponse(queryId, currentUser);
+                  })
+                }
+                onRetry={() => run(() => dispatchResponse(queryId, currentUser))}
+              />
             </CardBody>
           </Card>
         </div>

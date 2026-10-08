@@ -1,5 +1,15 @@
 import { useCallback, useState } from "react";
 
+import { notify } from "@/services/notify";
+
+function reasonFor(caught) {
+  return (
+    caught?.response?.data?.error ||
+    caught?.message ||
+    String(caught)
+  );
+}
+
 export function useWorkflowAction() {
   const [error, setError] = useState(null);
   const [running, setRunning] = useState(false);
@@ -11,7 +21,9 @@ export function useWorkflowAction() {
       await action();
       return true;
     } catch (caught) {
-      setError(caught?.message || String(caught));
+      const message = reasonFor(caught);
+      setError(message);
+      notify.error("Action could not be completed", message);
       return false;
     } finally {
       setRunning(false);

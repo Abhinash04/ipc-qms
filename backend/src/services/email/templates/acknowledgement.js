@@ -1,26 +1,23 @@
+import { IPC_GREETING, IPC_SIGNATURE, referenceSentence, salutationFor } from './signature.js';
+
 const SUBJECT = 'Acknowledgement of Query Received – Indian Pharmacopoeia Commission';
 
-const BODY = `Dear Sir/Madam,
+const AUTO_NOTICE = 'This is an auto-generated email. Please do not reply to this message.';
 
-Greetings from the Indian Pharmacopoeia Commission (IPC)!
+function acknowledgementBody({ inquirerName = '', receivedAt = null } = {}) {
+  return [
+    `${salutationFor(inquirerName)}
+${IPC_GREETING}`,
+    `${referenceSentence(receivedAt)} This is to acknowledge that your query has been duly received and forwarded to the concerned division for examination.`,
+    'The matter is currently under consideration, and an appropriate response will be provided to you at the earliest. We appreciate your patience and understanding.',
+    IPC_SIGNATURE,
+    AUTO_NOTICE,
+  ].join('\n\n');
+}
 
-This is to acknowledge that we have received your email/query. Your query has been duly noted and forwarded to the concerned division for review.
+const BODY = acknowledgementBody();
 
-The matter is currently under consideration, and we will provide you with an appropriate response as soon as possible.
-
-We appreciate your patience and understanding.
-
-Thank you.
-
-Regards,
-AR&D Division
-Indian Pharmacopoeia Commission (IPC)
-Ministry of Health & Family Welfare
-Government of India
-
-This is an auto-generated email. Please do not reply to this message.`;
-
-function buildAcknowledgement({ to, fromEmail, fromName, queryId }) {
+function buildAcknowledgement({ to, fromEmail, fromName, queryId, inquirerName, receivedAt }) {
   if (!to) throw new Error('buildAcknowledgement: "to" is required');
   if (!fromEmail) throw new Error('buildAcknowledgement: "fromEmail" is required');
 
@@ -28,8 +25,13 @@ function buildAcknowledgement({ to, fromEmail, fromName, queryId }) {
     from: fromName ? `${fromName} <${fromEmail}>` : fromEmail,
     to: [to],
     subject: queryId ? `${SUBJECT} [${queryId}]` : SUBJECT,
-    body: BODY,
+    body: acknowledgementBody({ inquirerName, receivedAt }),
   };
 }
 
-export { buildAcknowledgement, SUBJECT as ACKNOWLEDGEMENT_SUBJECT, BODY as ACKNOWLEDGEMENT_BODY };
+export {
+  buildAcknowledgement,
+  acknowledgementBody,
+  SUBJECT as ACKNOWLEDGEMENT_SUBJECT,
+  BODY as ACKNOWLEDGEMENT_BODY,
+};

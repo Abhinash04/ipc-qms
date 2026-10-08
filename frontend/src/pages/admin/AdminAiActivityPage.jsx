@@ -1,0 +1,142 @@
+import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { Bot, Sparkles, PenLine, AlertTriangle } from 'lucide-react';
+
+import { Breadcrumb } from '@/components/common/Breadcrumb';
+import { PageHeader } from '@/components/common/PageHeader';
+import { StatTile } from '@/components/common/StatTile';
+import { Skeleton } from '@/components/ui/skeleton';
+import { AuditTable } from '@/components/admin/AuditTable';
+import { CaseViewSheet } from '@/components/admin/CaseViewSheet';
+import { StatusDonut } from '@/components/admin/charts';
+import { fetchAuditEvents, fetchAuditSummary } from '@/services/api/adminService';
+import { useRoutePaths } from '@/hooks/useRoutePaths';
+
+export function AdminAiActivityPage() {
+  const paths = useRoutePaths();
+  // A case opens read-only here; the audit pages never take the admin into the query workflow.
+  const [viewedCase, setViewedCase] = useState(null);
+
+  const summary = useQuery({ queryKey: ['audit', 'summary'], queryFn: () => fetchAuditSummary(), retry: false });
+  const events = useQuery({
+    queryKey: ['audit', 'ai'],
+    queryFn: () => fetchAuditEvents({ actorType: 'agent', limit: 100 }),
+    retry: false,
+  });
+
+  const byAction = summary.data?.overall?.byAction || {};
+  const aiEvents = (events.data?.events || []).filter((event) => event.action.startsWith('AI_'));
+
+  const withMeta = aiEvents.filter((event) => event.aiMetadata);
+  const fellBack = withMeta.filter((event) => event.aiMetadata.fallback).length;
+  const answered = withMeta.length - fellBack;
+  const failed = aiEvents.filter((event) => event.result === 'failure').length;
+
+  const latencies = withMeta
+    .map((event) => Number(event.aiMetadata.latencyMs))
+    .filter((value) => Number.isFinite(value));
+  const medianLatency = latencies.length
+    ? [...latencies].sort((a, b) => a - b)[Math.floor(latencies.length / 2)]
+    : null;
+
+  const tiles = [
+    {
+      label: 'Summaries generated',
+      value: byAction.AI_SUMMARY_GENERATED ?? 0,
+      icon: Sparkles,
+      tone: 'blue',
+    },
+    {
+      label: 'Drafts generated',
+      value: byAction.AI_DRAFT_GENERATED ?? 0,
+      icon: PenLine,
+      tone: 'violet',
+    },
+    {
+      label: 'Recommendations',
+      value: byAction.AI_RECOMMENDATION_GENERATED ?? 0,
+      icon: Bot,
+      tone: 'emerald',
+    },
+    {
+      label: 'Failed calls',
+      value: failed,
+      icon: AlertTriangle,
+      tone: 'rose',
+    },
+  ];
+
+  const panel = 'rounded-2xl border border-transparent bg-card p-5 shadow-card';
+
+  return (
+    <div className="space-y-5">
+      <Breadcrumb
+        items={[
+          { label: 'Dashboard', path: paths.DASHBOARD },
+          { label: 'Administration', path: paths.ADMINISTRATION },
+          { label: 'AI Agent' },
+        ]}
+      />
+      <PageHeader
+        title="AI Agent"
+        purpose="What the agent produced, and whether the model answered or the fallback was used."
+      />
+
+      {summary.isLoading ? (
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Skeleton key={i} className="h-28 w-full rounded-2xl" />
+          ))}
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {tiles.map((tile) => (
+            <StatTile key={tile.label} {...tile} />
+          ))}
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[380px_minmax(0,1fr)]">
+        <section className={panel} aria-labelledby="model-health">
+          <h2 id="model-health" className="mb-3 font-heading text-[17px] font-bold text-slate-900">
+            Model health
+          </h2>
+          <StatusDonut
+            title="Answered by the model vs fallback"
+            emptyText="No AI calls recorded yet"
+            data={[
+              { label: 'Model answered', value: answered },
+              { label: 'Fell back', value: fellBack },
+            ]}
+          />
+          {medianLatency !== null && (
+            <p className="m-0 mt-3 border-t border-slate-100 pt-3 text-[12.5px] text-slate-600">
+              Median response time{' '}
+              <span className="font-bold tabular-nums text-slate-900">{medianLatency} ms</span>
+            </p>
+          )}
+          {fellBack > 0 && (
+            <p className="m-0 mt-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] font-semibold text-amber-900">
+              {fellBack} call{fellBack === 1 ? '' : 's'} used deterministic fallback text. Users still got a
+              response — it was not written by the model.
+            </p>
+          )}
+        </section>
+
+        <section className={panel} aria-labelledby="ai-events">
+          <h2 id="ai-events" className="mb-3 font-heading text-[17px] font-bold text-slate-900">
+            Agent activity
+          </h2>
+          <AuditTable
+            events={aiEvents}
+            loading={events.isLoading}
+            error={events.isError ? 'The audit API could not be reached.' : null}
+            onOpenQuery={setViewedCase}
+            emptyTitle="No AI activity recorded yet"
+          />
+          <CaseViewSheet queryId={viewedCase} onClose={() => setViewedCase(null)} />
+        </section>
+      </div>
+    </div>
+  );
+}

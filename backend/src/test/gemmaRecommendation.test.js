@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import request from 'supertest';
+import { AUTH } from './helpers/auth.js';
 import app from '../app.js';
 import { recommendOfficial } from '../services/ai/gemmaService.js';
 
@@ -18,14 +19,14 @@ describe('Gemma AI Recommendation System Tests', () => {
     const top1 = recommendations[0];
     expect(top1).toBeDefined();
     expect(top1.rank).toBe(1);
-    expect(top1.userId).toBe('USR-0004'); // Neha Singh (Dissolution & Assay expert)
+    expect(top1.userId).toBe('USR-0004');
     expect(top1.name).toBe('Neha Singh');
     expect(top1.matchPercent).toBeGreaterThanOrEqual(70);
   });
 
   it('POST /api/v1/ai/recommend endpoint should return Top 3 recommendations', async () => {
     const response = await request(app)
-      .post('/api/v1/ai/recommend')
+      .post('/api/v1/ai/recommend').set(AUTH)
       .send({
         subject: 'Microbiology Sterility Test Query',
         body: 'Please provide guidelines for bacterial endotoxin and sterility limits.',
@@ -38,6 +39,6 @@ describe('Gemma AI Recommendation System Tests', () => {
     expect(response.body.recommendations.length).toBeGreaterThan(0);
 
     const top1 = response.body.recommendations[0];
-    expect(top1.userId).toBe('USR-0011'); // Arjun Nair (Microbiology & Sterility expert)
+    expect(top1.userId).toBe('USR-0011');
   });
 });

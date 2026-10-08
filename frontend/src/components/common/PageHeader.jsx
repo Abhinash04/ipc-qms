@@ -26,7 +26,7 @@ function renderBalancedAnimatedEmoji(emoji) {
 
   return (
     <span
-      className={`emoji-animated ${animClass} inline-flex items-center shrink-0 text-2xl sm:text-3xl leading-none select-none`}
+      className={`emoji-animated ${animClass} inline-flex shrink-0 items-center text-2xl leading-none select-none`}
     >
       {emoji}
     </span>
@@ -39,48 +39,40 @@ export function PageHeader({
   purpose,
   actions,
   icon: Icon,
-  iconClassName = "bg-gradient-to-tr from-blue-600 to-indigo-600 text-white border-transparent shadow-blue-500/25",
+  iconClassName = "bg-primary-50 text-primary",
 }) {
   const greetingData = extractEmoji(greeting);
   const titleData = extractEmoji(title);
   const activeEmoji = titleData.emoji || greetingData.emoji;
 
   return (
-    <div className="glass-panel aurora-panel bento-card mb-3.5 flex flex-col gap-2 rounded-2xl px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-5 sm:py-4 lg:px-6 lg:py-5 border border-blue-100/80 bg-[linear-gradient(135deg,#eff6ff_0%,#ffffff_50%,#f5f3ff_100%)] shadow-[0_2px_12px_rgba(37,99,235,0.05)] relative overflow-hidden">
-      <div className="pointer-events-none absolute -right-10 -top-10 h-28 w-28 rounded-full bg-indigo-400/10 blur-2xl" />
-      <div className="pointer-events-none absolute -left-10 -bottom-10 h-28 w-28 rounded-full bg-blue-400/10 blur-2xl" />
-
-      <div className="relative z-10 flex items-center gap-3">
+    <div className="relative mb-5 flex flex-col gap-3 overflow-hidden rounded-2xl border border-transparent bg-surface px-5 py-4 shadow-card sm:flex-row sm:items-center sm:justify-between sm:px-6 sm:py-5">
+      <span aria-hidden="true" className="absolute inset-y-0 start-0 w-1 bg-primary" />
+      <div className="flex items-center gap-3.5">
         {Icon && (
           <div
-            className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border shadow-xs ${iconClassName}`}
+            className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${iconClassName}`}
           >
-            <Icon className="h-4.5 w-4.5 text-white" strokeWidth={2.2} />
+            <Icon className="h-5 w-5" strokeWidth={2.2} />
           </div>
         )}
-        <div>
+        <div className="min-w-0">
           {greetingData.text && (
-            <div className="text-[10px] sm:text-[10.5px] font-black text-blue-600 tracking-wider uppercase leading-none mb-1 sm:mb-1.5">
+            <div className="mb-1 text-[11.5px] font-semibold uppercase tracking-wider text-primary">
               {greetingData.text}
             </div>
           )}
-          <h1 className="m-0 font-heading text-xl sm:text-2xl lg:text-[29px] font-black tracking-tight leading-snug flex items-center gap-1.5 flex-wrap">
+          <h1 className="m-0 flex flex-wrap items-center gap-2 font-heading text-[22px] font-bold leading-tight tracking-tight text-ink sm:text-[26px]">
             {renderBalancedAnimatedEmoji(activeEmoji)}
-            <span className="bg-[linear-gradient(135deg,#1e3a8a_0%,#2563eb_45%,#4f46e5_100%)] bg-clip-text text-transparent inline-block pb-1.5 pt-0.5">
-              {titleData.text}
-            </span>
+            <span>{titleData.text}</span>
           </h1>
           {purpose && (
-            <p className="mt-0.5 text-[11.5px] font-medium text-slate-500 leading-normal">
-              {purpose}
-            </p>
+            <p className="mt-1 text-[13px] leading-normal text-ink-muted">{purpose}</p>
           )}
         </div>
       </div>
       {actions && (
-        <div className="relative z-10 flex shrink-0 items-center gap-2">
-          {actions}
-        </div>
+        <div className="relative flex shrink-0 flex-wrap items-center gap-2">{actions}</div>
       )}
     </div>
   );

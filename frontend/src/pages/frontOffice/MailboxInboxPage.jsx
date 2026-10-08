@@ -1,77 +1,1147 @@
-import { useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
+import {
+  useQuery,
+  useMutation,
+  useQueryClient,
+  keepPreviousData,
+} from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import {
   MailIcon,
   RefreshCwIcon,
   ShieldAlert,
+  ShieldCheck,
+  Clock,
   CheckCircle2,
   ArrowRight,
   Trash2Icon,
+  Check,
   X,
+  Ban,
+  PaperclipIcon,
+  Search,
+  CloudDownload,
 } from "lucide-react";
 
 import { Breadcrumb } from "@/components/common/Breadcrumb";
 import { PageHeader } from "@/components/common/PageHeader";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Label } from "@/components/ui/label";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Tooltip,
   TooltipProvider,
   TooltipTrigger,
   TooltipContent,
 } from "@/components/ui/tooltip";
-import { useMailboxIngestion } from "@/hooks/useMailboxIngestion";
+import { Button } from "@/components/ui/button";
+import { MailCategoryBadge } from "@/components/email/MailCategoryBadge";
+import { ALL_CATEGORIES, MailCategoryCards } from "@/components/email/MailCategoryCards";
+import { MailBucketTabs } from "@/components/email/MailBucketTabs";
+import { AutoReplyBadge } from "@/components/email/AutoReplyBadge";
+import { AutoReplyConfidence } from "@/components/email/AutoReplyConfidence";
+import { AUTO_REPLY_STATUS, MAIL_BUCKETS } from "@/constants/mailCategories";
+import {
+  useMailboxIngestion,
+  notifyMailboxCheck,
+} from "@/hooks/useMailboxIngestion";
 import { useRoutePaths } from "@/hooks/useRoutePaths";
 import { useWorkflowStore } from "@/store/useWorkflowStore";
 import {
   fetchMailboxMessages,
+  fetchMailboxDecisions,
   deleteMailboxMessage,
+  rescueMailboxMessage,
+  setMailboxMessageCategory,
+  syncMailbox,
 } from "@/services/api/mailboxService";
+import { notify } from "@/services/notify";
+import {
+  parseSender,
+  formatReceived,
+  toSnippet,
+} from "@/utils/mailboxFormat";
 import { buildPath } from "@/constants/routePaths";
 import { useAuthStore } from "@/store/useAuthStore";
 import { ROLE_SLUG } from "@/constants/permissions";
+import { MAIL_CATEGORY_META } from "@/constants/mailCategories";
+import { cn } from "@/utils/cn";
+import { isObserver } from "@/constants/workflowRules";
 
 const AUTO_REFRESH_MS = 15000;
+const SYNC_POLL_MS = 3000;
+const PAGE_SIZE = 50;
+const SEARCH_DEBOUNCE_MS = 300;
 
-export function MailboxInboxPage() {
-  const paths = useRoutePaths();
-  const currentUser = useAuthStore((state) => state.currentUser);
-  const queries = useWorkflowStore((state) => state.queries);
-  const emailMessages = useWorkflowStore((state) => state.emailMessages);
-  const { running, error, lastResult, ingestNow } = useMailboxIngestion();
+// The purge deletes only this app's copy of a mail; the original stays in the mailbox it arrived in.
+function describePurge(purgesAt, now = Date.now()) {
+  if (!purgesAt) return null;
+  const at = Date.parse(purgesAt);
+  if (Number.isNaN(at)) return null;
+  const hours = Math.round((at - now) / 3600000);
+  if (hours <= 0) return { label: "Removed from app soon", when: "shortly" };
+  if (hours < 48) return { label: `Removed from app in ${hours}h`, when: `in about ${hours} hour${hours === 1 ? "" : "s"}` };
+  const days = Math.round(hours / 24);
+  return { label: `Removed from app in ${days}d`, when: `in about ${days} days` };
+}
 
-  const [autoRefresh, setAutoRefresh] = useState(false);
-  const [confirmingId, setConfirmingId] = useState(null);
+function useDebouncedValue(value, ms) {
+  const [debounced, setDebounced] = useState(value);
 
-  const queryClient = useQueryClient();
+  useEffect(() => {
+    if (value === debounced) return undefined;
+    const timer = setTimeout(() => setDebounced(value), ms);
+    return () => clearTimeout(timer);
+  }, [value, debounced, ms]);
 
-  const inbox = useQuery({
-    queryKey: ["mailbox", "all"],
-    queryFn: () => fetchMailboxMessages({ unreadOnly: false }),
-    retry: false,
-    refetchInterval: autoRefresh ? AUTO_REFRESH_MS : false,
+  return debounced;
+}
+
+// The header and every row share this one template, so the columns line up.
+// Columns: S.No · Sender · Subject & Content · Classification · Received On · Query Case · Actions.
+// It switches on the list's own width (a container query), so a collapsed sidebar
+// counts. Fixed columns grow to their maximum first; whatever is left goes to the subject.
+const ROW_GRID =
+  "@5xl:grid-cols-[44px_minmax(168px,208px)_minmax(200px,1fr)_minmax(268px,296px)_112px_minmax(152px,176px)_152px]";
+// The columns' minimum widths added up. A narrower list scrolls sideways instead of squeezing them.
+const ROW_MIN_WIDTH = "@5xl:min-w-[1210px]";
+const ROW_PADDING = "@5xl:pl-5 @5xl:pr-4";
+
+// Every chip in the Classification column has the same height, radius, type and icon size.
+const TAG_CHIP = "h-6 gap-1 rounded-lg px-2 py-0 text-[11px] font-bold [&>svg]:size-3.5!";
+
+function describeMailboxCheck(result) {
+  const waiting = result.fetched || 0;
+  if (waiting === 0) return "No new mail";
+  return `${waiting} message${waiting === 1 ? "" : "s"} awaiting validation`;
+}
+
+function describeAccept(result, message) {
+  const sender = parseSender(message.from).email || message.from;
+  const done = [];
+  const failed = [];
+
+  if (result.aiSummaryStatus === "GENERATED") done.push("AI summary generated");
+  else if (result.aiSummaryStatus === "FALLBACK") done.push("summary produced offline");
+  else if (result.aiSummaryStatus === "FAILED") failed.push("no AI summary");
+
+  const ackUnconfirmed = (result.errors || []).some(
+    (entry) => entry.step === "acknowledgement" && entry.unconfirmed,
+  );
+  const ackError = (result.errors || []).find((entry) => entry.step === "acknowledgement")?.error;
+  const reason = ackError ? ` Acknowledgement: ${ackError}` : "";
+
+  if (result.acknowledged) done.push(`acknowledgement sent to ${sender}`);
+  else failed.push(ackUnconfirmed ? "acknowledgement may already have been sent" : "acknowledgement not sent");
+
+  if (result.autoReply) {
+    // An automatic-reply case is answered and closed, never forwarded.
+    if (result.autoReply.sent) done.push(`automatic reply sent to ${sender}`);
+    else failed.push(`automatic reply not sent${result.autoReply.error ? `: ${result.autoReply.error}` : ""} — retry it from the mail`);
+  } else {
+    (result.forwarded ? done : failed).push(
+      result.forwarded
+        ? "forwarded to the Officer-in-Charge"
+        : "not forwarded to the Officer-in-Charge",
+    );
+  }
+
+  const sentence = [...done, ...failed].join(" · ");
+  if (!failed.length) return `${sentence}.`;
+
+  return ackUnconfirmed
+    ? `${sentence}. The case is saved — check the NICeMail Sent folder before retrying, or ${sender} may receive the acknowledgement twice.${reason}`
+    : `${sentence}. The case is saved — retry from the case page.${reason}`;
+}
+
+function describeEarlierDecision(decision) {
+  if (decision?.decision === "ACCEPTED") {
+    return `It was already accepted${decision.queryId ? ` as ${decision.queryId}` : ""}. Nothing was changed.`;
+  }
+  return "It was already rejected. Nothing was changed.";
+}
+
+function MailboxSyncNotice({ sync }) {
+  const since = sync.since ? new Date(sync.since).toLocaleTimeString() : null;
+
+  return (
+    <div
+      role="alert"
+      className="rounded-2xl border border-amber-200 bg-amber-50/90 p-4.5 text-slate-700 shadow-sm flex items-start gap-3.5"
+    >
+      <ShieldAlert className="h-6 w-6 text-amber-600 shrink-0 mt-0.5" />
+      <div>
+        <p className="font-bold text-[14px] text-amber-900">
+          The mailbox could not be read — this list may be out of date
+        </p>
+        <p className="mt-1 text-[12.5px] font-medium text-amber-800 leading-relaxed">
+          {sync.error || "The last mailbox sync failed."}
+          {sync.stage ? ` (stage: ${sync.stage})` : ""}
+          {since ? ` Failing since ${since}` : ""}
+          {sync.failures > 1 ? `, ${sync.failures} attempts` : ""}. Checks continue
+          automatically; for NICeMail, confirm the dedicated Chrome is running and
+          signed in — see docs/NIC_BROWSER_AGENT.md.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function MailboxOfflineNotice({ reason }) {
+  return (
+    <div
+      role="alert"
+      className="rounded-2xl border border-rose-200 bg-rose-50/90 p-4.5 text-slate-700 shadow-sm flex items-start gap-3.5"
+    >
+      <ShieldAlert className="h-6 w-6 text-rose-600 shrink-0 mt-0.5" />
+      <div>
+        <p className="font-bold text-[14px] text-rose-900">
+          Mailbox server offline / unreachable
+        </p>
+        <p className="mt-1 text-[12.5px] font-medium text-rose-700 leading-relaxed">
+          {reason ||
+            'Could not connect to the backend mailbox service. Please verify backend is running (`npm start` in `/backend`).'}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function MailboxCheckSummary({ result }) {
+  return (
+    <div className="rounded-xl bg-surface-muted border border-line p-3.5 text-[13px] font-semibold text-ink-soft flex items-center gap-2">
+      <CheckCircle2 className="h-4.5 w-4.5 text-emerald-600 shrink-0" />
+      <span>{describeMailboxCheck(result)}</span>
+    </div>
+  );
+}
+
+function MailboxViewerNotice() {
+  return (
+    <div role="status" className="rounded-xl bg-surface-muted border border-line p-3.5 text-[13px] font-semibold text-ink-soft flex items-center gap-2">
+      <CloudDownload className="h-4.5 w-4.5 text-slate-500 shrink-0" aria-hidden="true" />
+      <span>NICeMail is read by the mailbox host, not by this backend. New mail appears here once the host has synced it.</span>
+    </div>
+  );
+}
+
+function InboxActions({
+  running,
+  onCheck,
+  canSync,
+  syncing,
+  onSync,
+}) {
+  return (
+    <div className="flex items-center gap-3">
+      <button
+        type="button"
+        onClick={onCheck}
+        disabled={running}
+        className="flex items-center gap-2 rounded-2xl bg-linear-to-r from-primary to-primary-700 hover:from-primary-600 hover:to-primary-700 text-white px-5 py-2.5 text-[13.5px] font-bold shadow-sm active:scale-95 transition-transform cursor-pointer disabled:opacity-60"
+      >
+        <RefreshCwIcon className={`h-4 w-4 ${running ? "animate-spin" : ""}`} />
+        <span>{running ? "Checking Mailbox…" : "Check IPC Mailbox"}</span>
+      </button>
+
+      {canSync && (
+        <button
+          type="button"
+          onClick={onSync}
+          disabled={syncing}
+          className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-card hover:bg-slate-50 text-slate-700 px-4 py-2.5 text-[13.5px] font-bold shadow-sm active:scale-95 transition-transform cursor-pointer disabled:opacity-60"
+        >
+          <CloudDownload
+            className={`h-4 w-4 ${syncing ? "animate-pulse" : ""}`}
+            aria-hidden="true"
+          />
+          <span>{syncing ? "Syncing…" : "Sync now"}</span>
+        </button>
+      )}
+    </div>
+  );
+}
+
+function InboxToolbar({ search, onSearchChange }) {
+  return (
+    <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-5">
+      <form role="search" onSubmit={(e) => e.preventDefault()} className="relative flex-1">
+        <label htmlFor="mailbox-search" className="sr-only">
+          Search mail
+        </label>
+        <Search
+          className="absolute left-4 top-1/2 -translate-y-1/2 h-4.5 w-4.5 text-slate-400"
+          aria-hidden="true"
+        />
+        <input
+          id="mailbox-search"
+          type="search"
+          maxLength={200}
+          value={search}
+          onChange={(e) => onSearchChange(e.target.value)}
+          placeholder="Search sender, subject or message text…"
+          className="w-full rounded-2xl bg-slate-50/70 border border-slate-200/70 pl-11 pr-4 py-3 text-[13.5px] font-medium text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors"
+        />
+      </form>
+
+    </div>
+  );
+}
+
+function InboxSkeleton() {
+  return (
+    <div role="status" aria-label="Loading mail" className="space-y-3">
+      {[0, 1, 2].map((n) => (
+        <Skeleton key={n} className="h-19 w-full rounded-2xl" />
+      ))}
+    </div>
+  );
+}
+
+function NoMatchingMail() {
+  return (
+    <div className="py-12 px-4 text-center rounded-2xl border border-dashed border-slate-200/90 bg-slate-50/50">
+      <h3 className="font-heading text-[16px] font-semibold text-slate-800 m-0">
+        No messages match
+      </h3>
+      <p className="text-[13px] font-medium text-slate-400 m-0 mt-1">
+        Try another search, or show all mail.
+      </p>
+    </div>
+  );
+}
+
+function InboxPager({ offset, shown, total, onPage }) {
+  if (!(total > PAGE_SIZE || offset > 0)) return null;
+
+  return (
+    <nav
+      aria-label="Mailbox pages"
+      className="mt-5 flex flex-wrap items-center justify-between gap-3"
+    >
+      <p className="m-0 text-[12.5px] font-bold text-slate-500">
+        {shown
+          ? `Showing ${offset + 1}–${offset + shown} of ${total}`
+          : "No messages on this page"}
+      </p>
+      <div className="flex items-center gap-2">
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={offset === 0}
+          onClick={() => onPage(Math.max(0, offset - PAGE_SIZE))}
+        >
+          Previous
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={offset + PAGE_SIZE >= total}
+          onClick={() => onPage(offset + PAGE_SIZE)}
+        >
+          Next
+        </Button>
+      </div>
+    </nav>
+  );
+}
+
+function EmptyInbox() {
+  return (
+    <div className="py-12 px-4 text-center rounded-2xl border border-dashed border-slate-200/90 bg-slate-50/50 flex flex-col items-center justify-center">
+      <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-primary-50 text-primary border border-primary-100/60 shadow-2xs mb-3">
+        <MailIcon className="h-7 w-7" strokeWidth={1.8} />
+      </div>
+      <h3 className="font-heading text-[16px] font-semibold text-slate-800 m-0">
+        No Mail in the IPC Mailbox
+      </h3>
+      <p className="text-[13px] font-medium text-slate-400 m-0 mt-1 max-w-sm">
+        Enquiries sent to the official mailbox appear here for you to accept or
+        reject. Nothing becomes a Query Case until you accept it.
+      </p>
+    </div>
+  );
+}
+
+const COLUMN_HEADERS = [
+  { label: "S.No.", align: "text-center" },
+  { label: "From / Sender" },
+  { label: "Subject & Content" },
+  { label: "Classification" },
+  { label: "Received On" },
+  { label: "Query Case" },
+  { label: "Actions", align: "text-right" },
+];
+
+function MailboxColumnHeader() {
+  return (
+    <div
+      className={`hidden @5xl:grid ${ROW_GRID} ${ROW_PADDING} gap-x-3 items-center py-3.5 bg-slate-50/80 border border-slate-100 rounded-2xl text-[11px] font-semibold text-slate-400 tracking-wider uppercase mb-3`}
+    >
+      {COLUMN_HEADERS.map(({ label, align }) => (
+        <span key={label} className={cn("truncate", align)}>
+          {label}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function QueryCaseCell({ known, queryId, detailPath, rejected }) {
+  if (known && detailPath) {
+    return (
+      <Link
+        to={detailPath}
+        className="inline-flex h-8 items-center gap-1.5 rounded-xl bg-linear-to-r from-primary to-primary-700 hover:from-primary-600 hover:to-primary-700 text-white px-3.5 text-[12px] font-bold tabular-nums shadow-sm transition-transform hover:scale-105"
+      >
+        <span>{queryId}</span>
+        <ArrowRight className="h-3.5 w-3.5" />
+      </Link>
+    );
+  }
+
+  if (rejected) {
+    return (
+      <span className="inline-flex h-8 items-center gap-1.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200 px-3.5 text-[11.5px] font-semibold shadow-2xs">
+        <Ban className="h-3 w-3 shrink-0" aria-hidden="true" />
+        Rejected
+      </span>
+    );
+  }
+
+  return (
+    <span className="inline-flex h-8 items-center gap-1.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200/80 px-3.5 text-[11.5px] font-semibold whitespace-nowrap shadow-2xs">
+      <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse shrink-0" />
+      Awaiting validation
+    </span>
+  );
+}
+
+/**
+ * Line 1: the category, then what has happened to the mail (auto reply, attachments, purge).
+ * Line 2: the AI confidence. That chip is too wide to share a line, so it gets its own
+ * and starts at the same place on every row.
+ */
+function MailboxRowTags({ message, known, junk, purge, onCorrectCategory, correctingCategory, caseHref, messageHref }) {
+  return (
+    <div className="flex min-w-0 flex-col items-start gap-1.5">
+      <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+        <MailCategoryBadge
+          triage={message.triage}
+          onCorrect={onCorrectCategory}
+          correcting={correctingCategory}
+          caseHref={caseHref}
+          messageHref={messageHref}
+          className={TAG_CHIP}
+        />
+        {/* "Auto Reply" already shows in the confidence chip; this adds sending, failed or sent. */}
+        {message.autoReply?.status !== AUTO_REPLY_STATUS.SUGGESTED && (
+          <AutoReplyBadge autoReply={message.autoReply} className={TAG_CHIP} />
+        )}
+        {message.attachments?.length > 0 && (
+          <span
+            title={`${message.attachments.length} attachment${message.attachments.length === 1 ? "" : "s"}`}
+            className={cn("inline-flex items-center border border-slate-200 bg-slate-100 text-slate-500", TAG_CHIP)}
+          >
+            <PaperclipIcon aria-hidden="true" />
+            {message.attachments.length}
+          </span>
+        )}
+        {purge && !known ? (
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span
+                  tabIndex={0}
+                  className={cn(
+                    "inline-flex cursor-help items-center whitespace-nowrap border focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary",
+                    TAG_CHIP,
+                    junk ? "border-amber-200 bg-amber-100 text-amber-700" : "border-slate-200 bg-slate-100 text-slate-500",
+                  )}
+                >
+                  <Clock aria-hidden="true" />
+                  {purge.label}
+                </span>
+              </TooltipTrigger>
+              <TooltipContent className="max-w-70 wrap-break-word">
+                {junk ? "Marked as junk, so this" : "This"} copy will be removed from this app {purge.when}. The
+                original email is not deleted — it stays in the IPC mailbox.
+                {junk ? " Choose “Not junk” to keep it here." : ""}
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        ) : null}
+      </div>
+      <AutoReplyConfidence message={message} className={TAG_CHIP} />
+    </div>
+  );
+}
+
+function RowValidationControls({ message, decision, junk, pending, confirming, onAsk, onCancel, onConfirm, onRescue }) {
+  if (decision) return null;
+
+  if (confirming) {
+    const accepting = confirming === "accept";
+    return (
+      <div className="flex flex-col items-end gap-1.5">
+        <span className="hidden @5xl:block text-right text-[11px] leading-tight font-semibold text-slate-500 uppercase tracking-wider">
+          {accepting
+            ? message.autoReply?.status === AUTO_REPLY_STATUS.SUGGESTED
+              ? "Register & auto-reply?"
+              : "Register & forward?"
+            : "Reject?"}
+        </span>
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={pending}
+            className={`rounded-xl px-3 py-1.5 text-[11.5px] font-semibold text-white shadow-sm transition-[background-color,transform] active:scale-95 cursor-pointer disabled:opacity-60 ${
+              accepting
+                ? "bg-emerald-600 hover:bg-emerald-600/90"
+                : "bg-danger hover:bg-danger/90"
+            }`}
+          >
+            {pending ? "Working…" : "Yes"}
+          </button>
+          <button
+            type="button"
+            aria-label={accepting ? "Cancel accept" : "Cancel reject"}
+            onClick={onCancel}
+            disabled={pending}
+            className="rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-500 p-1.5 transition-colors cursor-pointer disabled:opacity-60"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex items-center gap-2">
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label={`Accept message ${message.mailboxMessageId}`}
+              onClick={() => onAsk("accept")}
+              className="border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 hover:text-emerald-800"
+            >
+              <Check className="h-4 w-4" aria-hidden="true" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent className="max-w-70 wrap-break-word">
+            Register this as an IPC query case, acknowledge the sender and
+            forward it to the Officer-in-Charge.
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label={`Reject message ${message.mailboxMessageId}`}
+              onClick={() => onAsk("reject")}
+              className="border border-slate-200 bg-slate-50 text-slate-500 hover:bg-slate-100 hover:text-slate-700"
+            >
+              <X className="h-4 w-4" aria-hidden="true" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent className="max-w-70 wrap-break-word">
+            Not an IPC query. No case is created and no acknowledgement is sent.
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+
+      {junk ? (
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                aria-label={`Rescue message ${message.mailboxMessageId}`}
+                onClick={onRescue}
+                disabled={pending}
+                className="border border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100 hover:text-amber-800"
+              >
+                <ShieldCheck className="h-4 w-4" aria-hidden="true" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent className="max-w-70 wrap-break-word">
+              Not junk. Keeps it in this app instead of removing it, without opening
+              a Query Case the way accepting would.
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      ) : null}
+    </div>
+  );
+}
+
+function RowDeleteControls({
+  message,
+  known,
+  queryId,
+  confirming,
+  deleting,
+  onAskConfirm,
+  onCancel,
+  onDelete,
+}) {
+  if (confirming) {
+    return (
+      <div className="flex flex-col items-end gap-1.5">
+        <span className="hidden @5xl:block text-right text-[11px] leading-tight font-semibold text-slate-500 uppercase tracking-wider">
+          Delete?
+        </span>
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={onDelete}
+            disabled={deleting}
+            className="rounded-xl bg-rose-600 hover:bg-rose-600/90 text-white px-3 py-1.5 text-[11.5px] font-semibold shadow-sm transition-[background-color,transform] active:scale-95 cursor-pointer disabled:opacity-60"
+          >
+            {deleting ? "Deleting…" : "Yes"}
+          </button>
+          <button
+            type="button"
+            aria-label="Cancel delete"
+            onClick={onCancel}
+            disabled={deleting}
+            className="rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-500 p-1.5 transition-colors cursor-pointer disabled:opacity-60"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            aria-label={`Delete message ${message.mailboxMessageId}`}
+            onClick={onAskConfirm}
+            className="border border-rose-200 bg-rose-50 text-rose-600 hover:bg-rose-100 hover:text-rose-700"
+          >
+            <Trash2Icon className="h-4 w-4" aria-hidden="true" />
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent className="max-w-70 wrap-break-word">
+          {known
+            ? `Removes the mailbox copy only. Query Case ${queryId} will remain.`
+            : "Remove this message from the IPC mailbox."}
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
+
+const railColour = (known, rejected) => {
+  if (known) return "bg-emerald-500";
+  if (rejected) return "bg-slate-400";
+  return "bg-amber-500";
+};
+
+const decisionFromRow = (message) => {
+  const decision = message.linkedCase ? "ACCEPTED" : message.status;
+  return decision === "ACCEPTED" || decision === "REJECTED"
+    ? { mailboxMessageId: message.mailboxMessageId, decision, queryId: message.linkedCase?.queryId ?? null }
+    : null;
+};
+
+function MailboxRow({
+  message,
+  index,
+  openPath,
+  known,
+  queryId,
+  detailPath,
+  decision,
+  confirming,
+  pending,
+  deleting,
+  onAskConfirm,
+  onCancel,
+  onDelete,
+  onAskDecision,
+  onCancelDecision,
+  onConfirmDecision,
+  onRescue,
+  onCorrectCategory,
+  correctingCategory,
+  caseHref,
+  messageHref,
+  readOnly,
+}) {
+  const sender = parseSender(message.from);
+  const received = formatReceived(message.receivedAt);
+  const rejected = decision?.decision === "REJECTED";
+  const unread = message.isRead === false;
+  const junk = message.triage?.verdict === "JUNK" && !message.triage?.rescuedAt;
+  const purge = describePurge(message.triage?.purgesAt);
+  const snippet = toSnippet(message.body);
+
+  return (
+    <div
+      className={`group relative flex flex-col @5xl:grid ${ROW_GRID} ${ROW_PADDING} items-start @5xl:items-center gap-3 @5xl:gap-x-3 @5xl:min-h-20 ${unread ? "bg-primary-50/40" : "bg-card"} rounded-2xl border border-slate-200/70 p-4 @5xl:py-3 shadow-2xs hover:shadow-md hover:border-purple-300 transition-[border-color,box-shadow] duration-200 cursor-pointer`}
+    >
+      <div
+        className={`absolute left-0 top-0 bottom-0 w-1.5 rounded-l-2xl ${railColour(known, rejected)}`}
+      />
+
+      <div className="hidden @5xl:flex justify-center">
+        <span className="flex h-7 w-7 items-center justify-center rounded-full bg-slate-100 font-semibold text-[12px] tabular-nums text-slate-700">
+          {index + 1}
+        </span>
+      </div>
+
+      <div className="flex items-center justify-between @5xl:justify-start w-full gap-3 min-w-0">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="relative flex h-9.5 w-9.5 shrink-0 items-center justify-center rounded-xl bg-purple-50 text-purple-700 font-semibold text-[12px] border border-purple-100">
+            {sender.initials}
+            {unread && (
+              <span
+                className="absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full bg-primary ring-2 ring-white"
+                aria-hidden="true"
+              />
+            )}
+          </div>
+          <div className="min-w-0">
+            <div title={sender.name} className="text-[13.5px] font-semibold text-slate-900 truncate">
+              {unread && <span className="sr-only">Unread </span>}
+              {sender.name}
+            </div>
+            {sender.email && (
+              <div title={sender.email} className="text-[11px] font-medium text-slate-400 truncate">
+                {sender.email}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="@5xl:hidden flex flex-col items-end shrink-0 text-right pl-2 tabular-nums">
+          <div className="text-[12px] font-bold text-slate-800">
+            {received.date}
+          </div>
+          <div className="text-[10px] font-medium text-slate-400 mt-0.5">
+            {received.time}
+          </div>
+        </div>
+      </div>
+
+      <div className="min-w-0 w-full px-1 @5xl:px-0">
+        {/* The link's ::after covers the whole row, so a click anywhere on it opens the mail. */}
+        <Link
+          to={openPath}
+          className="block min-w-0 text-[14px] font-semibold text-slate-900 truncate group-hover:text-purple-700 transition-colors after:absolute after:inset-0 after:rounded-2xl after:content-['']"
+        >
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className="relative z-10">{message.subject || "(No Subject)"}</span>
+              </TooltipTrigger>
+              <TooltipContent className="max-w-100 wrap-break-word">
+                {message.subject}
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        </Link>
+        <div className="flex min-w-0 items-center gap-1.5 text-[12px] font-medium text-slate-400 mt-1">
+          <MailIcon className="h-3.5 w-3.5 text-purple-500 shrink-0" aria-hidden="true" />
+          <span title={snippet || undefined} className="truncate">
+            {snippet || "Email Enquiry"}
+          </span>
+        </div>
+      </div>
+
+      <div className="relative z-10 min-w-0 w-full px-1 @5xl:px-0">
+        <MailboxRowTags
+          message={message}
+          known={known}
+          junk={junk}
+          purge={purge}
+          onCorrectCategory={readOnly ? null : onCorrectCategory}
+          correctingCategory={correctingCategory}
+          caseHref={caseHref}
+          messageHref={messageHref}
+        />
+      </div>
+
+      <div className="hidden @5xl:block tabular-nums">
+        <div className="text-[13px] font-bold text-slate-800 whitespace-nowrap">
+          {received.date}
+        </div>
+        <div className="text-[11.5px] font-medium text-slate-400 mt-0.5 whitespace-nowrap">
+          {received.time}
+        </div>
+      </div>
+
+      <div className="flex items-center w-full min-w-0 mt-2 @5xl:mt-0 pt-3 @5xl:pt-0 border-t border-slate-100 @5xl:border-0">
+        <div className="relative z-10 flex items-center gap-2">
+          <span className="@5xl:hidden text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+            Query Case:
+          </span>
+          <QueryCaseCell
+            known={known}
+            queryId={queryId}
+            detailPath={detailPath}
+            rejected={rejected}
+          />
+        </div>
+      </div>
+
+      <div className="relative z-10 flex items-center justify-end gap-2 w-full">
+        {readOnly ? (
+          <span className="rounded-lg bg-slate-100 px-2.5 py-1 text-[11.5px] font-semibold text-slate-500">
+            View only
+          </span>
+        ) : (
+          <>
+            <RowValidationControls
+              message={message}
+              decision={decision}
+              junk={junk}
+              pending={pending}
+              confirming={confirming?.action === "accept" || confirming?.action === "reject" ? confirming.action : null}
+              onAsk={onAskDecision}
+              onCancel={onCancelDecision}
+              onConfirm={onConfirmDecision}
+              onRescue={onRescue}
+            />
+            <RowDeleteControls
+              message={message}
+              known={known}
+              queryId={queryId}
+              confirming={confirming?.action === "delete"}
+              deleting={deleting}
+              onAskConfirm={onAskConfirm}
+              onCancel={onCancel}
+              onDelete={onDelete}
+            />
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+const FEED_SUBTITLE = {
+  'nic-browser': 'Email received in the NICeMail mailbox, from any sender.',
+  nic: 'Email received in the NICeMail mailbox over IMAP, from any sender.',
+  mongo: 'Messages in the local mailbox store — development and testing, not a live inbox.',
+  'in-memory': 'Messages in the local mailbox store — development and testing, not a live inbox.',
+};
+
+function MailboxFeedCard({ count, backend, deleteMessage, children }) {
+  return (
+    <div className="rounded-2xl border border-transparent bg-surface p-6 shadow-card sm:p-7">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 mb-5 border-b border-slate-100/80">
+        <div className="flex items-center gap-4">
+          <div className="flex h-13 w-13 shrink-0 items-center justify-center rounded-xl bg-primary-50 text-primary">
+            <MailIcon className="h-6.5 w-6.5" strokeWidth={2} />
+          </div>
+          <div>
+            <h2 className="font-heading text-[22px] sm:text-[26px] font-bold text-slate-900 m-0 leading-tight tracking-tight">
+              Incoming Mailbox Feed 📬
+            </h2>
+            <p className="m-0 text-[13.5px] font-medium text-slate-500 mt-1">
+              {FEED_SUBTITLE[backend] || 'Messages in the Front Office mailbox, from any sender.'}{' '}
+              A message becomes a Query Case only when you accept it.
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 self-start sm:self-center shrink-0">
+          <span className="inline-flex items-center gap-2 rounded-full bg-primary-50 px-4 py-1.5 text-[12.5px] font-semibold text-primary-700 border border-primary-200/60 shadow-2xs">
+            <span className="h-2 w-2 rounded-full bg-primary animate-pulse" />
+            {count} Message{count === 1 ? "" : "s"} Total
+          </span>
+        </div>
+      </div>
+
+      {deleteMessage.isError && (
+        <p
+          role="alert"
+          className="mb-4 rounded-2xl border border-rose-200 bg-rose-50/90 px-4 py-3 text-[13px] font-bold text-rose-700"
+        >
+          Could not delete that message.{" "}
+          {deleteMessage.error?.response?.data?.error ||
+            deleteMessage.error?.message ||
+            "Please try again."}
+        </p>
+      )}
+
+      {children}
+    </div>
+  );
+}
+
+function useInboxMutations(queryClient, setConfirming) {
+  const syncNow = useMutation({
+    mutationFn: () => syncMailbox(),
+    onSuccess: ({ started }) => {
+      notify.info(
+        started ? "NICeMail sync started" : "NICeMail is already syncing",
+        started
+          ? "New mail appears here as it is read."
+          : "A sync is running or has just finished.",
+        { id: "mailbox-sync" },
+      );
+      queryClient.invalidateQueries({ queryKey: ["mailbox", "list"] });
+    },
+    onError: (failure) => {
+      notify.error(
+        "Could not start a NICeMail sync",
+        failure?.response?.data?.error || failure?.message,
+        { id: "mailbox-sync" },
+      );
+    },
   });
 
   const deleteMessage = useMutation({
     mutationFn: (mailboxMessageId) => deleteMailboxMessage(mailboxMessageId),
     onSuccess: () => {
-      setConfirmingId(null);
+      setConfirming(null);
       queryClient.invalidateQueries({ queryKey: ["mailbox"] });
     },
   });
 
-  const messages = inbox.data?.messages || [];
-  const loadError = inbox.isError ? inbox.error?.message : null;
+  const rescueMessage = useMutation({
+    mutationFn: (mailboxMessageId) => rescueMailboxMessage(mailboxMessageId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["mailbox"] });
+      notify.success("Kept", {
+        description: "It is no longer marked as junk and will stay in this app.",
+      });
+    },
+    onError: (error) => {
+      notify.error("Could not keep that message", {
+        description: error?.response?.data?.error || error?.message || "Please try again.",
+      });
+    },
+  });
 
-  const registerAll = async () => {
-    await ingestNow();
+  const correctCategory = useMutation({
+    mutationFn: ({ mailboxMessageId, category: next }) => setMailboxMessageCategory(mailboxMessageId, next),
+    onSuccess: (_result, { category: next }) => {
+      queryClient.invalidateQueries({ queryKey: ["mailbox"] });
+      notify.success("Category updated", `Filed under ${MAIL_CATEGORY_META[next]?.label ?? next}.`);
+    },
+    onError: (failure) => {
+      notify.error(
+        "Could not change the category",
+        failure?.response?.data?.error || failure?.message || "Please try again.",
+      );
+    },
+  });
+
+  return { syncNow, deleteMessage, rescueMessage, correctCategory };
+}
+
+// What went wrong loading the list, and whether this account may only look.
+function inboxLoadState(inbox) {
+  const loadFailure = inbox.isError
+    ? (inbox.error?.response?.data ?? { error: inbox.error?.message })
+    : null;
+  return {
+    loadError: loadFailure?.error || null,
+    syncFailure: [inbox.data?.sync, loadFailure?.sync].find((sync) => sync?.ok === false) || null,
+    viewer: Boolean(inbox.data?.sync?.viewer),
+  };
+}
+
+function InboxNotices({ error, loadError, syncFailure, viewer, lastResult }) {
+  return (
+    <>
+      {(error || loadError) && !syncFailure && <MailboxOfflineNotice reason={loadError} />}
+
+      {syncFailure && <MailboxSyncNotice sync={syncFailure} />}
+
+      {viewer && !syncFailure && <MailboxViewerNotice />}
+
+      {lastResult?.fetched !== undefined && !error && (
+        <MailboxCheckSummary result={lastResult} />
+      )}
+    </>
+  );
+}
+
+function InboxResults({ pending, placeholder, messages, filtered, offset, rowProps }) {
+  if (pending) return <InboxSkeleton />;
+  if (messages.length === 0) return filtered ? <NoMatchingMail /> : <EmptyInbox />;
+
+  return (
+    <div
+      aria-busy={placeholder}
+      className={cn("@container", placeholder && "opacity-60")}
+    >
+      {/* The padding keeps row shadows and focus rings from being clipped by the scroller. */}
+      <div className="-m-1 overflow-x-auto p-1">
+        <div className={ROW_MIN_WIDTH}>
+          <MailboxColumnHeader />
+
+          <div className="space-y-3">
+            {messages.map((message, position) => (
+              <MailboxRow
+                key={message.mailboxMessageId}
+                index={offset + position}
+                {...rowProps(message)}
+              />
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export function MailboxInboxPage() {
+  const paths = useRoutePaths();
+  const currentUser = useAuthStore((state) => state.currentUser);
+  // Super Admin reads every message; only the Front Office decides on them.
+  const readOnly = isObserver(currentUser);
+  const queries = useWorkflowStore((state) => state.queries);
+  const emailMessages = useWorkflowStore((state) => state.emailMessages);
+  const { running, error, lastResult, accept, reject, checkMailbox } =
+    useMailboxIngestion();
+
+  const [autoRefresh, setAutoRefresh] = useState(true);
+  const [confirming, setConfirming] = useState(null);
+  const [deciding, setDeciding] = useState(false);
+  const [search, setSearch] = useState("");
+  const [category, setCategory] = useState(ALL_CATEGORIES);
+  const [bucket, setBucket] = useState(MAIL_BUCKETS.ALL);
+  const [offset, setOffset] = useState(0);
+  const q = useDebouncedValue(search.trim(), SEARCH_DEBOUNCE_MS);
+
+  const queryClient = useQueryClient();
+
+  const inbox = useQuery({
+    queryKey: ["mailbox", "list", { q, category, bucket, offset }],
+    queryFn: () =>
+      fetchMailboxMessages({
+        unreadOnly: false,
+        category: category === ALL_CATEGORIES ? undefined : category,
+        bucket: bucket === MAIL_BUCKETS.ALL ? undefined : bucket,
+        q,
+        limit: PAGE_SIZE,
+        offset,
+      }),
+    placeholderData: keepPreviousData,
+    retry: false,
+    refetchInterval: (query) => {
+      if (query.state.status !== "error" && query.state.data?.sync?.running) {
+        return SYNC_POLL_MS;
+      }
+      return autoRefresh ? AUTO_REFRESH_MS : false;
+    },
+  });
+
+  const { syncNow, deleteMessage, rescueMessage, correctCategory } =
+    useInboxMutations(queryClient, setConfirming);
+
+  const decisions = useQuery({
+    queryKey: ["mailbox", "decisions"],
+    queryFn: fetchMailboxDecisions,
+    retry: false,
+  });
+
+  const messages = inbox.data?.messages || [];
+
+  if (!inbox.isPlaceholderData && inbox.data && !messages.length && offset > 0) {
+    setOffset(Math.max(0, offset - PAGE_SIZE));
+  }
+
+  const { loadError, syncFailure, viewer } = inboxLoadState(inbox);
+
+  const decisionFor = (mailboxMessageId) =>
+    (decisions.data?.decisions || []).find(
+      (d) => d.mailboxMessageId === mailboxMessageId,
+    ) || null;
+
+  const checkNow = async () => {
+    notifyMailboxCheck(await checkMailbox());
     await inbox.refetch();
+  };
+
+  const settle = async () => {
+    setConfirming(null);
+    setDeciding(false);
+    await Promise.all([
+      inbox.refetch(),
+      queryClient.invalidateQueries({ queryKey: ["mailbox", "decisions"] }),
+    ]);
+  };
+
+  const onAcceptMessage = async (message) => {
+    setDeciding(true);
+    const result = await accept(message);
+
+    if (result.error) {
+      notify.error("Could not register that message", result.error);
+    } else if (result.accepted) {
+      notify.success(`Query case ${result.queryId} created`, describeAccept(result, message));
+    } else {
+      notify.info(
+        "Already registered",
+        `Query case ${result.queryId} — ${describeAccept(result, message)}`,
+      );
+    }
+
+    await settle();
+  };
+
+  const onRejectMessage = async (message) => {
+    setDeciding(true);
+    const result = await reject(message);
+
+    if (result.error) {
+      notify.error("Could not reject that message", result.error);
+    } else if (result.alreadyDecided) {
+      notify.warning("Already decided by someone else", describeEarlierDecision(result.decision));
+    } else {
+      notify.info(
+        "Message rejected",
+        "No case was created and no acknowledgement was sent.",
+      );
+    }
+
+    await settle();
   };
 
   const queryIdFor = (mailboxMessageId) =>
     emailMessages.find((m) => m.sourceMessageId === mailboxMessageId)
       ?.queryId || null;
+
+  const onSearchChange = (value) => {
+    setSearch(value);
+    setOffset(0);
+  };
+
+  const onCategoryChange = (value) => {
+    setCategory(value);
+    setOffset(0);
+  };
+
+  // The Auto Reply bucket is its own list, without the category cards.
+  const onBucketChange = (value) => {
+    setBucket(value);
+    setCategory(ALL_CATEGORIES);
+    setOffset(0);
+  };
+  const autoReplies = bucket === MAIL_BUCKETS.AUTO_REPLY;
+
+  const filtered = Boolean(q) || category !== ALL_CATEGORIES || bucket !== MAIL_BUCKETS.ALL;
 
   const getQueryDetailPath = (queryId) => {
     if (paths.QUERY_DETAIL) {
@@ -79,6 +1149,58 @@ export function MailboxInboxPage() {
     }
     const slug = ROLE_SLUG[currentUser?.role] || "front-officer";
     return `/${slug}/queries/${queryId}`;
+  };
+
+  const rowProps = (message) => {
+    const queryId =
+      message.linkedCase?.queryId ||
+      queryIdFor(message.mailboxMessageId);
+    const known =
+      Boolean(message.linkedCase) ||
+      (queryId && queries.some((q) => q.queryId === queryId));
+
+    return {
+      message,
+      openPath: buildPath(paths.INBOX_DETAIL, {
+        messageId: encodeURIComponent(message.mailboxMessageId),
+      }),
+      known,
+      queryId,
+      detailPath:
+        queryId && paths.QUERY_DETAIL
+          ? getQueryDetailPath(queryId)
+          : null,
+      decision: decisionFor(message.mailboxMessageId) || decisionFromRow(message),
+      confirming:
+        confirming?.id === message.mailboxMessageId
+          ? confirming
+          : null,
+      pending: deciding,
+      deleting: deleteMessage.isPending,
+      onAskConfirm: () =>
+        setConfirming({
+          id: message.mailboxMessageId,
+          action: "delete",
+        }),
+      onCancel: () => setConfirming(null),
+      onDelete: () =>
+        deleteMessage.mutate(message.mailboxMessageId),
+      onRescue: () => rescueMessage.mutate(message.mailboxMessageId),
+      onCorrectCategory: (next) =>
+        correctCategory.mutate({ mailboxMessageId: message.mailboxMessageId, category: next }),
+      correctingCategory: correctCategory.isPending,
+      caseHref: paths.QUERY_DETAIL ? getQueryDetailPath : null,
+      messageHref: (mailboxMessageId) =>
+        buildPath(paths.INBOX_DETAIL, { messageId: encodeURIComponent(mailboxMessageId) }),
+      readOnly,
+      onAskDecision: (action) =>
+        setConfirming({ id: message.mailboxMessageId, action }),
+      onCancelDecision: () => setConfirming(null),
+      onConfirmDecision: () =>
+        confirming?.action === "accept"
+          ? onAcceptMessage(message)
+          : onRejectMessage(message),
+    };
   };
 
   return (
@@ -93,365 +1215,70 @@ export function MailboxInboxPage() {
       <PageHeader
         greeting="IPC Live Mailbox 📬"
         title="IPC Mailbox Inbox"
-        purpose="Incoming enquiries waiting to be ingested and registered as Query Cases."
+        purpose={
+          readOnly
+            ? "Every message in the Front Office mailbox and what was decided on it. You can read them all; only the Front Office can accept, reject or delete mail."
+            : "Incoming enquiries awaiting your validation. Accept one to open a Query Case, acknowledge the sender and forward it to the Officer-in-Charge; reject anything that is not an IPC query."
+        }
         actions={
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2 bg-[#f1f5fa] border border-white px-3.5 py-2 rounded-2xl shadow-[inset_2px_2px_4px_#d0d7e5,inset_-2px_-2px_4px_#ffffff]">
-              <Checkbox
-                id="auto-refresh"
-                checked={autoRefresh}
-                onCheckedChange={(checked) => setAutoRefresh(checked === true)}
-              />
-              <Label
-                htmlFor="auto-refresh"
-                className="text-[12.5px] font-semibold text-slate-600 cursor-pointer"
-              >
-                Auto-refresh (15s)
-              </Label>
-            </div>
-
-            <button
-              type="button"
-              onClick={registerAll}
-              disabled={running}
-              className="flex items-center gap-2 rounded-2xl bg-linear-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white px-5 py-2.5 text-[13.5px] font-bold shadow-md shadow-blue-500/20 active:scale-95 transition-all cursor-pointer disabled:opacity-60"
-            >
-              <RefreshCwIcon
-                className={`h-4 w-4 ${running ? "animate-spin" : ""}`}
-              />
-              <span>{running ? "Checking Mailbox…" : "Check IPC Mailbox"}</span>
-            </button>
-          </div>
+          <InboxActions
+            autoRefresh={autoRefresh}
+            onAutoRefreshChange={setAutoRefresh}
+            running={running}
+            onCheck={checkNow}
+            canSync={inbox.data?.backend === "nic-browser" && !viewer}
+            syncing={syncNow.isPending || Boolean(inbox.data?.sync?.running)}
+            onSync={() => syncNow.mutate()}
+          />
         }
       />
 
-      {(error || loadError) && (
-        <div
-          role="alert"
-          className="rounded-2xl border border-rose-200 bg-rose-50/90 p-4.5 text-slate-700 shadow-sm flex items-start gap-3.5"
-        >
-          <ShieldAlert className="h-6 w-6 text-rose-600 shrink-0 mt-0.5" />
-          <div>
-            <p className="font-bold text-[14px] text-rose-900">
-              Mailbox server offline / unreachable
-            </p>
-            <p className="mt-1 text-[12.5px] font-medium text-rose-700 leading-relaxed">
-              Could not connect to the backend mailbox service. Please verify
-              backend is running (`npm start` in `/backend`).
-            </p>
-          </div>
-        </div>
-      )}
+      <InboxNotices
+        error={error}
+        loadError={loadError}
+        syncFailure={syncFailure}
+        viewer={viewer}
+        lastResult={lastResult}
+      />
 
-      {lastResult && !error && (
-        <div className="rounded-2xl bg-[#f1f5fa] border border-white p-3.5 shadow-[4px_4px_8px_#d0d7e5,-4px_-4px_8px_#ffffff] text-[13px] font-bold text-slate-700 flex items-center gap-2">
-          <CheckCircle2 className="h-4.5 w-4.5 text-emerald-600 shrink-0" />
-          <span>
-            {lastResult.created.length > 0
-              ? `${lastResult.created.length} case${lastResult.created.length > 1 ? "s" : ""} registered`
-              : "No new mail to register"}
-            {lastResult.skipped.length > 0 &&
-              ` · ${lastResult.skipped.length} already registered`}
-            {lastResult.acknowledged?.length > 0 &&
-              ` · ${lastResult.acknowledged.length} acknowledged`}
-          </span>
-        </div>
-      )}
+      <MailboxFeedCard
+        count={inbox.data?.total ?? messages.length}
+        backend={inbox.data?.backend}
+        deleteMessage={deleteMessage}
+      >
+        <InboxToolbar
+          search={search}
+          onSearchChange={onSearchChange}
+        />
 
-      <div className="glass-panel aurora-panel bento-card rounded-[30px] border border-white/80 p-6 sm:p-7 shadow-lg bg-white/95 backdrop-blur-xl">
-        {/* Card Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 mb-5 border-b border-slate-100/80">
-          <div className="flex items-center gap-4">
-            <div className="flex h-13 w-13 shrink-0 items-center justify-center rounded-2xl bg-linear-to-br from-blue-500/10 via-indigo-500/10 to-purple-500/10 text-blue-600 border border-blue-200/50 shadow-2xs">
-              <MailIcon className="h-6.5 w-6.5" strokeWidth={2} />
-            </div>
-            <div>
-              <h2 className="font-heading text-[22px] sm:text-[26px] font-black text-slate-900 m-0 leading-tight tracking-tight">
-                Ingested Mailbox Feed 📬
-              </h2>
-              <p className="m-0 text-[13.5px] font-medium text-slate-500 mt-1">
-                Live email messages received in the official IPC inbox.
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2 self-start sm:self-center shrink-0">
-            <span className="inline-flex items-center gap-2 rounded-full bg-blue-50 px-4 py-1.5 text-[12.5px] font-extrabold text-blue-700 border border-blue-200/60 shadow-2xs">
-              <span className="h-2 w-2 rounded-full bg-blue-600 animate-pulse" />
-              {messages.length} Message{messages.length === 1 ? "" : "s"} Total
-            </span>
-          </div>
-        </div>
-
-        {deleteMessage.isError && (
-          <p
-            role="alert"
-            className="mb-4 rounded-2xl border border-rose-200 bg-rose-50/90 px-4 py-3 text-[13px] font-bold text-rose-700"
-          >
-            Could not delete that message.{" "}
-            {deleteMessage.error?.response?.data?.error ||
-              deleteMessage.error?.message ||
-              "Please try again."}
-          </p>
+        {inbox.data?.bucketCounts && (
+          <MailBucketTabs value={bucket} counts={inbox.data.bucketCounts} onChange={onBucketChange} />
         )}
 
-        {messages.length === 0 ? (
-          <div className="py-12 px-4 text-center rounded-2xl border border-dashed border-slate-200/90 bg-slate-50/50 flex flex-col items-center justify-center">
-            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-50 text-blue-600 border border-blue-100/60 shadow-2xs mb-3">
-              <MailIcon className="h-7 w-7" strokeWidth={1.8} />
-            </div>
-            <h4 className="font-heading text-[16px] font-extrabold text-slate-800 m-0">
-              No Mail in the IPC Mailbox
-            </h4>
-            <p className="text-[13px] font-medium text-slate-400 m-0 mt-1 max-w-sm">
-              Incoming enquiries sent to the official mailbox will automatically
-              appear here.
-            </p>
-          </div>
-        ) : (
-          <div>
-            {/* Column Header */}
-            <div className="hidden xl:grid grid-cols-[60px_220px_1fr_200px_160px_150px] gap-4 px-5 py-3.5 bg-slate-50/80 border border-slate-100 rounded-2xl text-[11px] font-extrabold text-slate-400 tracking-wider uppercase mb-3">
-              <span className="text-center">S.No.</span>
-              <span>From / Sender</span>
-              <span>Subject & Content</span>
-              <span>Received On</span>
-              <span className="text-center">Query Case</span>
-              <span className="text-center">Actions</span>
-            </div>
-
-            {/* List Rows */}
-            <div className="space-y-3">
-              {messages.map((message, index) => {
-                const queryId = queryIdFor(message.mailboxMessageId);
-                const known =
-                  queryId && queries.some((q) => q.queryId === queryId);
-                const senderName = message.from
-                  ? message.from.split("<")[0].trim()
-                  : "Unknown Sender";
-                const senderEmail =
-                  message.from && message.from.includes("<")
-                    ? message.from.split("<")[1].replace(">", "").trim()
-                    : "";
-
-                const receivedDate = message.receivedAt
-                  ? new Date(message.receivedAt)
-                  : new Date();
-                const dateFormatted = receivedDate.toLocaleDateString("en-GB", {
-                  day: "2-digit",
-                  month: "short",
-                  year: "numeric",
-                });
-                const timeFormatted = receivedDate.toLocaleTimeString("en-US", {
-                  hour: "2-digit",
-                  minute: "2-digit",
-                  second: "2-digit",
-                  hour12: true,
-                });
-
-                const senderInitials =
-                  senderName
-                    .split(" ")
-                    .map((n) => n[0])
-                    .join("")
-                    .slice(0, 2)
-                    .toUpperCase() || "M";
-
-                return (
-                  <div
-                    key={message.mailboxMessageId}
-                    className="group relative flex flex-col xl:grid xl:grid-cols-[60px_220px_1fr_200px_160px_150px] items-start xl:items-center gap-3 xl:gap-4 bg-white rounded-2xl border border-slate-200/70 p-4 shadow-2xs hover:shadow-md hover:border-purple-300 transition-all duration-200"
-                  >
-                    {/* Left Accent Bar */}
-                    <div
-                      className={`absolute left-0 top-0 bottom-0 w-1.5 rounded-l-2xl ${known ? "bg-emerald-500" : "bg-amber-500"}`}
-                    />
-
-                    {/* S.No - Desktop Only */}
-                    <div className="hidden xl:flex justify-center pl-2">
-                      <span className="flex h-7 w-7 items-center justify-center rounded-full bg-slate-100 font-extrabold text-[12px] text-slate-700">
-                        {index + 1}
-                      </span>
-                    </div>
-
-                    {/* From / Sender + Mobile Date */}
-                    <div className="flex items-center justify-between xl:justify-start w-full xl:w-auto gap-3 min-w-0">
-                      <div className="flex items-center gap-3 min-w-0">
-                        <div className="flex h-9.5 w-9.5 shrink-0 items-center justify-center rounded-xl bg-purple-50 text-purple-700 font-extrabold text-[12px] border border-purple-100">
-                          {senderInitials}
-                        </div>
-                        <div className="min-w-0">
-                          <div className="text-[13.5px] font-extrabold text-slate-900 truncate">
-                            {senderName}
-                          </div>
-                          {senderEmail && (
-                            <div className="text-[11px] font-medium text-slate-400 truncate">
-                              {senderEmail}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                      
-                      {/* Mobile Date */}
-                      <div className="xl:hidden flex flex-col items-end shrink-0 text-right pl-2">
-                        <div className="text-[12px] font-bold text-slate-800">
-                          {dateFormatted}
-                        </div>
-                        <div className="text-[10px] font-medium text-slate-400 mt-0.5">
-                          {timeFormatted}
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Subject */}
-                    <div className="min-w-0 w-full xl:w-auto px-1 xl:px-0">
-                      <TooltipProvider>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <div className="text-[14px] font-extrabold text-slate-900 truncate group-hover:text-purple-700 transition-colors cursor-pointer">
-                              {message.subject || "(No Subject)"}
-                            </div>
-                          </TooltipTrigger>
-                          <TooltipContent className="max-w-100 wrap-break-word">
-                            {message.subject}
-                          </TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
-                      <div className="flex items-center gap-1.5 text-[11.5px] font-medium text-slate-400 mt-0.5">
-                        <MailIcon className="h-3.5 w-3.5 text-purple-500 shrink-0" />
-                        <span className="truncate">Email Enquiry</span>
-                      </div>
-                    </div>
-
-                    {/* Received - Desktop Only */}
-                    <div className="hidden xl:block">
-                      <div className="text-[13px] font-bold text-slate-800">
-                        {dateFormatted}
-                      </div>
-                      <div className="text-[11.5px] font-medium text-slate-400 mt-0.5">
-                        {timeFormatted}
-                      </div>
-                    </div>
-
-                    {/* Query Case and Mobile Actions */}
-                    <div className="flex items-center justify-between xl:justify-center w-full xl:w-auto mt-2 xl:mt-0 pt-3 xl:pt-0 border-t border-slate-100 xl:border-0">
-                      <div className="flex items-center gap-2">
-                        <span className="xl:hidden text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                          Query Case:
-                        </span>
-                        {known && paths.QUERY_DETAIL ? (
-                          <Link
-                            to={getQueryDetailPath(queryId)}
-                            className="inline-flex items-center gap-1.5 rounded-xl bg-linear-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white px-3.5 py-1.5 xl:px-4 xl:py-2 text-[11.5px] xl:text-[12px] font-black shadow-sm transition-all hover:scale-105"
-                          >
-                            <span>{queryId}</span>
-                            <ArrowRight className="h-3.5 w-3.5" />
-                          </Link>
-                        ) : (
-                          <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200/80 px-3 py-1 xl:px-3.5 xl:py-1.5 text-[10.5px] xl:text-[11.5px] font-extrabold shadow-2xs">
-                            <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse shrink-0" />
-                            Not registered
-                          </span>
-                        )}
-                      </div>
-
-                      {/* Actions - Mobile */}
-                      <div className="xl:hidden flex justify-center">
-                        {confirmingId === message.mailboxMessageId ? (
-                          <div className="flex items-center gap-1.5">
-                            <button
-                              type="button"
-                              onClick={() =>
-                                deleteMessage.mutate(message.mailboxMessageId)
-                              }
-                              disabled={deleteMessage.isPending}
-                              className="rounded-xl bg-rose-600 hover:bg-rose-700 text-white px-3 py-1.5 text-[11px] font-extrabold shadow-sm transition-all active:scale-95 cursor-pointer disabled:opacity-60"
-                            >
-                              {deleteMessage.isPending ? "..." : "Yes"}
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setConfirmingId(null)}
-                              disabled={deleteMessage.isPending}
-                              className="rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-500 p-1.5 transition-all cursor-pointer disabled:opacity-60"
-                            >
-                              <X className="h-3.5 w-3.5" />
-                            </button>
-                          </div>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setConfirmingId(message.mailboxMessageId)
-                            }
-                            className="rounded-xl border border-rose-200 bg-rose-50 hover:bg-rose-100 text-rose-600 p-2 transition-all active:scale-95 cursor-pointer"
-                          >
-                            <Trash2Icon className="h-4 w-4" />
-                          </button>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Actions - Desktop */}
-                    <div className="hidden xl:flex justify-center">
-                      {confirmingId === message.mailboxMessageId ? (
-                        <div className="flex flex-col items-center gap-1.5">
-                          <span className="text-[11px] font-extrabold text-slate-500 uppercase tracking-wider">
-                            Delete?
-                          </span>
-                          <div className="flex items-center gap-1.5">
-                            <button
-                              type="button"
-                              onClick={() =>
-                                deleteMessage.mutate(message.mailboxMessageId)
-                              }
-                              disabled={deleteMessage.isPending}
-                              className="rounded-xl bg-rose-600 hover:bg-rose-700 text-white px-3 py-1.5 text-[11.5px] font-extrabold shadow-sm transition-all active:scale-95 cursor-pointer disabled:opacity-60"
-                            >
-                              {deleteMessage.isPending ? "Deleting…" : "Yes"}
-                            </button>
-                            <button
-                              type="button"
-                              aria-label="Cancel delete"
-                              onClick={() => setConfirmingId(null)}
-                              disabled={deleteMessage.isPending}
-                              className="rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-500 p-1.5 transition-all cursor-pointer disabled:opacity-60"
-                            >
-                              <X className="h-3.5 w-3.5" />
-                            </button>
-                          </div>
-                        </div>
-                      ) : (
-                        <TooltipProvider>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <button
-                                type="button"
-                                aria-label={`Delete message ${message.mailboxMessageId}`}
-                                onClick={() =>
-                                  setConfirmingId(message.mailboxMessageId)
-                                }
-                                className="rounded-xl border border-rose-200 bg-rose-50 hover:bg-rose-100 text-rose-600 p-2 transition-all active:scale-95 cursor-pointer"
-                              >
-                                <Trash2Icon className="h-4 w-4" />
-                              </button>
-                            </TooltipTrigger>
-                            <TooltipContent className="max-w-70 wrap-break-word">
-                              {known
-                                ? `Removes the mailbox copy only. Query Case ${queryId} will remain.`
-                                : "Remove this message from the IPC mailbox."}
-                            </TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
+        {inbox.data?.categoryCounts && !autoReplies && (
+          <MailCategoryCards
+            value={category}
+            counts={inbox.data.categoryCounts}
+            onChange={onCategoryChange}
+          />
         )}
-      </div>
+
+        <InboxResults
+          pending={inbox.isPending}
+          placeholder={inbox.isPlaceholderData}
+          messages={messages}
+          filtered={filtered}
+          offset={offset}
+          rowProps={rowProps}
+        />
+
+        <InboxPager
+          offset={offset}
+          shown={messages.length}
+          total={inbox.data?.total}
+          onPage={setOffset}
+        />
+      </MailboxFeedCard>
     </div>
   );
 }

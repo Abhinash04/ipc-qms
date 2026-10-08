@@ -2,31 +2,27 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 import { useWorkflowStore } from '@/store/useWorkflowStore';
 import { findUserById } from '@/constants/mockUsers';
+import { FRONT_OFFICE_USER as FRONT_OFFICE } from '@/test/frontOfficeUser';
 import {
   assembleDraftEmail,
+  DRAFT_SALUTATION,
+  IPC_DISCLAIMER,
   IPC_SIGNATURE,
   NOT_ESTABLISHED_SENTENCE,
 } from '@/services/ai/draftComposer';
+import { draftResponse } from '@/services/ai/mockAiService';
+import { fakeCaseMail } from '@/test/fakeCaseMail';
+import { EXTERNAL_INQUIRER as INQUIRER } from '@/test/externalInquirer';
 
 vi.mock('@/services/api/mailboxService');
 
 const s = () => useWorkflowStore.getState();
 
-const FRONT_OFFICE = findUserById('USR-0002');
 const OIC = findUserById('USR-0003');
 const OFFICIAL = findUserById('USR-0004');
-const INQUIRER = findUserById('USR-0001');
 
-const fakeForward = (payload) =>
-  Promise.resolve({
-    from: 'Test Front Officer <front-office@test.invalid>',
-    to: ['officer@test.invalid'],
-    subject: `Fwd: ${payload.subject}`,
-    body: payload.body,
-    providerMessageId: 'mock-msg-forward',
-    providerThreadId: 'mock-thread-1',
-    sentAt: '2026-08-18T10:00:00.000Z',
-  });
+const caseMail = fakeCaseMail();
+const fakeForward = caseMail.forwardQuery;
 
 const enquiry = () => ({
   mailboxMessageId: 'MSG-00001',
@@ -63,20 +59,32 @@ describe('assembleDraftEmail keeps identity out of the model’s hands', () => {
   const query = {
     queryId: 'QRY-2026-00001',
     subject: 'Monograph revision',
+    createdAt: '2026-09-10T08:00:00.000Z',
     inquirer: { name: 'Abhinash Pritiraj', email: 'a@example.com' },
   };
 
-  it('greets the real inquirer from query data', () => {
+  it('consistently begins with Dear Sir/Madam, without email headers or draft markers', () => {
     const email = assembleDraftEmail({ query, draft: GEMMA_DRAFT });
-    expect(email).toContain('Dear Abhinash Pritiraj,');
+    expect(DRAFT_SALUTATION).toBe('Dear Sir/Madam,');
+    expect(email.startsWith(DRAFT_SALUTATION)).toBe(true);
+    expect(email).not.toContain('[FIRST DRAFT]');
+    expect(email).not.toContain('To,');
+    expect(email).not.toContain('Sub:');
   });
 
   it('ends with the constant IPC signature', () => {
     expect(assembleDraftEmail({ query, draft: GEMMA_DRAFT }).endsWith(IPC_SIGNATURE)).toBe(true);
   });
 
-  it('quotes the real query id as the reference', () => {
-    expect(assembleDraftEmail({ query, draft: GEMMA_DRAFT })).toContain('QRY-2026-00001');
+  it('cites the enquiry date from query data without injecting Sub: lines', () => {
+    const email = assembleDraftEmail({ query, draft: { ...GEMMA_DRAFT, subject: 'Model invented subject' } });
+    expect(email).not.toContain('Sub:');
+    expect(email).toContain('This is in reference to your email dated 10.09.2026 on the subject matter cited above.');
+    expect(email).not.toContain('Model invented subject');
+  });
+
+  it('closes with the standard disclaimer just above the signature', () => {
+    expect(assembleDraftEmail({ query, draft: GEMMA_DRAFT }).endsWith(`${IPC_DISCLAIMER}\n\n${IPC_SIGNATURE}`)).toBe(true);
   });
 
   it('never lets a model-supplied name reach the output', () => {
@@ -101,9 +109,11 @@ describe('assembleDraftEmail keeps identity out of the model’s hands', () => {
     expect(assembleDraftEmail({ query: null, draft: GEMMA_DRAFT })).toBe('');
   });
 
-  it('falls back to a neutral salutation when the inquirer has no name', () => {
+  it('consistently starts with Dear Sir/Madam, even when inquirer has no name', () => {
     const anonymous = { ...query, inquirer: { email: 'a@example.com' } };
-    expect(assembleDraftEmail({ query: anonymous, draft: GEMMA_DRAFT })).toContain('Dear Sir/Madam,');
+    const email = assembleDraftEmail({ query: anonymous, draft: GEMMA_DRAFT });
+    expect(email.startsWith('Dear Sir/Madam,')).toBe(true);
+    expect(email).not.toContain('To,');
   });
 });
 
@@ -195,12 +205,13 @@ describe('the composed email has exactly one section per question', () => {
     expect(email()).not.toContain('Sources:');
   });
 
-  it('preserves the email structure', () => {
+  it('preserves the email structure with clean Dear Sir/Madam, opening', () => {
     const text = email();
-    expect(text).toContain('Subject: Response regarding Clarification on submission documentation');
-    expect(text).toContain('Dear Abhinash Pritiraj,');
-    expect(text).toContain('reference QRY-2026-00005');
-    expect(text.endsWith(IPC_SIGNATURE)).toBe(true);
+    expect(text.startsWith('Dear Sir/Madam,')).toBe(true);
+    expect(text).not.toContain('[FIRST DRAFT]');
+    expect(text).not.toContain('Sub:');
+    expect(text).not.toContain('To,');
+    expect(text.endsWith(`${IPC_DISCLAIMER}\n\n${IPC_SIGNATURE}`)).toBe(true);
   });
 
   it('carries no legacy unanswered block', () => {
@@ -327,11 +338,12 @@ describe('assembleDraftEmail renders one numbered section per question', () => {
     expect(assembleDraftEmail({ query, draft: SECTIONED })).not.toContain('could not be answered');
   });
 
-  it('still greets the real inquirer and signs off constantly', () => {
+  it('consistently starts with Dear Sir/Madam, and signs off constantly', () => {
     const email = assembleDraftEmail({ query, draft: SECTIONED });
-    expect(email).toContain('Dear Abhinash Pritiraj,');
-    expect(email.endsWith(IPC_SIGNATURE)).toBe(true);
-    expect(email).toContain('QRY-2026-00004');
+    expect(email.startsWith('Dear Sir/Madam,')).toBe(true);
+    expect(email).not.toContain('To,');
+    expect(email).not.toContain('Sub:');
+    expect(email.endsWith(`${IPC_DISCLAIMER}\n\n${IPC_SIGNATURE}`)).toBe(true);
   });
 
   it('falls back to the not-established sentence when a section has no paragraphs', () => {
@@ -349,11 +361,61 @@ describe('assembleDraftEmail renders one numbered section per question', () => {
           sufficiency: 'NOT_ESTABLISHED',
           paragraphs: [],
         },
+        {
+          question: 2,
+          questionText: 'A second question?',
+          topic: 'Second topic',
+          sufficiency: 'NOT_ESTABLISHED',
+          paragraphs: [],
+        },
       ],
     };
     const email = assembleDraftEmail({ query, draft: long });
     expect(email).toContain('1. Short topic');
     expect(email).not.toContain('xxxxxxxxxx');
+  });
+});
+
+describe('the draft follows the IPC sample letters', () => {
+  const query = {
+    queryId: 'QRY-2026-00009',
+    subject: 'Re: Clarification Required on Lactose Monohydrate Monograph',
+    createdAt: '2026-09-10T08:00:00.000Z',
+    inquirer: { name: 'Ms. Pujan Mehta', email: 'Pujan_Mehta@intaspharma.com' },
+  };
+
+  it('lays out a single answer with Dear Sir/Madam, and no numbered heading', () => {
+    const draft = {
+      answers: [
+        {
+          question: 1,
+          questionText: 'Are both tests required?',
+          topic: 'Loss on drying and water',
+          sufficiency: 'ANSWERED',
+          paragraphs: ['This is to inform you that both the tests have to be performed.'],
+          sources: [],
+        },
+      ],
+    };
+    expect(assembleDraftEmail({ query, draft })).toBe(
+      [
+        'Dear Sir/Madam,',
+        'This is in reference to your email dated 10.09.2026 on the subject matter cited above. This is to inform you that both the tests have to be performed.',
+        IPC_DISCLAIMER,
+        IPC_SIGNATURE,
+      ].join('\n\n'),
+    );
+  });
+
+  it('gives the offline fallback draft the Dear Sir/Madam, opening and closing', () => {
+    const text = draftResponse({ ...query, description: 'Are both loss on drying and water determination required?' });
+    expect(text.startsWith('Dear Sir/Madam,')).toBe(true);
+    expect(text).not.toContain('[FIRST DRAFT]');
+    expect(text).not.toContain('[AI-GENERATED FIRST DRAFT');
+    expect(text).not.toContain('To,');
+    expect(text).not.toContain('Sub:');
+    expect(text).toContain('This is in reference to your email dated 10.09.2026 on the subject matter cited above.');
+    expect(text.endsWith(`${IPC_DISCLAIMER}\n\n${IPC_SIGNATURE}`)).toBe(true);
   });
 });
 
@@ -365,9 +427,11 @@ describe('generateAiDraft mints exactly one version', () => {
     const versions = s().getVersions(queryId);
     expect(versions).toHaveLength(1);
     expect(versions[0].version).toBe('v1');
-    expect(versions[0].createdBy).toBe('Gemma AI Draft Assistant');
+    expect(versions[0].createdBy).toBe('Pravah AI Draft Assistant');
     expect(versions[0].content).toContain('The monograph is under revision.');
-    expect(versions[0].content).toContain(INQUIRER.name);
+    expect(versions[0].content.startsWith('Dear Sir/Madam,')).toBe(true);
+    expect(versions[0].content).not.toContain('[FIRST DRAFT]');
+    expect(versions[0].content).not.toContain('To,');
   });
 
   it('passes the query, summary and key points to the service', async () => {
@@ -389,7 +453,10 @@ describe('generateAiDraft mints exactly one version', () => {
     const versions = s().getVersions(queryId);
     expect(versions).toHaveLength(1);
     expect(versions[0].createdBy).toBe('AI Draft Assistant');
-    expect(versions[0].content).toContain('AI-GENERATED FIRST DRAFT');
+    expect(versions[0].content.startsWith('Dear Sir/Madam,')).toBe(true);
+    expect(versions[0].content).not.toContain('FIRST DRAFT');
+    expect(versions[0].content).not.toContain('To,');
+    expect(versions[0].content).not.toContain('Sub:');
   });
 
   it('falls back rather than failing when the service rejects', async () => {

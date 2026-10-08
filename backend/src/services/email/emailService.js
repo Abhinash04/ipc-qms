@@ -1,71 +1,59 @@
 import env, { EMAIL_TRANSPORTS } from '../../config/env.js';
+import browserConfig from '../../config/browserConfig.js';
 import {
   IDENTITY_ROLES,
   identityForRole,
-  identityForEmail,
   formatSender,
   publicDirectory,
 } from '../../config/identities.js';
 import * as mockTransport from './transports/mockTransport.js';
-import * as mailbox from './mailbox/mockIpcMailbox.js';
+import { outboundAllowed } from './nic/outboundGuard.js';
 import { buildAcknowledgement } from './templates/acknowledgement.js';
 import * as gemmaService from '../ai/gemmaService.js';
+import { resolveAttachments, toPublicRecord } from '../attachments/resolveAttachments.js';
+import * as audit from '../audit/auditService.js';
+import { AUDIT_ACTIONS, AUDIT_RESULTS } from '../../constants/auditActions.js';
+import { ACTOR_TYPES } from '../../constants/roles.js';
 
-/**
- * Email orchestration.
- *
- * Sender identity comes from the acting stakeholder, never from the caller and
- * never from one global address: the enquiry is sent by the inquirer, the
- * acknowledgement, forward and final response by the Front Officer. Each is a
- * different Gmail account, so each needs its own credentials.
- */
+async function getTransport(name = env.EMAIL_TRANSPORT) {
+  if (name === EMAIL_TRANSPORTS.NIC) return import('./transports/nicTransport.js');
+  return mockTransport;
+}
 
-/**
- * Resolve the transport **for a specific sender**.
- *
- * A role that has its own refresh token sends through Gmail as itself. A role
- * without one falls back to the mock transport rather than borrowing another
- * account's credentials — which would make the QMS claim a `From` address that
- * Gmail did not actually send from. This is what lets the mocked tail of the
- * workflow keep running while the first three stakeholders are real.
- *
- * The Gmail module is loaded with a dynamic import so `googleapis` is never
- * evaluated unless a real send is actually happening.
- */
-async function getTransport(name = env.EMAIL_TRANSPORT, asRole = null, asEmail = null) {
-  if (name !== EMAIL_TRANSPORTS.GMAIL) return mockTransport;
+const NIC_BROWSER = 'nic-browser';
+const isNicBrowser = (sourceMailbox) => sourceMailbox?.source === NIC_BROWSER;
 
-  // The acting user's ADDRESS is the authority, because a role can hold more
-  // than one person. Falling back to the role is safe only for single-holder roles.
-  const identity = asEmail ? identityForEmail(asEmail) : asRole ? identityForRole(asRole) : null;
-  if ((asEmail || asRole) && !identity?.canSendReal) return mockTransport;
+async function transportFor(sourceMailbox) {
+  if (isNicBrowser(sourceMailbox)) return import('./transports/nicBrowserTransport.js');
+  return getTransport(env.EMAIL_TRANSPORT);
+}
 
-  return import('./transports/gmailTransport.js');
+function senderFor(sourceMailbox) {
+  if (isNicBrowser(sourceMailbox)) {
+    return { email: sourceMailbox.address, name: browserConfig.frontOfficeName };
+  }
+  return identityForRole(IDENTITY_ROLES.FRONT_OFFICE);
 }
 
 function getEmailConfig() {
-  const inquirer = identityForRole(IDENTITY_ROLES.INQUIRER);
   const frontOffice = identityForRole(IDENTITY_ROLES.FRONT_OFFICE);
 
   return {
     transport: env.EMAIL_TRANSPORT,
 
-    // Where an enquiry is addressed. With real stakeholders this is the Front
-    // Officer; IPC_QUERY_EMAIL remains the shared mock mailbox address.
-    ipcQueryEmail: frontOffice?.email || env.IPC_QUERY_EMAIL,
-    mockMailboxEmail: env.IPC_QUERY_EMAIL,
+    nicBrowserMailbox: browserConfig.mailboxEnabled,
+    outboundAllowed: outboundAllowed(),
 
-    ipcReplyFrom: { email: env.IPC_ACK_FROM_EMAIL, name: env.IPC_ACK_FROM_NAME },
-    inquirer: { email: inquirer.email, name: inquirer.name },
+    ipcQueryEmail: frontOffice?.email,
 
-    // Non-secret participant directory. Never contains tokens — only whether a
-    // role is able to authenticate as itself.
     participants: publicDirectory(),
   };
 }
 
-/** Send a message on behalf of `asRole`. */
-async function sendEmail(message, { asRole = null, asEmail = null } = {}) {
+async function sendEmail(
+  message,
+  { asRole = null, sourceMailbox = null, internalForward = false, onStage = null } = {},
+) {
   if (!message?.from) throw Object.assign(new Error('"from" is required'), { status: 400 });
 
   const recipients = (Array.isArray(message.to) ? message.to : [message.to]).filter(Boolean);
@@ -73,75 +61,124 @@ async function sendEmail(message, { asRole = null, asEmail = null } = {}) {
     throw Object.assign(new Error('at least one recipient is required'), { status: 400 });
   }
 
-  const normalised = { ...message, to: recipients };
-  const transport = await getTransport(env.EMAIL_TRANSPORT, asRole, asEmail);
-  // The Gmail client is keyed by role; when an address was supplied, use the
-  // role that address actually belongs to rather than the one assumed.
-  const resolvedRole = asEmail ? identityForEmail(asEmail)?.role || asRole : asRole;
-  const result = await transport.send(normalised, { asRole: resolvedRole });
+  const resolvedAttachments = await resolveAttachments(message.attachments);
 
-  return { ...normalised, ...result, sentAt: normalised.timestamp || new Date().toISOString() };
-}
-
-/** Inquirer → Front Officer. Sender identity is config, not caller input. */
-async function sendEnquiry({ subject, body, attachments = [], cc = [], timestamp }) {
-  const inquirer = identityForRole(IDENTITY_ROLES.INQUIRER);
-  const frontOffice = identityForRole(IDENTITY_ROLES.FRONT_OFFICE);
-
-  return sendEmail(
-    {
-      from: formatSender(inquirer),
-      to: [frontOffice?.email || env.IPC_QUERY_EMAIL],
-      cc,
-      subject,
-      body,
-      attachments,
-      timestamp,
-    },
-    { asRole: IDENTITY_ROLES.INQUIRER },
-  );
-}
-
-async function sendAcknowledgement({ to, queryId, timestamp, providerThreadId }) {
-  const frontOffice = identityForRole(IDENTITY_ROLES.FRONT_OFFICE);
-
-  const message = buildAcknowledgement({
-    to,
-    fromEmail: frontOffice?.email || env.IPC_ACK_FROM_EMAIL,
-    fromName: frontOffice?.name || env.IPC_ACK_FROM_NAME,
-    queryId,
+  const normalised = { ...message, to: recipients, attachments: resolvedAttachments };
+  const transport = await transportFor(sourceMailbox);
+  const provider = transport.name || null;
+  onStage?.('RESOLUTION', {
+    recipient: recipients,
+    provider,
+    ...(provider === 'nic-browser' || provider === 'nic'
+      ? { guard: outboundAllowed() ? 'production-outbound' : 'test-recipient' }
+      : {}),
   });
+  const result = await transport.send(normalised, { asRole, internalForward, onStage });
+
+  return {
+    ...normalised,
+    attachments: resolvedAttachments.map(toPublicRecord),
+    ...result,
+    sentAt: normalised.timestamp || new Date().toISOString(),
+  };
+}
+
+function composeAcknowledgement({ to, queryId, sourceMailbox = null, inquirerName, subject, receivedAt }) {
+  const frontOffice = senderFor(sourceMailbox);
+  return buildAcknowledgement({
+    to,
+    fromEmail: frontOffice?.email,
+    fromName: frontOffice?.name,
+    queryId,
+    inquirerName,
+    subject,
+    receivedAt,
+  });
+}
+
+async function sendAcknowledgement({
+  to,
+  queryId,
+  timestamp,
+  providerThreadId,
+  sourceMailbox = null,
+  rfcMessageId = null,
+  onStage = null,
+  inquirerName,
+  subject,
+  receivedAt,
+}) {
+  const message = composeAcknowledgement({ to, queryId, sourceMailbox, inquirerName, subject, receivedAt });
 
   return sendEmail(
-    { ...message, timestamp, providerThreadId },
-    { asRole: IDENTITY_ROLES.FRONT_OFFICE },
+    { ...message, timestamp, providerThreadId, messageIdHeader: rfcMessageId },
+    { asRole: IDENTITY_ROLES.FRONT_OFFICE, sourceMailbox, onStage },
   );
 }
 
-async function forwardToOfficerInCharge({ queryId, subject, body, timestamp, providerThreadId, aiSummary = null }) {
-  const frontOffice = identityForRole(IDENTITY_ROLES.FRONT_OFFICE);
+async function forwardToOfficerInCharge({
+  queryId,
+  subject,
+  body,
+  timestamp,
+  providerThreadId,
+  aiSummary = null,
+  attachments = [],
+  rfcMessageId = null,
+  sourceMailbox = null,
+  onStage = null,
+}) {
+  const frontOffice = senderFor(sourceMailbox);
   const officer = identityForRole(IDENTITY_ROLES.OFFICER_IN_CHARGE);
 
   if (!officer?.email) {
     throw Object.assign(new Error('No Officer-in-Charge address is configured'), { status: 500 });
   }
 
+  await resolveAttachments(attachments);
+
   let summary = aiSummary;
   if (!summary) {
-    summary = await gemmaService.generateSummary({ subject, body });
+    const startedAt = Date.now();
+    let error = null;
+
+    try {
+      summary = await gemmaService.generateSummary({ subject, body });
+    } catch (caught) {
+      error = caught.message;
+      summary = null;
+    }
+
+    await audit.record({
+      action: AUDIT_ACTIONS.AI_SUMMARY_GENERATED,
+      actorType: ACTOR_TYPES.AGENT,
+      queryId,
+      result: error ? AUDIT_RESULTS.FAILURE : AUDIT_RESULTS.SUCCESS,
+      error,
+      aiMetadata: {
+        latencyMs: Date.now() - startedAt,
+        fallback: Boolean(summary?.fallback),
+        aiGenerated: Boolean(summary) && !summary.fallback,
+        trigger: 'forward',
+      },
+    });
   }
 
-  const formattedSummaryBlock = [
-    '======================================================================',
-    '🤖 GEMMA AI QUERY SUMMARY (For Officer-in-Charge Review):',
-    summary.text,
-    summary.keyPoints?.length ? `Key Points:\n${summary.keyPoints.map((p) => ` • ${p}`).join('\n')}` : '',
-    summary.topics?.length ? `Topics: ${summary.topics.join(', ')}` : '',
-    '======================================================================',
-    '',
-  ]
-    .filter(Boolean)
-    .join('\n');
+  const formattedSummaryBlock = summary
+    ? [
+        '======================================================================',
+        '🤖 PRAVAH AI QUERY SUMMARY (For Officer-in-Charge Review):',
+        summary.text,
+        summary.keyPoints?.length
+          ? `Key Points:\n${summary.keyPoints.map((p) => ` • ${p}`).join('\n')}`
+          : '',
+        summary.topics?.length ? `Topics: ${summary.topics.join(', ')}` : '',
+        '======================================================================',
+        '',
+      ]
+        .filter(Boolean)
+        .join('\n')
+    : '';
 
   const fullBody = `${formattedSummaryBlock}\n${body || ''}`;
 
@@ -149,19 +186,36 @@ async function forwardToOfficerInCharge({ queryId, subject, body, timestamp, pro
     {
       from: formatSender(frontOffice),
       to: [officer.email],
-      subject: `Fwd: ${subject} [${queryId}]`,
+      subject: forwardSubject({ subject, queryId }),
       body: fullBody,
+      attachments,
       timestamp,
       providerThreadId,
+      messageIdHeader: rfcMessageId,
     },
-    { asRole: IDENTITY_ROLES.FRONT_OFFICE },
+    { asRole: IDENTITY_ROLES.FRONT_OFFICE, sourceMailbox, internalForward: true, onStage },
   );
 
   return { ...sent, aiSummary: summary };
 }
 
-async function sendResponse({ to, subject, body, attachments = [], cc = [], timestamp, providerThreadId }) {
-  const frontOffice = identityForRole(IDENTITY_ROLES.FRONT_OFFICE);
+function forwardSubject({ subject, queryId }) {
+  return `Fwd: ${subject} [${queryId}]`;
+}
+
+async function sendResponse({
+  to,
+  subject,
+  body,
+  attachments = [],
+  cc = [],
+  timestamp,
+  providerThreadId,
+  sourceMailbox = null,
+  rfcMessageId = null,
+  onStage = null,
+}) {
+  const frontOffice = senderFor(sourceMailbox);
 
   return sendEmail(
     {
@@ -173,18 +227,32 @@ async function sendResponse({ to, subject, body, attachments = [], cc = [], time
       attachments,
       timestamp,
       providerThreadId,
+      messageIdHeader: rfcMessageId,
     },
-    { asRole: IDENTITY_ROLES.FRONT_OFFICE },
+    { asRole: IDENTITY_ROLES.FRONT_OFFICE, sourceMailbox, onStage },
   );
+}
+
+async function reconcileDelivery(dispatch, { sourceMailbox = null } = {}) {
+  const transport = await transportFor(sourceMailbox, IDENTITY_ROLES.FRONT_OFFICE);
+  if (typeof transport.reconcile !== 'function') return { verdict: 'UNKNOWN' };
+  return transport.reconcile(dispatch, { asRole: IDENTITY_ROLES.FRONT_OFFICE });
+}
+
+function senderDomainFor(sourceMailbox) {
+  return String(senderFor(sourceMailbox)?.email || '').split('@')[1] || null;
 }
 
 export {
   getEmailConfig,
   getTransport,
   sendEmail,
-  sendEnquiry,
+  composeAcknowledgement,
   sendAcknowledgement,
+  forwardSubject,
   forwardToOfficerInCharge,
   sendResponse,
-  mailbox,
+  senderFor,
+  senderDomainFor,
+  reconcileDelivery,
 };

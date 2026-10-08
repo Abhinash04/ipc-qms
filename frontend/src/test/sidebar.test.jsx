@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { render, screen, within, fireEvent } from '@testing-library/react';
+import { render, screen, within, fireEvent, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 
 import {
@@ -11,11 +11,12 @@ import {
 import { useAuthStore } from '@/store/useAuthStore';
 import { navItemsForRole } from '@/constants/navigation';
 import { MOCK_USERS } from '@/constants/mockUsers';
-import { ROLES, ROLE_LABELS } from '@/constants/roles';
+import { FRONT_OFFICE_USER } from '@/test/frontOfficeUser';
+import { ROLES } from '@/constants/roles';
 
 const STORAGE_KEY = 'qms.sidebar.collapsed';
 const EVERY_ROLE = Object.values(ROLES);
-const userFor = (role) => MOCK_USERS.find((u) => u.role === role);
+const userFor = (role) => [...MOCK_USERS, FRONT_OFFICE_USER].find((u) => u.role === role);
 
 function renderSidebar({ collapsed = false } = {}) {
   localStorage.setItem(STORAGE_KEY, String(collapsed));
@@ -50,7 +51,7 @@ describe('collapsed geometry adds up', () => {
 
   it('never allows the nav to scroll horizontally', () => {
     renderSidebar({ collapsed: true });
-    expect(nav().className).toContain('overflow-x-hidden');
+    expect(nav().parentElement.className).toContain('overflow-x-hidden');
   });
 });
 
@@ -77,15 +78,15 @@ describe('navigation comes from the permission system, in both states', () => {
   });
 
   it('grants no item the permission table withheld', () => {
-    useAuthStore.setState({ currentUser: userFor(ROLES.INQUIRER) });
+    useAuthStore.setState({ currentUser: userFor(ROLES.REVIEWER) });
     renderSidebar({ collapsed: true });
 
     const hrefs = within(nav())
       .getAllByRole('link')
       .map((a) => a.getAttribute('href'));
 
-    expect(hrefs.some((h) => h.includes('/queries'))).toBe(false);
-    expect(hrefs.every((h) => h.startsWith('/inquirer/'))).toBe(true);
+    expect(hrefs.some((h) => h.includes('/drafting'))).toBe(false);
+    expect(hrefs.every((h) => h.startsWith('/reviewer/'))).toBe(true);
   });
 });
 
@@ -99,22 +100,14 @@ describe('every icon-only control has an accessible name', () => {
     }
   });
 
-  it('names the avatar, sign out and the toggle', () => {
-    const user = userFor(ROLES.REVIEWER);
-    useAuthStore.setState({ currentUser: user });
+  it('names every icon-only control it owns', () => {
+    useAuthStore.setState({ currentUser: userFor(ROLES.REVIEWER) });
     renderSidebar({ collapsed: true });
 
-    expect(
-      screen.getByRole('img', { name: `Signed in as ${user.name}, ${ROLE_LABELS[user.role]}` }),
-    ).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Sign out' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Sign out session' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Expand sidebar' })).toBeInTheDocument();
   });
 
-  it('keeps the avatar reachable by keyboard', () => {
-    renderSidebar({ collapsed: true });
-    expect(screen.getByRole('img', { name: /Signed in as/ })).toHaveAttribute('tabindex', '0');
-  });
 });
 
 describe('the active item is marked, and only it', () => {
@@ -136,30 +129,29 @@ describe('the active item is marked, and only it', () => {
 });
 
 describe('signing out works while collapsed', () => {
-  it('clears the session — collapsing used to hide the only way out', () => {
+  it('clears the session — collapsing used to hide the only way out', async () => {
     useAuthStore.setState({ currentUser: userFor(ROLES.ADMIN) });
     renderSidebar({ collapsed: true });
 
-    fireEvent.click(screen.getByRole('button', { name: 'Sign out' }));
-    expect(useAuthStore.getState().currentUser).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Sign out session' }));
+    await waitFor(() => expect(useAuthStore.getState().currentUser).toBeNull());
   });
 
-  it('still works while expanded', () => {
+  it('still works while expanded', async () => {
     useAuthStore.setState({ currentUser: userFor(ROLES.ADMIN) });
     renderSidebar({ collapsed: false });
 
-    fireEvent.click(screen.getByRole('button', { name: 'Sign out' }));
-    expect(useAuthStore.getState().currentUser).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Sign out session' }));
+    await waitFor(() => expect(useAuthStore.getState().currentUser).toBeNull());
   });
 });
 
 describe('collapsing and expanding', () => {
-  it('shows labels and the section heading when expanded', () => {
+  it('shows labels when expanded', () => {
     const [first] = navItemsForRole(ROLES.SUPER_ADMIN);
 
     renderSidebar({ collapsed: false });
     expect(within(nav()).getByText(first.label)).toBeInTheDocument();
-    expect(screen.getByText('Main Menu')).toBeInTheDocument();
   });
 
   it('renders no visible labels in the rail when collapsed', () => {

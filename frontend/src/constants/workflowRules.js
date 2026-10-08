@@ -1,5 +1,6 @@
 import { BUSINESS_STATUS, WORKFLOW_STATE } from './statusEnums';
 import { ROLES } from './roles';
+import { PULLBACK_RANK } from './reviewCycle';
 
 export const WORKFLOW_ACTION = {
   VERIFY: 'VERIFY',
@@ -20,32 +21,23 @@ export const WORKFLOW_ACTION = {
   PULLBACK: 'PULLBACK',
 };
 
-export const CLARIFICATION_REQUIRED_ACTIONS = {
-  [WORKFLOW_ACTION.TRANSFER]: {
-    label: 'Transfer query',
-    openQuestions: [
-      'Who can initiate a transfer?',
-      'Who is eligible to receive a transferred query?',
-      'Does the workflow continue from its current step after transfer, or restart?',
-      'Is a transfer reason mandatory?',
-    ],
-  },
-  [WORKFLOW_ACTION.PULLBACK]: {
-    label: 'Pull back query',
-    openQuestions: [
-      'Who can pull back a query?',
-      'From which workflow stages is pullback allowed?',
-      'Where does the query land after pullback?',
-      'Do completed review decisions remain valid after a pullback?',
-      'Is a reason required for pullback?',
-      'Is pullback allowed after final approval?',
-    ],
-  },
-  [WORKFLOW_ACTION.DELETE_REVIEW_LEVEL]: {
-    label: 'Delete review level',
-    openQuestions: ['Who can delete a review level, and under what conditions?'],
-  },
-};
+export const CLARIFICATION_REQUIRED_ACTIONS = {};
+
+export const ASSIGNEE_ONLY_ACTIONS = [
+  WORKFLOW_ACTION.GENERATE_AI_DRAFT,
+  WORKFLOW_ACTION.SAVE_DRAFT,
+  WORKFLOW_ACTION.SUBMIT_FOR_REVIEW,
+  WORKFLOW_ACTION.ADD_REVIEW_LEVEL,
+  WORKFLOW_ACTION.DELETE_REVIEW_LEVEL,
+  WORKFLOW_ACTION.TRANSFER,
+];
+
+// Super Admin audits the workflow: it sees every case but changes none of them.
+export const isObserver = (user) => user?.role === ROLES.SUPER_ADMIN;
+
+export function isCaseAssignee(user, query) {
+  return Boolean(query?.currentAssigneeId) && query.currentAssigneeId === user?.id;
+}
 
 export function deriveBusinessStatus(workflowState) {
   if (workflowState === WORKFLOW_STATE.RECEIVED) return BUSINESS_STATUS.OPEN;
@@ -56,37 +48,30 @@ export function deriveBusinessStatus(workflowState) {
 }
 
 const ROLE_ACTIONS = {
-  [ROLES.FRONT_OFFICE]: [WORKFLOW_ACTION.VERIFY, WORKFLOW_ACTION.FORWARD, WORKFLOW_ACTION.DISPATCH],
+  [ROLES.FRONT_OFFICE]: [
+    WORKFLOW_ACTION.VERIFY,
+    WORKFLOW_ACTION.FORWARD,
+    WORKFLOW_ACTION.DISPATCH,
+    WORKFLOW_ACTION.PULLBACK,
+  ],
   [ROLES.OFFICER_IN_CHARGE]: [
     WORKFLOW_ACTION.ASSIGN,
     WORKFLOW_ACTION.FINAL_APPROVE,
     WORKFLOW_ACTION.FINAL_REJECT,
     WORKFLOW_ACTION.RETURN_FOR_REVISION,
+    WORKFLOW_ACTION.PULLBACK,
   ],
   [ROLES.ASSIGNED_OFFICIAL]: [
     WORKFLOW_ACTION.GENERATE_AI_DRAFT,
     WORKFLOW_ACTION.SAVE_DRAFT,
     WORKFLOW_ACTION.SUBMIT_FOR_REVIEW,
     WORKFLOW_ACTION.ADD_REVIEW_LEVEL,
+    WORKFLOW_ACTION.DELETE_REVIEW_LEVEL,
+    WORKFLOW_ACTION.TRANSFER,
   ],
   [ROLES.REVIEWER]: [WORKFLOW_ACTION.APPROVE_REVIEW, WORKFLOW_ACTION.REQUEST_REVISION],
-  [ROLES.ADMIN]: [],
-  [ROLES.INQUIRER]: [],
-  [ROLES.SUPER_ADMIN]: [
-    WORKFLOW_ACTION.VERIFY,
-    WORKFLOW_ACTION.FORWARD,
-    WORKFLOW_ACTION.ASSIGN,
-    WORKFLOW_ACTION.GENERATE_AI_DRAFT,
-    WORKFLOW_ACTION.SAVE_DRAFT,
-    WORKFLOW_ACTION.SUBMIT_FOR_REVIEW,
-    WORKFLOW_ACTION.APPROVE_REVIEW,
-    WORKFLOW_ACTION.REQUEST_REVISION,
-    WORKFLOW_ACTION.ADD_REVIEW_LEVEL,
-    WORKFLOW_ACTION.FINAL_APPROVE,
-    WORKFLOW_ACTION.FINAL_REJECT,
-    WORKFLOW_ACTION.RETURN_FOR_REVISION,
-    WORKFLOW_ACTION.DISPATCH,
-  ],
+  [ROLES.ADMIN]: [WORKFLOW_ACTION.PULLBACK],
+  [ROLES.SUPER_ADMIN]: [],
 };
 
 const ACTION_VALID_STATES = {
@@ -107,10 +92,17 @@ const ACTION_VALID_STATES = {
     WORKFLOW_STATE.UNDER_REVIEW,
     WORKFLOW_STATE.RETURNED_FOR_REVISION,
   ],
+  [WORKFLOW_ACTION.DELETE_REVIEW_LEVEL]: [
+    WORKFLOW_STATE.DRAFTING,
+    WORKFLOW_STATE.UNDER_REVIEW,
+    WORKFLOW_STATE.RETURNED_FOR_REVISION,
+  ],
   [WORKFLOW_ACTION.FINAL_APPROVE]: [WORKFLOW_STATE.PENDING_FINAL_APPROVAL],
   [WORKFLOW_ACTION.FINAL_REJECT]: [WORKFLOW_STATE.PENDING_FINAL_APPROVAL],
   [WORKFLOW_ACTION.RETURN_FOR_REVISION]: [WORKFLOW_STATE.PENDING_FINAL_APPROVAL],
   [WORKFLOW_ACTION.DISPATCH]: [WORKFLOW_STATE.READY_FOR_DISPATCH],
+  [WORKFLOW_ACTION.TRANSFER]: [WORKFLOW_STATE.ASSIGNED],
+  [WORKFLOW_ACTION.PULLBACK]: Object.keys(PULLBACK_RANK),
 };
 
 export function canPerform(role, action, workflowState) {

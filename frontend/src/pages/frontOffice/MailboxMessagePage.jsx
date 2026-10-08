@@ -1,0 +1,331 @@
+import { useEffect, useRef } from "react";
+import { Link, useParams } from "react-router-dom";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  ArrowLeft,
+  ArrowRight,
+  ClipboardList,
+  FileText,
+  FolderOpen,
+  Inbox,
+  MailIcon,
+  MailOpen,
+  Paperclip,
+  Tag,
+  Tags,
+} from "lucide-react";
+
+import { Breadcrumb } from "@/components/common/Breadcrumb";
+import { CaseCard } from "@/components/common/CaseCard";
+import { EmptyState } from "@/components/common/EmptyState";
+import { StatusBadge } from "@/components/common/StatusBadge";
+import { AttachmentList } from "@/components/attachments/AttachmentList";
+import { MailCategoryDetails } from "@/components/email/MailCategoryBadge";
+import { AutoReplyPanel } from "@/components/email/AutoReplyPanel";
+import { AutoReplyConfidenceCard } from "@/components/email/AutoReplyConfidence";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useRoutePaths } from "@/hooks/useRoutePaths";
+import { buildPath } from "@/constants/routePaths";
+import {
+  fetchMailboxMessage,
+  markMailboxMessageRead,
+  mailboxAttachmentUrl,
+  setMailboxMessageCategory,
+} from "@/services/api/mailboxService";
+import { notify } from "@/services/notify";
+import { MAIL_CATEGORY_META } from "@/constants/mailCategories";
+import { isObserver } from "@/constants/workflowRules";
+import { useAuthStore } from "@/store/useAuthStore";
+import { parseSender, formatFullDate } from "@/utils/mailboxFormat";
+
+const CARD = "bg-card rounded-2xl border border-transparent p-5 shadow-card";
+
+const UNLINKED = {
+  REJECTED: ["Rejected", "No case was created for this message."],
+  ACCEPTED: ["Accepted", null],
+};
+const AWAITING = ["Awaiting validation", "Accept or reject it from the IPC Mailbox list."];
+
+function BackToInbox({ paths }) {
+  return (
+    <Link
+      to={paths.INBOX}
+      className="inline-flex items-center gap-1.5 text-[13px] font-bold text-primary-700 hover:underline"
+    >
+      <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+      Back to IPC Mailbox
+    </Link>
+  );
+}
+
+function MessageSkeleton() {
+  return (
+    <div role="status" aria-label="Loading message" className="space-y-4">
+      <Skeleton className="h-32 w-full rounded-2xl" />
+      <Skeleton className="h-64 w-full rounded-2xl" />
+    </div>
+  );
+}
+
+function Field({ label, children }) {
+  return (
+    <div className="flex gap-3">
+      <dt className="w-12 shrink-0 pt-px text-[11.5px] font-bold uppercase tracking-wider text-slate-400">
+        {label}
+      </dt>
+      <dd className="m-0 min-w-0 wrap-break-word text-[13px] font-semibold text-slate-800">
+        {children}
+      </dd>
+    </div>
+  );
+}
+
+function MessageHeader({ message }) {
+  const heading = useRef(null);
+  const sender = parseSender(message.from);
+
+  useEffect(() => {
+    heading.current?.focus();
+  }, [message.mailboxMessageId]);
+
+  return (
+    <section className={CARD}>
+      <h1
+        ref={heading}
+        tabIndex={-1}
+        className="text-[24px] font-bold text-slate-900 leading-tight wrap-break-word focus:outline-none"
+      >
+        {message.subject || "(No Subject)"}
+      </h1>
+      <dl className="mt-4 mb-0 space-y-1.5">
+        <Field label="From">
+          {sender.name}
+          {sender.email && (
+            <span className="font-medium text-slate-500"> &lt;{sender.email}&gt;</span>
+          )}
+        </Field>
+        {[
+          ["To", message.toAddresses],
+          ["CC", message.cc],
+          ["BCC", message.bcc],
+        ].map(([label, addresses]) =>
+          addresses?.length ? (
+            <Field key={label} label={label}>
+              {addresses.join(", ")}
+            </Field>
+          ) : null,
+        )}
+        <Field label="Date">
+          <time dateTime={message.receivedAt ?? undefined}>
+            {formatFullDate(message.receivedAt)}
+          </time>
+        </Field>
+      </dl>
+    </section>
+  );
+}
+
+function MessageBody({ message }) {
+  return (
+    <CaseCard tone="email" banner art={[MailOpen, MailIcon, Inbox]} icon={MailIcon} title="Message">
+      <div className="whitespace-pre-wrap wrap-break-word text-[13.5px] leading-relaxed text-slate-700">
+        {message.body || "(No text)"}
+      </div>
+    </CaseCard>
+  );
+}
+
+function CaseStateBadge({ label, type, value }) {
+  if (!value) return null;
+  return (
+    <div className="inline-flex items-center gap-1.5">
+      <dt className="text-[11px] font-semibold tracking-wider text-slate-400 uppercase">{label}</dt>
+      <dd className="m-0">
+        <StatusBadge type={type} value={value} />
+      </dd>
+    </div>
+  );
+}
+
+function MessageCaseCard({ message, paths }) {
+  const linked = message.linkedCase;
+  const [state, hint] = UNLINKED[message.status] || AWAITING;
+
+  return (
+    <CaseCard tone="context" banner compact art={[ClipboardList]} icon={FolderOpen} title="Query case">
+      {linked ? (
+        <div className="space-y-3">
+          <Link
+            to={buildPath(paths.QUERY_DETAIL, { queryId: linked.queryId })}
+            className="inline-flex items-center gap-1.5 rounded-xl bg-linear-to-r from-primary to-primary-700 hover:from-primary-600 hover:to-primary-700 text-white px-4 py-2 text-[12px] font-bold shadow-sm"
+          >
+            <span>{linked.queryId}</span>
+            <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
+          </Link>
+          {/* Status and stage read the same once a case closes, so the stage shows only when it differs. */}
+          <dl className="m-0 flex flex-wrap items-center gap-x-4 gap-y-2">
+            <CaseStateBadge label="Status" type="business" value={linked.businessStatus} />
+            {linked.workflowState !== linked.businessStatus && (
+              <CaseStateBadge label="Stage" type="workflow" value={linked.workflowState} />
+            )}
+          </dl>
+        </div>
+      ) : (
+        <>
+          <p className="m-0 text-[13.5px] font-semibold text-slate-800">{state}</p>
+          {hint && <p className="mt-1 mb-0 text-[12.5px] font-medium text-slate-500">{hint}</p>}
+        </>
+      )}
+    </CaseCard>
+  );
+}
+
+function MessageCategoryCard({ message, paths, readOnly }) {
+  const queryClient = useQueryClient();
+  const correct = useMutation({
+    mutationFn: (category) => setMailboxMessageCategory(message.mailboxMessageId, category),
+    onSuccess: (_result, category) => {
+      queryClient.invalidateQueries({ queryKey: ["mailbox"] });
+      notify.success("Category updated", `Filed under ${MAIL_CATEGORY_META[category]?.label ?? category}.`);
+    },
+    onError: (failure) => {
+      notify.error(
+        "Could not change the category",
+        failure?.response?.data?.error || failure?.message || "Please try again.",
+      );
+    },
+  });
+
+  return (
+    <CaseCard tone="context" banner compact art={[Tags]} icon={Tag} title="Category">
+      <MailCategoryDetails
+        triage={message.triage}
+        onCorrect={readOnly ? null : (category) => correct.mutate(category)}
+        correcting={correct.isPending}
+        caseHref={paths.QUERY_DETAIL ? (queryId) => buildPath(paths.QUERY_DETAIL, { queryId }) : null}
+        messageHref={(mailboxMessageId) =>
+          buildPath(paths.INBOX_DETAIL, { messageId: encodeURIComponent(mailboxMessageId) })
+        }
+      />
+    </CaseCard>
+  );
+}
+
+function MessageView({ message, paths, readOnly }) {
+  const attachments = message.attachments || [];
+
+  return (
+    <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
+      <div className="min-w-0 space-y-5">
+        <MessageHeader message={message} />
+        <MessageBody key={message.mailboxMessageId} message={message} />
+        <AutoReplyPanel
+          key={`${message.mailboxMessageId}-${message.autoReply?.status}`}
+          message={message}
+          caseHref={paths.QUERY_DETAIL ? (queryId) => buildPath(paths.QUERY_DETAIL, { queryId }) : null}
+          readOnly={readOnly}
+        />
+        {attachments.length > 0 && (
+          <CaseCard
+            banner
+            art={[Paperclip, FileText]}
+            icon={Paperclip}
+            title={`Attachments (${attachments.length})`}
+          >
+            <AttachmentList
+              attachments={attachments}
+              urlFor={(attachmentId) =>
+                mailboxAttachmentUrl(message.mailboxMessageId, attachmentId)
+              }
+            />
+          </CaseCard>
+        )}
+      </div>
+
+      <div className="lg:sticky lg:top-6 self-start space-y-5">
+        <AutoReplyConfidenceCard message={message} />
+        <MessageCaseCard message={message} paths={paths} />
+        <MessageCategoryCard message={message} paths={paths} readOnly={readOnly} />
+      </div>
+    </div>
+  );
+}
+
+export function MailboxMessagePage() {
+  const { messageId } = useParams();
+  const paths = useRoutePaths();
+  const queryClient = useQueryClient();
+  // Super Admin reads mail without marking it read or changing it for the Front Office.
+  const readOnly = isObserver(useAuthStore((state) => state.currentUser));
+
+  const message = useQuery({
+    queryKey: ["mailbox", "message", messageId],
+    queryFn: () => fetchMailboxMessage(messageId),
+    retry: false,
+  });
+
+  const { mutate: markRead } = useMutation({
+    mutationFn: (id) => markMailboxMessageRead(id),
+    onSuccess: (_view, id) => {
+      queryClient.setQueryData(["mailbox", "message", id], (current) =>
+        current ? { ...current, isRead: true } : current,
+      );
+      queryClient.invalidateQueries({ queryKey: ["mailbox", "list"] });
+    },
+  });
+
+  const marked = useRef(null);
+  const unread = message.data?.isRead === false;
+  useEffect(() => {
+    if (readOnly || !unread || marked.current === messageId) return;
+    marked.current = messageId;
+    markRead(messageId);
+  }, [readOnly, unread, messageId, markRead]);
+
+  let content;
+  if (message.isPending) {
+    content = <MessageSkeleton />;
+  } else if (message.isError && message.error?.response?.status !== 404) {
+    content = (
+      <div className="space-y-3">
+        <p
+          role="alert"
+          className="m-0 rounded-2xl border border-rose-200 bg-rose-50/90 px-4 py-3 text-[13px] font-bold text-rose-700"
+        >
+          Could not open this message.{" "}
+          {message.error?.response?.data?.error || message.error?.message}
+        </p>
+        <BackToInbox paths={paths} />
+      </div>
+    );
+  } else if (!message.data) {
+    content = (
+      <EmptyState
+        icon={MailIcon}
+        title="Message not found"
+        description="It may have been deleted, or it is not in your mailbox."
+        action={<BackToInbox paths={paths} />}
+      />
+    );
+  } else {
+    content = (
+      <div className="space-y-4">
+        <BackToInbox paths={paths} />
+        <MessageView message={message.data} paths={paths} readOnly={readOnly} />
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <Breadcrumb
+        items={[
+          { label: "Dashboard", path: paths.DASHBOARD },
+          { label: "IPC Mailbox", path: paths.INBOX },
+          { label: message.data?.subject || "Message" },
+        ]}
+      />
+      {content}
+    </div>
+  );
+}

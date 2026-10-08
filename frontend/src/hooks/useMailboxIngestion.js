@@ -1,133 +1,99 @@
 import { useCallback, useState } from "react";
 
 import { useWorkflowStore } from "@/store/useWorkflowStore";
-import { useAuthStore } from "@/store/useAuthStore";
 import {
   fetchMailboxMessages,
   markMessageIngested,
-  sendAcknowledgement,
+  recordMailboxDecision,
 } from "@/services/api/mailboxService";
+import { notify } from "@/services/notify";
+
+const DECISION = { ACCEPTED: "ACCEPTED", REJECTED: "REJECTED" };
 
 export function useMailboxIngestion() {
-  const ingestEmail = useWorkflowStore((state) => state.ingestEmail);
-  const recordAcknowledgement = useWorkflowStore(
-    (state) => state.recordAcknowledgement,
+  const acceptMailboxMessage = useWorkflowStore((state) => state.acceptMailboxMessage);
+
+  const [state, setState] = useState({ running: false, error: null, lastResult: null });
+
+  const accept = useCallback(
+    async (message) => {
+      setState((prev) => ({ ...prev, running: true, error: null }));
+      try {
+        const result = await acceptMailboxMessage(message);
+
+        await markMessageIngested(message.mailboxMessageId).catch(() => {});
+
+        setState({ running: false, error: null, lastResult: result });
+        return result;
+      } catch (error) {
+        const detail = error?.response?.data?.error || error?.message || String(error);
+        setState({ running: false, error: detail, lastResult: null });
+        return { accepted: false, error: detail };
+      }
+    },
+    [acceptMailboxMessage],
   );
-  const verifyQuery = useWorkflowStore((state) => state.verifyQuery);
-  const forwardToOic = useWorkflowStore((state) => state.forwardToOic);
-  const currentUser = useAuthStore((state) => state.currentUser);
 
-  const [state, setState] = useState({
-    running: false,
-    error: null,
-    lastResult: null,
-  });
-
-  const ingestNow = useCallback(async () => {
+  const reject = useCallback(async (message, reason = "") => {
     setState((prev) => ({ ...prev, running: true, error: null }));
     try {
-      const { messages = [] } = await fetchMailboxMessages({
-        unreadOnly: true,
+      const { alreadyDecided, decision } = await recordMailboxDecision(message.mailboxMessageId, {
+        decision: DECISION.REJECTED,
+        reason,
+        message: {
+          from: message.from,
+          subject: message.subject,
+          receivedAt: message.receivedAt,
+        },
       });
 
-      const created = [];
-      const skipped = [];
-      const acknowledged = [];
-      const forwarded = [];
+      if (!alreadyDecided) await markMessageIngested(message.mailboxMessageId).catch(() => {});
 
-      for (const message of messages) {
-        const result = ingestEmail(message);
-        (result.created ? created : skipped).push(result.queryId);
+      const outcome = { rejected: !alreadyDecided, alreadyDecided, decision: decision ?? null };
+      setState({ running: false, error: null, lastResult: outcome });
+      return outcome;
+    } catch (error) {
+      const detail = error?.message || String(error);
+      setState({ running: false, error: detail, lastResult: null });
+      return { rejected: false, error: detail };
+    }
+  }, []);
 
-        try {
-          await markMessageIngested(message.mailboxMessageId);
-        } catch {
-          // non-fatal
-        }
-
-        if (!result.created) continue;
-
-        if (
-          await acknowledge(result.queryId, message.from, recordAcknowledgement)
-        ) {
-          acknowledged.push(result.queryId);
-        }
-
-        if (
-          await verifyAndForward(
-            result.queryId,
-            currentUser,
-            verifyQuery,
-            forwardToOic,
-          )
-        ) {
-          forwarded.push(result.queryId);
-        }
-      }
-
-      const result = {
-        fetched: messages.length,
-        created,
-        skipped,
-        acknowledged,
-        forwarded,
-      };
+  const checkMailbox = useCallback(async () => {
+    setState((prev) => ({ ...prev, running: true, error: null }));
+    try {
+      const { messages = [], sync = null, total } = await fetchMailboxMessages({
+        unreadOnly: true,
+        limit: 1,
+      });
+      const result = { fetched: total ?? messages.length, messages, sync };
       setState({ running: false, error: null, lastResult: result });
       return result;
     } catch (error) {
-      const message = error?.message || String(error);
-      setState({ running: false, error: message, lastResult: null });
-      return {
-        fetched: 0,
-        created: [],
-        skipped: [],
-        acknowledged: [],
-        forwarded: [],
-        error: message,
-      };
+      const data = error?.response?.data;
+      const detail = data?.error || error?.message || String(error);
+      setState({ running: false, error: detail, lastResult: null });
+      return { fetched: 0, messages: [], error: detail, retryable: Boolean(data?.retryable) };
     }
-  }, [
-    ingestEmail,
-    recordAcknowledgement,
-    verifyQuery,
-    forwardToOic,
-    currentUser,
-  ]);
+  }, []);
 
-  return { ...state, ingestNow };
+  return { ...state, accept, reject, checkMailbox };
 }
 
-async function acknowledge(queryId, inquirerAddress, recordAcknowledgement) {
-  try {
-    const sent = await sendAcknowledgement({ to: inquirerAddress, queryId });
-    const outcome = recordAcknowledgement({
-      queryId,
-      from: sent.from,
-      to: sent.to,
-      subject: sent.subject,
-      body: sent.body,
-      timestamp: sent.sentAt,
-      providerMessageId: sent.providerMessageId,
-    });
-    return outcome.created;
-  } catch {
-    return false;
-  }
-}
-
-async function verifyAndForward(queryId, actor, verifyQuery, forwardToOic) {
-  try {
-    // Awaited so the acknowledgement promise settles inside this try. The chain
-    // already acknowledged above, so verifyQuery's own attempt is a no-op.
-    await verifyQuery(queryId, actor);
-  } catch {
-    return false;
+export function notifyMailboxCheck(result, { announceIdle = true } = {}) {
+  if (result.error) {
+    notify.error("Could not check the IPC mailbox", result.error, { id: "mailbox-unreachable" });
+    return;
   }
 
-  try {
-    await forwardToOic(queryId, actor);
-    return true;
-  } catch {
-    return false;
+  const waiting = result.fetched || 0;
+  if (waiting === 0) {
+    if (announceIdle) notify.info("No new mail");
+    return;
   }
+
+  notify.info(
+    `${waiting} message${waiting === 1 ? "" : "s"} awaiting validation`,
+    "Open the IPC mailbox to accept or reject them.",
+  );
 }

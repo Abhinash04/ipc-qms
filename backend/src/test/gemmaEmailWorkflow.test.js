@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import request from 'supertest';
+import { AUTH } from './helpers/auth.js';
 import app from '../app.js';
 import { forwardToOfficerInCharge } from '../services/email/emailService.js';
 
@@ -18,7 +19,7 @@ describe('Gemma AI Integration & REST API Tests', () => {
     });
 
     const response = await request(app)
-      .post('/api/v1/ai/summary')
+      .post('/api/v1/ai/summary').set(AUTH)
       .send({
         subject: 'Enquiry on Monograph Dissolution',
         body: 'We are seeking guidance regarding the dissolution test procedure for Paracetamol IP tablets.',
@@ -51,7 +52,7 @@ describe('Gemma AI Integration & REST API Tests', () => {
 
     expect(forwardResult).toBeDefined();
     expect(forwardResult.aiSummary).toEqual(mockSummary);
-    expect(forwardResult.body).toContain('🤖 GEMMA AI QUERY SUMMARY');
+    expect(forwardResult.body).toContain('🤖 PRAVAH AI QUERY SUMMARY');
     expect(forwardResult.body).toContain('Abhinash asks about monograph dissolution test standards.');
   });
 });

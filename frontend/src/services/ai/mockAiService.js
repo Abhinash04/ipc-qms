@@ -1,7 +1,8 @@
 import { MOCK_USERS } from '@/constants/mockUsers';
 import { findDivisionById } from '@/constants/mockDivisions';
 import { ROLES } from '@/constants/roles';
-import { IPC_SIGNATURE } from '@/services/ai/draftComposer';
+import { expandExpertise } from '@/constants/expertise';
+import { DRAFT_SALUTATION, IPC_DISCLAIMER, IPC_SIGNATURE, referenceSentence } from '@/services/ai/draftComposer';
 
 const TOPIC_DIVISIONS = {
   'monograph': 'DIV-003',
@@ -96,7 +97,7 @@ export function summarise(query) {
   };
 }
 function expertiseMatch(user, text) {
-  const matched = (user.expertise || []).filter((skill) => text.includes(skill.toLowerCase()));
+  const matched = expandExpertise(user.expertise).filter((term) => text.includes(term));
   return { matched, score: matched.length };
 }
 
@@ -154,8 +155,11 @@ export function recommendAssignee(query, users = MOCK_USERS, openQueries = []) {
   };
 }
 
-export function recommendTopOfficials(query, users = MOCK_USERS, openQueries = []) {
-  const eligible = users.filter((user) => user.role === ROLES.ASSIGNED_OFFICIAL);
+export function recommendTopOfficials(query, users = MOCK_USERS, openQueries = [], excludeUserId = null) {
+  const excludeId = excludeUserId || query?.currentAssigneeId;
+  const eligible = users.filter(
+    (user) => user.role === ROLES.ASSIGNED_OFFICIAL && user.id !== excludeId,
+  );
   if (eligible.length === 0) return [];
 
   const text = textOf(query);
@@ -170,24 +174,23 @@ export function recommendTopOfficials(query, users = MOCK_USERS, openQueries = [
       const expertise = expertiseMatch(user, text);
       const division = findDivisionById(user.divisionId);
       const load = workload(user.id);
-      const plural = load === 1 ? 'query' : 'queries';
 
       let matchPercent;
       if (expertise.score > 0) {
-        matchPercent = Math.min(98, 70 + (expertise.score - 1) * 12 + (divisionMatch ? 10 : 0));
+        matchPercent = Math.min(98, 72 + (expertise.score - 1) * 10 + (divisionMatch ? 10 : 0));
       } else if (divisionMatch) {
-        matchPercent = 65;
+        matchPercent = 78;
       } else {
-        matchPercent = Math.max(25, 55 - idx * 12);
+        matchPercent = Math.max(45, 68 - idx * 8);
       }
 
       let reason;
       if (expertise.score > 0) {
-        reason = `${user.name} specializes in ${expertise.matched.join(', ')} (${division?.name || 'Technical Division'}), matching this enquiry. Holds ${load} open ${plural}.`;
+        reason = `Expertise matches the query subject (${expertise.matched.join(', ')}).`;
       } else if (divisionMatch) {
-        reason = `${division?.name || 'Their division'} handles topics like ${topics.slice(0, 2).join(' & ')}. Holds ${load} open ${plural}.`;
+        reason = `Belongs to ${division?.name || 'relevant division'} which handles this category.`;
       } else {
-        reason = `Suggested based on division capacity (${division?.name || 'Technical'}) and workload (${load} open ${plural}).`;
+        reason = `Suggested based on division capacity and lower workload (${load} open).`;
       }
 
       return {
@@ -200,24 +203,22 @@ export function recommendTopOfficials(query, users = MOCK_USERS, openQueries = [
         reason,
         matchedKeywords: expertise.matched,
         expertise: user.expertise || [],
+        weakMatch: expertise.score === 0 && !divisionMatch,
       };
     })
     .sort((a, b) => b.matchPercent - a.matchPercent || a.userId.localeCompare(b.userId));
 
-  return scored.slice(0, 3).map((rec, idx) => ({
+  return scored.slice(0, 4).map((rec, idx) => ({
     ...rec,
     rank: idx + 1,
   }));
 }
-
-const SIGNATURE = IPC_SIGNATURE;
 
 export function draftResponse(query) {
   if (!query) return '';
 
   const keyPoints = extractKeyPoints(query);
   const topics = detectTopics(query);
-  const inquirer = query.inquirer?.name || 'Sir/Madam';
 
   const pointBlock = keyPoints.length
     ? keyPoints
@@ -225,23 +226,19 @@ export function draftResponse(query) {
         .join('\n\n')
     : '[Response required — the enquiry raises no itemised points; summarise the position here.]';
 
-  const topicLine = topics.length
-    ? `Your enquiry has been reviewed by the division responsible for ${topics.slice(0, 3).join(', ')}.`
-    : 'Your enquiry has been reviewed by the concerned division.';
+  const reviewedBy = topics.length
+    ? `the division responsible for ${topics.slice(0, 3).join(', ')}`
+    : 'the concerned division';
 
-  return `[AI-GENERATED FIRST DRAFT — requires review and editing by the assigned official before it can proceed.]
+  return `${DRAFT_SALUTATION}
 
-Dear ${inquirer},
-
-Thank you for your enquiry dated ${new Date(query.createdAt).toLocaleDateString()} regarding "${query.subject}".
-
-${topicLine} Our response to the points you raised follows.
+${referenceSentence(query.createdAt)} This is to inform you that your query has been examined by ${reviewedBy}, and the response to the points raised is as follows:
 
 ${pointBlock}
 
-Should you require any further clarification, please write back quoting reference ${query.queryId}.
+${IPC_DISCLAIMER}
 
-${SIGNATURE}`;
+${IPC_SIGNATURE}`;
 }
 
 export const mockAiService = { summarise, recommendAssignee, draftResponse, detectTopics, extractKeyPoints };

@@ -35,7 +35,6 @@ describe('Enum Reference Guard', () => {
     const pattern = /WORKFLOW_STATE\.([A-Za-z0-9_]+)/g;
 
     for (const filePath of sourceFiles) {
-      // Don't scan statusEnums.js definition itself
       if (filePath.endsWith('statusEnums.js')) continue;
 
       const content = fs.readFileSync(filePath, 'utf-8');

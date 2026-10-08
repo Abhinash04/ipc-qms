@@ -1,15 +1,7 @@
 import { AUDIT_EVENT, WORKFLOW_STATE } from './statusEnums';
 import { findUserById } from './mockUsers';
 import { reviewLevelName, STAGE_STATUS } from './queryLifecycle';
-
-/**
- * Who is handling this case, and where each of them stands.
- *
- * This is deliberately not derived from `buildLifecycle`: that returns process
- * *stages*, and its Front Office rows carry the literal string "Front Office"
- * rather than the person who acted. The people come from audit actors (which
- * store real names), the current assignee, and the review steps.
- */
+import { brandedName } from './orgBranding';
 
 const PENDING_ASSIGNMENT_STATES = [
   WORKFLOW_STATE.RECEIVED,
@@ -23,9 +15,15 @@ export function buildCaseOfficials({ query, steps = [], audit = [] } = {}) {
   if (!query) return [];
 
   const seen = new Set(audit.map((a) => a.event));
+
+  const firstByEvent = new Map();
+  for (const entry of audit) {
+    if (!firstByEvent.has(entry.event)) firstByEvent.set(entry.event, entry);
+  }
+
   const actorOf = (...events) => {
     for (const event of events) {
-      const entry = audit.find((a) => a.event === event);
+      const entry = firstByEvent.get(event);
       if (entry?.actor) return entry.actor;
     }
     return null;
@@ -40,12 +38,11 @@ export function buildCaseOfficials({ query, steps = [], audit = [] } = {}) {
     ),
   ];
 
-  // Front Office own the case until it is forwarded, and again at dispatch.
   const forwarded = seen.has(AUDIT_EVENT.QUERY_FORWARDED);
   rows.push(
     official(
       'Front Office',
-      actorOf(AUDIT_EVENT.QUERY_FORWARDED, AUDIT_EVENT.QUERY_REGISTERED),
+      brandedName(actorOf(AUDIT_EVENT.QUERY_FORWARDED, AUDIT_EVENT.QUERY_REGISTERED)),
       forwarded
         ? STAGE_STATUS.COMPLETE
         : state === WORKFLOW_STATE.READY_FOR_DISPATCH
@@ -105,7 +102,6 @@ export function buildCaseOfficials({ query, steps = [], audit = [] } = {}) {
       );
     });
 
-  // Only worth listing once the case is actually heading for approval.
   const finalStep = steps.find((s) => s.stepType === 'FINAL_APPROVAL');
   if (finalStep && !PENDING_ASSIGNMENT_STATES.includes(state)) {
     rows.push(

@@ -1,0 +1,175 @@
+import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { Mail, Inbox, Send, AlertTriangle } from 'lucide-react';
+
+import { Breadcrumb } from '@/components/common/Breadcrumb';
+import { PageHeader } from '@/components/common/PageHeader';
+import { StatTile } from '@/components/common/StatTile';
+import { EmptyState } from '@/components/common/EmptyState';
+import { Skeleton } from '@/components/ui/skeleton';
+import { AuditTable } from '@/components/admin/AuditTable';
+import { CaseViewSheet } from '@/components/admin/CaseViewSheet';
+import { fetchAuditEvents, fetchAuditSummary } from '@/services/api/adminService';
+import { fetchMailboxMessages } from '@/services/api/mailboxService';
+import { useRoutePaths } from '@/hooks/useRoutePaths';
+import { useWorkflowStore } from '@/store/useWorkflowStore';
+
+export function AdminEmailActivityPage() {
+  const paths = useRoutePaths();
+  // A case opens read-only here; the audit pages never take the admin into the query workflow.
+  const [viewedCase, setViewedCase] = useState(null);
+  const emailMessages = useWorkflowStore((state) => state.emailMessages);
+
+  const summary = useQuery({ queryKey: ['audit', 'summary'], queryFn: () => fetchAuditSummary(), retry: false });
+  const inbox = useQuery({
+    queryKey: ['mailbox', 'admin'],
+    queryFn: () => fetchMailboxMessages({ unreadOnly: false }),
+    retry: false,
+  });
+  const outbound = useQuery({
+    queryKey: ['audit', 'email'],
+    queryFn: () => fetchAuditEvents({ limit: 100 }),
+    retry: false,
+  });
+
+  const byAction = summary.data?.overall?.byAction || {};
+  const emailEvents = (outbound.data?.events || []).filter((event) => event.action.startsWith('EMAIL_'));
+  const messages = inbox.data?.messages || [];
+
+  const queryIdFor = (mailboxMessageId) =>
+    emailMessages.find((m) => m.sourceMessageId === mailboxMessageId)?.queryId || null;
+
+  const tiles = [
+    {
+      label: 'In the mailbox',
+      value: messages.length,
+      icon: Inbox,
+      tone: 'blue',
+    },
+    {
+      label: 'Sent',
+      value: (byAction.EMAIL_SENT ?? 0) + (byAction.EMAIL_REPLIED ?? 0),
+      icon: Send,
+      tone: 'emerald',
+    },
+    {
+      label: 'Forwarded',
+      value: byAction.EMAIL_FORWARDED ?? 0,
+      icon: Mail,
+      tone: 'violet',
+    },
+    {
+      label: 'Send failures',
+      value: byAction.EMAIL_SEND_FAILED ?? 0,
+      icon: AlertTriangle,
+      tone: 'rose',
+    },
+  ];
+
+  const panel = 'rounded-2xl border border-transparent bg-card p-5 shadow-card';
+
+  return (
+    <div className="space-y-5">
+      <Breadcrumb
+        items={[
+          { label: 'Dashboard', path: paths.DASHBOARD },
+          { label: 'Administration', path: paths.ADMINISTRATION },
+          { label: 'Email Activity' },
+        ]}
+      />
+      <PageHeader title="Email Activity" purpose="Inbound mail, outbound mail, and the case each one belongs to." />
+
+      {summary.isLoading ? (
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Skeleton key={i} className="h-28 w-full rounded-2xl" />
+          ))}
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {tiles.map((tile) => (
+            <StatTile key={tile.label} {...tile} />
+          ))}
+        </div>
+      )}
+
+      <section className={panel} aria-labelledby="inbound">
+        <h2 id="inbound" className="mb-3 font-heading text-[17px] font-bold text-slate-900">
+          Inbound mailbox
+        </h2>
+
+        {inbox.isLoading && <Skeleton className="h-32 w-full rounded-2xl" />}
+        {inbox.isError && (
+          <p className="text-[13px] text-slate-500">The mailbox could not be reached.</p>
+        )}
+        {inbox.data && messages.length === 0 && (
+          <EmptyState icon={Inbox} title="The mailbox is empty" description="No messages are currently held." />
+        )}
+        {messages.length > 0 && (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-160 border-collapse">
+              <thead>
+                <tr className="border-b border-slate-200 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                  <th scope="col" className="px-3 py-2">Received</th>
+                  <th scope="col" className="px-3 py-2">From</th>
+                  <th scope="col" className="px-3 py-2">Subject</th>
+                  <th scope="col" className="px-3 py-2 text-center">Attachments</th>
+                  <th scope="col" className="px-3 py-2">Case</th>
+                </tr>
+              </thead>
+              <tbody>
+                {messages.map((message) => {
+                  const queryId = queryIdFor(message.mailboxMessageId);
+                  return (
+                    <tr key={message.mailboxMessageId} className="border-b border-slate-100 hover:bg-slate-50/70">
+                      <td className="whitespace-nowrap px-3 py-2.5 text-[12.5px] tabular-nums text-slate-600">
+                        {new Date(message.receivedAt).toLocaleString(undefined, {
+                          day: '2-digit',
+                          month: 'short',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })}
+                      </td>
+                      <td className="px-3 py-2.5 text-[12.5px] text-slate-700">{message.from}</td>
+                      <td className="px-3 py-2.5 text-[12.5px] font-semibold text-slate-800">{message.subject}</td>
+                      <td className="px-3 py-2.5 text-center text-[12.5px] tabular-nums text-slate-600">
+                        {message.attachments?.length || 0}
+                      </td>
+                      <td className="px-3 py-2.5">
+                        {queryId ? (
+                          <button
+                            type="button"
+                            onClick={() => setViewedCase(queryId)}
+                            className="rounded font-mono text-[11.5px] font-bold text-primary-700 underline-offset-2 hover:underline"
+                          >
+                            {queryId}
+                          </button>
+                        ) : (
+                          <span className="text-[11.5px] font-semibold text-amber-700">Not registered</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      <section className={panel} aria-labelledby="outbound">
+        <h2 id="outbound" className="mb-3 font-heading text-[17px] font-bold text-slate-900">
+          Outbound and delivery events
+        </h2>
+        <AuditTable
+          events={emailEvents}
+          loading={outbound.isLoading}
+          error={outbound.isError ? 'The audit API could not be reached.' : null}
+          onOpenQuery={setViewedCase}
+          emptyTitle="No email events recorded yet"
+        />
+        <CaseViewSheet queryId={viewedCase} onClose={() => setViewedCase(null)} />
+      </section>
+    </div>
+  );
+}

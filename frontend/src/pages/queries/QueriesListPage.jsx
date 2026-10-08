@@ -1,16 +1,20 @@
 import { QueryTable } from "@/components/workflow/QueryTable";
-import { MailboxIngestButton } from "@/components/workflow/MailboxIngestButton";
 import { useRoutePaths } from "@/hooks/useRoutePaths";
 import { useBucketFilter } from "@/hooks/useBucketFilter";
 import { useAuthStore } from "@/store/useAuthStore";
 import { ROLES } from "@/constants/roles";
+import { useWatchedUser } from "@/hooks/useWatchedUser";
 
 export function QueriesListPage() {
   const paths = useRoutePaths();
   const currentUser = useAuthStore((state) => state.currentUser);
 
-  // The role's own visibility rule — the same one the dashboard scopes by.
-  const filter = useBucketFilter(currentUser?.role);
+  const watcher = useWatchedUser([ROLES.ASSIGNED_OFFICIAL, ROLES.REVIEWER]);
+  const filter = useBucketFilter(
+    watcher.watched?.role || currentUser?.role,
+    null,
+    watcher.watched,
+  );
 
   const isAssignedOfficial = currentUser?.role === ROLES.ASSIGNED_OFFICIAL;
 
@@ -20,7 +24,7 @@ export function QueriesListPage() {
       greeting="IPC Query Registry 📋"
       purpose={
         isAssignedOfficial
-          ? "Queries currently assigned to you."
+          ? "Queries assigned to you, and ones you worked on before they were transferred."
           : "All registered queries across the organization."
       }
       breadcrumbItems={[
@@ -28,13 +32,13 @@ export function QueriesListPage() {
         { label: "Queries" },
       ]}
       detailPath={paths.QUERY_DETAIL}
-      actions={!isAssignedOfficial && <MailboxIngestButton />}
       emptyMessage={
         isAssignedOfficial
           ? "No queries assigned to you yet."
-          : "No queries yet. A case is created when an email is ingested from the IPC mailbox."
+          : "No queries yet. A case is created when the Front Office accepts an email in the IPC mailbox."
       }
       filter={filter}
+      watcher={watcher}
     />
   );
 }

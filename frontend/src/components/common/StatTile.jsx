@@ -1,104 +1,143 @@
 import { cn } from "@/utils/cn";
+import { activateOnKey } from "@/utils/a11y";
+import { DIRECTION_ICON, trendTone } from "@/components/common/trendTone";
+import { RadialRing } from "@/components/charts/RadialRing";
+import { TILE_TONES } from "@/components/common/tileTones";
+import { CardDecor } from "@/components/common/CardDecor";
+
+function TileTrend({ delta, higherIsWorse, neutral, comparisonLabel }) {
+  if (!delta) {
+    return (
+      <span
+        aria-hidden="true"
+        title={`No ${comparisonLabel || "comparison"} to report yet`}
+        className="select-none text-[11px] font-bold leading-none text-black/70"
+      >
+        —
+      </span>
+    );
+  }
+
+  const TrendIcon = DIRECTION_ICON[delta.direction] || DIRECTION_ICON.flat;
+  const tone = neutral ? "text-ink-muted" : trendTone(delta.direction, higherIsWorse);
+
+  return (
+    <span
+      title={comparisonLabel}
+      className={cn("inline-flex items-center gap-1 text-[11.5px] font-semibold", tone)}
+    >
+      <TrendIcon className="h-3.5 w-3.5" aria-hidden="true" />
+      {delta.text}
+    </span>
+  );
+}
+
+function ringLabelFor(pct, shareTotal) {
+  if (pct == null || !(shareTotal > 0)) return undefined;
+  return `${pct}% of ${shareTotal} ${shareTotal === 1 ? "query" : "queries"} in view`;
+}
+
+// A tile with onClick acts as a toggle button; without one it is plain content.
+function interactiveProps(onClick, selected) {
+  if (!onClick) return {};
+  return { onClick, onKeyDown: activateOnKey(onClick), role: "button", tabIndex: 0, "aria-pressed": selected };
+}
+
+function StatTileFooter({ subtextMain, caption }) {
+  return (
+    <>
+      {subtextMain && (
+        <div className="mt-3 flex items-center gap-1 text-[12px] font-semibold text-black">
+          {subtextMain}
+        </div>
+      )}
+      {caption && (
+        <p className="m-0 mt-3 line-clamp-2 text-[11.5px] font-medium leading-snug text-black">{caption}</p>
+      )}
+    </>
+  );
+}
 
 export function StatTile({
   label,
   value,
   icon: Icon,
-  cardBg = "#ffffff",
-  cardBorder = "#e2e8f0",
-  numColor = "#1e293b",
-  iconBg,
-  trendText,
-  trendType,
-  subtextMain,
+  tone = "primary",
+  delta,
+  higherIsWorse,
+  neutralTrend,
+  comparisonLabel,
+  share,
+  shareTotal,
   caption,
-  subtextColor,
+  subtextMain,
   className,
   onClick,
   selected = false,
 }) {
+  const palette = TILE_TONES[tone] || TILE_TONES.primary;
+  const pct = share == null ? null : Math.round(share * 100);
+  const ringLabel = ringLabelFor(pct, shareTotal);
+
   return (
     <div
-      onClick={onClick}
-      role={onClick ? "button" : undefined}
-      aria-pressed={onClick ? selected : undefined}
+      {...interactiveProps(onClick, selected)}
       className={cn(
-        "bento-card group relative select-none overflow-hidden rounded-2xl p-3.5 sm:p-4 transition-all duration-200 flex flex-col justify-between h-full border shadow-[0_2px_8px_rgba(0,0,0,0.03)]",
+        "bento-card group relative flex h-full select-none flex-col overflow-hidden rounded-2xl border-2 bg-surface p-4 shadow-card",
+        "transition-[border-color,box-shadow,transform] duration-200 motion-reduce:transition-none",
+        selected ? "border-primary" : "border-transparent",
         onClick &&
-          "cursor-pointer hover:-translate-y-0.5 hover:shadow-[0_6px_18px_rgba(0,0,0,0.06)] active:scale-[0.99]",
-        selected &&
-          "ring-2 ring-offset-1 ring-blue-500/80 shadow-md -translate-y-0.5",
+          "cursor-pointer outline-none hover:shadow-card-hover focus-visible:ring-2 focus-visible:ring-primary/50 motion-safe:hover:-translate-y-0.5",
         className,
       )}
-      style={{
-        background: cardBg,
-        borderColor: cardBorder || "#e2e8f0",
-      }}
     >
-      <div className="relative z-10 flex h-full w-full flex-col justify-between space-y-2">
-        {/* Top Header: Icon Badge */}
-        <div className="flex items-center justify-between gap-2">
-          {Icon ? (
-            <div
-              className={cn(
-                "flex h-8.5 w-8.5 shrink-0 items-center justify-center rounded-lg text-white shadow-2xs transition-transform duration-200 group-hover:scale-105",
-                iconBg || "bg-blue-600 text-white",
-              )}
-            >
-              <Icon className="h-4.5 w-4.5 text-white" strokeWidth={2.2} />
-            </div>
-          ) : (
-            <div />
-          )}
-
-          {trendText && (
-            <span
-              className={cn(
-                "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10.5px] font-bold",
-                trendType === "down"
-                  ? "bg-rose-50 text-rose-600 border-rose-200"
-                  : "bg-emerald-50 text-emerald-600 border-emerald-200",
-              )}
-            >
-              {trendText}
-            </span>
-          )}
-        </div>
-
-        {/* Middle KPI Value */}
-        <div className="my-0.5">
-          <div
-            className="font-heading text-2xl sm:text-3xl font-extrabold leading-none tracking-tight"
-            style={{ color: numColor || "#1e293b" }}
+      <CardDecor colorClass={palette.ring} />
+      <div className="relative z-10 flex h-full flex-col">
+        <div className="flex items-center gap-3.5">
+          <RadialRing
+            value={pct == null ? null : pct / 100}
+            size={58}
+            stroke={5}
+            colorClass={palette.ring}
+            label={ringLabel}
           >
-            {value}
+            {Icon && (
+              <span className={cn("flex h-9 w-9 items-center justify-center rounded-full", palette.chip)}>
+                <Icon className="h-4.5 w-4.5" strokeWidth={2.2} aria-hidden="true" />
+              </span>
+            )}
+          </RadialRing>
+
+          <div className="min-w-0 flex-1">
+            <p
+              data-slot="stat-label"
+              className="m-0 line-clamp-2 text-[13px] font-semibold leading-snug text-black"
+            >
+              {label}
+            </p>
+            <div className="mt-1 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+              <div
+                data-slot="stat-value"
+                className="font-heading text-[26px] font-bold leading-none tracking-tight text-black tabular-nums"
+              >
+                {value}
+              </div>
+              <TileTrend
+                delta={delta}
+                higherIsWorse={higherIsWorse}
+                neutral={neutralTrend}
+                comparisonLabel={comparisonLabel}
+              />
+            </div>
           </div>
         </div>
 
-        {/* Bottom Label, Subtext & Caption */}
-        <div>
-          <h3 className="font-heading text-[13px] font-bold text-slate-800 m-0 leading-tight group-hover:text-slate-900 line-clamp-1">
-            {label}
-          </h3>
-
-          {subtextMain && (
-            <div
-              className={cn(
-                "text-[11.5px] font-semibold mt-0.5 flex items-center gap-1",
-                subtextColor || "text-slate-600",
-              )}
-            >
-              {subtextMain}
-            </div>
-          )}
-
-          {caption && (
-            <p className="text-[10.5px] font-medium text-slate-400 m-0 mt-0.5 line-clamp-1">
-              {caption}
-            </p>
-          )}
-        </div>
+        <StatTileFooter subtextMain={subtextMain} caption={caption} />
       </div>
+
+      {selected && (
+        <span aria-hidden="true" className="absolute inset-x-0 bottom-0 z-20 h-1 bg-primary" />
+      )}
     </div>
   );
 }

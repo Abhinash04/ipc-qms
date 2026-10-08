@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 
 import { useWorkflowStore } from '@/store/useWorkflowStore';
 import { buildSeedState } from '@/constants/mockDomain';
-import { loadAll } from '@/services/db/db';
+import { loadAll } from '@/services/persistence/queryState';
 import { BUSINESS_STATUS, WORKFLOW_STATE, AUDIT_EVENT } from '@/constants/statusEnums';
 import { EMAIL_DIRECTION, EMAIL_TYPE } from '@/constants/emailModel';
 
@@ -11,7 +11,7 @@ const s = () => useWorkflowStore.getState();
 const mailboxMessage = (overrides = {}) => ({
   mailboxMessageId: 'MSG-00001',
   to: 'ipc-query-mock@example.com',
-  from: 'Abhinash Pritiraj <abhinash.pritiraj@gmail.com>',
+  from: 'Abhinash Pritiraj <abhinash.pritiraj@pharma.example>',
   cc: [],
   bcc: [],
   subject: 'Clarification on Magnesium Stearate monograph revision',
@@ -78,9 +78,9 @@ describe('requirement 2 — a query is created dynamically from an email', () =>
     expect(query.subject).toBe('Clarification on Magnesium Stearate monograph revision');
     expect(query.description).toContain('revised limits');
     expect(query.source).toBe('Email');
-    expect(query.inquirer.email).toBe('abhinash.pritiraj@gmail.com');
+    expect(query.inquirer.email).toBe('abhinash.pritiraj@pharma.example');
     expect(query.inquirer.name).toBe('Abhinash Pritiraj');
-    expect(query.inquirer.id).toBe('USR-0001');
+    expect(query.inquirer.id).toBeNull();
   });
 
   it('mints the documented id shapes, sequentially', () => {
@@ -94,7 +94,7 @@ describe('requirement 2 — a query is created dynamically from an email', () =>
     expect(second.threadId).toBe('THREAD-2026-00002');
   });
 
-  it('records the inbound message with the QMS/IPC direction convention', () => {
+  it('records the inbound message with the BRIDGETECH/IPC direction convention', () => {
     const { messageId } = s().ingestEmail(mailboxMessage());
     const message = s().emailMessages.find((m) => m.messageId === messageId);
 

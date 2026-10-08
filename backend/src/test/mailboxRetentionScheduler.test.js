@@ -1,0 +1,99 @@
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+
+vi.mock('../config/db.js', async (importOriginal) => ({
+  ...(await importOriginal()),
+  isConnected: () => false,
+}));
+
+import env from '../config/env.js';
+import { startRetentionSweeps, stopRetentionSweeps } from '../services/email/mailbox/retention.js';
+
+const ORIGINAL = { nodeEnv: env.NODE_ENV, enabled: env.MAILBOX_RETENTION_ENABLED, databaseUrl: env.DATABASE_URL };
+
+beforeEach(() => {
+  vi.useFakeTimers();
+  stopRetentionSweeps();
+});
+
+afterEach(() => {
+  stopRetentionSweeps();
+  vi.useRealTimers();
+  env.NODE_ENV = ORIGINAL.nodeEnv;
+  env.MAILBOX_RETENTION_ENABLED = ORIGINAL.enabled;
+  env.DATABASE_URL = ORIGINAL.databaseUrl;
+  vi.unstubAllEnvs();
+});
+
+describe('when the sweep is not wanted', () => {
+  it('registers nothing under NODE_ENV=test', () => {
+    env.NODE_ENV = 'test';
+    expect(startRetentionSweeps()).toBeNull();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('registers nothing when retention is switched off', () => {
+    env.NODE_ENV = 'production';
+    env.MAILBOX_RETENTION_ENABLED = false;
+    expect(startRetentionSweeps()).toBeNull();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+});
+
+describe('when the sweep is wanted', () => {
+  beforeEach(() => {
+    env.NODE_ENV = 'production';
+    env.MAILBOX_RETENTION_ENABLED = true;
+  });
+
+  it('never holds the process open', () => {
+    const timer = startRetentionSweeps({ bootedAt: Date.now() });
+    expect(timer.hasRef()).toBe(false);
+  });
+
+  it('schedules an early first pass as well as the hourly one', () => {
+    startRetentionSweeps({ bootedAt: Date.now() });
+    expect(vi.getTimerCount()).toBe(2);
+  });
+
+  it('is idempotent — starting twice leaves one interval', () => {
+    const first = startRetentionSweeps({ bootedAt: Date.now() });
+    const second = startRetentionSweeps({ bootedAt: Date.now() });
+    expect(second).toBe(first);
+  });
+
+  it('clears both timers on stop', () => {
+    startRetentionSweeps({ bootedAt: Date.now() });
+    stopRetentionSweeps();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('keeps ticking rather than dying on a pass that went wrong', async () => {
+    startRetentionSweeps({ bootedAt: Date.now() });
+    await vi.advanceTimersByTimeAsync(3 * 60 * 60 * 1000);
+    expect(vi.getTimerCount()).toBeGreaterThan(0);
+  });
+});
+
+describe('on a database other developers share', () => {
+  beforeEach(() => {
+    env.NODE_ENV = 'development';
+    env.MAILBOX_RETENTION_ENABLED = true;
+    env.DATABASE_URL = 'mongodb+srv://cluster0.example.mongodb.net/query_management_system';
+  });
+
+  it('registers nothing on a backend that is not the mailbox host', () => {
+    expect(startRetentionSweeps()).toBeNull();
+
+    vi.stubEnv('NIC_BROWSER_MAILBOX', 'true');
+    vi.stubEnv('NIC_BROWSER_VIEWER', 'true');
+    expect(startRetentionSweeps()).toBeNull();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('sweeps on the mailbox host', () => {
+    vi.stubEnv('NIC_BROWSER_MAILBOX', 'true');
+
+    expect(startRetentionSweeps({ bootedAt: Date.now() })).not.toBeNull();
+    expect(vi.getTimerCount()).toBe(2);
+  });
+});

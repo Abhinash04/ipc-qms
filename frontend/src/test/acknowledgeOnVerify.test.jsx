@@ -7,35 +7,35 @@ import { AppRoutes } from '@/routes/AppRoutes';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useWorkflowStore } from '@/store/useWorkflowStore';
 import { findUserById } from '@/constants/mockUsers';
+import { FRONT_OFFICE_USER as FRONT_OFFICE } from '@/test/frontOfficeUser';
 import { WORKFLOW_STATE, AUDIT_EVENT } from '@/constants/statusEnums';
 import { EMAIL_TYPE } from '@/constants/emailModel';
 import * as mailboxService from '@/services/api/mailboxService';
+import { notify } from '@/services/notify';
+import { installFakeCaseMail } from '@/test/fakeCaseMail';
+import { EXTERNAL_INQUIRER as INQUIRER } from '@/test/externalInquirer';
 
 vi.mock('@/services/api/mailboxService');
 
-const INQUIRER = findUserById('USR-0001');
-const FRONT_OFFICE = findUserById('USR-0002');
 
 const s = () => useWorkflowStore.getState();
 
-const ACK_RESULT = {
-  from: 'Bhumika Makker <bhoomikamakker@gmail.com>',
-  to: [INQUIRER.email],
-  subject: 'Acknowledgement of Query Received',
-  body: 'We have received your enquiry.',
-  sentAt: '2026-08-26T10:00:00.000Z',
-  providerMessageId: 'ack-msg-1',
+let caseMail;
+
+const restoreMail = () => {
+  vi.mocked(mailboxService.sendAcknowledgement).mockImplementation(caseMail.sendAcknowledgement);
 };
 
-const FORWARD_RESULT = {
-  from: 'Bhumika Makker <bhoomikamakker@gmail.com>',
-  to: ['rawatjatin436@gmail.com'],
-  subject: 'Fwd: enquiry',
-  body: 'forwarded',
-  sentAt: '2026-08-26T10:05:00.000Z',
-  providerMessageId: 'fwd-msg-1',
-  providerThreadId: 'thread-1',
-};
+const UNCONFIRMED_REASON =
+  'NICeMail may have sent this message but did not confirm it in time. Check the NICeMail Sent folder before retrying.';
+
+const unconfirmedFailure = () =>
+  Object.assign(new Error('Request failed with status code 504'), {
+    response: {
+      status: 504,
+      data: { error: UNCONFIRMED_REASON, unconfirmed: true },
+    },
+  });
 
 const enquiry = () => ({
   mailboxMessageId: 'MSG-ACK-0001',
@@ -46,7 +46,6 @@ const enquiry = () => ({
   receivedAt: '2026-08-26T09:00:00.000Z',
 });
 
-/** A freshly received query, sitting where Front Office would pick it up. */
 function receivedQuery() {
   const { queryId } = s().ingestEmail(enquiry(), async () => null);
   return queryId;
@@ -73,8 +72,7 @@ beforeEach(async () => {
   vi.mocked(mailboxService.fetchEmailConfig).mockResolvedValue({});
   vi.mocked(mailboxService.fetchMailboxMessages).mockResolvedValue({ messages: [] });
   vi.mocked(mailboxService.markMessageIngested).mockResolvedValue({ ingested: true });
-  vi.mocked(mailboxService.sendAcknowledgement).mockResolvedValue(ACK_RESULT);
-  vi.mocked(mailboxService.forwardQuery).mockResolvedValue(FORWARD_RESULT);
+  caseMail = installFakeCaseMail(mailboxService);
 
   await s().hydrate();
   await s().resetDemo();
@@ -88,10 +86,7 @@ describe('Validate acknowledges the inquirer', () => {
     const result = await s().verifyQuery(queryId, FRONT_OFFICE);
 
     expect(result.acknowledged).toBe(true);
-    expect(mailboxService.sendAcknowledgement).toHaveBeenCalledWith({
-      to: INQUIRER.email,
-      queryId,
-    });
+    expect(mailboxService.sendAcknowledgement).toHaveBeenCalledWith({ queryId });
   });
 
   it('records the acknowledgement on the case, not just in the mail server', async () => {
@@ -119,23 +114,24 @@ describe('Validate acknowledges the inquirer', () => {
 describe('the inquirer is never emailed twice', () => {
   it('does not re-send when the query is already acknowledged', async () => {
     const queryId = receivedQuery();
-    // Stand in for the ingestion chain, which acknowledges before verifying.
-    s().recordAcknowledgement({ queryId, ...ACK_RESULT, timestamp: ACK_RESULT.sentAt });
+    await caseMail.sendAcknowledgement({ queryId });
+    await s().refreshFromServer();
     expect(ackMessages(queryId)).toHaveLength(1);
 
     const result = await s().verifyQuery(queryId, FRONT_OFFICE);
 
-    expect(result).toEqual({ acknowledged: true, alreadySent: true });
-    expect(mailboxService.sendAcknowledgement).not.toHaveBeenCalled();
+    expect(result).toMatchObject({ acknowledged: true, alreadySent: true });
+    expect(mailboxService.sendAcknowledgement).toHaveBeenCalledTimes(1);
     expect(ackMessages(queryId)).toHaveLength(1);
   });
 
   it('sends once even if acknowledgeInquirer is called again', async () => {
     const queryId = receivedQuery();
     await s().verifyQuery(queryId, FRONT_OFFICE);
-    await s().acknowledgeInquirer(queryId, FRONT_OFFICE);
+    const second = await s().acknowledgeInquirer(queryId, FRONT_OFFICE);
 
-    expect(mailboxService.sendAcknowledgement).toHaveBeenCalledTimes(1);
+    expect(second.alreadySent).toBe(true);
+    expect(mailboxService.sendAcknowledgement).toHaveBeenCalledTimes(2);
     expect(ackMessages(queryId)).toHaveLength(1);
   });
 });
@@ -151,7 +147,6 @@ describe('a failed acknowledgement never blocks the workflow', () => {
 
     expect(result.acknowledged).toBe(false);
     expect(result.error).toMatch(/Network Error/);
-    // The point: the timeline moved anyway.
     expect(s().getQuery(queryId).workflowState).toBe(
       WORKFLOW_STATE.FRONT_OFFICE_VERIFICATION,
     );
@@ -165,17 +160,25 @@ describe('a failed acknowledgement never blocks the workflow', () => {
     const queryId = receivedQuery();
     await s().verifyQuery(queryId, FRONT_OFFICE);
 
-    vi.mocked(mailboxService.sendAcknowledgement).mockResolvedValue(ACK_RESULT);
     const retry = await s().acknowledgeInquirer(queryId, FRONT_OFFICE);
 
     expect(retry.acknowledged).toBe(true);
     expect(ackMessages(queryId)).toHaveLength(1);
   });
 
+  it("reports the server's reason, and that the send may have gone out", async () => {
+    vi.mocked(mailboxService.sendAcknowledgement).mockRejectedValue(unconfirmedFailure());
+    const queryId = receivedQuery();
+
+    const result = await s().verifyQuery(queryId, FRONT_OFFICE);
+
+    expect(result).toMatchObject({ acknowledged: false, unconfirmed: true });
+    expect(result.error).toMatch(/Sent folder/);
+    expect(ackMessages(queryId)).toHaveLength(0);
+  });
+
   it('keeps the permission gate throwing synchronously', () => {
     const queryId = receivedQuery();
-    // The whole design rests on this: verifyQuery is not `async`, so an
-    // unauthorised call throws rather than rejecting.
     expect(() => s().verifyQuery(queryId, findUserById('USR-0003'))).toThrow(
       /may not perform VERIFY/,
     );
@@ -185,25 +188,22 @@ describe('a failed acknowledgement never blocks the workflow', () => {
 describe('the Front Office sees when the email did not go out', () => {
   const openCase = (queryId) => renderAt(`/front-officer/queries/${queryId}`);
 
-  it('warns and offers a retry, without claiming the action failed', async () => {
+  it('warns and offers a retry, without claiming the case failed', async () => {
     vi.mocked(mailboxService.sendAcknowledgement).mockRejectedValue(
       new Error('Network Error'),
     );
     const queryId = receivedQuery();
+    await s().verifyQuery(queryId, FRONT_OFFICE);
+
     openCase(queryId);
 
-    fireEvent.click(await screen.findByRole('button', { name: /Validate Query/ }));
-
     expect(await screen.findByText('Acknowledgement email not sent')).toBeInTheDocument();
-    // Not the red "Action refused" banner — the action itself did succeed.
     expect(screen.queryByText('Action refused')).toBeNull();
-    // A failed acknowledgement does not stop the forward: the query still
-    // reached the Officer-in-Charge.
     expect(s().getQuery(queryId).workflowState).toBe(
-      WORKFLOW_STATE.PENDING_ASSIGNMENT,
+      WORKFLOW_STATE.FRONT_OFFICE_VERIFICATION,
     );
 
-    vi.mocked(mailboxService.sendAcknowledgement).mockResolvedValue(ACK_RESULT);
+    restoreMail();
     fireEvent.click(screen.getByRole('button', { name: /Retry sending/ }));
 
     await waitFor(() =>
@@ -212,13 +212,34 @@ describe('the Front Office sees when the email did not go out', () => {
     expect(ackMessages(queryId)).toHaveLength(1);
   });
 
+  it('says a retry may already have been sent, rather than that it was not', async () => {
+    vi.mocked(mailboxService.sendAcknowledgement).mockRejectedValue(new Error('Network Error'));
+    const queryId = receivedQuery();
+    await s().verifyQuery(queryId, FRONT_OFFICE);
+    openCase(queryId);
+    await screen.findByText('Acknowledgement email not sent');
+
+    const warning = vi.spyOn(notify, 'warning');
+    installFakeCaseMail(mailboxService, {
+      acknowledgement: { outcome: 'UNCERTAIN', error: UNCONFIRMED_REASON },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /Retry sending/ }));
+
+    expect(await screen.findByText('Acknowledgement may already have been sent')).toBeInTheDocument();
+    expect(screen.getByText(/Check the NICeMail Sent folder/)).toBeInTheDocument();
+    expect(screen.queryByText('Acknowledgement email not sent')).toBeNull();
+    expect(warning).toHaveBeenCalledWith('Acknowledgement not confirmed', expect.stringMatching(/Sent folder/));
+    warning.mockRestore();
+  });
+
   it('shows no warning when the email goes out', async () => {
     const queryId = receivedQuery();
+    await s().verifyQuery(queryId, FRONT_OFFICE);
+    await waitFor(() => expect(ackMessages(queryId)).toHaveLength(1));
+
     openCase(queryId);
 
-    fireEvent.click(await screen.findByRole('button', { name: /Validate Query/ }));
-
-    await waitFor(() => expect(ackMessages(queryId)).toHaveLength(1));
+    await screen.findByRole('heading', { name: 'Available actions' });
     expect(screen.queryByText('Acknowledgement email not sent')).toBeNull();
   });
 });
@@ -231,9 +252,7 @@ describe('Forward to OIC still forwards the enquiry', () => {
     await s().forwardToOic(queryId, FRONT_OFFICE);
 
     expect(mailboxService.forwardQuery).toHaveBeenCalledTimes(1);
-    expect(mailboxService.forwardQuery).toHaveBeenCalledWith(
-      expect.objectContaining({ queryId, subject: enquiry().subject }),
-    );
+    expect(mailboxService.forwardQuery).toHaveBeenCalledWith({ queryId });
     expect(s().getQuery(queryId).workflowState).toBe(WORKFLOW_STATE.PENDING_ASSIGNMENT);
     expect(
       s().emailMessages.some(

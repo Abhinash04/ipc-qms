@@ -5,7 +5,10 @@ import { ROUTE_PATHS } from '@/constants/routePaths';
 
 export function ProtectedRoute({ children }) {
   const currentUser = useAuthStore((state) => state.currentUser);
+  const authReady = useAuthStore((state) => state.authReady);
   const location = useLocation();
+
+  if (!authReady && !currentUser) return null;
 
   if (!currentUser) {
     return <Navigate to={ROUTE_PATHS.LOGIN} state={{ from: location.pathname }} replace />;

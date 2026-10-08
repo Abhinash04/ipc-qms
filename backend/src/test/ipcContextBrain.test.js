@@ -71,6 +71,11 @@ describe('formatContextForPrompt', () => {
     expect(formatted).toContain(entry.source.name);
   });
 
+  it('shows the entry id, which is the token the model must cite', () => {
+    const [entry] = selectContext('dissolution');
+    expect(formatContextForPrompt([entry])).toContain(`[${entry.id}]`);
+  });
+
   it('flags an unverified entry so the model cannot treat it as authoritative', () => {
     const unverified = IPC_CONTEXT_ENTRIES.find((entry) => entry.verified === false);
     expect(formatContextForPrompt([unverified])).toContain('UNVERIFIED');

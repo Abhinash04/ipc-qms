@@ -1,10 +1,7 @@
-import 'fake-indexeddb/auto';
 import '@testing-library/jest-dom/vitest';
 import { afterEach, beforeEach, expect, vi } from 'vitest';
 import { cleanup } from '@testing-library/react';
 
-// jsdom has no ResizeObserver, and Radix ScrollArea constructs one. Layout is
-// never asserted here, so a no-op is enough to let those components mount.
 if (!globalThis.ResizeObserver) {
   globalThis.ResizeObserver = class {
     observe() {}
@@ -17,13 +14,33 @@ vi.mock('@/services/api/aiService', () => ({
   fetchGemmaAiSummary: async () => null,
   fetchGemmaAiRecommendations: async () => null,
   fetchGemmaAiDraft: async () => null,
+  fetchAssignableOfficials: async () => null,
+}));
+
+vi.mock('@/services/api/queryCaseService', () => import('@/test/fakeQueryApi'));
+
+vi.mock('@/components/charts/apexRuntime', async () => {
+  const { createElement } = await import('react');
+  return {
+    default: ({ type }) => createElement('div', { 'data-testid': 'apex-chart', 'data-type': type }),
+  };
+});
+
+vi.mock('@/components/workflow/NicemailLoginReminder', () => ({
+  NicemailLoginReminder: () => null,
 }));
 
 let consoleError;
 let consoleWarn;
 const captured = [];
 
-beforeEach(() => {
+beforeEach(async () => {
+  const { loadAll } = await import('@/services/persistence/queryState');
+  await loadAll().catch(() => {});
+  await loadAll().catch(() => {});
+
+  const { __resetFakeQueryApi } = await import('@/test/fakeQueryApi');
+  __resetFakeQueryApi();
   captured.length = 0;
   consoleError = vi.spyOn(console, 'error').mockImplementation((...args) => {
     captured.push(['error', ...args]);

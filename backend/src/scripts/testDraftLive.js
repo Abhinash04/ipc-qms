@@ -33,7 +33,7 @@ const ENQUIRY = {
 };
 
 console.log(`GEMMA_API_URL: ${env.GEMMA_API_URL || '(not configured — will use the fallback)'}`);
-console.log(`timeout: ${env.GEMMA_TIMEOUT_MS}ms, x5 for drafting\n`);
+console.log(`timeout: ${env.GEMMA_TIMEOUT_MS}ms, x2 per question call\n`);
 
 console.log('--- decomposition ---');
 const questions = await decomposeEnquiry(ENQUIRY);
@@ -62,6 +62,12 @@ const draft = await generateDraft(ENQUIRY);
 console.log(`took ${Date.now() - started}ms; aiGenerated=${draft.aiGenerated} fallback=${draft.fallback}\n`);
 
 console.log(`questions: ${questions.length}   answers: ${draft.answers.length}`);
+if (draft.stats) {
+  const { answered, repaired, failed, noEvidence } = draft.stats;
+  console.log(
+    `per question: ${answered} parsed first try, ${repaired} repaired, ${failed} unusable, ${noEvidence} skipped (no evidence)`,
+  );
+}
 console.log(
   `sufficiency: ${draft.answers.map((a) => `${a.question}=${a.sufficiency}`).join(' ')}\n`,
 );
