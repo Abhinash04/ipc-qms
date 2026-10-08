@@ -130,7 +130,7 @@ describe('signing in with a self-registered account', () => {
   it('works once approved, with the role the administrator gave, and survives /auth/me', async () => {
     const body = applicant();
     await register(body);
-    await User.updateOne({ email: body.email }, { $set: { role: ROLES.REVIEWER } });
+    await User.updateOne({ email: body.email }, { $set: { role: ROLES.REVIEWER, status: 'APPROVED' } });
 
     const res = await login(body.email.toUpperCase(), body.password);
     expect(res.status).toBe(200);
@@ -147,7 +147,7 @@ describe('signing in with a self-registered account', () => {
   it('is refused again when the administrator deactivates it', async () => {
     const body = applicant();
     await register(body);
-    await User.updateOne({ email: body.email }, { $set: { role: ROLES.REVIEWER, active: false } });
+    await User.updateOne({ email: body.email }, { $set: { role: ROLES.REVIEWER, status: 'DEACTIVATED', active: false } });
 
     expect((await login(body.email, body.password)).status).toBe(403);
   });

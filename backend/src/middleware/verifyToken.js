@@ -5,6 +5,7 @@ import { cleanIp, setContextUser } from '../services/audit/requestContext.js';
 import * as audit from '../services/audit/auditService.js';
 import { AUDIT_ACTIONS, AUDIT_RESULTS } from '../constants/auditActions.js';
 import { ACTOR_TYPES } from '../constants/roles.js';
+import { findApprovedById } from '../services/auth/userDirectory.js';
 
 // A tab that keeps polling on an expired session, or a client sending made-up cookies, would
 // otherwise add one event per request; once a minute per address is enough to show it.
@@ -22,6 +23,42 @@ function firstRejectionThisMinute(ip) {
 /** For tests. */
 export function clearRejectedSessionThrottle() {
   recentRejections.clear();
+}
+
+const sessionRefused = () =>
+  Object.assign(new Error('Session is invalid or has expired'), { status: HTTP_STATUS.UNAUTHORIZED });
+
+/**
+ * A self-registered account is re-read on every request, so deactivating it or changing its role
+ * takes effect at once rather than when the session expires. Fails closed: if the account cannot
+ * be confirmed as approved (including while the database is unreachable), the session is refused.
+ */
+// JWT `iat` is in whole seconds, so compare at that granularity.
+const issuedBeforeReset = (user, current) =>
+  Boolean(current.credentialsChangedAt) &&
+  (user.issuedAt ?? 0) < Math.floor(Date.parse(current.credentialsChangedAt) / 1000);
+
+async function withCurrentAccount(req, user, next) {
+  try {
+    const current = await findApprovedById(user.id);
+    if (!current || issuedBeforeReset(user, current)) {
+      audit.record({
+        action: AUDIT_ACTIONS.AUTHENTICATION_FAILED,
+        actorType: ACTOR_TYPES.HUMAN,
+        actorId: user.id,
+        actorRole: user.role,
+        result: AUDIT_RESULTS.DENIED,
+        details: { reason: 'account is no longer approved', path: (req.originalUrl || '').split('?')[0] },
+      });
+      return next(sessionRefused());
+    }
+    const fresh = { ...user, role: current.role, name: current.name, email: current.email };
+    req.user = fresh;
+    setContextUser(fresh);
+    return next();
+  } catch (error) {
+    return next(error);
+  }
 }
 
 function verifyToken(req, res, next) {
@@ -50,6 +87,8 @@ function verifyToken(req, res, next) {
       }),
     );
   }
+
+  if (user.registered) return withCurrentAccount(req, user, next);
 
   req.user = user;
   setContextUser(user);

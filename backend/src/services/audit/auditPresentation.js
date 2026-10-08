@@ -90,6 +90,16 @@ const ACTIVITY = {
   AI_RECOMMENDATION_GENERATED: 'Suitable officers suggested automatically',
   AI_ASSIGNMENT_RECOMMENDED: 'Suitable officer suggested automatically',
 
+  USER_REGISTRATION_REQUESTED: 'Asked for an account',
+  USER_ROLE_ASSIGNED: 'Role given to an account',
+  USER_APPROVED: 'Account approved',
+  USER_REJECTED: 'Account request rejected',
+  USER_DEACTIVATED: 'Account deactivated',
+  USER_ACTIVATED: 'Account reactivated',
+  USER_CREATED: 'Account created',
+  USER_UPDATED: 'Account details changed',
+  USER_PASSWORD_RESET: 'Account password reset',
+
   AUDIT_EXPORTED: 'Activity report downloaded',
   AUDIT_VERIFIED: 'Records checked for tampering',
   AUDIT_VIEWED: 'Activity records viewed',
@@ -134,6 +144,7 @@ export const statusWords = (status) => STATUS_WORDS[status] || activityLabel(sta
 
 const MODULES = [
   ['Login & access', /^(LOGIN|LOGOUT|AUTHENTICATION|AUTHORIZATION)(_|$)/],
+  ['Accounts', /^USER_/],
   ['Activity records', /^(AUDIT_|QUERY_STATE_RESET$)/],
   ['Automatic help', /^AI_/],
   ['Files', /^ATTACHMENT_/],
@@ -345,6 +356,12 @@ const sure = (confidence) => (typeof confidence === 'number' ? ` (${Math.round(c
 const fromLine = (details) =>
   [details.from ? `From ${details.from}` : null, details.subject ? `"${details.subject}"` : null].filter(Boolean).join(': ');
 
+// "Jane Doe (jane@ipc.example): approved as Reviewer"
+const accountLine = (details, note = null) => {
+  const who = [details.targetName, details.targetEmail ? `(${details.targetEmail})` : null].filter(Boolean).join(' ');
+  return [who || details.targetUserId || '', note].filter(Boolean).join(': ');
+};
+
 /**
  * Plain sentences for activities whose stored details are technical (mailbox checks, junk
  * handling, file reading, reports). Each returns '' to fall back to the generic wording.
@@ -383,6 +400,15 @@ const PLAIN_DETAILS = {
   LOGIN_FAILED: (d) => [d.email ? `Tried to log in as ${d.email}` : 'Tried to log in', d.reason].filter(Boolean).join(': '),
   AUTHORIZATION_DENIED: (d) => `Tried to open ${areaOf(d.path)}${d.reason ? ` - ${d.reason}` : ''}`,
   AUTHENTICATION_FAILED: (d) => `Used an expired or invalid login while opening ${areaOf(d.path)}`,
+  USER_REGISTRATION_REQUESTED: (d) => accountLine(d, d.requestedDesignation && `asked to work as ${d.requestedDesignation}`),
+  USER_ROLE_ASSIGNED: (d) => accountLine(d, `role ${roleLabel(d.role)}${d.previousRole ? ` (was ${roleLabel(d.previousRole)})` : ''}`),
+  USER_APPROVED: (d) => accountLine(d, d.role && `approved as ${roleLabel(d.role)}`),
+  USER_REJECTED: (d) => accountLine(d, d.reason && `reason: ${d.reason}`),
+  USER_DEACTIVATED: (d) => accountLine(d),
+  USER_ACTIVATED: (d) => accountLine(d),
+  USER_CREATED: (d) => accountLine(d, d.role && `created as ${roleLabel(d.role)}`),
+  USER_UPDATED: (d) => accountLine(d, Array.isArray(d.changed) && d.changed.length ? `changed ${d.changed.join(', ')}` : null),
+  USER_PASSWORD_RESET: (d) => accountLine(d),
   AUDIT_VIEWED: (d) =>
     d.queryId
       ? `Viewed the history of query ${d.queryId}`

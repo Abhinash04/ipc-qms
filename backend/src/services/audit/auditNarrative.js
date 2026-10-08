@@ -97,6 +97,13 @@ const after = (event, pattern) => text(event).match(pattern)?.[1]?.trim().replac
 const queryWord = (event) => (event.queryId ? `query ${event.queryId}` : 'a query');
 
 const withReason = (sentence, reason, word = 'reason') => (reason ? `${sentence} (${word}: ${reason})` : sentence);
+// The person an account event was about: "Jane Doe (jane@ipc.example)".
+const targetOf = (event) => {
+  const name = field(event, 'targetName');
+  const email = field(event, 'targetEmail');
+  if (name && email) return `${name} (${email})`;
+  return name || email || field(event, 'targetUserId') || 'a user';
+};
 
 const inquirer = (address) => (address ? `${address} (${INQUIRER})` : `the ${INQUIRER}`);
 
@@ -255,6 +262,20 @@ const SENTENCES = {
   AUDIT_EXPORTED: (e) => `Downloaded the activity report${field(e, 'reference') ? ` ${field(e, 'reference')}` : ''} (${field(e, 'rows') ?? 0} records)`,
   AUDIT_VIEWED: (e) => (field(e, 'queryId') ? `Looked at the history of query ${field(e, 'queryId')}` : 'Looked at the activity records'),
   AUDIT_VERIFIED: (e) => (field(e, 'ok') === false ? 'Checked the records for tampering: a problem was found' : 'Checked the records for tampering: none found'),
+  USER_REGISTRATION_REQUESTED: (e) =>
+    `Asked for an account${field(e, 'requestedDesignation') ? ` as ${field(e, 'requestedDesignation')}` : ''}`,
+  USER_ROLE_ASSIGNED: (e) =>
+    `Gave ${targetOf(e)} the role ${roleWords(field(e, 'role'))}${
+      field(e, 'previousRole') ? ` (was ${roleWords(field(e, 'previousRole'))})` : ''
+    }`,
+  USER_APPROVED: (e) => `Approved the account of ${targetOf(e)}`,
+  USER_REJECTED: (e) => withReason(`Rejected the account request of ${targetOf(e)}`, field(e, 'reason')),
+  USER_DEACTIVATED: (e) => `Deactivated the account of ${targetOf(e)}`,
+  USER_ACTIVATED: (e) => `Reactivated the account of ${targetOf(e)}`,
+  USER_CREATED: (e) => `Created an account for ${targetOf(e)}`,
+  USER_UPDATED: (e) => `Updated the account of ${targetOf(e)}`,
+  USER_PASSWORD_RESET: (e) => `Set a new password for ${targetOf(e)}`,
+
   AUDIT_CHAIN_RESET: () => 'Restarted the activity records (test system only)',
   QUERY_STATE_RESET: () => 'Cleared all query data (test system only)',
   CREDENTIAL_ROTATED: () => 'Changed the mailbox password',

@@ -14,19 +14,41 @@ import {
   findApprovedById,
 } from '../services/auth/userDirectory.js';
 import { BCRYPT_ROUNDS } from '../services/auth/credentials.js';
+import { passwordProblem } from '../services/auth/passwordPolicy.js';
 import * as audit from '../services/audit/auditService.js';
 import { AUDIT_ACTIONS, AUDIT_RESULTS } from '../constants/auditActions.js';
-import { ACTOR_TYPES } from '../constants/roles.js';
+import { ACTOR_TYPES, ACCOUNT_STATUS } from '../constants/roles.js';
 import { nicFrontOfficeUser } from '../constants/users.js';
 import { verifyGoogleToken } from '../services/auth/googleAuthService.js';
 import { User } from '../models/User.js';
 import { isConnected } from '../config/db.js';
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const MIN_PASSWORD_LENGTH = 8;
-// bcrypt reads only the first 72 bytes; a longer password would match any password sharing them.
-const MAX_PASSWORD_BYTES = 72;
 const PENDING_APPROVAL = 'Your account is awaiting approval by an administrator.';
+const CONTACT_ADMINISTRATION = 'Please contact the IPC administration team.';
+
+const BLOCKED_REASON = {
+  [ACCOUNT_STATUS.PENDING]: 'account awaiting approval',
+  [ACCOUNT_STATUS.REJECTED]: 'registration was rejected',
+  [ACCOUNT_STATUS.DEACTIVATED]: 'account is deactivated',
+};
+
+/** What a person whose account cannot sign in is told, once their password has matched. */
+function blockedMessage({ status, rejectionReason }) {
+  if (status === ACCOUNT_STATUS.REJECTED) {
+    return `Your registration request was not approved. ${rejectionReason || CONTACT_ADMINISTRATION}`;
+  }
+  if (status === ACCOUNT_STATUS.DEACTIVATED) {
+    return `Your account has been deactivated. ${CONTACT_ADMINISTRATION}`;
+  }
+  return PENDING_APPROVAL;
+}
+
+/** Best effort and not awaited: a slow or failing write must never delay or stop a sign-in. */
+function recordLastLogin(userId) {
+  if (!isConnected()) return;
+  User.updateOne({ userId }, { $set: { lastLoginAt: new Date().toISOString() } }).catch(() => {});
+}
 
 const badRequest = (res, message) =>
   res.status(HTTP_STATUS.BAD_REQUEST).json({ success: false, message });
@@ -56,16 +78,17 @@ async function login(req, res, next) {
         .json({ error: 'Invalid email or password' });
     }
 
-    if (user.pending) {
+    // Only reached with the right password, so saying why reveals nothing to a guesser.
+    if (user.status) {
       await audit.record({
         action: AUDIT_ACTIONS.LOGIN_FAILED,
         result: AUDIT_RESULTS.DENIED,
         actorType: ACTOR_TYPES.HUMAN,
         actorId: user.id,
-        details: { email: user.email, reason: 'account awaiting approval' },
+        details: { email: user.email, reason: BLOCKED_REASON[user.status] || 'account cannot sign in' },
       });
 
-      return res.status(HTTP_STATUS.FORBIDDEN).json({ error: PENDING_APPROVAL });
+      return res.status(HTTP_STATUS.FORBIDDEN).json({ error: blockedMessage(user) });
     }
 
     const sessionId = startSession(user);
@@ -75,8 +98,10 @@ async function login(req, res, next) {
       actorId: user.id,
       actorRole: user.role,
     });
+    recordLastLogin(user.id);
 
-    res.cookie(authConfig.COOKIE_NAME, signToken(user, sessionId), cookieOptions());
+    const token = signToken(user, sessionId, { registered: !findById(user.id) });
+    res.cookie(authConfig.COOKIE_NAME, token, cookieOptions());
     return res.status(HTTP_STATUS.OK).json({ user });
   } catch (error) {
     return next(error);
@@ -113,7 +138,8 @@ async function logout(req, res, next) {
 async function me(req, res, next) {
   try {
     const builtIn = findById(req.user.id);
-    const user = builtIn ? toPublicUser(builtIn) : await findApprovedById(req.user.id);
+    const registered = builtIn ? null : await findApprovedById(req.user.id);
+    const user = builtIn ? toPublicUser(builtIn) : registered && toPublicUser(registered);
 
     if (!user) {
       return res.status(HTTP_STATUS.UNAUTHORIZED).json({ error: 'Authentication required' });
@@ -169,6 +195,7 @@ async function devLogin(req, res, next) {
       details: { devLogin: true },
     });
 
+    recordLastLogin(publicUser.id);
     res.cookie(authConfig.COOKIE_NAME, signToken(publicUser, sessionId), cookieOptions());
     return res.status(HTTP_STATUS.OK).json({ user: publicUser });
   } catch (error) {
@@ -221,6 +248,7 @@ async function googleLogin(req, res, next) {
       details: { authProvider: 'google' },
     });
 
+    recordLastLogin(publicUser.id);
     res.cookie(authConfig.COOKIE_NAME, signToken(publicUser, sessionId), cookieOptions());
     return res.status(HTTP_STATUS.OK).json({ user: publicUser });
   } catch (error) {
@@ -247,12 +275,8 @@ async function register(req, res, next) {
       return badRequest(res, 'Please enter a valid email address');
     }
 
-    if (typeof password !== 'string' || password.length < MIN_PASSWORD_LENGTH) {
-      return badRequest(res, `Password must be at least ${MIN_PASSWORD_LENGTH} characters`);
-    }
-    if (Buffer.byteLength(password, 'utf8') > MAX_PASSWORD_BYTES) {
-      return badRequest(res, `Password must be at most ${MAX_PASSWORD_BYTES} bytes`);
-    }
+    const weakPassword = passwordProblem(password);
+    if (weakPassword) return badRequest(res, weakPassword);
 
     if (password !== confirmPassword) {
       return badRequest(res, 'Password and confirm password must match');
@@ -271,15 +295,30 @@ async function register(req, res, next) {
         .json({ success: false, message: 'An account with this email already exists' });
     }
 
-    await User.create({
+    const account = {
       userId: `USR-${randomUUID().slice(0, 8)}`,
       name: text(name),
       email: normalizedEmail,
       department: text(department),
       designation: text(designation),
-      password: await bcrypt.hash(password, BCRYPT_ROUNDS),
       role: null,
       active: true,
+      status: ACCOUNT_STATUS.PENDING,
+      createdAt: new Date().toISOString(),
+    };
+    await User.create({ ...account, password: await bcrypt.hash(password, BCRYPT_ROUNDS) });
+
+    await audit.record({
+      action: AUDIT_ACTIONS.USER_REGISTRATION_REQUESTED,
+      actorType: ACTOR_TYPES.HUMAN,
+      actorId: account.userId,
+      details: {
+        targetUserId: account.userId,
+        targetName: account.name,
+        targetEmail: account.email,
+        requestedDesignation: account.designation,
+        department: account.department,
+      },
     });
 
     return res.status(HTTP_STATUS.CREATED).json({
