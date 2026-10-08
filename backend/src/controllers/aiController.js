@@ -2,7 +2,8 @@ import HTTP_STATUS from '../constants/httpStatus.js';
 import * as gemmaService from '../services/ai/gemmaService.js';
 import * as audit from '../services/audit/auditService.js';
 import { AUDIT_ACTIONS, AUDIT_RESULTS } from '../constants/auditActions.js';
-import { ACTOR_TYPES } from '../constants/roles.js';
+import { ACTOR_TYPES, ROLES } from '../constants/roles.js';
+import { recommendableOfficials } from '../services/ai/officialDirectory.js';
 
 async function recordAi({ req, action, startedAt, output, error = null }) {
   const fallback = Boolean(output?.fallback);
@@ -64,6 +65,23 @@ async function recommendOfficial(req, res, next) {
   }
 }
 
+/** The officials the Recommendation Engine can suggest, built-in and approved alike, in the client's user shape. */
+async function listOfficials(req, res, next) {
+  try {
+    const officials = (await recommendableOfficials()).map((official) => ({
+      id: official.userId,
+      name: official.name,
+      email: official.email,
+      role: ROLES.ASSIGNED_OFFICIAL,
+      divisionId: official.divisionId,
+      expertise: official.expertise,
+    }));
+    return res.status(HTTP_STATUS.OK).json({ success: true, officials });
+  } catch (error) {
+    return next(error);
+  }
+}
+
 async function generateDraft(req, res, next) {
   const startedAt = Date.now();
   try {
@@ -85,4 +103,4 @@ async function generateDraft(req, res, next) {
   }
 }
 
-export { generateSummary, recommendOfficial, generateDraft };
+export { generateSummary, recommendOfficial, generateDraft, listOfficials };

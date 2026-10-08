@@ -14,6 +14,10 @@ vi.mock('../models/User.js', async () => ({
 vi.mock('../models/AuditEvent.js', async () => ({
   AuditEvent: (await import('./support/memoryDb.js')).memoryDb.model('AuditEvent'),
 }));
+// The Recommendation Engine counts each official's open cases to break ties.
+vi.mock('../models/QueryCase.js', async () => ({
+  QueryCase: (await import('./support/memoryDb.js')).memoryDb.model('QueryCase', { unique: ['queryId'] }),
+}));
 
 import app from '../app.js';
 import authConfig from '../config/authConfig.js';

@@ -186,11 +186,17 @@ IPC JSON Summary:`;
   }
 }
 
-function generateFallbackRecommendations({ subject = '', body = '', summaryText = '' }, officials) {
+/**
+ * Every official, best match first. Expertise is matched through the phrases it expands to, so an
+ * officer who picked a broad area at sign-up is found by the subjects a query actually names. Equal
+ * matches go to whoever holds fewer open cases. `weakMatch` marks an official the query gives no
+ * reason to pick: nothing in their expertise or division appears in it.
+ */
+function rankOfficials({ subject = '', body = '', summaryText = '' }, officials) {
   const fullText = `${subject} ${body} ${summaryText}`.toLowerCase();
 
   const scored = officials.map((official, idx) => {
-    const matchedKeywords = official.expertise.filter((skill) => fullText.includes(skill.toLowerCase()));
+    const matchedKeywords = official.matchTerms.filter((term) => fullText.includes(term));
     const divisionMatch = fullText.includes(official.divisionName.toLowerCase());
 
     let matchPercent;
@@ -221,18 +227,23 @@ function generateFallbackRecommendations({ subject = '', body = '', summaryText 
       reason,
       matchedKeywords,
       expertise: official.expertise,
+      weakMatch: matchedKeywords.length === 0 && !divisionMatch,
       aiGenerated: false,
+      openCases: official.openCases,
     };
   });
 
   return scored
-    .sort((a, b) => b.matchPercent - a.matchPercent || b.matchedKeywords.length - a.matchedKeywords.length)
-    .slice(0, 3)
-    .map((rec, idx) => ({
-      ...rec,
-      rank: idx + 1,
-    }));
+    .sort(
+      (a, b) =>
+        b.matchPercent - a.matchPercent ||
+        b.matchedKeywords.length - a.matchedKeywords.length ||
+        a.openCases - b.openCases,
+    )
+    .map(({ openCases: _openCases, ...rec }) => rec);
 }
+
+const ranked = (recs) => recs.map((rec, idx) => ({ ...rec, rank: idx + 1 }));
 
 // One line per official; whitespace is collapsed so an administrator-entered value stays on its line.
 const directoryLine = (official, idx) =>
@@ -245,7 +256,8 @@ export async function recommendOfficial({ subject = '', body = '', summaryText =
   // Built-in officials plus every approved, active one an administrator added: deactivated
   // officials are never offered, and an expertise change applies to the next recommendation.
   const officials = await recommendableOfficials();
-  const fallbackRecs = generateFallbackRecommendations({ subject, body, summaryText }, officials);
+  const ranking = rankOfficials({ subject, body, summaryText }, officials);
+  const fallbackRecs = ranked(ranking.slice(0, 3));
 
   if (!env.GEMMA_API_URL) {
     return fallbackRecs;
@@ -326,11 +338,11 @@ IPC AI Recommendations:`;
         if (parsed && Array.isArray(parsed.recommendations) && parsed.recommendations.length > 0) {
           // An ID the model made up is dropped rather than swapped for someone it did not choose.
           const known = parsed.recommendations
-            .map((item) => ({ item, officialMeta: officials.find((o) => o.userId === item.userId) }))
-            .filter(({ officialMeta }) => officialMeta);
+            .map((item) => ({ item, officialMeta: officials.find((o) => o.userId === item?.userId) }))
+            .filter(({ officialMeta }, idx, all) => officialMeta && all.findIndex((e) => e.officialMeta === officialMeta) === idx);
+          const evidence = new Map(ranking.map((rec) => [rec.userId, rec]));
           const formatted = known.slice(0, 3).map(({ item, officialMeta }, idx) => {
             return {
-              rank: idx + 1,
               userId: officialMeta.userId,
               name: officialMeta.name,
               email: officialMeta.email,
@@ -340,10 +352,17 @@ IPC AI Recommendations:`;
               reason: item.reason || `${officialMeta.name} is recommended for this enquiry.`,
               matchedKeywords: Array.isArray(item.matchedKeywords) ? item.matchedKeywords : [],
               expertise: officialMeta.expertise,
+              // Judged the same way as without the model, so the flag means one thing.
+              weakMatch: evidence.get(officialMeta.userId).weakMatch,
               aiGenerated: true,
             };
           });
-          if (formatted.length > 0) return formatted;
+          if (formatted.length > 0) {
+            // A short answer is topped up from the keyword ranking, so a later transfer still has someone to try.
+            const chosen = new Set(formatted.map((rec) => rec.userId));
+            const extra = ranking.filter((rec) => !chosen.has(rec.userId)).slice(0, 3 - formatted.length);
+            return ranked([...formatted, ...extra]);
+          }
         }
       } catch {
         console.warn('[Gemma AI] Could not parse the recommendation reply. Using fallback.');
