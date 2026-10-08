@@ -14,6 +14,7 @@ vi.mock('@/services/api/aiService', () => ({
   fetchGemmaAiSummary: async () => null,
   fetchGemmaAiRecommendations: async () => null,
   fetchGemmaAiDraft: async () => null,
+  fetchAssignableOfficials: async () => null,
 }));
 
 vi.mock('@/services/api/queryCaseService', () => import('@/test/fakeQueryApi'));

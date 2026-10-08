@@ -2,13 +2,15 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Sparkles, CheckCircle2, UserCheck, Loader2, RefreshCw, Award } from 'lucide-react';
 import { fetchGemmaAiRecommendations } from '@/services/api/aiService';
 import { recommendTopOfficials } from '@/services/ai/mockAiService';
-import { MOCK_USERS } from '@/constants/mockUsers';
+import { useAssignableOfficials } from '@/hooks/useAssignableOfficials';
+import { expandExpertise } from '@/constants/expertise';
 import { CaseCard, CardAction } from '@/components/common/CaseCard';
 
 export function AiRecommendationCard({ query, onAssign, currentAssigneeId, variant = 'card' }) {
+  const officials = useAssignableOfficials();
   const localRecommendations = useMemo(
-    () => (query ? recommendTopOfficials(query, MOCK_USERS) : []),
-    [query],
+    () => (query ? recommendTopOfficials(query, officials) : []),
+    [query, officials],
   );
 
   const [gemma, setGemma] = useState({ queryId: null, recs: null });
@@ -77,6 +79,11 @@ export function AiRecommendationCard({ query, onAssign, currentAssigneeId, varia
     </div>
   ) : (
     <div className="space-y-3.5">
+      {recommendations.length > 0 && recommendations.every((rec) => rec.weakMatch) && (
+        <p role="status" className="m-0 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[13px] font-semibold text-amber-800">
+          No officer&apos;s expertise clearly matches this query — review before assigning.
+        </p>
+      )}
       {(showAll ? recommendations : recommendations.slice(0, 2)).map((rec) => {
         const isAssigned = currentAssigneeId === rec.userId;
         const isRank1 = rec.rank === 1;
@@ -142,7 +149,8 @@ export function AiRecommendationCard({ query, onAssign, currentAssigneeId, varia
               <div className="mt-3 flex flex-wrap items-center gap-1.5">
                 <span className="text-[14px] font-bold text-slate-400">Expertise:</span>
                 {rec.expertise.map((exp) => {
-                  const isMatched = rec.matchedKeywords?.includes(exp.toLowerCase());
+                  // An area such as "Microbiology" counts as matched when any subject it covers does.
+                  const isMatched = expandExpertise([exp]).some((term) => rec.matchedKeywords?.includes(term));
                   return (
                     <span
                       key={exp}

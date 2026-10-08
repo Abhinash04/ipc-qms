@@ -7,7 +7,8 @@ import {
   DialogDescription,
   DialogFooter,
 } from '@/components/ui/dialog';
-import { MOCK_USERS, findUserById } from '@/constants/mockUsers';
+import { findUserById } from '@/constants/mockUsers';
+import { useAssignableOfficials } from '@/hooks/useAssignableOfficials';
 import { ROLES } from '@/constants/roles';
 import { recommendTopOfficials } from '@/services/ai/mockAiService';
 import { useWorkflowStore } from '@/store/useWorkflowStore';
@@ -38,9 +39,9 @@ function combineReason(category, details) {
   return category;
 }
 
-function findEligibleColleagues(query, searchQuery) {
+function findEligibleColleagues(officials, query, searchQuery) {
   const term = searchQuery.trim().toLowerCase();
-  return MOCK_USERS.filter((user) => {
+  return officials.filter((user) => {
     if (user.id === query.currentAssigneeId) return false;
     if (user.role !== ROLES.ASSIGNED_OFFICIAL) return false;
     if (!term) return true;
@@ -65,7 +66,7 @@ function buildDisplayedOfficials(eligibleColleagues, aiRecommendations, searchQu
   return eligibleColleagues.map(asOption);
 }
 
-function useAiRecommendations(query, isOpen) {
+function useAiRecommendations(query, isOpen, officials) {
   const [result, setResult] = useState(null);
   const key = isOpen && query ? query.queryId : null;
 
@@ -77,7 +78,7 @@ function useAiRecommendations(query, isOpen) {
         const openQueries = useWorkflowStore
           .getState()
           .queries.filter((q) => q.workflowState !== 'CLOSED');
-        const recs = recommendTopOfficials(query, MOCK_USERS, openQueries, query.currentAssigneeId);
+        const recs = recommendTopOfficials(query, officials, openQueries, query.currentAssigneeId);
         setResult({ key: query.queryId, recommendations: recs || [], error: null });
       } catch (err) {
         console.warn('[AI Rec] Failed to compute recommendations:', err);
@@ -91,7 +92,7 @@ function useAiRecommendations(query, isOpen) {
     }, 300);
 
     return () => clearTimeout(timer);
-  }, [isOpen, query]);
+  }, [isOpen, query, officials]);
 
   const fresh = key !== null && result?.key === key;
 
@@ -427,24 +428,27 @@ export function TransferQueryModal({ query, isOpen, onClose, currentUser }) {
   const [isConfirmStep, setIsConfirmStep] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState(null);
+  const officials = useAssignableOfficials();
 
   const {
     recommendations: aiRecommendations,
     isLoading: isLoadingAiRecs,
     error: aiRecError,
-  } = useAiRecommendations(query, isOpen);
+  } = useAiRecommendations(query, isOpen, officials);
 
   if (!query) return null;
 
-  const eligibleColleagues = findEligibleColleagues(query, searchQuery);
+  const eligibleColleagues = findEligibleColleagues(officials, query, searchQuery);
   const displayedOfficials = buildDisplayedOfficials(
     eligibleColleagues,
     aiRecommendations,
     searchQuery,
   );
 
-  const currentAssigneeUser = findUserById(query.currentAssigneeId);
-  const selectedColleague = findUserById(selectedAssigneeId);
+  // An officer an administrator approved is known only to the server's list.
+  const officialById = (id) => officials.find((user) => user.id === id) || findUserById(id);
+  const currentAssigneeUser = officialById(query.currentAssigneeId);
+  const selectedColleague = officialById(selectedAssigneeId);
 
   const handleClose = () => {
     setSelectedAssigneeId('');
@@ -478,7 +482,7 @@ export function TransferQueryModal({ query, isOpen, onClose, currentUser }) {
 
     setIsSubmitting(true);
     try {
-      transferQuery(query.queryId, selectedAssigneeId, finalReason, currentUser);
+      transferQuery(query.queryId, selectedAssigneeId, finalReason, currentUser, selectedColleague);
       notify.success(
         'Query Transferred Successfully',
         `Query ${query.queryId} has been transferred to ${selectedColleague?.name || selectedAssigneeId}.`,

@@ -671,9 +671,13 @@ export const useWorkflowStore = create((set, get) => ({
 
   assignQuery: (queryId, assigneeId, actor, ranking = null) => {
     assertCan(get(), WORKFLOW_ACTION.ASSIGN, queryId, actor);
-    const recommendation = get().recommendAssigneeFor(queryId);
+    // The ranking the Officer-in-Charge was shown is the recommendation they followed or overrode;
+    // it also names an official an administrator approved, whom the built-in directory does not know.
+    const ranked = Array.isArray(ranking) && ranking[0]?.userId ? ranking : null;
+    const recommendation = ranked ? ranked[0] : get().recommendAssigneeFor(queryId);
     const acceptedAi = recommendation?.userId === assigneeId;
-    const assignee = findUserById(assigneeId);
+    const nameOf = (id) => findUserById(id)?.name || ranked?.find((entry) => entry?.userId === id)?.name;
+    const assignee = { name: nameOf(assigneeId) };
 
     if (recommendation) {
       get().applyTransition({
@@ -681,7 +685,7 @@ export const useWorkflowStore = create((set, get) => ({
         actor: null,
         actorLabel: 'AI Assignment Assistant',
         event: AUDIT_EVENT.AI_ASSIGNMENT_RECOMMENDED,
-        details: `Recommended ${findUserById(recommendation.userId)?.name || recommendation.userId} (${recommendation.matchPercent}% match). ${recommendation.reason}`,
+        details: `Recommended ${nameOf(recommendation.userId) || recommendation.userId} (${recommendation.matchPercent}% match). ${recommendation.reason || ''}`.trim(),
       });
     }
 
@@ -713,12 +717,11 @@ export const useWorkflowStore = create((set, get) => ({
     });
 
     if (!acceptedAi && recommendation) {
-      const recommended = findUserById(recommendation.userId);
       get().applyTransition({
         queryId,
         actor,
         event: AUDIT_EVENT.ASSIGNMENT_OVERRIDDEN,
-        details: `AI recommended ${recommended?.name}; OIC assigned ${assignee?.name || assigneeId} instead.`,
+        details: `AI recommended ${nameOf(recommendation.userId) || recommendation.userId}; OIC assigned ${assignee?.name || assigneeId} instead.`,
       });
     }
   },
@@ -1266,7 +1269,8 @@ export const useWorkflowStore = create((set, get) => ({
     }
   },
 
-  transferQuery: (queryId, newAssigneeId, reason, actor) => {
+  // `official`: the chosen official's record, for one an administrator approved, whom only the server lists.
+  transferQuery: (queryId, newAssigneeId, reason, actor, official = null) => {
     const query = assertCan(get(), WORKFLOW_ACTION.TRANSFER, queryId, actor);
 
     if (!newAssigneeId) {
@@ -1283,7 +1287,7 @@ export const useWorkflowStore = create((set, get) => ({
     }
 
     const prevAssignee = findUserById(query.currentAssigneeId);
-    const newAssignee = findUserById(newAssigneeId);
+    const newAssignee = findUserById(newAssigneeId) || (official?.id === newAssigneeId ? official : null);
     if (newAssignee?.role !== ROLES.ASSIGNED_OFFICIAL) {
       throw new Error('A query can only be transferred to an Assigned Official.');
     }

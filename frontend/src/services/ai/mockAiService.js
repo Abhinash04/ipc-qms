@@ -1,6 +1,7 @@
 import { MOCK_USERS } from '@/constants/mockUsers';
 import { findDivisionById } from '@/constants/mockDivisions';
 import { ROLES } from '@/constants/roles';
+import { expandExpertise } from '@/constants/expertise';
 import { DRAFT_SALUTATION, IPC_DISCLAIMER, IPC_SIGNATURE, referenceSentence } from '@/services/ai/draftComposer';
 
 const TOPIC_DIVISIONS = {
@@ -96,7 +97,7 @@ export function summarise(query) {
   };
 }
 function expertiseMatch(user, text) {
-  const matched = (user.expertise || []).filter((skill) => text.includes(skill.toLowerCase()));
+  const matched = expandExpertise(user.expertise).filter((term) => text.includes(term));
   return { matched, score: matched.length };
 }
 
@@ -202,6 +203,7 @@ export function recommendTopOfficials(query, users = MOCK_USERS, openQueries = [
         reason,
         matchedKeywords: expertise.matched,
         expertise: user.expertise || [],
+        weakMatch: expertise.score === 0 && !divisionMatch,
       };
     })
     .sort((a, b) => b.matchPercent - a.matchPercent || a.userId.localeCompare(b.userId));

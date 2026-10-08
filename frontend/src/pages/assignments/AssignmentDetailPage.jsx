@@ -10,14 +10,12 @@ import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@
 import { useQueryCase } from '@/hooks/useQueryCase';
 import { useWorkflowStore } from '@/store/useWorkflowStore';
 import { WORKFLOW_ACTION } from '@/constants/workflowRules';
-import { MOCK_USERS } from '@/constants/mockUsers';
-import { ROLES, ROLE_LABELS } from '@/constants/roles';
+import { ROLE_LABELS } from '@/constants/roles';
 import { useRoutePaths } from '@/hooks/useRoutePaths';
 import { useWorkflowAction } from '@/hooks/useWorkflowAction';
 import { ActionError } from '@/components/workflow/ActionError';
 import { AiRecommendationCard } from '@/components/ai/AiRecommendationCard';
-
-const ELIGIBLE_ASSIGNEES = MOCK_USERS.filter((u) => u.role === ROLES.ASSIGNED_OFFICIAL);
+import { useAssignableOfficials } from '@/hooks/useAssignableOfficials';
 
 export function AssignmentDetailPage() {
   const paths = useRoutePaths();
@@ -25,6 +23,7 @@ export function AssignmentDetailPage() {
   const { run, error, clearError } = useWorkflowAction();
   const assignQuery = useWorkflowStore((state) => state.assignQuery);
   const [override, setOverride] = useState('');
+  const eligibleAssignees = useAssignableOfficials();
 
   if (!query) return <EmptyState title={resolving ? 'Loading case…' : 'Query not found'} />;
 
@@ -91,7 +90,7 @@ export function AssignmentDetailPage() {
                   <SelectValue placeholder="Select an official" />
                 </SelectTrigger>
                 <SelectContent>
-                  {ELIGIBLE_ASSIGNEES.map((user) => (
+                  {eligibleAssignees.map((user) => (
                     <SelectItem key={user.id} value={user.id}>
                       {user.name} — {ROLE_LABELS[user.role]}
                     </SelectItem>

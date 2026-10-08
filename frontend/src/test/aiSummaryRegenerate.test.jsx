@@ -35,6 +35,7 @@ vi.mock('@/services/api/aiService', () => ({
   fetchGemmaAiSummary: vi.fn(async () => REGENERATED),
   fetchGemmaAiRecommendations: vi.fn(async () => null),
   fetchGemmaAiDraft: vi.fn(async () => null),
+  fetchAssignableOfficials: vi.fn(async () => null),
 }));
 
 const s = () => useWorkflowStore.getState();

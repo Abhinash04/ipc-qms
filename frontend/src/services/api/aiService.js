@@ -49,3 +49,16 @@ export async function fetchGemmaAiRecommendations({ subject, body, summaryText }
   }
   return null;
 }
+
+/** Assigned Officials a case can go to: built-in ones and every approved, active one an administrator added. */
+export async function fetchAssignableOfficials() {
+  try {
+    const { data } = await axiosClient.get('/ai/officials');
+    if (data && data.success && Array.isArray(data.officials)) {
+      return data.officials;
+    }
+  } catch (error) {
+    console.warn('[AI Service] Failed to fetch assignable officials from backend:', error.message);
+  }
+  return null;
+}
