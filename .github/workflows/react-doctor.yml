@@ -1,32 +1,15 @@
-# React Doctor — finds security, performance, correctness, accessibility,
-# bundle-size, and architecture issues in React codebases.
-#
-# Docs: https://www.react.doctor/ci
-# Source: https://github.com/millionco/react-doctor
-#
-# This file lived at frontend/.github/workflows/ and therefore never ran:
-# GitHub Actions only reads .github/workflows at the repository root. Moving it
-# here is what makes it execute; `directory: frontend` below is what keeps it
-# pointed at the React app now that checkout lands at the repo root.
-
 name: React Doctor
-
 on:
-  # Scans the PR's changed files and posts a sticky summary comment listing only the new issues introduced relative to the merge base of the target branch.
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
     paths: ["frontend/**"]
-  # Scans `main` on every push to track the health-score trend and catch regressions that slipped past PR review.
   push:
     branches: ["main"]
     paths: ["frontend/**"]
 
-# Declared on the job rather than here, so the write scopes belong to the one
-# step that needs them instead of being inherited by everything in the file.
 permissions:
   contents: read
 
-# Cancels any in-flight scan for the same PR (or branch, on push) the moment a new commit arrives, so reviewers only ever see the latest run.
 concurrency:
   group: react-doctor-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
@@ -34,48 +17,17 @@ concurrency:
 jobs:
   react-doctor:
     runs-on: ubuntu-latest
-    # React Doctor posts a sticky PR comment, inline review comments and a
-    # commit status. `issues: write` was granted too and is not needed for any
-    # of those.
     permissions:
       contents: read
       pull-requests: write
       statuses: write
     steps:
-      # fetch-depth: 0 gives React Doctor the full git history it needs to find the merge base with the target branch. Without it a shallow checkout has no merge base, so PR runs can't compare against the base and fall back to reporting every issue in the changed files (pre-existing ones included) instead of only the ones the PR introduced.
-      # Pinned to a commit, not a tag: a tag can be repointed by whoever owns
-      # the action, and this job holds write-scoped credentials.
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           fetch-depth: 0
-          # Without this, checkout leaves the GITHUB_TOKEN in .git/config inside
-          # the workspace, where the third-party step below can read it directly
-          # rather than only receiving what this workflow chooses to pass it.
           persist-credentials: false
 
       - uses: millionco/react-doctor@013f7373f91a3b9e68bd1dc7d4d354f4b041b117 # v2
         with:
-          # Required now that the workflow runs from the repository root: the
-          # React app is in frontend/, and the default of "." would scan the
-          # backend and docs as well.
           directory: frontend
-        # Advisory by default: React Doctor reports findings on every PR — a
-        # sticky summary comment, inline review comments, and a commit status
-        # with the health score — but never fails the check, so it won't red-X
-        # a teammate's PR on day one. When your team trusts the signal, graduate
-        # the gate: uncomment the block below and set blocking to "error" (fail
-        # on new error-severity findings) or "warning" (fail on any finding).
-        # Full reference: https://www.react.doctor/ci
-        #
-        # Security: pinned to a full commit SHA above, rather than the floating
-        # @v2 tag. Update it deliberately — read the diff — rather than letting
-        # a moved tag change what runs here with write-scoped credentials.
-        #
-        # Further options, added alongside `directory` above:
-        #   blocking: error          # Gate level: "none" (advisory, the default) | "warning" | "error"
-        #   scope: full              # On PRs, scan the whole project instead of just changed files
-        #   comment: false           # Disable the sticky PR summary comment
-        #   review-comments: false   # Disable inline review comments on changed lines
-        #   commit-status: false     # Disable the commit status (score + counts, links to the run)
-        #   version: "0.4.0"         # Pin to a specific react-doctor version instead of "latest"
-        #   project: "web,admin"     # In a monorepo, scan specific workspace project(s)
+        

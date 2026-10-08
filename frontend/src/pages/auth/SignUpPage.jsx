@@ -32,6 +32,10 @@ const FIELD_ERROR =
   "border-red-400 focus:border-red-500 focus:ring-red-500/20";
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+// Same limits as the server: bcrypt only reads the first 72 bytes of a password.
+const MIN_PASSWORD_LENGTH = 8;
+const MAX_PASSWORD_BYTES = 72;
+const PENDING_APPROVAL = "An administrator approves new accounts before they can sign in.";
 
 const DEPARTMENTS = [
   "Quality Assurance & Standards",
@@ -197,6 +201,10 @@ export function SignUpPage() {
 
     if (!formData.password) {
       newErrors.password = "Password is required.";
+    } else if (formData.password.length < MIN_PASSWORD_LENGTH) {
+      newErrors.password = `Password must be at least ${MIN_PASSWORD_LENGTH} characters.`;
+    } else if (new TextEncoder().encode(formData.password).length > MAX_PASSWORD_BYTES) {
+      newErrors.password = `Password must be at most ${MAX_PASSWORD_BYTES} bytes.`;
     }
 
     if (!formData.confirmPassword) {
@@ -231,7 +239,7 @@ export function SignUpPage() {
       };
 
       const response = await register(payload);
-      notify.success(response?.message || "Account created successfully! Please sign in.");
+      notify.success(response?.message || `Account created. ${PENDING_APPROVAL}`);
       navigate(ROUTE_PATHS.LOGIN, { replace: true });
     } catch (caught) {
       const status = caught?.response?.status;
@@ -491,6 +499,8 @@ export function SignUpPage() {
                   </p>
                 )}
               </div>
+
+              <p className="text-[12px] text-ink-muted">{PENDING_APPROVAL}</p>
 
               {generalError && (
                 <div

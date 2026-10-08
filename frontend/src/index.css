@@ -537,18 +537,19 @@ body {
     opacity: 0;
   }
 }
+/* Centring comes from the badge's translate utilities (the `translate` property), so only scale and lift here. */
 @keyframes wf-pullback-badge-pop {
   0% {
     opacity: 0;
-    transform: translate(-50%, -50%) scale(0.6) translateY(10px);
+    transform: scale(0.6) translateY(10px);
   }
   65% {
     opacity: 1;
-    transform: translate(-50%, -50%) scale(1.08) translateY(-2px);
+    transform: scale(1.08) translateY(-2px);
   }
   100% {
     opacity: 1;
-    transform: translate(-50%, -50%) scale(1) translateY(0);
+    transform: scale(1) translateY(0);
   }
 }
 @keyframes wf-arrow-left-slide {
@@ -595,6 +596,10 @@ body {
   .wf-march-x,
   .wf-march-y {
     animation: none;
+  }
+  /* Without its travel the pulse would sit as a frozen white dash on the arc. */
+  .wf-arc-pulse {
+    display: none;
   }
 }
 

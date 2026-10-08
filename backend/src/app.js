@@ -41,6 +41,18 @@ if (env.NODE_ENV !== 'test') {
     }),
   );
 
+  // Every attempt counts, successful or not: each one hashes a password and may create an account.
+  app.use(
+    '/api/v1/auth/register',
+    rateLimit({
+      windowMs: 60 * 60 * 1000,
+      limit: 10,
+      standardHeaders: 'draft-7',
+      legacyHeaders: false,
+      message: { success: false, message: 'Too many sign-up attempts. Try again later.' },
+    }),
+  );
+
   app.use(
     '/api/v1',
     rateLimit({
@@ -54,7 +66,6 @@ if (env.NODE_ENV !== 'test') {
 }
 
 app.use('/api/v1', apiRoutes);
-app.use('/api', apiRoutes);
 
 app.use(notFound);
 app.use(errorHandler);

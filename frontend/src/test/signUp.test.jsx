@@ -187,6 +187,70 @@ describe('Sign Up page and navigation', () => {
     });
   });
 
+  it('asks for a password of at least 8 characters, as the server does', async () => {
+    const { register } = await import('@/services/api/authService');
+    renderApp(ROUTE_PATHS.SIGNUP);
+    await screen.findByRole('heading', { name: 'Sign Up' });
+
+    fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'short1' } });
+    fireEvent.change(screen.getByLabelText('Confirm Password'), { target: { value: 'short1' } });
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /Create Account/i }));
+    });
+
+    expect(await screen.findByText('Password must be at least 8 characters.')).toBeInTheDocument();
+    expect(register).not.toHaveBeenCalled();
+  });
+
+  it('says new accounts need approval, and sends the request without any role', async () => {
+    const { register } = await import('@/services/api/authService');
+    renderApp(ROUTE_PATHS.SIGNUP);
+    await screen.findByRole('heading', { name: 'Sign Up' });
+
+    expect(screen.getByText(/administrator approves new accounts/i)).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText('Full Name'), { target: { value: 'Jane Doe' } });
+    fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'Jane@IPC.example' } });
+    await act(async () => {
+      fireEvent.click(screen.getByLabelText('Department'));
+    });
+    fireEvent.click(screen.getByRole('option', { name: 'Quality Assurance & Standards' }));
+    await act(async () => {
+      fireEvent.click(screen.getByLabelText('Designation'));
+    });
+    fireEvent.click(screen.getByRole('option', { name: 'Super Admin' }));
+    fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'password123' } });
+    fireEvent.change(screen.getByLabelText('Confirm Password'), { target: { value: 'password123' } });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /Create Account/i }));
+    });
+
+    await waitFor(() => expect(register).toHaveBeenCalledTimes(1));
+    const payload = vi.mocked(register).mock.calls[0][0];
+    expect(payload).toMatchObject({ designation: 'Super Admin', email: 'Jane@IPC.example' });
+    expect(payload).not.toHaveProperty('role');
+  });
+
+  it('shows the server\'s "awaiting approval" message when a pending account signs in', async () => {
+    const { login } = await import('@/services/api/authService');
+    vi.mocked(login).mockRejectedValueOnce(
+      Object.assign(new Error('Forbidden'), {
+        response: { status: 403, data: { error: 'Your account is awaiting approval by an administrator.' } },
+      }),
+    );
+    renderApp(ROUTE_PATHS.LOGIN);
+    await screen.findByRole('heading', { name: 'Sign in' });
+
+    fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'jane@ipc.example' } });
+    fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'password123' } });
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /^Sign in$/ }));
+    });
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Your account is awaiting approval by an administrator.');
+  });
+
   it('handles duplicate email 409 conflict error from backend', async () => {
     const { register } = await import('@/services/api/authService');
     const conflictError = Object.assign(new Error('Conflict'), {

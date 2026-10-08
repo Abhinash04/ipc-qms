@@ -11,8 +11,9 @@ import {
   findById,
   listUsers,
   toPublicUser,
-  addUser,
+  findApprovedById,
 } from '../services/auth/userDirectory.js';
+import { BCRYPT_ROUNDS } from '../services/auth/credentials.js';
 import * as audit from '../services/audit/auditService.js';
 import { AUDIT_ACTIONS, AUDIT_RESULTS } from '../constants/auditActions.js';
 import { ACTOR_TYPES } from '../constants/roles.js';
@@ -20,6 +21,15 @@ import { nicFrontOfficeUser } from '../constants/users.js';
 import { verifyGoogleToken } from '../services/auth/googleAuthService.js';
 import { User } from '../models/User.js';
 import { isConnected } from '../config/db.js';
+
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const MIN_PASSWORD_LENGTH = 8;
+// bcrypt reads only the first 72 bytes; a longer password would match any password sharing them.
+const MAX_PASSWORD_BYTES = 72;
+const PENDING_APPROVAL = 'Your account is awaiting approval by an administrator.';
+
+const badRequest = (res, message) =>
+  res.status(HTTP_STATUS.BAD_REQUEST).json({ success: false, message });
 
 async function login(req, res, next) {
   try {
@@ -44,6 +54,18 @@ async function login(req, res, next) {
       return res
         .status(HTTP_STATUS.UNAUTHORIZED)
         .json({ error: 'Invalid email or password' });
+    }
+
+    if (user.pending) {
+      await audit.record({
+        action: AUDIT_ACTIONS.LOGIN_FAILED,
+        result: AUDIT_RESULTS.DENIED,
+        actorType: ACTOR_TYPES.HUMAN,
+        actorId: user.id,
+        details: { email: user.email, reason: 'account awaiting approval' },
+      });
+
+      return res.status(HTTP_STATUS.FORBIDDEN).json({ error: PENDING_APPROVAL });
     }
 
     const sessionId = startSession(user);
@@ -88,14 +110,19 @@ async function logout(req, res, next) {
   }
 }
 
-function me(req, res) {
-  const user = findById(req.user.id);
+async function me(req, res, next) {
+  try {
+    const builtIn = findById(req.user.id);
+    const user = builtIn ? toPublicUser(builtIn) : await findApprovedById(req.user.id);
 
-  if (!user) {
-    return res.status(HTTP_STATUS.UNAUTHORIZED).json({ error: 'Authentication required' });
+    if (!user) {
+      return res.status(HTTP_STATUS.UNAUTHORIZED).json({ error: 'Authentication required' });
+    }
+
+    return res.status(HTTP_STATUS.OK).json({ user });
+  } catch (error) {
+    return next(error);
   }
-
-  return res.status(HTTP_STATUS.OK).json({ user: toPublicUser(user) });
 }
 
 function users(req, res) {
@@ -201,105 +228,66 @@ async function googleLogin(req, res, next) {
   }
 }
 
+/**
+ * Self-registration. The account is stored with the designation the person asked for but no
+ * role, so it cannot sign in until an administrator approves it and gives it one. A role is
+ * never taken from the request: anyone can reach this endpoint.
+ */
 async function register(req, res, next) {
   try {
     const { name, email, department, designation, password, confirmPassword } = req.body || {};
+    const text = (value) => (typeof value === 'string' ? value.trim() : '');
 
-    // 1. Required fields validation
-    if (
-      !name ||
-      !String(name).trim() ||
-      !email ||
-      !String(email).trim() ||
-      !department ||
-      !String(department).trim() ||
-      !designation ||
-      !String(designation).trim() ||
-      !password ||
-      !confirmPassword
-    ) {
-      return res
-        .status(HTTP_STATUS.BAD_REQUEST)
-        .json({ success: false, message: 'All required fields must be provided' });
+    if (!text(name) || !text(email) || !text(department) || !text(designation) || !password || !confirmPassword) {
+      return badRequest(res, 'All required fields must be provided');
     }
 
-    // 2. Email format validation
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    const normalizedEmail = String(email).trim().toLowerCase();
-    if (!emailRegex.test(normalizedEmail)) {
-      return res
-        .status(HTTP_STATUS.BAD_REQUEST)
-        .json({ success: false, message: 'Please enter a valid email address' });
+    const normalizedEmail = text(email).toLowerCase();
+    if (!EMAIL_PATTERN.test(normalizedEmail)) {
+      return badRequest(res, 'Please enter a valid email address');
     }
 
-    // 3. Password match validation
+    if (typeof password !== 'string' || password.length < MIN_PASSWORD_LENGTH) {
+      return badRequest(res, `Password must be at least ${MIN_PASSWORD_LENGTH} characters`);
+    }
+    if (Buffer.byteLength(password, 'utf8') > MAX_PASSWORD_BYTES) {
+      return badRequest(res, `Password must be at most ${MAX_PASSWORD_BYTES} bytes`);
+    }
+
     if (password !== confirmPassword) {
+      return badRequest(res, 'Password and confirm password must match');
+    }
+
+    if (!isConnected()) {
       return res
-        .status(HTTP_STATUS.BAD_REQUEST)
-        .json({ success: false, message: 'Password and confirm password must match' });
+        .status(HTTP_STATUS.SERVICE_UNAVAILABLE)
+        .json({ success: false, message: 'Sign-up is unavailable while the database is offline' });
     }
 
-    // 4. Check existing user in MongoDB or directory
-    const existingDirectoryUser = findByEmail(normalizedEmail);
-    let existingDbUser = null;
-
-    if (isConnected()) {
-      try {
-        existingDbUser = await User.findOne({ email: normalizedEmail });
-      } catch {
-        existingDbUser = null;
-      }
-    }
-
-    if (existingDirectoryUser || existingDbUser) {
+    const exists = findByEmail(normalizedEmail) || (await User.exists({ email: normalizedEmail }));
+    if (exists) {
       return res
         .status(HTTP_STATUS.CONFLICT)
         .json({ success: false, message: 'An account with this email already exists' });
     }
 
-    // 5. Hash password with bcryptjs
-    const saltRounds = 10;
-    const hashedPassword = await bcrypt.hash(password, saltRounds);
-
-    // 6. Map designation to QMS role for dashboard routing
-    const designationNorm = String(designation).trim().toLowerCase();
-    const designationRoleMap = {
-      'officer-in-charge': 'OFFICER_IN_CHARGE',
-      'officer in charge': 'OFFICER_IN_CHARGE',
-      'assigned official': 'ASSIGNED_OFFICIAL',
-      'reviewer': 'REVIEWER',
-      'admin': 'ADMIN',
-      'super admin': 'SUPER_ADMIN',
-    };
-    const assignedRole = designationRoleMap[designationNorm] || 'Inquirer';
-
-    // 7. Create user in MongoDB / Directory
-    const userId = `USR-${randomUUID().slice(0, 8)}`;
-    const userData = {
-      userId,
-      id: userId,
-      name: String(name).trim(),
+    await User.create({
+      userId: `USR-${randomUUID().slice(0, 8)}`,
+      name: text(name),
       email: normalizedEmail,
-      department: String(department).trim(),
-      designation: String(designation).trim(),
-      password: hashedPassword,
-      role: assignedRole,
-      isActive: true,
+      department: text(department),
+      designation: text(designation),
+      password: await bcrypt.hash(password, BCRYPT_ROUNDS),
+      role: null,
       active: true,
-    };
+    });
 
-    if (isConnected()) {
-      await User.create(userData);
-    }
-    addUser(userData);
-
-    // 7. Success response
     return res.status(HTTP_STATUS.CREATED).json({
       success: true,
-      message: 'Account created successfully',
+      message: `Account created. ${PENDING_APPROVAL}`,
     });
   } catch (error) {
-    if (error?.code === 11000 || (error?.name === 'MongoServerError' && error?.code === 11000)) {
+    if (error?.code === 11000) {
       return res
         .status(HTTP_STATUS.CONFLICT)
         .json({ success: false, message: 'An account with this email already exists' });
