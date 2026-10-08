@@ -44,6 +44,7 @@ import { authHeader } from './helpers/auth.js';
 import { ROLES } from '../constants/roles.js';
 import { USERS } from '../constants/users.js';
 import { Review } from '../models/Review.js';
+import { QueryCase } from '../models/index.js';
 
 const CASE = 'QRY-2026-00003';
 const OIC = USERS.find((u) => u.role === ROLES.OFFICER_IN_CHARGE);
@@ -80,6 +81,14 @@ const rejection = (reviewId, version, at, overrides = {}) => ({
 async function seed() {
   const res = await persist({ query: caseRow() }, ROLES.FRONT_OFFICE);
   expect(res.status).toBe(200);
+}
+
+// The review rounds in between belong to other tests; these only need the case back with the OIC.
+async function backForFinalApproval() {
+  await QueryCase.updateOne(
+    { queryId: CASE },
+    { $set: { workflowState: 'PENDING_FINAL_APPROVAL' }, $inc: { revision: 1 } },
+  );
 }
 
 async function reject(review, baseRevision, role = ROLES.OFFICER_IN_CHARGE) {
@@ -149,13 +158,7 @@ describe('an OIC rejection is a persisted review record', () => {
   it('keeps a rejection distinct from a return for revision', async () => {
     await seed();
     await reject(rejection('REV-00001', 'v6', '2026-10-03T12:48:00.000Z'), 1);
-    await persist(
-      {
-        query: caseRow({ workflowState: 'PENDING_FINAL_APPROVAL' }),
-        baseRevision: 2,
-      },
-      ROLES.SUPER_ADMIN,
-    );
+    await backForFinalApproval();
     const back = await persist(
       {
         query: caseRow({ workflowState: 'RETURNED_FOR_REVISION' }),
@@ -177,17 +180,9 @@ describe('an OIC rejection is a persisted review record', () => {
     await seed();
     await reject(rejection('REV-00001', 'v6', '2026-10-03T12:48:00.000Z'), 1);
 
-    const resubmitted = await persist(
-      {
-        query: caseRow({ workflowState: 'UNDER_REVIEW' }),
-        baseRevision: 2,
-        addVersions: [{ responseId: 'RESP-v7', queryId: CASE, version: 'v7', content: 'Revised.', status: 'SUBMITTED', respondsToReviewId: 'REV-00001', changeSummary: 'Clarification added.' }],
-      },
-      ROLES.SUPER_ADMIN,
-    );
-    expect(resubmitted.status).toBe(200);
-    await persist({ query: caseRow({ workflowState: 'PENDING_FINAL_APPROVAL' }), baseRevision: 3 }, ROLES.SUPER_ADMIN);
-    await reject(rejection('REV-00002', 'v7', '2026-10-03T16:00:00.000Z', { comment: 'Still incomplete.' }), 4);
+    await backForFinalApproval();
+    const second = await reject(rejection('REV-00002', 'v7', '2026-10-03T16:00:00.000Z', { comment: 'Still incomplete.' }), 3);
+    expect(second.status).toBe(200);
 
     const reviews = (await loadCase()).reviews.filter((r) => r.queryId === CASE);
     expect(reviews.map((r) => [r.reviewId, r.version, r.comment])).toEqual([

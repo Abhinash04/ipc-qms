@@ -66,7 +66,6 @@ const OFFICER_B = byId('USR-0010');
 const OFFICER_C = byId('USR-0011');
 const OFFICER_D = byId('USR-0012');
 const REVIEWER = byId('USR-0005');
-const SUPER_ADMIN = byId('USR-0008');
 
 const RANKING = [
   { userId: OFFICER_A.id, matchPercent: 98 },
@@ -123,7 +122,7 @@ function stripServerFields(doc) {
 }
 
 async function openCase(overrides = {}) {
-  const res = await persistAs(SUPER_ADMIN, { query: caseRow(overrides) });
+  const res = await persistAs(OIC, { query: caseRow(overrides) });
   expect(res.status).toBe(200);
 }
 

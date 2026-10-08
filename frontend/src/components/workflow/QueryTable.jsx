@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   Search,
@@ -17,10 +17,18 @@ import { ROLE_LABELS } from "@/constants/roles";
 import { ROLE_SLUG } from "@/constants/permissions";
 import { useAuthStore } from "@/store/useAuthStore";
 import { lifecycleProgress } from "@/components/dashboard/lifecycleProgress";
+import { WatchedUserPicker } from "@/components/workflow/WatchedUserPicker";
+import { humaniseAction, relativeTime } from "@/components/admin/auditFormat";
+import { AUDIT_EVENT_LABELS } from "@/constants/statusEnums";
+import { auditActor } from "@/constants/queryLifecycle";
+import { isObserver } from "@/constants/workflowRules";
 import { cn } from "@/utils/cn";
 
 const GRID =
   "grid-cols-[minmax(220px,2fr)_110px_minmax(150px,1fr)_minmax(170px,1fr)_130px]";
+// The Super Admin also sees who last did what on each case.
+const AUDIT_GRID =
+  "grid-cols-[minmax(220px,2fr)_110px_minmax(150px,1fr)_minmax(170px,1fr)_minmax(190px,1.2fr)_130px]";
 
 const PAGE_SIZES = [10, 25, 50];
 
@@ -33,6 +41,32 @@ const PRIORITY_OPTIONS = [
 ];
 
 const COLUMNS = ["Query", "Priority", "Status", "Assignee", "Received"];
+const AUDIT_COLUMNS = ["Query", "Priority", "Status", "Held by", "Last activity", "Received"];
+
+function latestActivityByCase(auditEvents) {
+  const latest = new Map();
+  for (const event of auditEvents || []) {
+    if (!event.queryId) continue;
+    const seen = latest.get(event.queryId);
+    if (!seen || new Date(event.at) > new Date(seen.at)) latest.set(event.queryId, event);
+  }
+  return latest;
+}
+
+function LastActivity({ event }) {
+  if (!event) return <span className="text-[12.5px] text-ink-muted">No activity yet</span>;
+  const { actor, role } = auditActor(event);
+  return (
+    <div className="min-w-0">
+      <div className="truncate text-[13px] font-medium text-ink">
+        {AUDIT_EVENT_LABELS[event.event] || humaniseAction(event.event)}
+      </div>
+      <div className="truncate text-[11.5px] text-ink-muted">
+        {[actor || role || "System", relativeTime(event.at)].join(" · ")}
+      </div>
+    </div>
+  );
+}
 
 const PRIORITY_STYLE = {
   URGENT: "bg-rose-50 text-rose-700",
@@ -158,7 +192,7 @@ function formatReceived(createdAt) {
   };
 }
 
-function QueryRow({ query, to }) {
+function QueryRow({ query, to, audit, activity }) {
   const assignee = describeAssignee(query);
   const received = formatReceived(query.createdAt);
   const progress = lifecycleProgress(query.workflowState);
@@ -170,7 +204,7 @@ function QueryRow({ query, to }) {
         to={to}
         className={cn(
           "group grid items-center gap-4 px-5 py-3.5 outline-none transition-colors hover:bg-surface-muted focus-visible:bg-surface-muted",
-          GRID,
+          audit ? AUDIT_GRID : GRID,
         )}
       >
         <div className="min-w-0">
@@ -213,6 +247,8 @@ function QueryRow({ query, to }) {
             <div className="truncate text-[11.5px] text-ink-muted">{assignee.role}</div>
           </div>
         </div>
+
+        {audit && <LastActivity event={activity} />}
 
         <div>
           <div className="text-[13px] font-medium text-ink">{received.date}</div>
@@ -309,10 +345,17 @@ export function QueryTable({
   greeting = "IPC Query Registry 📋",
   icon = null,
   iconClassName,
+  watcher = null,
 }) {
   const currentUser = useAuthStore((state) => state.currentUser);
   const allQueries = useWorkflowStore((state) => state.queries);
+  const auditEvents = useWorkflowStore((state) => state.auditEvents);
   const queries = filter ? allQueries.filter(filter) : allQueries;
+  const audit = isObserver(currentUser);
+  const activity = useMemo(
+    () => (audit ? latestActivityByCase(auditEvents) : null),
+    [audit, auditEvents],
+  );
 
   const [searchQuery, setSearchQuery] = useState("");
   const [priorityFilter, setPriorityFilter] = useState("ALL");
@@ -357,9 +400,18 @@ export function QueryTable({
       >
         <div className="flex items-center justify-between gap-3 px-5 pt-5 pb-4">
           <h2 className="font-heading text-[17px] font-semibold text-ink">Records</h2>
-          <span className="rounded-full bg-primary-50 px-3 py-1 text-[12px] font-semibold text-primary">
-            {queries.length} total
-          </span>
+          <div className="flex flex-wrap items-center justify-end gap-3">
+            {watcher?.options.length > 0 && (
+              <WatchedUserPicker
+                options={watcher.options}
+                watched={watcher.watched}
+                onWatch={watcher.watch}
+              />
+            )}
+            <span className="rounded-full bg-primary-50 px-3 py-1 text-[12px] font-semibold text-primary">
+              {queries.length} total
+            </span>
+          </div>
         </div>
 
         <QueryTableToolbar
@@ -381,14 +433,14 @@ export function QueryTable({
         />
 
         <div className="overflow-x-auto">
-          <div className="min-w-[860px]">
+          <div className={audit ? "min-w-[1060px]" : "min-w-[860px]"}>
             <div
               className={cn(
                 "grid gap-4 border-y border-line bg-surface-muted px-5 py-3 text-[11.5px] font-semibold uppercase tracking-wider text-ink-muted",
-                GRID,
+                audit ? AUDIT_GRID : GRID,
               )}
             >
-              {COLUMNS.map((label) => (
+              {(audit ? AUDIT_COLUMNS : COLUMNS).map((label) => (
                 <span key={label}>{label}</span>
               ))}
             </div>
@@ -400,6 +452,8 @@ export function QueryTable({
                     key={query.queryId}
                     query={query}
                     to={getQueryDetailPath(query.queryId)}
+                    audit={audit}
+                    activity={activity?.get(query.queryId)}
                   />
                 ))}
               </ul>

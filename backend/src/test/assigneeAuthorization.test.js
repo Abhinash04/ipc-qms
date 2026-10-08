@@ -46,6 +46,7 @@ const byId = (id) => USERS.find((user) => user.id === id);
 const OFFICIAL_A = byId('USR-0004');
 const OFFICIAL_B = byId('USR-0009');
 const REVIEWER = byId('USR-0005');
+const OIC = byId('USR-0003');
 const SUPER_ADMIN = byId('USR-0008');
 
 const caseRow = (overrides = {}) => ({
@@ -77,7 +78,7 @@ const persistAs = (user, body) =>
     .send(body);
 
 async function seed(query = {}, extra = {}) {
-  const res = await persistAs(SUPER_ADMIN, { query: caseRow(query), ...extra });
+  const res = await persistAs(OIC, { query: caseRow(query), ...extra });
   expect(res.status).toBe(200);
 }
 
@@ -128,19 +129,26 @@ describe('a transferred case belongs to the new assignee only', () => {
 });
 
 describe('transfer is only possible before drafting starts', () => {
-  it.each([
-    ['the assignee', OFFICIAL_A],
-    ['the Super Admin', SUPER_ADMIN],
-  ])('refuses %s transferring a case in DRAFTING', async (_label, actor) => {
+  it('refuses the assignee transferring a case in DRAFTING', async () => {
     await seed({ workflowState: 'DRAFTING' });
 
-    const res = await persistAs(actor, {
+    const res = await persistAs(OFFICIAL_A, {
       query: caseRow({ workflowState: 'DRAFTING', currentAssigneeId: OFFICIAL_B.id }),
       baseRevision: 1,
     });
 
     expect(res.status).toBe(403);
     expect(res.body.fields).toEqual(['query.currentAssigneeId']);
+    expect((await QueryCase.findOne({ queryId: CASE }).lean()).currentAssigneeId).toBe(OFFICIAL_A.id);
+  });
+
+  it('refuses the Super Admin, who observes cases but changes none', async () => {
+    await seed();
+
+    const res = await persistAs(SUPER_ADMIN, { query: caseRow({ currentAssigneeId: OFFICIAL_B.id }), baseRevision: 1 });
+
+    expect(res.status).toBe(403);
+    expect(res.body.error).toBe('Super Admin can view cases but not change them');
     expect((await QueryCase.findOne({ queryId: CASE }).lean()).currentAssigneeId).toBe(OFFICIAL_A.id);
   });
 

@@ -424,8 +424,8 @@ describe('POST /api/v1/queries/:queryId/pullback', () => {
   const pull = (body, role = ROLES.ADMIN) =>
     request(app).post(`/api/v1/queries/${QUERY_ID}/pullback`).set(authHeader(role)).send(body);
 
-  it('pulls back for the Admin and the System Administrator, and says where the query went', async () => {
-    for (const role of [ROLES.ADMIN, ROLES.SUPER_ADMIN]) {
+  it('pulls back for the Admin, and says where the query went', async () => {
+    for (const role of [ROLES.ADMIN]) {
       db.reset();
       await seed('PENDING_FINAL_APPROVAL (two reviewers)');
 
@@ -505,7 +505,6 @@ describe('who may pull back', () => {
     [ROLES.FRONT_OFFICE]: 'USR-TEST-FO',
     [ROLES.OFFICER_IN_CHARGE]: OIC,
     [ROLES.ADMIN]: 'USR-0007',
-    [ROLES.SUPER_ADMIN]: 'USR-0008',
   };
 
   it.each(Object.keys(ACTORS))('lets the %s pull back to a reviewer level, and records who did it', async (role) => {
@@ -544,7 +543,7 @@ describe('who may pull back', () => {
     expect(cycleSteps(1)).toEqual([]);
   });
 
-  it.each([ROLES.ASSIGNED_OFFICIAL, ROLES.REVIEWER])('refuses the %s, changes nothing, and records the denial', async (role) => {
+  it.each([ROLES.ASSIGNED_OFFICIAL, ROLES.REVIEWER, ROLES.SUPER_ADMIN])('refuses the %s, changes nothing, and records the denial', async (role) => {
     await seed('PENDING_FINAL_APPROVAL (two reviewers)');
     const before = { query: stored(), steps: steps() };
 

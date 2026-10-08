@@ -64,6 +64,7 @@ import { useAuthStore } from "@/store/useAuthStore";
 import { ROLE_SLUG } from "@/constants/permissions";
 import { MAIL_CATEGORY_META } from "@/constants/mailCategories";
 import { cn } from "@/utils/cn";
+import { isObserver } from "@/constants/workflowRules";
 
 const AUTO_REFRESH_MS = 15000;
 const SYNC_POLL_MS = 3000;
@@ -680,6 +681,7 @@ function MailboxRow({
   correctingCategory,
   caseHref,
   messageHref,
+  readOnly,
 }) {
   const sender = parseSender(message.from);
   const received = formatReceived(message.receivedAt);
@@ -768,7 +770,7 @@ function MailboxRow({
           known={known}
           junk={junk}
           purge={purge}
-          onCorrectCategory={onCorrectCategory}
+          onCorrectCategory={readOnly ? null : onCorrectCategory}
           correctingCategory={correctingCategory}
           caseHref={caseHref}
           messageHref={messageHref}
@@ -1202,7 +1204,11 @@ export function MailboxInboxPage() {
       <PageHeader
         greeting="IPC Live Mailbox 📬"
         title="IPC Mailbox Inbox"
-        purpose="Incoming enquiries awaiting your validation. Accept one to open a Query Case, acknowledge the sender and forward it to the Officer-in-Charge; reject anything that is not an IPC query."
+        purpose={
+          readOnly
+            ? "Every message in the Front Office mailbox and what was decided on it. You can read them all; only the Front Office can accept, reject or delete mail."
+            : "Incoming enquiries awaiting your validation. Accept one to open a Query Case, acknowledge the sender and forward it to the Officer-in-Charge; reject anything that is not an IPC query."
+        }
         actions={
           <InboxActions
             autoRefresh={autoRefresh}

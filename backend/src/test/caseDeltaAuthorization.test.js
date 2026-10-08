@@ -163,15 +163,15 @@ describe('the final-approval lock', () => {
     upsertVersions: [{ responseId: 'RESP-NEW', queryId: CASE_ID, status, content: 'text' }],
   });
 
-  it.each([REMOVED_ROLE, ROLES.REVIEWER, ROLES.ASSIGNED_OFFICIAL, ROLES.FRONT_OFFICE, ROLES.ADMIN])(
+  it.each([REMOVED_ROLE, ROLES.REVIEWER, ROLES.ASSIGNED_OFFICIAL, ROLES.FRONT_OFFICE, ROLES.ADMIN, ROLES.SUPER_ADMIN])(
     'refuses %s marking a response FINAL_APPROVED',
     (role) => {
       expect(check(role, setStatus('FINAL_APPROVED'))).toContain('upsertVersions.status');
     },
   );
 
-  it.each([ROLES.OFFICER_IN_CHARGE, ROLES.SUPER_ADMIN])('permits %s, who holds FINAL_APPROVE', (role) => {
-    expect(check(role, setStatus('FINAL_APPROVED'))).toEqual([]);
+  it('permits the OFFICER_IN_CHARGE, who holds FINAL_APPROVE', () => {
+    expect(check(ROLES.OFFICER_IN_CHARGE, setStatus('FINAL_APPROVED'))).toEqual([]);
   });
 
   it('leaves an ordinary draft alone', () => {
@@ -194,7 +194,14 @@ describe('the route wiring', () => {
     expect(res.status).toBe(401);
   });
 
-  it.each([ROLES.ASSIGNED_OFFICIAL, ROLES.REVIEWER, ROLES.SUPER_ADMIN])(
+  it('refuses SUPER_ADMIN outright, since it observes cases but changes none', async () => {
+    const res = await persistAs(ROLES.SUPER_ADMIN, { query: { queryId: CASE_ID, workflowState: 'ASSIGNED' } });
+
+    expect(res.status).toBe(403);
+    expect(res.body.error).toBe('Super Admin can view cases but not change them');
+  });
+
+  it.each([ROLES.ASSIGNED_OFFICIAL, ROLES.REVIEWER, ROLES.OFFICER_IN_CHARGE])(
     'fails closed for %s when case storage is unavailable',
     async (role) => {
       const res = await persistAs(role, { query: { queryId: CASE_ID, workflowState: 'ASSIGNED' } });

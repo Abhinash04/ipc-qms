@@ -135,7 +135,7 @@ describe('previous and new values', () => {
 
     await request(app)
       .post('/api/v1/queries/persist')
-      .set(authHeader(ROLES.SUPER_ADMIN))
+      .set(authHeader(ROLES.OFFICER_IN_CHARGE))
       .send({
         query: { queryId: 'QRY-2026-00007', workflowState: 'ASSIGNED', currentAssigneeId: 'USR-0004', createdAt: '2026-09-18T09:00:00.000Z' },
         baseRevision: 0,

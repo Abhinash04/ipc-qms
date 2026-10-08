@@ -36,7 +36,7 @@ describe('POST /api/v1/queries/:queryId/pullback', () => {
   });
 
   it('returns 503 rather than a fabricated success when storage is unavailable', async () => {
-    for (const role of [ROLES.FRONT_OFFICE, ROLES.OFFICER_IN_CHARGE, ROLES.ADMIN, ROLES.SUPER_ADMIN]) {
+    for (const role of [ROLES.FRONT_OFFICE, ROLES.OFFICER_IN_CHARGE, ROLES.ADMIN]) {
       const res = await request(app).post(PATH).set(authHeader(role)).send(VALID);
       expect(res.status).toBe(503);
       expect(res.body.success).toBeUndefined();

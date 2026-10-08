@@ -259,13 +259,13 @@ describe('the roles matrix is generated from the live permission tables', () => 
     expect(screen.getByText(/Administration is one interface/)).toBeInTheDocument();
   });
 
-  it('reflects that ADMIN holds no workflow actions', async () => {
+  it('reflects that neither SUPER_ADMIN, who only observes, nor ADMIN forwards a case', async () => {
     renderAs(ADMIN, '/admin/roles');
 
     const actions = (await screen.findByText('Workflow actions')).closest('section');
     const forwardRow = within(actions).getByText('Forward').closest('tr');
     const cells = within(forwardRow).getAllByLabelText(/granted/);
-    expect(cells[0]).toHaveAttribute('aria-label', 'granted');
+    expect(cells[0]).toHaveAttribute('aria-label', 'not granted');
     expect(cells[1]).toHaveAttribute('aria-label', 'not granted');
   });
 });

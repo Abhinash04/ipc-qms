@@ -18,7 +18,6 @@ const NEHA = findUserById('USR-0004');
 const RAWAT = findUserById('USR-0009');
 const AMIT = findUserById('USR-0005');
 const KAVITA = findUserById('USR-0006');
-const SYSTEM_ADMIN = findUserById('USR-0008');
 const ADMIN = findUserById('USR-0007');
 
 const {
@@ -130,7 +129,7 @@ const describeTarget = (target) => {
 
 const targetsNow = () => getPullbackTargets(query(), s().auditEvents, s().workflowSteps);
 
-const pullBack = (target, actor = SYSTEM_ADMIN) =>
+const pullBack = (target, actor = ADMIN) =>
   s().pullBackQuery(queryId, target.stage, 'Requires correction', '', actor, { reviewStepId: target.reviewStepId });
 
 beforeEach(async () => {

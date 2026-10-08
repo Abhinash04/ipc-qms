@@ -52,7 +52,7 @@ router.post(
 router.post(
   '/queries/:queryId/outbound/resolve',
   verifyToken,
-  verifyRole(ROLES.FRONT_OFFICE, ROLES.SUPER_ADMIN),
+  verifyRole(ROLES.FRONT_OFFICE),
   validateBody(resolveOutboundSchema),
   resolveOutbound,
 );

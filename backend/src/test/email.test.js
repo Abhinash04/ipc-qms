@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import request from 'supertest';
-import { AUTH } from './helpers/auth.js';
+import { AUTH, authHeader } from './helpers/auth.js';
+import { ROLES } from '../constants/roles.js';
 import app from '../app.js';
 import env, { validateEmailConfig } from '../config/env.js';
 import * as emailService from '../services/email/emailService.js';
@@ -12,6 +13,8 @@ const arrive = (subject) =>
     .send({ from: 'Ravi Kumar <ravi@pharma.example>', subject, body: 'Body' });
 
 import { buildAcknowledgement, ACKNOWLEDGEMENT_SUBJECT } from '../services/email/templates/acknowledgement.js';
+
+const FRONT_OFFICE = authHeader(ROLES.FRONT_OFFICE);
 
 beforeEach(async () => {
   await mockTransport.reset();
@@ -199,7 +202,7 @@ describe('email HTTP endpoints', () => {
 
   it('POST /emails/acknowledgement sends the acknowledgement', async () => {
     const res = await request(app)
-      .post('/api/v1/emails/acknowledgement').set(AUTH)
+      .post('/api/v1/emails/acknowledgement').set(FRONT_OFFICE)
       .send({ to: 'inquirer@test.invalid', queryId: 'QRY-2026-00001' });
 
     expect(res.status).toBe(201);
@@ -208,13 +211,13 @@ describe('email HTTP endpoints', () => {
   });
 
   it('rejects a response with no recipient', async () => {
-    const res = await request(app).post('/api/v1/emails/response').set(AUTH).send({ subject: 'x', body: 'y' });
+    const res = await request(app).post('/api/v1/emails/response').set(FRONT_OFFICE).send({ subject: 'x', body: 'y' });
     expect(res.status).toBe(400);
   });
 
   it('carries the query id in the acknowledgement subject, so the thread is identifiable', async () => {
     const res = await request(app)
-      .post('/api/v1/emails/acknowledgement').set(AUTH)
+      .post('/api/v1/emails/acknowledgement').set(FRONT_OFFICE)
       .send({ to: 'inquirer@test.invalid', queryId: 'QRY-2026-00042' });
 
     expect(res.body.subject).toContain('[QRY-2026-00042]');
@@ -224,7 +227,7 @@ describe('email HTTP endpoints', () => {
   it('does not put the acknowledgement back in the IPC inbox — no ingestion loop', async () => {
     await arrive('Loop check');
     await request(app)
-      .post('/api/v1/emails/acknowledgement').set(AUTH)
+      .post('/api/v1/emails/acknowledgement').set(FRONT_OFFICE)
       .send({ to: 'inquirer@test.invalid', queryId: 'QRY-2026-00001' });
 
     const ipcInbox = await mailbox.list('front-office@test.invalid');
@@ -266,11 +269,11 @@ describe('mailbox HTTP endpoints', () => {
   it('marks a message ingested and 404s for an unknown id', async () => {
     await arrive('To ingest');
 
-    const ok = await request(app).post('/api/v1/mailbox/messages/MSG-00001/ingested').set(AUTH);
+    const ok = await request(app).post('/api/v1/mailbox/messages/MSG-00001/ingested').set(FRONT_OFFICE);
     expect(ok.status).toBe(200);
     expect(ok.body.ingested).toBe(true);
 
-    const missing = await request(app).post('/api/v1/mailbox/messages/MSG-99999/ingested').set(AUTH);
+    const missing = await request(app).post('/api/v1/mailbox/messages/MSG-99999/ingested').set(FRONT_OFFICE);
     expect(missing.status).toBe(404);
   });
 
@@ -278,7 +281,7 @@ describe('mailbox HTTP endpoints', () => {
     await arrive('Keep');
     await arrive('Doomed');
 
-    const ok = await request(app).delete('/api/v1/mailbox/messages/MSG-00002').set(AUTH);
+    const ok = await request(app).delete('/api/v1/mailbox/messages/MSG-00002').set(FRONT_OFFICE);
     expect(ok.status).toBe(200);
     expect(ok.body.deleted).toBe(true);
     expect(ok.body.message.subject).toBe('Doomed');
@@ -287,7 +290,7 @@ describe('mailbox HTTP endpoints', () => {
     expect(remaining).toHaveLength(1);
     expect(remaining[0].subject).toBe('Keep');
 
-    const missing = await request(app).delete('/api/v1/mailbox/messages/MSG-99999').set(AUTH);
+    const missing = await request(app).delete('/api/v1/mailbox/messages/MSG-99999').set(FRONT_OFFICE);
     expect(missing.status).toBe(404);
     expect(missing.body).toEqual({ error: 'Message not found', messageId: 'MSG-99999' });
   });

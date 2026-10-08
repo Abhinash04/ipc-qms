@@ -18,7 +18,7 @@ const s = () => useWorkflowStore.getState();
 const OIC = findUserById('USR-0003');
 const OFFICIAL = findUserById('USR-0004');
 const COLLEAGUE = findUserById('USR-0009');
-const ADMIN = findUserById('USR-0008');
+const ADMIN = findUserById('USR-0007');
 
 const caseMail = fakeCaseMail();
 

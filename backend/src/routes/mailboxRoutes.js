@@ -33,21 +33,22 @@ import {
 
 const router = express.Router();
 
-const FRONT_OFFICE_ONLY = [ROLES.FRONT_OFFICE, ROLES.SUPER_ADMIN];
+const MAILBOX_READERS = [ROLES.FRONT_OFFICE, ROLES.SUPER_ADMIN];
+const FRONT_OFFICE_ONLY = [ROLES.FRONT_OFFICE];
 
 router.get(
   '/mailbox/messages',
   verifyToken,
-  verifyRole(FRONT_OFFICE_ONLY),
+  verifyRole(MAILBOX_READERS),
   validateQuery(listMessagesQuerySchema),
   listMessages,
 );
 
-router.get('/mailbox/messages/:messageId', verifyToken, verifyRole(FRONT_OFFICE_ONLY), getMessage);
+router.get('/mailbox/messages/:messageId', verifyToken, verifyRole(MAILBOX_READERS), getMessage);
 router.get(
   '/mailbox/messages/:messageId/attachments/:attachmentId',
   verifyToken,
-  verifyRole(FRONT_OFFICE_ONLY),
+  verifyRole(MAILBOX_READERS),
   downloadMessageAttachment,
 );
 
@@ -79,7 +80,7 @@ router.post(
   declineAutoReply,
 );
 
-router.post('/mailbox/sync', verifyToken, verifyRole(FRONT_OFFICE_ONLY), syncMailbox);
+router.post('/mailbox/sync', verifyToken, verifyRole(MAILBOX_READERS), syncMailbox);
 
 router.post('/mailbox/receive', verifyToken, verifyRole(ROLES.SUPER_ADMIN), receiveMessage);
 
@@ -106,7 +107,7 @@ router.post(
   acceptMessage,
 );
 
-router.get('/mailbox/decisions', verifyToken, verifyRole(FRONT_OFFICE_ONLY), listDecisions);
+router.get('/mailbox/decisions', verifyToken, verifyRole(MAILBOX_READERS), listDecisions);
 
 router.delete(
   '/mailbox/messages/:messageId',

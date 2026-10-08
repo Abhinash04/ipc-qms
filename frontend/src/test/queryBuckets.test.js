@@ -75,6 +75,19 @@ describe('ownership predicates', () => {
     expect(isActiveWorkFor(q, [], null)).toBe(false);
     expect(isAwaitingReviewBy(q, [], null)).toBe(false);
   });
+
+  it('Super Admin sees every case in the My Work, Drafting and Reviews queues', () => {
+    const superAdmin = { id: 'USR-0009', role: ROLES.SUPER_ADMIN };
+    const ctx = { user: superAdmin, workflowSteps: stepsFor(EVERY_STATE, REVIEWER.id), reviews: [] };
+    const drafting = anyBucket(ROLES.ASSIGNED_OFFICIAL, ['assigned', 'drafting', 'returned'], ctx);
+    const reviews = anyBucket(ROLES.REVIEWER, ['awaitingReview'], ctx);
+
+    expect(EVERY_STATE.filter(drafting).map((q) => q.workflowState)).toEqual(
+      expect.arrayContaining([WORKFLOW_STATE.ASSIGNED, WORKFLOW_STATE.DRAFTING, WORKFLOW_STATE.RETURNED_FOR_REVISION]),
+    );
+    expect(EVERY_STATE.filter(drafting)).toHaveLength(3);
+    expect(EVERY_STATE.filter(reviews).map((q) => q.workflowState)).toEqual([WORKFLOW_STATE.UNDER_REVIEW]);
+  });
 });
 
 describe('every role has buckets, and they never double-count', () => {
@@ -188,6 +201,25 @@ describe('role visibility scoping', () => {
 
     const seen = visibleQueries([mine, theirs], ROLES.ASSIGNED_OFFICIAL, ctx(OFFICIAL));
     expect(seen.map((q) => q.queryId)).toEqual([mine.queryId]);
+  });
+
+  it('an official keeps sight of a case transferred away, but not as active work', () => {
+    const transferred = queryInState(WORKFLOW_STATE.UNDER_REVIEW, {
+      queryId: 'QRY-TRANSFERRED',
+      currentAssigneeId: OTHER_OFFICIAL.id,
+    });
+    const context = ctx(OFFICIAL, {
+      workflowSteps: [
+        { stepId: 'STP-OLD-DRAFT', queryId: 'QRY-TRANSFERRED', stepType: 'DRAFT', assignedUserId: OFFICIAL.id },
+        { stepId: transferred.currentWorkflowStepId, queryId: 'QRY-TRANSFERRED', assignedUserId: REVIEWER.id },
+      ],
+    });
+
+    expect(visibleQueries([transferred], ROLES.ASSIGNED_OFFICIAL, context)).toHaveLength(1);
+    for (const bucket of bucketsForRole(ROLES.ASSIGNED_OFFICIAL).filter((b) => !b.aggregate)) {
+      expect(bucketRecords([transferred], ROLES.ASSIGNED_OFFICIAL, bucket.key, context), bucket.key)
+        .toHaveLength(0);
+    }
   });
 
   it('a reviewer sees only cases they hold a level on or have ruled on', () => {

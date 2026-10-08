@@ -1,5 +1,5 @@
 import HTTP_STATUS from '../constants/httpStatus.js';
-import { roleCanPerform, WORKFLOW_ACTION } from '../constants/workflowActions.js';
+import { isObserver, roleCanPerform, WORKFLOW_ACTION } from '../constants/workflowActions.js';
 import {
   STATE_REQUIRES_ACTION,
   VERSION_STATUS_REQUIRES_ACTION,
@@ -172,7 +172,7 @@ async function reviewLevelDeletionRefused(user, body, storedQuery) {
   if (!stepIds.length) return false;
   if (!roleCanPerform(user.role, WORKFLOW_ACTION.DELETE_REVIEW_LEVEL)) return true;
   if (!storedQuery || !REVIEW_LEVEL_STATES.includes(storedQuery.workflowState)) return true;
-  if (user.role !== ROLES.SUPER_ADMIN && storedQuery.currentAssigneeId !== user.id) return true;
+  if (storedQuery.currentAssigneeId !== user.id) return true;
 
   const cycle = storedQuery.reviewCycle ?? 0;
   const steps = await WorkflowStep.find({ stepId: { $in: stepIds } }).select('stepType status cycle').lean();
@@ -200,6 +200,10 @@ async function authorizeCaseDelta(req, res, next) {
       return next(
         Object.assign(new Error('Authentication required'), { status: HTTP_STATUS.UNAUTHORIZED }),
       );
+    }
+
+    if (isObserver(req.user.role)) {
+      return deny(req, res, 'Super Admin can view cases but not change them');
     }
 
     const body = req.body || {};

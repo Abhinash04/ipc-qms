@@ -8,6 +8,7 @@ import * as audit from '../services/audit/auditService.js';
 import * as store from '../services/attachments/attachmentStore.js';
 
 const ADMIN = authHeader(ROLES.ADMIN);
+const FRONT_OFFICE = authHeader(ROLES.FRONT_OFFICE);
 
 beforeEach(async () => {
   audit.resetBuffer();
@@ -51,7 +52,7 @@ describe('the trail reports what the server actually did', () => {
   it('records a forward, with the case id and attachment count', async () => {
     const res = await request(app)
       .post('/api/v1/emails/forward')
-      .set(AUTH)
+      .set(FRONT_OFFICE)
       .send({ queryId: 'QRY-2026-00042', subject: 'Sterility clarification', body: 'body' });
     expect(res.status).toBe(201);
 
@@ -83,11 +84,11 @@ describe('the trail reports what the server actually did', () => {
   it('records an attachment upload and download against the actor', async () => {
     const upload = await request(app)
       .post('/api/v1/attachments')
-      .set(AUTH)
+      .set(FRONT_OFFICE)
       .attach('files', Buffer.from('%PDF-1.4 audit me'), { filename: 'spec.pdf', contentType: 'application/pdf' });
     const { attachmentId } = upload.body.attachments[0];
 
-    await request(app).get(`/api/v1/attachments/${attachmentId}`).set(AUTH);
+    await request(app).get(`/api/v1/attachments/${attachmentId}`).set(FRONT_OFFICE);
 
     const trail = await request(app).get('/api/v1/audit').set(ADMIN);
     const uploaded = trail.body.events.find((e) => e.action === AUDIT_ACTIONS.ATTACHMENT_UPLOADED);
@@ -116,7 +117,7 @@ describe('the trail reports what the server actually did', () => {
       .send({ email: 'admin@ipc.example', password: 'test-seed-password' });
     await request(app)
       .post('/api/v1/emails/forward')
-      .set(AUTH)
+      .set(FRONT_OFFICE)
       .send({ queryId: 'QRY-1', subject: 'Secret subject', body: 'CONFIDENTIAL BODY TEXT' });
 
     const trail = await request(app).get('/api/v1/audit').set(ADMIN);

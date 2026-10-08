@@ -19,10 +19,10 @@ import { useWorkflowStore } from "@/store/useWorkflowStore";
 import {
   WORKFLOW_ACTION,
   CLARIFICATION_REQUIRED_ACTIONS,
+  isObserver,
 } from "@/constants/workflowRules";
 import { WORKFLOW_STATE } from "@/constants/statusEnums";
 import { EMAIL_TYPE } from "@/constants/emailModel";
-import { ROLES } from "@/constants/roles";
 import { buildPath } from "@/constants/routePaths";
 import { SECTION } from "@/constants/routeSections";
 import { useRoutePaths } from "@/hooks/useRoutePaths";
@@ -76,9 +76,7 @@ function deriveCaseActions({ query, currentStep, currentUser, can, paths }) {
     !currentStep?.assignedUserId ||
     currentStep.assignedUserId === currentUser?.id;
 
-  const role = currentUser?.role;
-  const isCurrentAssignee =
-    query.currentAssigneeId === currentUser?.id || role === ROLES.SUPER_ADMIN;
+  const isCurrentAssignee = query.currentAssigneeId === currentUser?.id;
 
   const canForward = can(WORKFLOW_ACTION.FORWARD);
   const canTransfer = can(WORKFLOW_ACTION.TRANSFER) && isCurrentAssignee;
@@ -236,6 +234,7 @@ function EmailRetryNotice({
   uncertain = false,
   onResolve = null,
   urgent = false,
+  readOnly = false,
 }) {
   const action =
     "rounded-xl px-3.5 py-1.5 text-[12.5px] font-semibold transition-colors cursor-pointer disabled:opacity-60";
@@ -250,7 +249,7 @@ function EmailRetryNotice({
         {description}
       </p>
 
-      {uncertain && onResolve ? (
+      {readOnly ? null : uncertain && onResolve ? (
         <div className="mt-2 flex flex-wrap gap-2">
           <button
             type="button"
@@ -577,10 +576,16 @@ export function WorkflowActionsCard() {
 
         <ActionLinks links={links} queryId={queryId} firstIsPrimary={!canForward} />
 
-        {!isClosed && hasNoActions && (
+        {observer ? (
           <div className="rounded-lg border border-slate-200 bg-card p-3 text-[13px] text-slate-500 leading-relaxed">
-            No actions available to you at this stage.
+            You are viewing this case as Super Admin. You can see everything on it, but only the people working on it can take action.
           </div>
+        ) : (
+          !isClosed && hasNoActions && (
+            <div className="rounded-lg border border-slate-200 bg-card p-3 text-[13px] text-slate-500 leading-relaxed">
+              No actions available to you at this stage.
+            </div>
+          )
         )}
 
         <ClarificationList

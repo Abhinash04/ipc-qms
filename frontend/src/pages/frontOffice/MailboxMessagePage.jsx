@@ -34,6 +34,8 @@ import {
 } from "@/services/api/mailboxService";
 import { notify } from "@/services/notify";
 import { MAIL_CATEGORY_META } from "@/constants/mailCategories";
+import { isObserver } from "@/constants/workflowRules";
+import { useAuthStore } from "@/store/useAuthStore";
 import { parseSender, formatFullDate } from "@/utils/mailboxFormat";
 
 const CARD = "bg-card rounded-2xl border border-transparent p-5 shadow-card";
@@ -178,7 +180,7 @@ function MessageCaseCard({ message, paths }) {
   );
 }
 
-function MessageCategoryCard({ message, paths }) {
+function MessageCategoryCard({ message, paths, readOnly }) {
   const queryClient = useQueryClient();
   const correct = useMutation({
     mutationFn: (category) => setMailboxMessageCategory(message.mailboxMessageId, category),
@@ -198,7 +200,7 @@ function MessageCategoryCard({ message, paths }) {
     <CaseCard tone="context" banner compact art={[Tags]} icon={Tag} title="Category">
       <MailCategoryDetails
         triage={message.triage}
-        onCorrect={(category) => correct.mutate(category)}
+        onCorrect={readOnly ? null : (category) => correct.mutate(category)}
         correcting={correct.isPending}
         caseHref={paths.QUERY_DETAIL ? (queryId) => buildPath(paths.QUERY_DETAIL, { queryId }) : null}
         messageHref={(mailboxMessageId) =>
@@ -209,7 +211,7 @@ function MessageCategoryCard({ message, paths }) {
   );
 }
 
-function MessageView({ message, paths }) {
+function MessageView({ message, paths, readOnly }) {
   const attachments = message.attachments || [];
 
   return (
@@ -221,6 +223,7 @@ function MessageView({ message, paths }) {
           key={`${message.mailboxMessageId}-${message.autoReply?.status}`}
           message={message}
           caseHref={paths.QUERY_DETAIL ? (queryId) => buildPath(paths.QUERY_DETAIL, { queryId }) : null}
+          readOnly={readOnly}
         />
         {attachments.length > 0 && (
           <CaseCard
@@ -242,7 +245,7 @@ function MessageView({ message, paths }) {
       <div className="lg:sticky lg:top-6 self-start space-y-5">
         <AutoReplyConfidenceCard message={message} />
         <MessageCaseCard message={message} paths={paths} />
-        <MessageCategoryCard message={message} paths={paths} />
+        <MessageCategoryCard message={message} paths={paths} readOnly={readOnly} />
       </div>
     </div>
   );
@@ -252,6 +255,8 @@ export function MailboxMessagePage() {
   const { messageId } = useParams();
   const paths = useRoutePaths();
   const queryClient = useQueryClient();
+  // Super Admin reads mail without marking it read or changing it for the Front Office.
+  const readOnly = isObserver(useAuthStore((state) => state.currentUser));
 
   const message = useQuery({
     queryKey: ["mailbox", "message", messageId],
@@ -272,10 +277,10 @@ export function MailboxMessagePage() {
   const marked = useRef(null);
   const unread = message.data?.isRead === false;
   useEffect(() => {
-    if (!unread || marked.current === messageId) return;
+    if (readOnly || !unread || marked.current === messageId) return;
     marked.current = messageId;
     markRead(messageId);
-  }, [unread, messageId, markRead]);
+  }, [readOnly, unread, messageId, markRead]);
 
   let content;
   if (message.isPending) {
@@ -306,7 +311,7 @@ export function MailboxMessagePage() {
     content = (
       <div className="space-y-4">
         <BackToInbox paths={paths} />
-        <MessageView message={message.data} paths={paths} />
+        <MessageView message={message.data} paths={paths} readOnly={readOnly} />
       </div>
     );
   }

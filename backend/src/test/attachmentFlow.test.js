@@ -1,9 +1,12 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import request from 'supertest';
-import { AUTH } from './helpers/auth.js';
+import { authHeader } from './helpers/auth.js';
+import { ROLES } from '../constants/roles.js';
 import app from '../app.js';
 import * as mockTransport from '../services/email/transports/mockTransport.js';
 import * as store from '../services/attachments/attachmentStore.js';
+
+const FRONT_OFFICE = authHeader(ROLES.FRONT_OFFICE);
 
 const FIXTURES = [
   { filename: 'spec.pdf', contentType: 'application/pdf', bytes: Buffer.from('%PDF-1.4 pretend pdf content') },
@@ -26,7 +29,7 @@ describe('end-to-end attachment flow', () => {
     const uploaded = [];
     for (const fixture of FIXTURES) {
       const res = await request(app)
-        .post('/api/v1/attachments').set(AUTH)
+        .post('/api/v1/attachments').set(FRONT_OFFICE)
         .attach('files', fixture.bytes, { filename: fixture.filename, contentType: fixture.contentType });
       expect(res.status).toBe(201);
       uploaded.push(res.body.attachments[0]);
@@ -39,7 +42,7 @@ describe('end-to-end attachment flow', () => {
 
     const sendSpy = vi.spyOn(mockTransport, 'send');
     const forwardRes = await request(app)
-      .post('/api/v1/emails/forward').set(AUTH)
+      .post('/api/v1/emails/forward').set(FRONT_OFFICE)
       .send({
         queryId: 'QRY-2026-00099',
         subject: 'Enquiry with attachments',
@@ -66,7 +69,7 @@ describe('end-to-end attachment flow', () => {
     sendSpy.mockClear();
 
     const failedForward = await request(app)
-      .post('/api/v1/emails/forward').set(AUTH)
+      .post('/api/v1/emails/forward').set(FRONT_OFFICE)
       .send({
         queryId: 'QRY-2026-00100',
         subject: 'Enquiry with attachments (retry)',

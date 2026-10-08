@@ -34,7 +34,7 @@ const s = () => useWorkflowStore.getState();
 
 const OIC = findUserById('USR-0003');
 const OFFICIAL_A = findUserById('USR-0004');
-const ADMIN = findUserById('USR-0008');
+const ADMIN = findUserById('USR-0007');
 const REGULAR_ADMIN = findUserById('USR-0007');
 
 const caseMail = fakeCaseMail();
@@ -184,7 +184,7 @@ describe('Admin Pullback Query Functionality Unit & Integration Tests', () => {
 
   describe('UI Integration & Pullback Query Modal Flow', () => {
     it('renders "Pullback Query" button for Admin user and processes modal pullback flow', async () => {
-      const { unmount } = renderAs(ADMIN, `/super-admin/queries/${queryId}`);
+      const { unmount } = renderAs(ADMIN, `/admin/queries/${queryId}`);
 
       const pullbackBtn = screen.getByRole('button', { name: /Pullback Query/i });
       expect(pullbackBtn).toBeInTheDocument();
@@ -262,7 +262,7 @@ describe('the pull back dialog across a review cycle', () => {
 
   it('offers each review level as a target, and resumes review at the one chosen', async () => {
     await toFinalApproval();
-    const { unmount } = renderAs(ADMIN, `/super-admin/queries/${queryId}`);
+    const { unmount } = renderAs(ADMIN, `/admin/queries/${queryId}`);
 
     fireEvent.click(screen.getByRole('button', { name: /Pullback Query/i }));
     const select = screen.getByLabelText(/Pull Back To/i);
@@ -292,7 +292,7 @@ describe('the pull back dialog across a review cycle', () => {
     await toFinalApproval();
     await s().grantFinalApproval(queryId, OIC, fakeFinalApprovalEndpoint());
 
-    const { unmount } = renderAs(ADMIN, `/super-admin/queries/${queryId}`);
+    const { unmount } = renderAs(ADMIN, `/admin/queries/${queryId}`);
 
     expect(screen.queryByRole('button', { name: /Pullback Query/i })).toBeNull();
     unmount();

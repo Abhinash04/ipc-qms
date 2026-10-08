@@ -1,6 +1,9 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import request from 'supertest';
-import { AUTH } from './helpers/auth.js';
+import { AUTH, authHeader } from './helpers/auth.js';
+import { ROLES } from '../constants/roles.js';
+
+const FRONT_OFFICE = authHeader(ROLES.FRONT_OFFICE);
 
 import app from '../app.js';
 import * as emailService from '../services/email/emailService.js';
@@ -124,12 +127,12 @@ describe('email HTTP surface', () => {
 
   it('forwards an existing query and requires its id', async () => {
     const ok = await request(app)
-      .post('/api/v1/emails/forward').set(AUTH)
+      .post('/api/v1/emails/forward').set(FRONT_OFFICE)
       .send({ queryId: 'QRY-2026-00001', subject: 'Query', body: 'quoted' });
     expect(ok.status).toBe(201);
     expect(ok.body.to).toEqual(['officer@test.invalid']);
 
-    const bad = await request(app).post('/api/v1/emails/forward').set(AUTH).send({ subject: 'x' });
+    const bad = await request(app).post('/api/v1/emails/forward').set(FRONT_OFFICE).send({ subject: 'x' });
     expect(bad.status).toBe(400);
   });
 
@@ -192,7 +195,7 @@ describe('sending while the mailbox is a read-only NICeMail IMAP inbox', () => {
   });
 
   it('POST /emails/response succeeds instead of 500', async () => {
-    const res = await request(app).post('/api/v1/emails/response').set(AUTH).send({
+    const res = await request(app).post('/api/v1/emails/response').set(FRONT_OFFICE).send({
       to: 'inquirer@test.invalid',
       subject: 'Re: Clarification [QRY-2026-00001]',
       body: 'The approved response.',
@@ -205,12 +208,12 @@ describe('sending while the mailbox is a read-only NICeMail IMAP inbox', () => {
 
   it('the acknowledgement and forward survive it too — same code path', async () => {
     const ack = await request(app)
-      .post('/api/v1/emails/acknowledgement').set(AUTH)
+      .post('/api/v1/emails/acknowledgement').set(FRONT_OFFICE)
       .send({ to: 'inquirer@test.invalid', queryId: 'QRY-2026-00001' });
     expect(ack.status).toBe(201);
 
     const forward = await request(app)
-      .post('/api/v1/emails/forward').set(AUTH)
+      .post('/api/v1/emails/forward').set(FRONT_OFFICE)
       .send({ queryId: 'QRY-2026-00001', subject: 'Clarification', body: 'quoted' });
     expect(forward.status).toBe(201);
   });
@@ -225,7 +228,7 @@ describe('sending while the mailbox is a read-only NICeMail IMAP inbox', () => {
   });
 
   it('records nothing in the local mailbox, because there is none to record in', async () => {
-    await request(app).post('/api/v1/emails/response').set(AUTH).send({
+    await request(app).post('/api/v1/emails/response').set(FRONT_OFFICE).send({
       to: 'inquirer@test.invalid',
       subject: 'Re: test',
       body: 'x',

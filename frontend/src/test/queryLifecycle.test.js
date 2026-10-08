@@ -277,7 +277,7 @@ describe('a pulled back query updates workflow progress, and the pull back is an
     s().assignQuery(queryId, OFFICIAL.id, OIC);
     await s().generateAiDraft(queryId, OFFICIAL);
 
-    const ADMIN_USER = findUserById('USR-0008');
+    const ADMIN_USER = findUserById('USR-0007');
     await s().pullBackQuery(
       queryId,
       WORKFLOW_STATE.PENDING_ASSIGNMENT,

@@ -17,7 +17,7 @@ router.get('/emails/config', verifyToken, getConfig);
 router.post(
   '/emails/acknowledgement',
   verifyToken,
-  verifyRole(ROLES.FRONT_OFFICE, ROLES.SUPER_ADMIN),
+  verifyRole(ROLES.FRONT_OFFICE),
   sendAcknowledgement,
 );
 router.post('/emails/forward', verifyToken, verifyAction(WORKFLOW_ACTION.FORWARD), forwardQuery);

@@ -101,7 +101,7 @@ describe('closing a case is the server’s to do', () => {
     expect((await stored()).priority).toBe('HIGH');
   });
 
-  it('allows an administrator to pull a closed case back', async () => {
+  it('refuses the Super Admin reopening a closed case, since it only observes', async () => {
     await QueryCase.updateOne({ queryId: QUERY_ID }, { $set: { workflowState: 'CLOSED', businessStatus: 'CLOSED' } });
 
     const res = await persist(
@@ -109,8 +109,8 @@ describe('closing a case is the server’s to do', () => {
       ROLES.SUPER_ADMIN,
     );
 
-    expect(res.status).toBe(200);
-    expect((await stored()).workflowState).toBe('DRAFTING');
+    expect(res.status).toBe(403);
+    expect((await stored()).workflowState).toBe('CLOSED');
   });
 });
 

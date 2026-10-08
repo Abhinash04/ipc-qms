@@ -1,6 +1,9 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import request from 'supertest';
-import { AUTH } from './helpers/auth.js';
+import { authHeader } from './helpers/auth.js';
+
+const FRONT_OFFICE = authHeader(ROLES.FRONT_OFFICE);
+import { ROLES } from '../constants/roles.js';
 import app from '../app.js';
 import * as mockTransport from '../services/email/transports/mockTransport.js';
 import * as mailbox from '../services/email/mailbox/index.js';
@@ -13,7 +16,7 @@ beforeEach(async () => {
 
 async function uploadFixture(filename, contentType, bytes = 'fixture bytes') {
   const res = await request(app)
-    .post('/api/v1/attachments').set(AUTH)
+    .post('/api/v1/attachments').set(FRONT_OFFICE)
     .attach('files', Buffer.from(bytes), { filename, contentType });
   return res.body.attachments[0];
 }
@@ -23,7 +26,7 @@ describe('POST /emails/forward carries attachments to the OIC', () => {
     const pdf = await uploadFixture('spec.pdf', 'application/pdf', 'pdf-bytes-here');
 
     const res = await request(app)
-      .post('/api/v1/emails/forward').set(AUTH)
+      .post('/api/v1/emails/forward').set(FRONT_OFFICE)
       .send({ queryId: 'QRY-2026-00001', subject: 'Sterility clarification', body: 'body', attachments: [pdf] });
 
     expect(res.status).toBe(201);
@@ -44,7 +47,7 @@ describe('POST /emails/forward carries attachments to the OIC', () => {
       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     );
 
-    const res = await request(app).post('/api/v1/emails/forward').set(AUTH).send({
+    const res = await request(app).post('/api/v1/emails/forward').set(FRONT_OFFICE).send({
       queryId: 'QRY-2026-00002',
       subject: 'Multi-attachment query',
       body: 'body',
@@ -59,7 +62,7 @@ describe('POST /emails/forward carries attachments to the OIC', () => {
     const pdf = await uploadFixture('spec.pdf', 'application/pdf');
 
     const res = await request(app)
-      .post('/api/v1/emails/forward').set(AUTH)
+      .post('/api/v1/emails/forward').set(FRONT_OFFICE)
       .send({ queryId: 'QRY-2026-00003', subject: 'Original subject', body: 'original body', attachments: [pdf] });
 
     expect(res.status).toBe(201);
@@ -70,7 +73,7 @@ describe('POST /emails/forward carries attachments to the OIC', () => {
 
   it('a forward with no attachments still succeeds unchanged', async () => {
     const res = await request(app)
-      .post('/api/v1/emails/forward').set(AUTH)
+      .post('/api/v1/emails/forward').set(FRONT_OFFICE)
       .send({ queryId: 'QRY-2026-00004', subject: 'No attachments here', body: 'body' });
 
     expect(res.status).toBe(201);

@@ -1,9 +1,12 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import request from 'supertest';
-import { AUTH } from './helpers/auth.js';
+import { authHeader } from './helpers/auth.js';
+import { ROLES } from '../constants/roles.js';
 import app from '../app.js';
 import * as mockTransport from '../services/email/transports/mockTransport.js';
 import * as store from '../services/attachments/attachmentStore.js';
+
+const FRONT_OFFICE = authHeader(ROLES.FRONT_OFFICE);
 
 beforeEach(async () => {
   await mockTransport.reset();
@@ -13,7 +16,7 @@ beforeEach(async () => {
 
 async function uploadFixture(filename = 'good.pdf', contentType = 'application/pdf') {
   const res = await request(app)
-    .post('/api/v1/attachments').set(AUTH)
+    .post('/api/v1/attachments').set(FRONT_OFFICE)
     .attach('files', Buffer.from('fixture bytes'), { filename, contentType });
   return res.body.attachments[0];
 }
@@ -22,7 +25,7 @@ describe('forwarding fails closed on an unresolvable attachment', () => {
   it('an unknown attachment id -> 409, names the file, and sends nothing', async () => {
     const sendSpy = vi.spyOn(mockTransport, 'send');
 
-    const res = await request(app).post('/api/v1/emails/forward').set(AUTH).send({
+    const res = await request(app).post('/api/v1/emails/forward').set(FRONT_OFFICE).send({
       queryId: 'QRY-2026-00010',
       subject: 'Missing attachment',
       body: 'body',
@@ -43,7 +46,7 @@ describe('forwarding fails closed on an unresolvable attachment', () => {
     const sendSpy = vi.spyOn(mockTransport, 'send');
 
     const res = await request(app)
-      .post('/api/v1/emails/forward').set(AUTH)
+      .post('/api/v1/emails/forward').set(FRONT_OFFICE)
       .send({ queryId: 'QRY-2026-00011', subject: 'Vanished bytes', body: 'body', attachments: [good] });
 
     expect(res.status).toBe(409);
@@ -68,7 +71,7 @@ describe('forwarding fails closed on an unresolvable attachment', () => {
     const sendSpy = vi.spyOn(mockTransport, 'send');
 
     const res = await request(app)
-      .post('/api/v1/emails/forward').set(AUTH)
+      .post('/api/v1/emails/forward').set(FRONT_OFFICE)
       .send({ queryId: 'QRY-2026-00012', subject: 'Corrupted', body: 'body', attachments: [good] });
 
     expect(res.status).toBe(409);
@@ -83,7 +86,7 @@ describe('forwarding fails closed on an unresolvable attachment', () => {
 
     const sendSpy = vi.spyOn(mockTransport, 'send');
 
-    const res = await request(app).post('/api/v1/emails/forward').set(AUTH).send({
+    const res = await request(app).post('/api/v1/emails/forward').set(FRONT_OFFICE).send({
       queryId: 'QRY-2026-00013',
       subject: 'Mixed batch',
       body: 'body',
@@ -98,7 +101,7 @@ describe('forwarding fails closed on an unresolvable attachment', () => {
 
   it('a forward with no attachments at all is unaffected and still succeeds', async () => {
     const res = await request(app)
-      .post('/api/v1/emails/forward').set(AUTH)
+      .post('/api/v1/emails/forward').set(FRONT_OFFICE)
       .send({ queryId: 'QRY-2026-00014', subject: 'Plain forward', body: 'body' });
 
     expect(res.status).toBe(201);

@@ -86,17 +86,17 @@ describe('workflow-action authorization mirrors the frontend table', () => {
     expect(roleCanPerform(ROLES.ADMIN, WORKFLOW_ACTION.VERIFY)).toBe(false);
   });
 
-  it('permits DELETE_REVIEW_LEVEL for the Assigned Official and Super Admin only', () => {
+  it('permits DELETE_REVIEW_LEVEL for the Assigned Official only', () => {
     for (const role of Object.values(ROLES)) {
       expect(roleCanPerform(role, WORKFLOW_ACTION.DELETE_REVIEW_LEVEL)).toBe(
-        [ROLES.ASSIGNED_OFFICIAL, ROLES.SUPER_ADMIN].includes(role),
+        role === ROLES.ASSIGNED_OFFICIAL,
       );
     }
   });
 
-  it('permits PULLBACK for the Front Office, the OIC, Admin and Super Admin only', () => {
+  it('permits PULLBACK for the Front Office, the OIC and Admin only', () => {
     expect(roleCanPerform(ROLES.ADMIN, WORKFLOW_ACTION.PULLBACK)).toBe(true);
-    expect(roleCanPerform(ROLES.SUPER_ADMIN, WORKFLOW_ACTION.PULLBACK)).toBe(true);
+    expect(roleCanPerform(ROLES.SUPER_ADMIN, WORKFLOW_ACTION.PULLBACK)).toBe(false);
     expect(roleCanPerform(ROLES.FRONT_OFFICE, WORKFLOW_ACTION.PULLBACK)).toBe(true);
     expect(roleCanPerform(ROLES.OFFICER_IN_CHARGE, WORKFLOW_ACTION.PULLBACK)).toBe(true);
     expect(roleCanPerform(ROLES.ASSIGNED_OFFICIAL, WORKFLOW_ACTION.PULLBACK)).toBe(false);

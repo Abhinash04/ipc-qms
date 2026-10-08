@@ -23,7 +23,6 @@ const INBOX_PATH = '/super-admin/inbox';
 const currentYear = () => new Date().getUTCFullYear();
 async function decideInUi(page, mailboxMessageId, action) {
   const verb = action === 'accept' ? 'Accept' : 'Reject';
-  await page.locator(`[data-message-id="${mailboxMessageId}"]`).click();
   await page
     .getByRole('button', { name: `${verb} message ${mailboxMessageId}`, exact: true })
     .click();
@@ -135,7 +134,6 @@ test('a message opens in full from the inbox, and shows the case it became once 
   const subject = 'Dissolution test — Amoxicillin capsules';
   const message = await arrive(page, request, subject);
 
-  await page.locator(`[data-message-id="${message.mailboxMessageId}"]`).click();
   await page.getByRole('link', { name: subject, exact: true }).click();
 
   await expect(page).toHaveURL(`${INBOX_PATH}/${message.mailboxMessageId}`);
@@ -171,7 +169,6 @@ test('a formatted body runs no script and cannot take the page anywhere', async 
     await dialog.dismiss();
   });
 
-  await page.locator(`[data-message-id="${message.mailboxMessageId}"]`).click();
   await page.getByRole('link', { name: subject, exact: true }).click();
   await page.getByRole('button', { name: 'Formatted' }).click();
 

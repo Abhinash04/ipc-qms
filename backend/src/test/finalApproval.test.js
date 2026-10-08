@@ -471,12 +471,12 @@ describe('POST /queries/:queryId/final-approval — authorization', () => {
     expect(sendSpy).not.toHaveBeenCalled();
   });
 
-  it('admits the Officer-in-Charge and the Super Admin', async () => {
+  it('admits the Officer-in-Charge', async () => {
     expect((await approve(QUERY_ID, ROLES.OFFICER_IN_CHARGE)).status).toBe(200);
+  });
 
-    db.reset();
-    await caseAwaitingApproval();
-
-    expect((await approve(QUERY_ID, ROLES.SUPER_ADMIN)).status).toBe(200);
+  it('refuses the Super Admin, who observes cases but changes none', async () => {
+    expect((await approve(QUERY_ID, ROLES.SUPER_ADMIN)).status).toBe(403);
+    expect(sendSpy).not.toHaveBeenCalled();
   });
 });

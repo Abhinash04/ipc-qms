@@ -3,6 +3,7 @@ import * as store from '../services/attachments/attachmentStore.js';
 import { EmailMessage } from '../models/index.js';
 import { isConnected } from '../config/db.js';
 import { isPartyToCase, scopeKindForRole, SCOPE_KIND } from '../services/authz/caseAccess.js';
+import { isObserver } from '../constants/workflowActions.js';
 
 export async function resolveAttachmentCase(meta) {
   if (meta?.queryId) return meta.queryId;
@@ -37,6 +38,7 @@ async function authorizeAttachmentAccess(req, res, next) {
     const seesEverything = scopeKindForRole(req.user.role) === SCOPE_KIND.EVERYTHING;
 
     if (!req.params.id) {
+      if (isObserver(req.user.role)) return next(forbidden());
       const queryId = req.body?.queryId;
       if (queryId && !seesEverything && !(await isPartyToCase(req.user, queryId))) {
         return next(forbidden());
