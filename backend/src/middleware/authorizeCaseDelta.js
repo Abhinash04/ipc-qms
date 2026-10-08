@@ -22,6 +22,7 @@ import {
   Notification,
 } from '../models/index.js';
 import { isConnected } from '../config/db.js';
+import { assignableDirectory } from '../services/ai/officialDirectory.js';
 
 const permits = (role, actions) =>
   Array.isArray(actions) && actions.some((action) => roleCanPerform(role, action));
@@ -31,11 +32,11 @@ const REVIEW_LEVEL_STATES = [
   WORKFLOW_STATE.RETURNED_FOR_REVISION,
 ];
 
-function isAssignedOfficial(userId) {
-  return allUsers().some((user) => user.id === userId && user.role === ROLES.ASSIGNED_OFFICIAL);
+function isAssignedOfficial(userId, directory) {
+  return directory.some((user) => user.id === userId && user.role === ROLES.ASSIGNED_OFFICIAL);
 }
 
-function assigneeChangeAllowed(role, query, storedQuery) {
+function assigneeChangeAllowed(role, query, storedQuery, directory) {
   if (!storedQuery) return true;
   if (storedQuery.workflowState === WORKFLOW_STATE.PENDING_ASSIGNMENT) {
     return roleCanPerform(role, WORKFLOW_ACTION.ASSIGN);
@@ -44,11 +45,12 @@ function assigneeChangeAllowed(role, query, storedQuery) {
     roleCanPerform(role, WORKFLOW_ACTION.TRANSFER) &&
     storedQuery.workflowState === WORKFLOW_STATE.ASSIGNED &&
     (query.workflowState ?? storedQuery.workflowState) === WORKFLOW_STATE.ASSIGNED &&
-    isAssignedOfficial(query.currentAssigneeId)
+    isAssignedOfficial(query.currentAssigneeId, directory)
   );
 }
 
-export function protectedValueViolations(user, body, stored = {}) {
+// `directory`: who may be assigned work; the middleware adds approved registered officials.
+export function protectedValueViolations(user, body, stored = {}, directory = allUsers()) {
   const role = user?.role;
   const everything = scopeKindForRole(role) === SCOPE_KIND.EVERYTHING;
   const violations = [];
@@ -77,7 +79,7 @@ export function protectedValueViolations(user, body, stored = {}) {
 
     const assignee = query.currentAssigneeId;
     if (typeof assignee === 'string' && assignee && assignee !== storedQuery?.currentAssigneeId) {
-      if (!permits(role, ASSIGNEE_REQUIRES_ACTION) || !assigneeChangeAllowed(role, query, storedQuery)) {
+      if (!permits(role, ASSIGNEE_REQUIRES_ACTION) || !assigneeChangeAllowed(role, query, storedQuery, directory)) {
         violations.push('query.currentAssigneeId');
       }
     }
@@ -225,7 +227,12 @@ async function authorizeCaseDelta(req, res, next) {
       });
     }
 
-    const violations = protectedValueViolations(req.user, body, stored);
+    // The database is read only when the case moves to someone outside the built-in directory.
+    const assignee = body.query?.currentAssigneeId;
+    const registeredAssignee =
+      assignee && assignee !== stored.query?.currentAssigneeId && !allUsers().some((user) => user.id === assignee);
+    const directory = registeredAssignee ? await assignableDirectory() : undefined;
+    const violations = protectedValueViolations(req.user, body, stored, directory);
     if (violations.length) {
       return deny(req, res, `${req.user.role} is not permitted to make that change`, {
         fields: violations,

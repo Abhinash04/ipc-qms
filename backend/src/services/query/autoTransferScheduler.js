@@ -6,6 +6,7 @@ import { ACTOR_TYPES, ROLES } from '../../constants/roles.js';
 import { AUDIT_ACTIONS, AUDIT_RESULTS } from '../../constants/auditActions.js';
 import { allUsers } from '../../constants/users.js';
 import * as gemmaService from '../ai/gemmaService.js';
+import { assignableDirectory } from '../ai/officialDirectory.js';
 import * as audit from '../audit/auditService.js';
 import { change } from '../audit/caseChanges.js';
 import { autoTransferSettings, deadlineFrom, sanitizeRanking, TRANSFER_TYPES } from './assignmentClock.js';
@@ -195,10 +196,12 @@ export async function executeAutoTransfer(
 export async function processExpiredTransfers({
   now = Date.now(),
   settings = autoTransferSettings(),
-  directory = allUsers(),
+  directory = null,
 } = {}) {
   if (!settings.enabled) return { ran: false, reason: 'DISABLED', transferred: 0, exhausted: 0, results: [] };
   if (!isConnected()) return { ran: false, reason: 'DB_DISCONNECTED', transferred: 0, exhausted: 0, results: [] };
+  // Approved officials an administrator added are eligible too; deactivated ones are not listed.
+  directory ??= await assignableDirectory();
 
   const nowIso = new Date(now).toISOString();
   const expired = await QueryCase.find(expiredAssignmentFilter(nowIso))

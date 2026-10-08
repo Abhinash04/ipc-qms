@@ -30,6 +30,9 @@ vi.mock('../models/EmailThread.js', async () => ({
 vi.mock('../models/AuditEvent.js', async () => ({
   AuditEvent: (await import('./support/memoryDb.js')).memoryDb.model('AuditEvent'),
 }));
+vi.mock('../models/User.js', async () => ({
+  User: (await import('./support/memoryDb.js')).memoryDb.model('User', { unique: ['userId', 'email'] }),
+}));
 vi.mock('../models/OutboundEmail.js', async (importOriginal) => ({
   ...(await importOriginal()),
   OutboundEmail: (await import('./support/memoryDb.js')).memoryDb.model('OutboundEmail', { unique: ['dispatchKey'] }),

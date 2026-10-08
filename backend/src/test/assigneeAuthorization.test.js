@@ -30,6 +30,9 @@ vi.mock('../models/EmailThread.js', async () => ({
 vi.mock('../models/AuditEvent.js', async () => ({
   AuditEvent: (await import('./support/memoryDb.js')).memoryDb.model('AuditEvent'),
 }));
+vi.mock('../models/User.js', async () => ({
+  User: (await import('./support/memoryDb.js')).memoryDb.model('User', { unique: ['userId', 'email'] }),
+}));
 vi.mock('../models/QueryCounter.js', async () => ({
   QueryCounter: (await import('./support/memoryDb.js')).memoryDb.model('QueryCounter'),
 }));

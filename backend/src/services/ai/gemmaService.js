@@ -1,5 +1,5 @@
 import env from '../../config/env.js';
-import { ASSIGNED_OFFICIALS } from '../../config/officialsMetadata.js';
+import { recommendableOfficials } from './officialDirectory.js';
 import { selectContext, formatContextForPrompt } from '../../data/ipcContextBrain.js';
 import { retrieveContext, formatPassagesForPrompt } from '../../data/ipcKnowledge.js';
 import { splitEnquiryQuestions } from '../../data/enquiryQuestions.js';
@@ -186,10 +186,10 @@ IPC JSON Summary:`;
   }
 }
 
-function generateFallbackRecommendations({ subject = '', body = '', summaryText = '' }) {
+function generateFallbackRecommendations({ subject = '', body = '', summaryText = '' }, officials) {
   const fullText = `${subject} ${body} ${summaryText}`.toLowerCase();
 
-  const scored = ASSIGNED_OFFICIALS.map((official, idx) => {
+  const scored = officials.map((official, idx) => {
     const matchedKeywords = official.expertise.filter((skill) => fullText.includes(skill.toLowerCase()));
     const divisionMatch = fullText.includes(official.divisionName.toLowerCase());
 
@@ -234,8 +234,18 @@ function generateFallbackRecommendations({ subject = '', body = '', summaryText 
     }));
 }
 
+// One line per official; whitespace is collapsed so an administrator-entered value stays on its line.
+const directoryLine = (official, idx) =>
+  `${idx + 1}. ${official.userId}: ${official.name} | Division: ${official.divisionName} | Expertise: ${official.expertise.join(', ')}`.replace(
+    /\s+/g,
+    ' ',
+  );
+
 export async function recommendOfficial({ subject = '', body = '', summaryText = '' }) {
-  const fallbackRecs = generateFallbackRecommendations({ subject, body, summaryText });
+  // Built-in officials plus every approved, active one an administrator added: deactivated
+  // officials are never offered, and an expertise change applies to the next recommendation.
+  const officials = await recommendableOfficials();
+  const fallbackRecs = generateFallbackRecommendations({ subject, body, summaryText }, officials);
 
   if (!env.GEMMA_API_URL) {
     return fallbackRecs;
@@ -245,12 +255,7 @@ export async function recommendOfficial({ subject = '', body = '', summaryText =
 Your task is to analyze the following incoming enquiry and recommend the Top 3 best-qualified IPC Officials from the directory to handle this enquiry.
 
 IPC OFFICIALS DIRECTORY:
-1. USR-0004: Neha Singh | Division: Analytical & Quality Control | Expertise: assay, dissolution, impurity, method validation, chromatography, hplc
-2. USR-0010: Meera Iyer | Division: Pharmacopoeial Standards | Expertise: monograph, reference standard, pharmacopoeia, specification, iprs
-3. USR-0011: Arjun Nair | Division: Microbiology | Expertise: sterility, endotoxin, microbial limits, bioburden, contamination, lal
-4. USR-0012: Sana Qureshi | Division: Pharmaceutical Chemistry | Expertise: synthesis, degradation, stability, excipient, formulation, api
-5. USR-0013: Vikram Desai | Division: Regulatory Affairs & Compliance | Expertise: submission, documentation, regulatory, guideline, compliance, dossier
-6. USR-0009: Rawat Jatin | Division: Technical Operations | Expertise: instrumentation, calibration, laboratory operations, equipment, glp
+${officials.map(directoryLine).join('\n')}
 
 Enquiry Subject: "${subject.trim() || 'Untitled Enquiry'}"
 Enquiry Summary: "${summaryText.trim() || ''}"
@@ -319,8 +324,11 @@ IPC AI Recommendations:`;
       try {
         const parsed = JSON.parse(cleaned);
         if (parsed && Array.isArray(parsed.recommendations) && parsed.recommendations.length > 0) {
-          const formatted = parsed.recommendations.slice(0, 3).map((item, idx) => {
-            const officialMeta = ASSIGNED_OFFICIALS.find((o) => o.userId === item.userId) || ASSIGNED_OFFICIALS[idx];
+          // An ID the model made up is dropped rather than swapped for someone it did not choose.
+          const known = parsed.recommendations
+            .map((item) => ({ item, officialMeta: officials.find((o) => o.userId === item.userId) }))
+            .filter(({ officialMeta }) => officialMeta);
+          const formatted = known.slice(0, 3).map(({ item, officialMeta }, idx) => {
             return {
               rank: idx + 1,
               userId: officialMeta.userId,
@@ -335,7 +343,7 @@ IPC AI Recommendations:`;
               aiGenerated: true,
             };
           });
-          return formatted;
+          if (formatted.length > 0) return formatted;
         }
       } catch {
         console.warn('[Gemma AI] Could not parse the recommendation reply. Using fallback.');
