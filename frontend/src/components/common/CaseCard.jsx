@@ -71,6 +71,46 @@ function BannerShine({ seed }) {
   );
 }
 
+function CaseCardHeader({ tone, icon: Icon, title, headingId, meta, badge, actions, padX, compact, banner, art, illustrated }) {
+  return (
+    <header
+      className={cn(
+        'relative flex flex-wrap items-center gap-x-3 gap-y-2',
+        padX,
+        banner ? cn(BANNER, 'py-4 text-white') : cn('border-b border-slate-200/60', compact ? 'py-3' : 'py-3.5'),
+        illustrated && (compact ? 'overflow-hidden pe-20' : 'min-h-[76px] overflow-hidden sm:pe-40'),
+      )}
+    >
+      {illustrated && <BannerShine seed={title} />}
+      {illustrated && <BannerArt art={art} compact={compact} seed={title} />}
+      {Icon && (
+        <span
+          className={cn(
+            'relative flex shrink-0 items-center justify-center rounded-lg',
+            banner ? 'h-9 w-9 bg-white/15 text-white ring-1 ring-white/25' : cn('h-8 w-8', ICON_TONES[tone]),
+          )}
+          aria-hidden="true"
+        >
+          <Icon className="h-4 w-4" strokeWidth={2.2} />
+        </span>
+      )}
+      <div className="relative min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <h2
+            id={headingId}
+            className={cn('m-0 font-heading font-semibold leading-tight', banner ? 'text-[17px] text-white' : 'text-[16px] text-slate-900')}
+          >
+            {title}
+          </h2>
+          {badge}
+        </div>
+        {meta && <p className={cn('m-0 mt-0.5 text-[12.5px]', banner ? 'text-white/80' : 'text-slate-500')}>{meta}</p>}
+      </div>
+      {actions && <div className="relative flex flex-wrap items-center gap-2">{actions}</div>}
+    </header>
+  );
+}
+
 export function CaseCard({
   tone = 'default',
   icon: Icon,
@@ -103,41 +143,20 @@ export function CaseCard({
       )}
     >
       {title && (
-        <header
-          className={cn(
-            'relative flex flex-wrap items-center gap-x-3 gap-y-2',
-            padX,
-            banner ? cn(BANNER, 'py-4 text-white') : cn('border-b border-slate-200/60', compact ? 'py-3' : 'py-3.5'),
-            illustrated && (compact ? 'overflow-hidden pe-20' : 'min-h-[76px] overflow-hidden sm:pe-40'),
-          )}
-        >
-          {illustrated && <BannerShine seed={title} />}
-          {illustrated && <BannerArt art={art} compact={compact} seed={title} />}
-          {Icon && (
-            <span
-              className={cn(
-                'relative flex shrink-0 items-center justify-center rounded-lg',
-                banner ? 'h-9 w-9 bg-white/15 text-white ring-1 ring-white/25' : cn('h-8 w-8', ICON_TONES[tone]),
-              )}
-              aria-hidden="true"
-            >
-              <Icon className="h-4 w-4" strokeWidth={2.2} />
-            </span>
-          )}
-          <div className="relative min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-2">
-              <h2
-                id={headingId}
-                className={cn('m-0 font-heading font-semibold leading-tight', banner ? 'text-[17px] text-white' : 'text-[16px] text-slate-900')}
-              >
-                {title}
-              </h2>
-              {badge}
-            </div>
-            {meta && <p className={cn('m-0 mt-0.5 text-[12.5px]', banner ? 'text-white/80' : 'text-slate-500')}>{meta}</p>}
-          </div>
-          {actions && <div className="relative flex flex-wrap items-center gap-2">{actions}</div>}
-        </header>
+        <CaseCardHeader
+          tone={tone}
+          icon={Icon}
+          title={title}
+          headingId={headingId}
+          meta={meta}
+          badge={badge}
+          actions={actions}
+          padX={padX}
+          compact={compact}
+          banner={banner}
+          art={art}
+          illustrated={illustrated}
+        />
       )}
       {toolbar && (
         <div className={cn('flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-slate-200/70 bg-slate-50/70 py-2.5', padX)}>

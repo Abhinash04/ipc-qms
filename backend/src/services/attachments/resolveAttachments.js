@@ -2,46 +2,48 @@ import { createHash } from 'crypto';
 import * as store from './attachmentStore.js';
 import { AttachmentUnavailableError } from './errors.js';
 
-async function resolveAttachments(refs = []) {
-  if (!refs || refs.length === 0) return [];
+/** Loads one attachment and checks it against its stored checksum: { attachment } or { missing }. */
+async function resolveOne(ref) {
+  const id = ref?.attachmentId || ref?.id;
+  const fallbackName = ref?.filename || ref?.name || null;
 
-  const resolved = [];
-  const unavailable = [];
+  if (!id) {
+    return { missing: { attachmentId: null, filename: fallbackName, reason: 'no attachmentId provided' } };
+  }
 
-  for (const ref of refs) {
-    const id = ref?.attachmentId || ref?.id;
-    const fallbackName = ref?.filename || ref?.name || null;
-
-    if (!id) {
-      unavailable.push({ attachmentId: null, filename: fallbackName, reason: 'no attachmentId provided' });
-      continue;
+  try {
+    const meta = await store.getMetadata(id);
+    if (!meta) {
+      return { missing: { attachmentId: id, filename: fallbackName, reason: 'attachment not found' } };
     }
 
-    try {
-      const meta = await store.getMetadata(id);
-      if (!meta) {
-        unavailable.push({ attachmentId: id, filename: fallbackName, reason: 'attachment not found' });
-        continue;
-      }
+    const buffer = await store.readBytes(id);
+    const sha256 = createHash('sha256').update(buffer).digest('hex');
+    if (sha256 !== meta.sha256) {
+      return { missing: { attachmentId: id, filename: meta.filename, reason: 'corrupted (checksum mismatch)' } };
+    }
 
-      const buffer = await store.readBytes(id);
-      const sha256 = createHash('sha256').update(buffer).digest('hex');
-      if (sha256 !== meta.sha256) {
-        unavailable.push({ attachmentId: id, filename: meta.filename, reason: 'corrupted (checksum mismatch)' });
-        continue;
-      }
-
-      resolved.push({
+    return {
+      attachment: {
         attachmentId: id,
         filename: meta.filename,
         mimeType: meta.mimeType,
         size: meta.size,
         content: buffer,
-      });
-    } catch (error) {
-      unavailable.push({ attachmentId: id, filename: fallbackName, reason: error.message });
-    }
+      },
+    };
+  } catch (error) {
+    return { missing: { attachmentId: id, filename: fallbackName, reason: error.message } };
   }
+}
+
+async function resolveAttachments(refs = []) {
+  if (!refs || refs.length === 0) return [];
+
+  // The attachments are independent, so they load together; results keep the order they were given in.
+  const outcomes = await Promise.all(refs.map(resolveOne));
+  const resolved = outcomes.filter((outcome) => outcome.attachment).map((outcome) => outcome.attachment);
+  const unavailable = outcomes.filter((outcome) => outcome.missing).map((outcome) => outcome.missing);
 
   if (unavailable.length) throw new AttachmentUnavailableError(unavailable);
   return resolved;

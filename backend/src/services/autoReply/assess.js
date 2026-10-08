@@ -105,9 +105,14 @@ export async function assess(ids = [], { now = Date.now() } = {}) {
   );
 
   const nowIso = new Date(now).toISOString();
-  for (const message of messages) {
-    const id = message.mailboxMessageId;
-    const status = await assessOne(message, { decided: decided.has(id), junk: junk.has(id), nowIso });
+  // Each message is matched and saved on its own, so the batch runs together.
+  const statuses = await Promise.all(
+    messages.map((message) => {
+      const id = message.mailboxMessageId;
+      return assessOne(message, { decided: decided.has(id), junk: junk.has(id), nowIso });
+    }),
+  );
+  for (const status of statuses) {
     if (status === AUTO_REPLY_STATUS.SUGGESTED) counts.suggested += 1;
     else if (status) counts.notEligible += 1;
   }

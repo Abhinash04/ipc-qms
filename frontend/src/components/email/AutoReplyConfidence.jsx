@@ -56,15 +56,15 @@ export function AutoReplyConfidenceCard({ message, className }) {
             <span className={cn("rounded-full border px-2.5 py-0.5 text-[12px] font-bold", tone.pill)}>{confidence.decision}</span>
           </div>
 
-          <div
-            role="meter"
+          <meter
+            className="sr-only"
             aria-label="Confidence"
-            aria-valuemin={0}
-            aria-valuemax={100}
-            aria-valuenow={confidence.percent}
+            min={0}
+            max={100}
+            value={confidence.percent}
             aria-valuetext={`${confidence.percent}%, ${confidence.decision}`}
-            className="relative h-2 rounded-full bg-slate-100"
-          >
+          />
+          <div aria-hidden="true" className="relative h-2 rounded-full bg-slate-100">
             <span className={cn("absolute inset-y-0 left-0 rounded-full", tone.bar)} style={{ width: `${confidence.percent}%` }} />
             {confidence.threshold !== null && (
               <span aria-hidden="true" className="absolute -top-1 -bottom-1 w-0.5 rounded bg-slate-500" style={{ left: `calc(${confidence.threshold}% - 1px)` }} />

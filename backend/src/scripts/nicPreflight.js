@@ -239,19 +239,21 @@ async function preflight() {
   console.log('Run this from the DEPLOYMENT HOST; a laptop pass proves nothing about the server.\n');
   console.log('── Reachability (TLS handshake)');
   const reachable = new Map();
-  for (const candidate of CANDIDATES) {
-    for (const kind of ['imap', 'smtp']) {
-      const endpoint = candidate[kind];
-      const result = await probeReachable(endpoint);
-      const target = `${endpoint.host}:${endpoint.port}`.padEnd(28);
-      if (result.ok) {
-        console.log(`   ✓ ${target} ${result.greeting.slice(0, 60)}`);
-        reachable.set(`${candidate.label}/${kind}`, true);
-      } else {
-        console.log(`   ✗ ${target} ${result.error}`);
-      }
+  // The handshakes are read-only and independent, so they run together; results print in list order.
+  const probes = CANDIDATES.flatMap((candidate) =>
+    ['imap', 'smtp'].map((kind) => ({ candidate, kind, endpoint: candidate[kind] })),
+  );
+  const results = await Promise.all(probes.map(({ endpoint }) => probeReachable(endpoint)));
+  probes.forEach(({ candidate, kind, endpoint }, position) => {
+    const result = results[position];
+    const target = `${endpoint.host}:${endpoint.port}`.padEnd(28);
+    if (result.ok) {
+      console.log(`   ✓ ${target} ${result.greeting.slice(0, 60)}`);
+      reachable.set(`${candidate.label}/${kind}`, true);
+    } else {
+      console.log(`   ✗ ${target} ${result.error}`);
     }
-  }
+  });
 
   if (reachable.size === 0) {
     console.error('\nFAILED — no NIC endpoint is reachable from this host.');

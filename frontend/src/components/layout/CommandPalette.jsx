@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Dialog as DialogPrimitive } from "radix-ui";
 import { CornerDownLeft, FileText, Search } from "lucide-react";
@@ -45,20 +45,21 @@ export function CommandPalette({ open, onOpenChange }) {
 
   const role = currentUser?.role;
 
-  useEffect(() => {
-    const onKey = (event) => {
-      if ((event.ctrlKey || event.metaKey) && event.key?.toLowerCase() === "k") {
-        event.preventDefault();
-        if (open) {
-          setTerm("");
-          setActive(0);
-        }
-        onOpenChange(!open);
+  const onShortcut = useEffectEvent((event) => {
+    if ((event.ctrlKey || event.metaKey) && event.key?.toLowerCase() === "k") {
+      event.preventDefault();
+      if (open) {
+        setTerm("");
+        setActive(0);
       }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [open, onOpenChange]);
+      onOpenChange(!open);
+    }
+  });
+
+  useEffect(() => {
+    window.addEventListener("keydown", onShortcut);
+    return () => window.removeEventListener("keydown", onShortcut);
+  }, []);
 
   const results = useMemo(() => {
     if (!role) return [];
@@ -182,7 +183,6 @@ export function CommandPalette({ open, onOpenChange }) {
           <div className="flex items-center gap-3 border-b border-line px-4">
             <Search className="h-5 w-5 shrink-0 text-ink-muted" />
             <input
-              autoFocus
               value={term}
               onChange={(event) => {
                 setTerm(event.target.value);

@@ -75,36 +75,41 @@ async function connectDb({ silent = false } = {}) {
     }
     try {
       const models = await import('../models/index.js');
-      for (const modelName of Object.keys(models)) {
-        const Model = models[modelName];
-        if (Model && typeof Model.createCollection === 'function') {
+      // Each collection's setup is independent of the others, so they run together.
+      await Promise.all(
+        Object.entries(models).map(async ([modelName, Model]) => {
+          if (!Model || typeof Model.createCollection !== 'function') return;
           await Model.createCollection().catch(() => {});
 
           const indexes = shared && env.NODE_ENV !== 'production' ? Model.createIndexes() : Model.syncIndexes();
           await indexes.catch((error) => {
             console.warn(`[qms] could not sync indexes for ${modelName}: ${error.message}`);
           });
-        }
-      }
+        }),
+      );
       const { User } = models;
       const { USERS } = await import('../constants/users.js');
-      for (const u of USERS) {
-        await User.updateOne(
-          { userId: u.id },
-          {
-            $setOnInsert: {
-              userId: u.id,
-              name: u.name,
-              email: u.email,
-              role: u.role,
-              divisionId: u.divisionId,
-              active: true,
-              createdAt: new Date().toISOString(),
+      // One round trip; unordered so one failing user does not stop the rest.
+      await User.bulkWrite(
+        USERS.map((u) => ({
+          updateOne: {
+            filter: { userId: u.id },
+            update: {
+              $setOnInsert: {
+                userId: u.id,
+                name: u.name,
+                email: u.email,
+                role: u.role,
+                divisionId: u.divisionId,
+                active: true,
+                createdAt: new Date().toISOString(),
+              },
             },
+            upsert: true,
           },
-          { upsert: true },
-        ).catch(() => {});
-      }
+        })),
+        { ordered: false },
+      ).catch(() => {});
     } catch {
     }
     return true;

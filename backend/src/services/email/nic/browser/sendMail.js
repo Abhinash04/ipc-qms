@@ -172,8 +172,10 @@ async function snapshot(session) {
     session
       .evaluate(fn, argument, { kit: pageKit, timeout: SNAPSHOT_TIMEOUT_MS })
       .catch((error) => ({ unavailable: firstLine(error) }));
-  const dialogs = await ask(openDialogs, { exclude: SELECTORS.toInput });
-  const form = await ask(formState, { send: SELECTORS.sendButton, editor: SELECTORS.bodyEditor });
+  const [dialogs, form] = await Promise.all([
+    ask(openDialogs, { exclude: SELECTORS.toInput }),
+    ask(formState, { send: SELECTORS.sendButton, editor: SELECTORS.bodyEditor }),
+  ]);
   return { dialogs, ...form };
 }
 

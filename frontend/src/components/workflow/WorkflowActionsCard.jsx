@@ -458,21 +458,80 @@ function ClarificationList({ actions, openAction, onToggle }) {
   );
 }
 
-export function WorkflowActionsCard() {
-  const { queryId, query, currentStep, currentUser, can, versions = [] } = useQueryCase();
-  const paths = useRoutePaths();
+function nextStepMeta({ isClosed, canPullback, canForward, links, hasNoActions }) {
+  if (isClosed && !canPullback) return "Case complete";
+  if (canForward) return "Next step: Forward to Officer-in-Charge";
+  if (links[0]) return `Next step: ${links[0].label}`;
+  if (hasNoActions) return "Nothing waiting on you";
+  return "Choose an action";
+}
+
+function DeliveryNotices({ retries }) {
   const {
     ackError,
     ackUncertain,
     forwardError,
     forwardUncertain,
     retrying,
-    forward,
     retryAcknowledgement,
     resolveAcknowledgement,
     retryForward,
     resolveForward,
-  } = useEmailDeliveryRetries(queryId, currentUser, query);
+  } = retries;
+
+  return (
+    <>
+      {ackError && (
+        <EmailRetryNotice
+          title={
+            ackUncertain
+              ? "Acknowledgement may already have been sent"
+              : "Acknowledgement email not sent"
+          }
+          description={
+            ackUncertain
+              ? `The case is registered. The inquirer may or may not have been emailed — check the Sent folder and say what is there. ${ackError}`
+              : `The case is registered, but the inquirer was not emailed. ${ackError}`
+          }
+          retrying={retrying}
+          busyLabel="Sending…"
+          idleLabel="Retry sending"
+          onRetry={retryAcknowledgement}
+          uncertain={ackUncertain}
+          onResolve={resolveAcknowledgement}
+        />
+      )}
+
+      {forwardError && (
+        <EmailRetryNotice
+          urgent
+          title={
+            forwardUncertain
+              ? "The forward may already have been sent"
+              : "Not forwarded to the Officer-in-Charge"
+          }
+          description={
+            forwardUncertain
+              ? `The Officer-in-Charge may or may not have received this case — check the Sent folder and say what is there. ${forwardError}`
+              : `The query is registered, but the enquiry was not forwarded on. ${forwardError}`
+          }
+          retrying={retrying}
+          busyLabel="Forwarding…"
+          idleLabel="Retry forwarding"
+          onRetry={retryForward}
+          uncertain={forwardUncertain}
+          onResolve={resolveForward}
+        />
+      )}
+    </>
+  );
+}
+
+export function WorkflowActionsCard() {
+  const { queryId, query, currentStep, currentUser, can, versions = [] } = useQueryCase();
+  const paths = useRoutePaths();
+  const retries = useEmailDeliveryRetries(queryId, currentUser, query);
+  const { forward } = retries;
 
   const [showClarification, setShowClarification] = useState(null);
   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
@@ -495,64 +554,13 @@ export function WorkflowActionsCard() {
       art={[Rocket]}
       icon={Zap}
       title="Available actions"
-      meta={
-        isClosed && !canPullback
-          ? "Case complete"
-          : canForward
-            ? "Next step: Forward to Officer-in-Charge"
-            : links[0]
-              ? `Next step: ${links[0].label}`
-              : hasNoActions
-                ? "Nothing waiting on you"
-                : "Choose an action"
-      }
+      meta={nextStepMeta({ isClosed, canPullback, canForward, links, hasNoActions })}
       compact
       className="select-none"
     >
       <div className="space-y-2.5">
 
-        {ackError && (
-          <EmailRetryNotice
-            title={
-              ackUncertain
-                ? "Acknowledgement may already have been sent"
-                : "Acknowledgement email not sent"
-            }
-            description={
-              ackUncertain
-                ? `The case is registered. The inquirer may or may not have been emailed — check the Sent folder and say what is there. ${ackError}`
-                : `The case is registered, but the inquirer was not emailed. ${ackError}`
-            }
-            retrying={retrying}
-            busyLabel="Sending…"
-            idleLabel="Retry sending"
-            onRetry={retryAcknowledgement}
-            uncertain={ackUncertain}
-            onResolve={resolveAcknowledgement}
-          />
-        )}
-
-        {forwardError && (
-          <EmailRetryNotice
-            urgent
-            title={
-              forwardUncertain
-                ? "The forward may already have been sent"
-                : "Not forwarded to the Officer-in-Charge"
-            }
-            description={
-              forwardUncertain
-                ? `The Officer-in-Charge may or may not have received this case — check the Sent folder and say what is there. ${forwardError}`
-                : `The query is registered, but the enquiry was not forwarded on. ${forwardError}`
-            }
-            retrying={retrying}
-            busyLabel="Forwarding…"
-            idleLabel="Retry forwarding"
-            onRetry={retryForward}
-            uncertain={forwardUncertain}
-            onResolve={resolveForward}
-          />
-        )}
+        <DeliveryNotices retries={retries} />
 
         {isClosed && !canPullback && (
           <ClosedState query={query} finalVersion={finalVersion} />

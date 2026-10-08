@@ -115,21 +115,17 @@ async function vetoFor(mailboxMessageId) {
 
 export async function purgeOne(row, { now = Date.now(), dryRun = false } = {}) {
   const nowIso = new Date(now).toISOString();
-  let attachmentsRemoved = 0;
+  const ids = (row.attachments ?? []).map((attachment) => attachment?.attachmentId).filter(Boolean);
+  let attachmentsRemoved = ids.length;
 
-  for (const attachment of row.attachments ?? []) {
-    const id = attachment?.attachmentId;
-    if (!id) continue;
-    if (dryRun) {
-      attachmentsRemoved += 1;
-      continue;
-    }
-    try {
-      await attachmentStore.remove(id);
-      attachmentsRemoved += 1;
-    } catch (error) {
-      console.warn(`[qms] retention: could not remove attachment ${id}: ${error.message}`);
-    }
+  if (!dryRun) {
+    // Each file is removed on its own; one failing does not stop the others.
+    const removals = await Promise.allSettled(ids.map((id) => attachmentStore.remove(id)));
+    attachmentsRemoved = 0;
+    removals.forEach((removal, position) => {
+      if (removal.status === 'fulfilled') attachmentsRemoved += 1;
+      else console.warn(`[qms] retention: could not remove attachment ${ids[position]}: ${removal.reason?.message}`);
+    });
   }
 
   if (!dryRun) {

@@ -34,45 +34,44 @@ function ResultChip({ result }) {
 const plainValue = (value) =>
   value !== null && typeof value === 'object' ? JSON.stringify(value) : String(value);
 
-function DetailRow({ event }) {
-  const view = event.view;
-  if (view) {
-    return (
-      <tr className="border-b border-slate-100 bg-slate-50/60">
-        <td />
-        <td colSpan={7} className="px-3 pb-3 pt-0 text-[12px] text-slate-700">
-          {view.details && <p className="m-0">{view.details}</p>}
-          {event.changes && (
-            <p className="m-0 mt-1">
-              <span className="font-bold text-slate-500">Previous value: </span>
-              {view.previousValue}
-              <span aria-hidden="true" className="mx-1.5 font-bold text-primary-700">→</span>
-              <span className="font-bold text-slate-500">New value: </span>
-              {view.newValue}
-            </p>
-          )}
-          {view.failureReason && !view.details?.includes(view.failureReason) && (
-            <p className="m-0 mt-1">
-              <span className="font-bold text-slate-500">Failure reason: </span>
-              {view.failureReason}
-            </p>
-          )}
-          <p className="m-0 mt-1 text-[11.5px] text-slate-500">
-            {[
-              view.section && `Section: ${view.section}`,
-              view.sessionId && `Login session ${view.sessionId}`,
-              view.device && `Browser: ${view.device}`,
-              view.module && `Module: ${view.module}`,
-              view.logSource && `Server: ${view.logSource}`,
-            ]
-              .filter(Boolean)
-              .join(' · ')}
+function ViewDetailRow({ event, view }) {
+  return (
+    <tr className="border-b border-slate-100 bg-slate-50/60">
+      <td />
+      <td colSpan={7} className="px-3 pb-3 pt-0 text-[12px] text-slate-700">
+        {view.details && <p className="m-0">{view.details}</p>}
+        {event.changes && (
+          <p className="m-0 mt-1">
+            <span className="font-bold text-slate-500">Previous value: </span>
+            {view.previousValue}
+            <span aria-hidden="true" className="mx-1.5 font-bold text-primary-700">→</span>
+            <span className="font-bold text-slate-500">New value: </span>
+            {view.newValue}
           </p>
-        </td>
-      </tr>
-    );
-  }
+        )}
+        {view.failureReason && !view.details?.includes(view.failureReason) && (
+          <p className="m-0 mt-1">
+            <span className="font-bold text-slate-500">Failure reason: </span>
+            {view.failureReason}
+          </p>
+        )}
+        <p className="m-0 mt-1 text-[11.5px] text-slate-500">
+          {[
+            view.section && `Section: ${view.section}`,
+            view.sessionId && `Login session ${view.sessionId}`,
+            view.device && `Browser: ${view.device}`,
+            view.module && `Module: ${view.module}`,
+            view.logSource && `Server: ${view.logSource}`,
+          ]
+            .filter(Boolean)
+            .join(' · ')}
+        </p>
+      </td>
+    </tr>
+  );
+}
 
+function RawDetailRow({ event }) {
   return (
     <tr className="border-b border-slate-100 bg-slate-50/60">
       <td />
@@ -116,6 +115,10 @@ function DetailRow({ event }) {
   );
 }
 
+function DetailRow({ event }) {
+  return event.view ? <ViewDetailRow event={event} view={event.view} /> : <RawDetailRow event={event} />;
+}
+
 // Shown on events recorded before audit IDs were given out, or by a copy that does not give them.
 const NOT_ISSUED_HINT =
   'This activity was recorded before audit IDs were given out, or by a copy of the application that does not give audit IDs.';
@@ -130,6 +133,88 @@ function UserCell({ event }) {
       {card.role && <span className="block text-slate-600">{card.role}</span>}
       {card.id && <span className="block font-mono text-[11px] text-slate-400">ID: {card.id}</span>}
     </>
+  );
+}
+
+function AuditIdCell({ view }) {
+  return (
+    <td className="whitespace-nowrap px-3 py-2.5 font-mono text-[11.5px] text-slate-500">
+      {view?.auditId && view.auditId !== '-' ? (
+        view.auditId
+      ) : (
+        <span className="font-sans text-slate-400" title={NOT_ISSUED_HINT}>
+          Not issued
+        </span>
+      )}
+    </td>
+  );
+}
+
+function IpCell({ view }) {
+  return (
+    <td className="whitespace-nowrap px-3 py-2.5 font-mono text-[11.5px] text-slate-600">
+      {view?.localIp ? (
+        <span className="block" title="Public IPv4 address of the network the request came from">
+          <span className="me-1 rounded bg-primary-50 px-1 py-px font-sans text-[9.5px] font-bold uppercase tracking-wide text-primary-700">
+            IPv4
+          </span>
+          <span className="font-semibold text-slate-800">{view.ipAddress}</span>
+        </span>
+      ) : (
+        view?.ipAddress || '—'
+      )}
+      {view?.localIp && (
+        <span className="block font-sans text-[11px] text-slate-400" title="Address on the local network">
+          LAN {view.localIp}
+        </span>
+      )}
+      {view?.deviceName && <span className="block font-sans text-[11px] text-slate-400">{view.deviceName}</span>}
+    </td>
+  );
+}
+
+function ActivityCell({ event, view }) {
+  return (
+    <td className="px-3 py-2.5 text-[12.5px]">
+      {view?.who ? (
+        <>
+          <span className="block font-bold text-slate-800">By: {view.who}</span>
+          <span className="mt-0.5 flex items-start gap-1.5 text-slate-700">
+            <span aria-hidden="true" className="font-bold text-primary-700">→</span>
+            <span>{view.did}</span>
+          </span>
+          {view.other && (
+            <span className="mt-0.5 flex items-start gap-1.5 font-semibold text-primary-700">
+              <span aria-hidden="true">→</span>
+              <span>{view.other}</span>
+            </span>
+          )}
+        </>
+      ) : (
+        <>
+          <span className="block font-bold text-slate-800">{ACTOR_LABEL[event.actorType] || event.actorType}</span>
+          <span className="block text-slate-700">{humaniseAction(event.action)}</span>
+        </>
+      )}
+    </td>
+  );
+}
+
+function CaseCell({ queryId, onOpenQuery }) {
+  return (
+    <td className="px-3 py-2.5">
+      {queryId ? (
+        <button
+          type="button"
+          onClick={() => onOpenQuery?.(queryId)}
+          className="rounded font-mono text-[11.5px] font-bold text-primary-700 underline-offset-2 hover:underline"
+        >
+          {queryId}
+        </button>
+      ) : (
+        <span className="text-[11.5px] text-slate-300">—</span>
+      )}
+    </td>
   );
 }
 
@@ -156,74 +241,16 @@ function Row({ event, onOpenQuery }) {
             <span className="block h-6 w-6" />
           )}
         </td>
-        <td className="whitespace-nowrap px-3 py-2.5 font-mono text-[11.5px] text-slate-500">
-          {view?.auditId && view.auditId !== '-' ? (
-            view.auditId
-          ) : (
-            <span className="font-sans text-slate-400" title={NOT_ISSUED_HINT}>
-              Not issued
-            </span>
-          )}
-        </td>
+        <AuditIdCell view={view} />
         <td className="whitespace-nowrap px-3 py-2.5 text-[12.5px] tabular-nums text-slate-600">
           {formatTime(event.timestamp)}
         </td>
         <td className="px-3 py-2.5 text-[12px] leading-snug">
           <UserCell event={event} />
         </td>
-        <td className="whitespace-nowrap px-3 py-2.5 font-mono text-[11.5px] text-slate-600">
-          {view?.localIp ? (
-            <span className="block" title="Public IPv4 address of the network the request came from">
-              <span className="me-1 rounded bg-primary-50 px-1 py-px font-sans text-[9.5px] font-bold uppercase tracking-wide text-primary-700">
-                IPv4
-              </span>
-              <span className="font-semibold text-slate-800">{view.ipAddress}</span>
-            </span>
-          ) : (
-            view?.ipAddress || '—'
-          )}
-          {view?.localIp && (
-            <span className="block font-sans text-[11px] text-slate-400" title="Address on the local network">
-              LAN {view.localIp}
-            </span>
-          )}
-          {view?.deviceName && <span className="block font-sans text-[11px] text-slate-400">{view.deviceName}</span>}
-        </td>
-        <td className="px-3 py-2.5 text-[12.5px]">
-          {view?.who ? (
-            <>
-              <span className="block font-bold text-slate-800">By: {view.who}</span>
-              <span className="mt-0.5 flex items-start gap-1.5 text-slate-700">
-                <span aria-hidden="true" className="font-bold text-primary-700">→</span>
-                <span>{view.did}</span>
-              </span>
-              {view.other && (
-                <span className="mt-0.5 flex items-start gap-1.5 font-semibold text-primary-700">
-                  <span aria-hidden="true">→</span>
-                  <span>{view.other}</span>
-                </span>
-              )}
-            </>
-          ) : (
-            <>
-              <span className="block font-bold text-slate-800">{ACTOR_LABEL[event.actorType] || event.actorType}</span>
-              <span className="block text-slate-700">{humaniseAction(event.action)}</span>
-            </>
-          )}
-        </td>
-        <td className="px-3 py-2.5">
-          {event.queryId ? (
-            <button
-              type="button"
-              onClick={() => onOpenQuery?.(event.queryId)}
-              className="rounded font-mono text-[11.5px] font-bold text-primary-700 underline-offset-2 hover:underline"
-            >
-              {event.queryId}
-            </button>
-          ) : (
-            <span className="text-[11.5px] text-slate-300">—</span>
-          )}
-        </td>
+        <IpCell view={view} />
+        <ActivityCell event={event} view={view} />
+        <CaseCell queryId={event.queryId} onOpenQuery={onOpenQuery} />
         <td className="px-3 py-2.5">
           <ResultChip result={event.result} />
         </td>

@@ -867,7 +867,8 @@ function buildAnswer(item, parsed) {
   const claimed = Array.isArray(parsed?.sources)
     ? parsed.sources.map((s) => String(s).trim()).filter(Boolean)
     : [];
-  const verified = [...new Set(claimed.filter((id) => item.sources.includes(id)))];
+  const known = new Set(item.sources);
+  const verified = [...new Set(claimed.filter((id) => known.has(id)))];
 
   const notEstablished =
     typeof parsed?.notEstablished === 'string' ? parsed.notEstablished.trim() : '';

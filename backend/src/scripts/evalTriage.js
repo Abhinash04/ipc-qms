@@ -221,7 +221,8 @@ function report(fixture, runs) {
   }
 
   if (fixture.categories) {
-    const filed = runs.filter((run) => fixture.categories.includes(run.category)).length;
+    const wanted = new Set(fixture.categories);
+    const filed = runs.filter((run) => wanted.has(run.category)).length;
     checks.push([
       `filed as ${fixture.categories.join('/')} >= ${Math.round(JUNK_CATCH_THRESHOLD * 100)}%`,
       filed / n >= JUNK_CATCH_THRESHOLD,

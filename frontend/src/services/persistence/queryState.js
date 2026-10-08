@@ -80,7 +80,7 @@ export async function replaceAll(state) {
     reportFailure(error);
     throw error;
   }
-  memoryStore = JSON.parse(JSON.stringify(state));
+  memoryStore = structuredClone(state);
   return state;
 }
 

@@ -148,11 +148,13 @@ export async function attachToNicemail({ connect = null, exclude = null } = {}) 
     const candidates = pages
       .filter((page) => !ours.has(page.targetId))
       .map((page) => ({ page, url: page.url(), title: '' }));
-    for (const candidate of candidates) {
-      try {
-        candidate.title = await candidate.page.title();
-      } catch {}
-    }
+    await Promise.all(
+      candidates.map(async (candidate) => {
+        try {
+          candidate.title = await candidate.page.title();
+        } catch {}
+      }),
+    );
 
     const best = pickBestTab(candidates);
 

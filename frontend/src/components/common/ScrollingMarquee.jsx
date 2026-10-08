@@ -1,22 +1,16 @@
 import React, { useState } from "react";
 import { CheckCircle2, Info, Megaphone, X } from "lucide-react";
 import { IPC_ANNOUNCEMENTS } from "@/constants/announcements";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 
 export function AnnouncementDialog({ announcement, onClose }) {
   if (!announcement) return null;
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm"
-      onClick={onClose}
-    >
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-label={announcement.title}
-        className="relative max-h-[90vh] w-[calc(100vw-2rem)] max-w-lg overflow-y-auto rounded-2xl border border-line bg-surface p-4 shadow-2xl sm:p-6"
-        data-slot="dialog-content"
-        data-state="open"
-        onClick={(e) => e.stopPropagation()}
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent
+        showCloseButton={false}
+        aria-describedby={undefined}
+        className="block max-h-[90vh] w-[calc(100vw-2rem)] max-w-lg overflow-y-auto rounded-2xl border-line bg-surface p-4 text-base text-ink shadow-2xl sm:max-w-lg sm:p-6"
       >
         <div className="flex items-start justify-between gap-4 border-b border-line pb-4">
           <div className="flex items-center gap-3">
@@ -34,7 +28,9 @@ export function AnnouncementDialog({ announcement, onClose }) {
                   {announcement.refCode}
                 </span>
               </div>
-              <h3 className="mt-1 text-base font-semibold text-ink">{announcement.title}</h3>
+              <DialogTitle className="mt-1 text-base font-semibold leading-normal text-ink">
+                {announcement.title}
+              </DialogTitle>
               <p className="mt-0.5 text-xs font-medium text-primary">{announcement.titleHi}</p>
             </div>
           </div>
@@ -85,8 +81,8 @@ export function AnnouncementDialog({ announcement, onClose }) {
             <CheckCircle2 className="h-3.5 w-3.5" /> Acknowledge Bulletin
           </button>
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 

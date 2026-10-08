@@ -23,6 +23,8 @@ import { findTriage, rescue } from './triage.js';
 export const MAX_TRIAGE_ATTEMPTS = 12;
 
 const CLASSIFY_CONCURRENCY = 4;
+// Backfill rows are plain upserts on distinct keys; a few at a time keeps the pool free for requests.
+const BACKFILL_CONCURRENCY = 8;
 
 const SWEEP_BATCHES = 4;
 
@@ -359,8 +361,8 @@ export async function backfillMissingRows({ sources, now = Date.now() } = {}) {
     const rows = await MailboxMessage.find({ mailboxMessageId: { $in: missing } })
       .select('mailboxMessageId source from subject body bodyHtml attachments receivedAt')
       .lean();
-    for (const message of rows) {
-      const result = await MailboxTriage.updateOne(
+    const results = await mapWithLimit(rows, BACKFILL_CONCURRENCY, (message) =>
+      MailboxTriage.updateOne(
         { mailboxMessageId: message.mailboxMessageId },
         {
           $setOnInsert: {
@@ -390,9 +392,9 @@ export async function backfillMissingRows({ sources, now = Date.now() } = {}) {
           },
         },
         { upsert: true },
-      );
-      created += result?.upsertedCount ? 1 : 0;
-    }
+      ),
+    );
+    created = results.filter((result) => result?.upsertedCount).length;
   }
 
   backfilled = true;

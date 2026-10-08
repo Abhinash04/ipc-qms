@@ -4,9 +4,9 @@ import { cn } from '@/utils/cn';
 
 const SECTIONS = [
   { id: 'case-summary', label: 'Summary', Icon: Sparkles },
-  { id: 'case-email-thread', label: 'Emails', Icon: Mail, count: 'emails' },
+  { id: 'case-email-thread', label: 'Emails', Icon: Mail, countKey: 'emails' },
   { id: 'case-response', label: 'Response', Icon: FileText },
-  { id: 'case-audit-history', label: 'History', Icon: History, count: 'events' },
+  { id: 'case-audit-history', label: 'History', Icon: History, countKey: 'events' },
 ];
 
 
@@ -44,7 +44,7 @@ export function CaseSectionBar({ emails = 0, events = 0, stickyClassName = 'top-
       )}
     >
       <ul className="m-0 flex list-none gap-1 p-0">
-        {SECTIONS.map(({ id, label, Icon, count }) => (
+        {SECTIONS.map(({ id, label, Icon, countKey }) => (
           <li key={id} className="shrink-0">
             <a
               href={`#${id}`}
@@ -63,14 +63,14 @@ export function CaseSectionBar({ emails = 0, events = 0, stickyClassName = 'top-
             >
               <Icon className="h-3.5 w-3.5" aria-hidden="true" />
               {label}
-              {count && (
+              {countKey && (
                 <span
                   className={cn(
                     'rounded-full px-1.5 text-[11px] font-bold',
                     active === id ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-500',
                   )}
                 >
-                  {counts[count]}
+                  {counts[countKey]}
                 </span>
               )}
             </a>

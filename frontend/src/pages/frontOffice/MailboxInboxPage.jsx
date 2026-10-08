@@ -5,7 +5,7 @@ import {
   useQueryClient,
   keepPreviousData,
 } from "@tanstack/react-query";
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import {
   MailIcon,
   RefreshCwIcon,
@@ -262,7 +262,7 @@ function InboxActions({
 function InboxToolbar({ search, onSearchChange }) {
   return (
     <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-5">
-      <div role="search" className="relative flex-1">
+      <form role="search" onSubmit={(e) => e.preventDefault()} className="relative flex-1">
         <label htmlFor="mailbox-search" className="sr-only">
           Search mail
         </label>
@@ -279,7 +279,7 @@ function InboxToolbar({ search, onSearchChange }) {
           placeholder="Search sender, subject or message text…"
           className="w-full rounded-2xl bg-slate-50/70 border border-slate-200/70 pl-11 pr-4 py-3 text-[13.5px] font-medium text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors"
         />
-      </div>
+      </form>
 
     </div>
   );
@@ -681,7 +681,6 @@ function MailboxRow({
   caseHref,
   messageHref,
 }) {
-  const navigate = useNavigate();
   const sender = parseSender(message.from);
   const received = formatReceived(message.receivedAt);
   const rejected = decision?.decision === "REJECTED";
@@ -690,20 +689,8 @@ function MailboxRow({
   const purge = describePurge(message.triage?.purgesAt);
   const snippet = toSnippet(message.body);
 
-  const openFromRow = (event) => {
-    if (
-      !event.currentTarget.contains(event.target) ||
-      event.target.closest('a, button, input, [role="button"]') ||
-      window.getSelection()?.toString()
-    ) {
-      return;
-    }
-    navigate(openPath);
-  };
-
   return (
     <div
-      onClick={openFromRow}
       className={`group relative flex flex-col @5xl:grid ${ROW_GRID} ${ROW_PADDING} items-start @5xl:items-center gap-3 @5xl:gap-x-3 @5xl:min-h-20 ${unread ? "bg-primary-50/40" : "bg-card"} rounded-2xl border border-slate-200/70 p-4 @5xl:py-3 shadow-2xs hover:shadow-md hover:border-purple-300 transition-[border-color,box-shadow] duration-200 cursor-pointer`}
     >
       <div
@@ -751,21 +738,22 @@ function MailboxRow({
       </div>
 
       <div className="min-w-0 w-full px-1 @5xl:px-0">
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Link
-                to={openPath}
-                className="block min-w-0 text-[14px] font-semibold text-slate-900 truncate group-hover:text-purple-700 transition-colors"
-              >
-                {message.subject || "(No Subject)"}
-              </Link>
-            </TooltipTrigger>
-            <TooltipContent className="max-w-100 wrap-break-word">
-              {message.subject}
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
+        {/* The link's ::after covers the whole row, so a click anywhere on it opens the mail. */}
+        <Link
+          to={openPath}
+          className="block min-w-0 text-[14px] font-semibold text-slate-900 truncate group-hover:text-purple-700 transition-colors after:absolute after:inset-0 after:rounded-2xl after:content-['']"
+        >
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className="relative z-10">{message.subject || "(No Subject)"}</span>
+              </TooltipTrigger>
+              <TooltipContent className="max-w-100 wrap-break-word">
+                {message.subject}
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        </Link>
         <div className="flex min-w-0 items-center gap-1.5 text-[12px] font-medium text-slate-400 mt-1">
           <MailIcon className="h-3.5 w-3.5 text-purple-500 shrink-0" aria-hidden="true" />
           <span title={snippet || undefined} className="truncate">
@@ -774,7 +762,7 @@ function MailboxRow({
         </div>
       </div>
 
-      <div className="min-w-0 w-full px-1 @5xl:px-0">
+      <div className="relative z-10 min-w-0 w-full px-1 @5xl:px-0">
         <MailboxRowTags
           message={message}
           known={known}
@@ -797,7 +785,7 @@ function MailboxRow({
       </div>
 
       <div className="flex items-center w-full min-w-0 mt-2 @5xl:mt-0 pt-3 @5xl:pt-0 border-t border-slate-100 @5xl:border-0">
-        <div className="flex items-center gap-2">
+        <div className="relative z-10 flex items-center gap-2">
           <span className="@5xl:hidden text-[11px] font-bold text-slate-500 uppercase tracking-wider">
             Query Case:
           </span>
@@ -810,7 +798,7 @@ function MailboxRow({
         </div>
       </div>
 
-      <div className="flex items-center justify-end gap-2 w-full">
+      <div className="relative z-10 flex items-center justify-end gap-2 w-full">
         <RowValidationControls
           message={message}
           decision={decision}
@@ -888,6 +876,125 @@ function MailboxFeedCard({ count, backend, deleteMessage, children }) {
   );
 }
 
+function useInboxMutations(queryClient, setConfirming) {
+  const syncNow = useMutation({
+    mutationFn: () => syncMailbox(),
+    onSuccess: ({ started }) => {
+      notify.info(
+        started ? "NICeMail sync started" : "NICeMail is already syncing",
+        started
+          ? "New mail appears here as it is read."
+          : "A sync is running or has just finished.",
+        { id: "mailbox-sync" },
+      );
+      queryClient.invalidateQueries({ queryKey: ["mailbox", "list"] });
+    },
+    onError: (failure) => {
+      notify.error(
+        "Could not start a NICeMail sync",
+        failure?.response?.data?.error || failure?.message,
+        { id: "mailbox-sync" },
+      );
+    },
+  });
+
+  const deleteMessage = useMutation({
+    mutationFn: (mailboxMessageId) => deleteMailboxMessage(mailboxMessageId),
+    onSuccess: () => {
+      setConfirming(null);
+      queryClient.invalidateQueries({ queryKey: ["mailbox"] });
+    },
+  });
+
+  const rescueMessage = useMutation({
+    mutationFn: (mailboxMessageId) => rescueMailboxMessage(mailboxMessageId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["mailbox"] });
+      notify.success("Kept", {
+        description: "It is no longer marked as junk and will stay in this app.",
+      });
+    },
+    onError: (error) => {
+      notify.error("Could not keep that message", {
+        description: error?.response?.data?.error || error?.message || "Please try again.",
+      });
+    },
+  });
+
+  const correctCategory = useMutation({
+    mutationFn: ({ mailboxMessageId, category: next }) => setMailboxMessageCategory(mailboxMessageId, next),
+    onSuccess: (_result, { category: next }) => {
+      queryClient.invalidateQueries({ queryKey: ["mailbox"] });
+      notify.success("Category updated", `Filed under ${MAIL_CATEGORY_META[next]?.label ?? next}.`);
+    },
+    onError: (failure) => {
+      notify.error(
+        "Could not change the category",
+        failure?.response?.data?.error || failure?.message || "Please try again.",
+      );
+    },
+  });
+
+  return { syncNow, deleteMessage, rescueMessage, correctCategory };
+}
+
+// What went wrong loading the list, and whether this account may only look.
+function inboxLoadState(inbox) {
+  const loadFailure = inbox.isError
+    ? (inbox.error?.response?.data ?? { error: inbox.error?.message })
+    : null;
+  return {
+    loadError: loadFailure?.error || null,
+    syncFailure: [inbox.data?.sync, loadFailure?.sync].find((sync) => sync?.ok === false) || null,
+    viewer: Boolean(inbox.data?.sync?.viewer),
+  };
+}
+
+function InboxNotices({ error, loadError, syncFailure, viewer, lastResult }) {
+  return (
+    <>
+      {(error || loadError) && !syncFailure && <MailboxOfflineNotice reason={loadError} />}
+
+      {syncFailure && <MailboxSyncNotice sync={syncFailure} />}
+
+      {viewer && !syncFailure && <MailboxViewerNotice />}
+
+      {lastResult?.fetched !== undefined && !error && (
+        <MailboxCheckSummary result={lastResult} />
+      )}
+    </>
+  );
+}
+
+function InboxResults({ pending, placeholder, messages, filtered, offset, rowProps }) {
+  if (pending) return <InboxSkeleton />;
+  if (messages.length === 0) return filtered ? <NoMatchingMail /> : <EmptyInbox />;
+
+  return (
+    <div
+      aria-busy={placeholder}
+      className={cn("@container", placeholder && "opacity-60")}
+    >
+      {/* The padding keeps row shadows and focus rings from being clipped by the scroller. */}
+      <div className="-m-1 overflow-x-auto p-1">
+        <div className={ROW_MIN_WIDTH}>
+          <MailboxColumnHeader />
+
+          <div className="space-y-3">
+            {messages.map((message, position) => (
+              <MailboxRow
+                key={message.mailboxMessageId}
+                index={offset + position}
+                {...rowProps(message)}
+              />
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function MailboxInboxPage() {
   const paths = useRoutePaths();
   const currentUser = useAuthStore((state) => state.currentUser);
@@ -928,68 +1035,13 @@ export function MailboxInboxPage() {
     },
   });
 
-  const syncNow = useMutation({
-    mutationFn: () => syncMailbox(),
-    onSuccess: ({ started }) => {
-      notify.info(
-        started ? "NICeMail sync started" : "NICeMail is already syncing",
-        started
-          ? "New mail appears here as it is read."
-          : "A sync is running or has just finished.",
-        { id: "mailbox-sync" },
-      );
-      queryClient.invalidateQueries({ queryKey: ["mailbox", "list"] });
-    },
-    onError: (failure) => {
-      notify.error(
-        "Could not start a NICeMail sync",
-        failure?.response?.data?.error || failure?.message,
-        { id: "mailbox-sync" },
-      );
-    },
-  });
+  const { syncNow, deleteMessage, rescueMessage, correctCategory } =
+    useInboxMutations(queryClient, setConfirming);
 
   const decisions = useQuery({
     queryKey: ["mailbox", "decisions"],
     queryFn: fetchMailboxDecisions,
     retry: false,
-  });
-
-  const deleteMessage = useMutation({
-    mutationFn: (mailboxMessageId) => deleteMailboxMessage(mailboxMessageId),
-    onSuccess: () => {
-      setConfirming(null);
-      queryClient.invalidateQueries({ queryKey: ["mailbox"] });
-    },
-  });
-
-  const rescueMessage = useMutation({
-    mutationFn: (mailboxMessageId) => rescueMailboxMessage(mailboxMessageId),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["mailbox"] });
-      notify.success("Kept", {
-        description: "It is no longer marked as junk and will stay in this app.",
-      });
-    },
-    onError: (error) => {
-      notify.error("Could not keep that message", {
-        description: error?.response?.data?.error || error?.message || "Please try again.",
-      });
-    },
-  });
-
-  const correctCategory = useMutation({
-    mutationFn: ({ mailboxMessageId, category: next }) => setMailboxMessageCategory(mailboxMessageId, next),
-    onSuccess: (_result, { category: next }) => {
-      queryClient.invalidateQueries({ queryKey: ["mailbox"] });
-      notify.success("Category updated", `Filed under ${MAIL_CATEGORY_META[next]?.label ?? next}.`);
-    },
-    onError: (failure) => {
-      notify.error(
-        "Could not change the category",
-        failure?.response?.data?.error || failure?.message || "Please try again.",
-      );
-    },
   });
 
   const messages = inbox.data?.messages || [];
@@ -998,12 +1050,7 @@ export function MailboxInboxPage() {
     setOffset(Math.max(0, offset - PAGE_SIZE));
   }
 
-  const loadFailure = inbox.isError
-    ? (inbox.error?.response?.data ?? { error: inbox.error?.message })
-    : null;
-  const loadError = loadFailure?.error || null;
-  const syncFailure = [inbox.data?.sync, loadFailure?.sync].find((sync) => sync?.ok === false) || null;
-  const viewer = Boolean(inbox.data?.sync?.viewer);
+  const { loadError, syncFailure, viewer } = inboxLoadState(inbox);
 
   const decisionFor = (mailboxMessageId) =>
     (decisions.data?.decisions || []).find(
@@ -1092,6 +1139,57 @@ export function MailboxInboxPage() {
     return `/${slug}/queries/${queryId}`;
   };
 
+  const rowProps = (message) => {
+    const queryId =
+      message.linkedCase?.queryId ||
+      queryIdFor(message.mailboxMessageId);
+    const known =
+      Boolean(message.linkedCase) ||
+      (queryId && queries.some((q) => q.queryId === queryId));
+
+    return {
+      message,
+      openPath: buildPath(paths.INBOX_DETAIL, {
+        messageId: encodeURIComponent(message.mailboxMessageId),
+      }),
+      known,
+      queryId,
+      detailPath:
+        queryId && paths.QUERY_DETAIL
+          ? getQueryDetailPath(queryId)
+          : null,
+      decision: decisionFor(message.mailboxMessageId) || decisionFromRow(message),
+      confirming:
+        confirming?.id === message.mailboxMessageId
+          ? confirming
+          : null,
+      pending: deciding,
+      deleting: deleteMessage.isPending,
+      onAskConfirm: () =>
+        setConfirming({
+          id: message.mailboxMessageId,
+          action: "delete",
+        }),
+      onCancel: () => setConfirming(null),
+      onDelete: () =>
+        deleteMessage.mutate(message.mailboxMessageId),
+      onRescue: () => rescueMessage.mutate(message.mailboxMessageId),
+      onCorrectCategory: (next) =>
+        correctCategory.mutate({ mailboxMessageId: message.mailboxMessageId, category: next }),
+      correctingCategory: correctCategory.isPending,
+      caseHref: paths.QUERY_DETAIL ? getQueryDetailPath : null,
+      messageHref: (mailboxMessageId) =>
+        buildPath(paths.INBOX_DETAIL, { messageId: encodeURIComponent(mailboxMessageId) }),
+      onAskDecision: (action) =>
+        setConfirming({ id: message.mailboxMessageId, action }),
+      onCancelDecision: () => setConfirming(null),
+      onConfirmDecision: () =>
+        confirming?.action === "accept"
+          ? onAcceptMessage(message)
+          : onRejectMessage(message),
+    };
+  };
+
   return (
     <div className="space-y-6">
       <Breadcrumb
@@ -1118,15 +1216,13 @@ export function MailboxInboxPage() {
         }
       />
 
-      {(error || loadError) && !syncFailure && <MailboxOfflineNotice reason={loadError} />}
-
-      {syncFailure && <MailboxSyncNotice sync={syncFailure} />}
-
-      {viewer && !syncFailure && <MailboxViewerNotice />}
-
-      {lastResult?.fetched !== undefined && !error && (
-        <MailboxCheckSummary result={lastResult} />
-      )}
+      <InboxNotices
+        error={error}
+        loadError={loadError}
+        syncFailure={syncFailure}
+        viewer={viewer}
+        lastResult={lastResult}
+      />
 
       <MailboxFeedCard
         count={inbox.data?.total ?? messages.length}
@@ -1150,88 +1246,14 @@ export function MailboxInboxPage() {
           />
         )}
 
-        {inbox.isPending ? (
-          <InboxSkeleton />
-        ) : messages.length === 0 ? (
-          filtered ? <NoMatchingMail /> : <EmptyInbox />
-        ) : (
-          <div
-            aria-busy={inbox.isPlaceholderData}
-            className={cn("@container", inbox.isPlaceholderData && "opacity-60")}
-          >
-            {/* The padding keeps row shadows and focus rings from being clipped by the scroller. */}
-            <div className="-m-1 overflow-x-auto p-1">
-              <div className={ROW_MIN_WIDTH}>
-                <MailboxColumnHeader />
-
-                <div className="space-y-3">
-                  {messages.map((message, index) => {
-                    const queryId =
-                      message.linkedCase?.queryId ||
-                      queryIdFor(message.mailboxMessageId);
-                    const known =
-                      Boolean(message.linkedCase) ||
-                      (queryId && queries.some((q) => q.queryId === queryId));
-
-                    return (
-                      <MailboxRow
-                        key={message.mailboxMessageId}
-                        message={message}
-                        index={offset + index}
-                        openPath={buildPath(paths.INBOX_DETAIL, {
-                          messageId: encodeURIComponent(message.mailboxMessageId),
-                        })}
-                        known={known}
-                        queryId={queryId}
-                        detailPath={
-                          queryId && paths.QUERY_DETAIL
-                            ? getQueryDetailPath(queryId)
-                            : null
-                        }
-                        decision={decisionFor(message.mailboxMessageId) || decisionFromRow(message)}
-                        confirming={
-                          confirming?.id === message.mailboxMessageId
-                            ? confirming
-                            : null
-                        }
-                        pending={deciding}
-                        deleting={deleteMessage.isPending}
-                        onAskConfirm={() =>
-                          setConfirming({
-                            id: message.mailboxMessageId,
-                            action: "delete",
-                          })
-                        }
-                        onCancel={() => setConfirming(null)}
-                        onDelete={() =>
-                          deleteMessage.mutate(message.mailboxMessageId)
-                        }
-                        onRescue={() => rescueMessage.mutate(message.mailboxMessageId)}
-                        onCorrectCategory={(next) =>
-                          correctCategory.mutate({ mailboxMessageId: message.mailboxMessageId, category: next })
-                        }
-                        correctingCategory={correctCategory.isPending}
-                        caseHref={paths.QUERY_DETAIL ? getQueryDetailPath : null}
-                        messageHref={(mailboxMessageId) =>
-                          buildPath(paths.INBOX_DETAIL, { messageId: encodeURIComponent(mailboxMessageId) })
-                        }
-                        onAskDecision={(action) =>
-                          setConfirming({ id: message.mailboxMessageId, action })
-                        }
-                        onCancelDecision={() => setConfirming(null)}
-                        onConfirmDecision={() =>
-                          confirming?.action === "accept"
-                            ? onAcceptMessage(message)
-                            : onRejectMessage(message)
-                        }
-                      />
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
+        <InboxResults
+          pending={inbox.isPending}
+          placeholder={inbox.isPlaceholderData}
+          messages={messages}
+          filtered={filtered}
+          offset={offset}
+          rowProps={rowProps}
+        />
 
         <InboxPager
           offset={offset}

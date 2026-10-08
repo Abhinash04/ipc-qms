@@ -36,8 +36,10 @@ export async function visibleQueryIds(user) {
     return new Set([...fromSteps, ...fromReviews]);
   }
 
-  const myStepQueryIds = await WorkflowStep.distinct('queryId', { assignedUserId: user.id });
-  const assigned = await QueryCase.distinct('queryId', { currentAssigneeId: user.id });
+  const [myStepQueryIds, assigned] = await Promise.all([
+    WorkflowStep.distinct('queryId', { assignedUserId: user.id }),
+    QueryCase.distinct('queryId', { currentAssigneeId: user.id }),
+  ]);
   return new Set([...myStepQueryIds, ...assigned]);
 }
 

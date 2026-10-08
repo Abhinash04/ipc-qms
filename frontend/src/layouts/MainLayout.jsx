@@ -1,5 +1,5 @@
 import { Outlet } from "react-router-dom";
-import { LazyMotion, MotionConfig, domAnimation } from "framer-motion";
+import { LazyMotion, MotionConfig, domMax } from "framer-motion";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
@@ -12,7 +12,7 @@ import { PageBackdrop } from "@/components/common/PageBackdrop";
 
 export function MainLayout() {
   return (
-    <LazyMotion features={domAnimation} strict>
+    <LazyMotion features={domMax} strict>
       <MotionConfig reducedMotion="user">
         <div className="relative isolate flex h-screen overflow-hidden bg-surface-muted text-ink">
           <PageBackdrop />

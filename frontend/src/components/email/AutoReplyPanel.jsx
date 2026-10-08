@@ -15,18 +15,8 @@ const SHOWN = new Set([AUTO_REPLY_STATUS.SUGGESTED, AUTO_REPLY_STATUS.APPROVING,
 
 const errorOf = (failure) => failure?.response?.data?.error || failure?.message || "Please try again.";
 
-/**
- * The automatic reply for a mail, read-only: the supported question it matched and the reply the
- * AI drafted from it. It is sent on its own when the Front Office accepts the mail, after the
- * acknowledgement; here the Front Office can only send the mail to Human Intervention instead,
- * or retry a reply that could not be sent.
- */
-export function AutoReplyPanel({ message, caseHref = null }) {
-  const autoReply = message.autoReply;
-  const textId = useId();
+function useAutoReplyMutations(message, recipient) {
   const queryClient = useQueryClient();
-  const recipient = parseSender(message.from).email || message.from;
-
   const refresh = () => queryClient.invalidateQueries({ queryKey: ["mailbox"] });
 
   const retry = useMutation({
@@ -50,6 +40,40 @@ export function AutoReplyPanel({ message, caseHref = null }) {
     },
     onError: (failure) => notify.error("Could not move the mail", errorOf(failure)),
   });
+
+  return { retry, decline };
+}
+
+function AutoReplyActions({ status, queryId, busy, retry, decline }) {
+  return (
+    <>
+      {status === AUTO_REPLY_STATUS.SUGGESTED && (
+        <Button size="sm" variant="outline" disabled={busy} onClick={() => decline.mutate()}>
+          <UserRound className="h-4 w-4" aria-hidden="true" />
+          Send to Human Intervention
+        </Button>
+      )}
+      {status === AUTO_REPLY_STATUS.FAILED && queryId && (
+        <Button size="sm" disabled={busy} onClick={() => retry.mutate()}>
+          {retry.isPending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <RotateCcw className="h-4 w-4" aria-hidden="true" />}
+          Retry sending
+        </Button>
+      )}
+    </>
+  );
+}
+
+/**
+ * The automatic reply for a mail, read-only: the supported question it matched and the reply the
+ * AI drafted from it. It is sent on its own when the Front Office accepts the mail, after the
+ * acknowledgement; here the Front Office can only send the mail to Human Intervention instead,
+ * or retry a reply that could not be sent.
+ */
+export function AutoReplyPanel({ message, caseHref = null }) {
+  const autoReply = message.autoReply;
+  const textId = useId();
+  const recipient = parseSender(message.from).email || message.from;
+  const { retry, decline } = useAutoReplyMutations(message, recipient);
 
   if (!SHOWN.has(autoReply?.status)) return null;
 
@@ -111,18 +135,7 @@ export function AutoReplyPanel({ message, caseHref = null }) {
           </Link>
         )}
 
-        {status === AUTO_REPLY_STATUS.SUGGESTED && (
-          <Button size="sm" variant="outline" disabled={busy} onClick={() => decline.mutate()}>
-            <UserRound className="h-4 w-4" aria-hidden="true" />
-            Send to Human Intervention
-          </Button>
-        )}
-        {status === AUTO_REPLY_STATUS.FAILED && autoReply.queryId && (
-          <Button size="sm" disabled={busy} onClick={() => retry.mutate()}>
-            {retry.isPending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <RotateCcw className="h-4 w-4" aria-hidden="true" />}
-            Retry sending
-          </Button>
-        )}
+        <AutoReplyActions status={status} queryId={autoReply.queryId} busy={busy} retry={retry} decline={decline} />
       </div>
     </CaseCard>
   );

@@ -32,6 +32,32 @@ function TileTrend({ delta, higherIsWorse, neutral, comparisonLabel }) {
   );
 }
 
+function ringLabelFor(pct, shareTotal) {
+  if (pct == null || !(shareTotal > 0)) return undefined;
+  return `${pct}% of ${shareTotal} ${shareTotal === 1 ? "query" : "queries"} in view`;
+}
+
+// A tile with onClick acts as a toggle button; without one it is plain content.
+function interactiveProps(onClick, selected) {
+  if (!onClick) return {};
+  return { onClick, onKeyDown: activateOnKey(onClick), role: "button", tabIndex: 0, "aria-pressed": selected };
+}
+
+function StatTileFooter({ subtextMain, caption }) {
+  return (
+    <>
+      {subtextMain && (
+        <div className="mt-3 flex items-center gap-1 text-[12px] font-semibold text-black">
+          {subtextMain}
+        </div>
+      )}
+      {caption && (
+        <p className="m-0 mt-3 line-clamp-2 text-[11.5px] font-medium leading-snug text-black">{caption}</p>
+      )}
+    </>
+  );
+}
+
 export function StatTile({
   label,
   value,
@@ -51,18 +77,11 @@ export function StatTile({
 }) {
   const palette = TILE_TONES[tone] || TILE_TONES.primary;
   const pct = share == null ? null : Math.round(share * 100);
-  const ringLabel =
-    pct != null && shareTotal > 0
-      ? `${pct}% of ${shareTotal} ${shareTotal === 1 ? "query" : "queries"} in view`
-      : undefined;
+  const ringLabel = ringLabelFor(pct, shareTotal);
 
   return (
     <div
-      onClick={onClick}
-      onKeyDown={activateOnKey(onClick)}
-      role={onClick ? "button" : undefined}
-      tabIndex={onClick ? 0 : undefined}
-      aria-pressed={onClick ? selected : undefined}
+      {...interactiveProps(onClick, selected)}
       className={cn(
         "bento-card group relative flex h-full select-none flex-col overflow-hidden rounded-2xl border-2 bg-surface p-4 shadow-card",
         "transition-[border-color,box-shadow,transform] duration-200 motion-reduce:transition-none",
@@ -113,14 +132,7 @@ export function StatTile({
           </div>
         </div>
 
-        {subtextMain && (
-          <div className="mt-3 flex items-center gap-1 text-[12px] font-semibold text-black">
-            {subtextMain}
-          </div>
-        )}
-        {caption && (
-          <p className="m-0 mt-3 line-clamp-2 text-[11.5px] font-medium leading-snug text-black">{caption}</p>
-        )}
+        <StatTileFooter subtextMain={subtextMain} caption={caption} />
       </div>
 
       {selected && (

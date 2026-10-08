@@ -19,9 +19,14 @@ const istDay = (iso) => {
 /** "01 Oct 2026" for a day key. */
 const dayLabel = (day) => formatDateTime(`${day}T06:30:00.000Z`).split(',')[0];
 
-const count = (rows, ...actions) => rows.filter((row) => actions.includes(row.action)).length;
-const distinctCases = (rows, ...actions) =>
-  new Set(rows.filter((row) => actions.includes(row.action) && row.queryId).map((row) => row.queryId)).size;
+const count = (rows, ...actions) => {
+  const wanted = new Set(actions);
+  return rows.filter((row) => wanted.has(row.action)).length;
+};
+const distinctCases = (rows, ...actions) => {
+  const wanted = new Set(actions);
+  return new Set(rows.filter((row) => wanted.has(row.action) && row.queryId).map((row) => row.queryId)).size;
+};
 
 export const UNAUTHORISED_ACTIONS = ['AUTHORIZATION_DENIED', 'AUTHENTICATION_FAILED'];
 

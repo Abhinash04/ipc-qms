@@ -80,23 +80,16 @@ const TRANSPORT_HINT = {
   nic: 'Real mail leaves this machine — NICeMail SMTP',
 };
 
-function EmailPanel({ config }) {
-  const transport = config?.transport || null;
-  const transportSends = Boolean(transport) && transport !== 'mock';
+function transportHint(transport) {
+  if (!transport) return 'Not reported by the server';
+  return TRANSPORT_HINT[transport] || 'Unrecognised transport — assume real mail leaves this machine';
+}
+
+function NicAgentRows({ config }) {
   const agentOn = Boolean(config?.nicBrowserMailbox);
 
   return (
-    <Panel title="Email" icon={CheckCircle2}>
-      <Row
-        label="Transport"
-        value={transport || '—'}
-        tone={transportSends ? 'warn' : 'neutral'}
-        hint={
-          transport
-            ? TRANSPORT_HINT[transport] || 'Unrecognised transport — assume real mail leaves this machine'
-            : 'Not reported by the server'
-        }
-      />
+    <>
       <Row
         label="NICeMail browser agent"
         value={agentOn ? 'enabled' : 'disabled'}
@@ -119,6 +112,23 @@ function EmailPanel({ config }) {
           }
         />
       )}
+    </>
+  );
+}
+
+function EmailPanel({ config }) {
+  const transport = config?.transport || null;
+  const transportSends = Boolean(transport) && transport !== 'mock';
+
+  return (
+    <Panel title="Email" icon={CheckCircle2}>
+      <Row
+        label="Transport"
+        value={transport || '—'}
+        tone={transportSends ? 'warn' : 'neutral'}
+        hint={transportHint(transport)}
+      />
+      <NicAgentRows config={config} />
       <Row label="Query recipient" value={config?.ipcQueryEmail || '—'} />
       {(config?.participants || []).map((participant) => (
         <Row

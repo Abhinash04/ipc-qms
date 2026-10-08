@@ -62,10 +62,13 @@ function CopyButton({ value, label }) {
     <button
       type="button"
       onClick={() => {
-        navigator.clipboard?.writeText(value).then(() => {
-          setCopied(true);
-          setTimeout(() => setCopied(false), 1500);
-        }, () => {});
+        navigator.clipboard
+          ?.writeText(value)
+          .then(() => {
+            setCopied(true);
+            setTimeout(() => setCopied(false), 1500);
+          })
+          .catch(() => {});
       }}
       aria-label={copied ? `${label} copied` : `Copy ${label}`}
       title={copied ? 'Copied' : `Copy ${label}`}
@@ -184,10 +187,10 @@ function DraftTabContent({ query, versions, latestVersion }) {
           </span>
         </div>
 
-        <div className="max-h-[40rem] overflow-y-auto p-3 sm:p-6">
+        <div className="max-h-160 overflow-y-auto p-3 sm:p-6">
           <article
             aria-label={`Response draft ${shown.version}`}
-            className="mx-auto max-w-[720px] rounded-sm bg-card px-6 py-7 shadow-[0_1px_3px_rgba(15,23,42,0.12),0_8px_24px_-8px_rgba(15,23,42,0.18)] sm:px-12 sm:py-10"
+            className="mx-auto max-w-180 rounded-sm bg-card px-6 py-7 shadow-[0_1px_3px_rgba(15,23,42,0.12),0_8px_24px_-8px_rgba(15,23,42,0.18)] sm:px-12 sm:py-10"
           >
             <header className="mb-6 flex items-start justify-between gap-4 border-b-2 border-double border-slate-300 pb-4">
               <div className="flex items-center gap-3">
@@ -563,8 +566,8 @@ export function QueryDetailPage({ queryId: viewedQueryId = null, readOnly = fals
           aria-label="Case actions and details"
           className={
             readOnly
-              ? 'order-first grid grid-cols-1 items-start gap-4 self-start md:grid-cols-2 xl:order-none xl:grid-cols-1'
-              : 'order-first grid grid-cols-1 items-start gap-4 self-start md:grid-cols-2 xl:order-none xl:sticky xl:top-24 xl:grid-cols-1 xl:max-h-[calc(100vh-7rem)] xl:overflow-y-auto xl:pe-1'
+              ? 'order-first grid grid-cols-1 items-start gap-4 self-start md:grid-cols-2 xl:order-0 xl:grid-cols-1'
+              : 'order-first grid grid-cols-1 items-start gap-4 self-start md:grid-cols-2 xl:order-0 xl:sticky xl:top-24 xl:grid-cols-1 xl:max-h-[calc(100vh-7rem)] xl:overflow-y-auto xl:pe-1'
           }
         >
           {!readOnly && <WorkflowActionsCard />}

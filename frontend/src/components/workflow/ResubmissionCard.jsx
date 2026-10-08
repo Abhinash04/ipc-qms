@@ -63,8 +63,20 @@ const DIFF_STYLE = {
   same: { mark: ' ', className: 'text-muted-foreground' },
 };
 
+// A row's line numbers in the old and the new text identify it ("-" where it has none).
+function withLineKeys(rows) {
+  let oldLine = 0;
+  let newLine = 0;
+  return rows.map((row) => {
+    if (row.type !== 'added') oldLine += 1;
+    if (row.type !== 'removed') newLine += 1;
+    const key = `${row.type === 'added' ? '-' : oldLine}:${row.type === 'removed' ? '-' : newLine}`;
+    return { ...row, key };
+  });
+}
+
 function VersionDiff({ before, after }) {
-  const rows = lineDiff(before?.content ?? '', after?.content ?? '');
+  const rows = withLineKeys(lineDiff(before?.content ?? '', after?.content ?? ''));
   const changed = rows.filter((r) => r.type !== 'same').length;
 
   return (
@@ -77,15 +89,15 @@ function VersionDiff({ before, after }) {
             } removed.`}
       </p>
       <pre className="max-h-96 overflow-auto rounded-md border border-border bg-card p-2 font-mono text-xs leading-5">
-        {rows.map((row, index) => {
+        {rows.map((row) => {
           const style = DIFF_STYLE[row.type];
           return (
-            <div key={index} className={cn('flex gap-2 px-1', style.className)} data-diff={row.type}>
+            <div key={row.key} className={cn('flex gap-2 px-1', style.className)} data-diff={row.type}>
               <span aria-hidden="true" className="w-3 shrink-0 select-none text-center">
                 {style.mark}
               </span>
               <span className="sr-only">{row.type === 'same' ? '' : `${row.type}: `}</span>
-              <span className="whitespace-pre-wrap break-words">{row.text || ' '}</span>
+              <span className="whitespace-pre-wrap wrap-break-word">{row.text || ' '}</span>
             </div>
           );
         })}
@@ -129,8 +141,45 @@ function EarlierRounds({ rounds }) {
   );
 }
 
-export function ResubmissionCard({ query, reviews, versions, steps, latestVersion, currentStep }) {
+function ResubmissionTimeline({ query, current, before, latestVersion, officer, currentStep, steps }) {
+  return (
+    <ol aria-label="How this version came about" className="flex flex-col gap-2 sm:flex-row">
+      <Step title={`${before?.version || 'Previous'} reviewed`} detail={when(current.request.at)} />
+      <Arrow />
+      <Step
+        tone="orange"
+        title={current.rejected ? 'Rejected' : 'Changes requested'}
+        detail={`${current.requesterRole} · ${current.requestedBy}`}
+      />
+      <Arrow />
+      <Step title={`${latestVersion.version} updated`} detail={`${officer} · ${when(latestVersion.submittedAt)}`} />
+      <Arrow />
+      <Step tone="blue" title="Under review now" detail={reviewingNow(query, currentStep, steps)} />
+    </ol>
+  );
+}
+
+function VersionCompare({ before, after }) {
   const [comparing, setComparing] = useState(false);
+  if (!before) return null;
+
+  return (
+    <div className="space-y-2">
+      <button
+        type="button"
+        aria-expanded={comparing}
+        onClick={() => setComparing((v) => !v)}
+        className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-xs font-semibold text-foreground hover:bg-muted"
+      >
+        <GitCompareArrows className="h-3.5 w-3.5" aria-hidden="true" />
+        {comparing ? 'Hide comparison' : `Compare ${before.version} → ${after.version}`}
+      </button>
+      {comparing && <VersionDiff before={before} after={after} />}
+    </div>
+  );
+}
+
+export function ResubmissionCard({ query, reviews, versions, steps, latestVersion, currentStep }) {
   const inReview = IN_REVIEW.includes(query?.workflowState);
   const found = inReview ? currentResubmission({ reviews, versions, steps, latestVersion }) : null;
   if (!found) return null;
@@ -151,19 +200,15 @@ export function ResubmissionCard({ query, reviews, versions, steps, latestVersio
       } by ${current.requesterRole} — what was asked and what changed are below.`}
       bodyClassName="space-y-4"
     >
-      <ol aria-label="How this version came about" className="flex flex-col gap-2 sm:flex-row">
-        <Step title={`${before?.version || 'Previous'} reviewed`} detail={when(current.request.at)} />
-        <Arrow />
-        <Step
-          tone="orange"
-          title={current.rejected ? 'Rejected' : 'Changes requested'}
-          detail={`${current.requesterRole} · ${current.requestedBy}`}
-        />
-        <Arrow />
-        <Step title={`${latestVersion.version} updated`} detail={`${officer} · ${when(latestVersion.submittedAt)}`} />
-        <Arrow />
-        <Step tone="blue" title="Under review now" detail={reviewingNow(query, currentStep, steps)} />
-      </ol>
+      <ResubmissionTimeline
+        query={query}
+        current={current}
+        before={before}
+        latestVersion={latestVersion}
+        officer={officer}
+        currentStep={currentStep}
+        steps={steps}
+      />
 
       <div className="grid gap-3 md:grid-cols-2">
         <Quote
@@ -177,20 +222,7 @@ export function ResubmissionCard({ query, reviews, versions, steps, latestVersio
         </Quote>
       </div>
 
-      {before && (
-        <div className="space-y-2">
-          <button
-            type="button"
-            aria-expanded={comparing}
-            onClick={() => setComparing((v) => !v)}
-            className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-xs font-semibold text-foreground hover:bg-muted"
-          >
-            <GitCompareArrows className="h-3.5 w-3.5" aria-hidden="true" />
-            {comparing ? 'Hide comparison' : `Compare ${before.version} → ${latestVersion.version}`}
-          </button>
-          {comparing && <VersionDiff before={before} after={latestVersion} />}
-        </div>
-      )}
+      <VersionCompare before={before} after={latestVersion} />
 
       <EarlierRounds rounds={earlier} />
     </CaseCard>

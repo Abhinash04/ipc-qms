@@ -60,16 +60,19 @@ const HISTORY_CHUNK = 500;
  * The stored events are not changed.
  */
 async function withInferredChanges(rows) {
-  const ids = [...new Set(rows.filter((row) => !row.changes && row.queryId).map((row) => row.queryId))];
+  const wanted = new Set(rows.filter((row) => !row.changes && row.queryId).map((row) => row.queryId));
+  const ids = [...wanted];
   if (!ids.length) return rows;
 
-  let history = buffer.filter((event) => ids.includes(event.queryId));
+  let history = buffer.filter((event) => wanted.has(event.queryId));
   if (persistent()) {
     try {
-      for (let i = 0; i < ids.length; i += HISTORY_CHUNK) {
-        const found = await AuditEvent.find({ queryId: { $in: ids.slice(i, i + HISTORY_CHUNK) } }, HISTORY_FIELDS).lean();
-        history = history.concat(found);
-      }
+      const chunks = [];
+      for (let i = 0; i < ids.length; i += HISTORY_CHUNK) chunks.push(ids.slice(i, i + HISTORY_CHUNK));
+      const found = await Promise.all(
+        chunks.map((chunk) => AuditEvent.find({ queryId: { $in: chunk } }, HISTORY_FIELDS).lean()),
+      );
+      history = history.concat(...found);
     } catch (error) {
       console.warn(`[audit] could not load query history: ${error.message}`);
       return rows;
@@ -449,7 +452,7 @@ async function summary(criteria = {}) {
   const filter = toMongoFilter(criteria);
   const group = async (field) => {
     const rows = await AuditEvent.aggregate([{ $match: filter }, { $group: { _id: `$${field}`, n: { $sum: 1 } } }]);
-    return rows.reduce((acc, row) => ({ ...acc, [row._id || 'unknown']: row.n }), {});
+    return Object.fromEntries(rows.map((row) => [row._id || 'unknown', row.n]));
   };
 
   const [total, byAction, byResult, byActorType] = await Promise.all([

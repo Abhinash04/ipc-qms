@@ -65,7 +65,10 @@ function withStatuses(stages, done) {
  * AI agent summarised, acknowledged, prepared the reply and sent it. Nothing goes to the OIC.
  */
 function buildAutoReplyLifecycle({ query, audit, messages }) {
-  const lastOf = (...events) => latest(audit.filter((entry) => events.includes(entry.event)));
+  const lastOf = (...events) => {
+    const wanted = new Set(events);
+    return latest(audit.filter((entry) => wanted.has(entry.event)));
+  };
   const outgoing = messages.find((m) => m.emailType === EMAIL_TYPE.OUTGOING_RESPONSE)?.timestamp || null;
   const { confidence = 1, topic = null } = query.autoReply;
   const inquirer = query.inquirer?.name || null;
@@ -175,7 +178,10 @@ export function buildLifecycle({
   // Pull backs and change requests are not noted here: they are actions on the workflow line
   // (see workflowSequence).
 
-  const lastOf = (...events) => latest(audit.filter((entry) => events.includes(entry.event)));
+  const lastOf = (...events) => {
+    const wanted = new Set(events);
+    return latest(audit.filter((entry) => wanted.has(entry.event)));
+  };
   const assigneeName = findUserById(query.currentAssigneeId)?.name || 'an official';
   const latestVersion =
     [...versions].sort((a, b) => String(a.createdAt || '').localeCompare(String(b.createdAt || ''))).at(-1) || null;

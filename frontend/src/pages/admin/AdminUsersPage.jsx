@@ -123,19 +123,23 @@ export function AdminUsersPage() {
         actions={
           <div className="flex flex-wrap items-center gap-3">
             <div className="relative">
+              <label htmlFor="admin-users-search" className="sr-only">
+                Search users
+              </label>
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
               <input
+                id="admin-users-search"
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search users..."
-                className="bg-surface-muted border border-line text-ink text-xs rounded-full py-2 pl-9 pr-4 w-48 sm:w-56 focus:outline-none focus:ring-2 focus:ring-primary/40 transition-all"
+                className="bg-surface-muted border border-line text-ink text-xs rounded-full py-2 pl-9 pr-4 w-48 sm:w-56 focus:outline-none focus:ring-2 focus:ring-primary/40 transition-shadow"
               />
             </div>
 
             <button
               type="button"
-              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-primary text-white font-bold text-xs shadow-xs hover:bg-primary-hover transition-all cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-primary text-white font-bold text-xs shadow-xs hover:bg-primary-hover transition-colors cursor-pointer"
             >
               <Plus className="w-4 h-4 text-white" strokeWidth={2.5} />
               <span>Add User</span>
@@ -161,10 +165,14 @@ export function AdminUsersPage() {
 
           <div className="flex items-center gap-2 ms-auto sm:ms-0">
             <div className="relative">
+              <label htmlFor="admin-users-role" className="sr-only">
+                Filter by role
+              </label>
               <select
+                id="admin-users-role"
                 value={roleFilter}
                 onChange={(e) => setRoleFilter(e.target.value)}
-                className="appearance-none bg-slate-50 border border-slate-200 text-slate-700 font-semibold text-xs rounded-full py-1.5 pl-3.5 pr-8 cursor-pointer outline-none hover:border-slate-300 transition-all"
+                className="appearance-none bg-slate-50 border border-slate-200 text-slate-700 font-semibold text-xs rounded-full py-1.5 pl-3.5 pr-8 cursor-pointer outline-none hover:border-slate-300 transition-colors"
               >
                 <option value="ALL">All Roles</option>
                 {Object.keys(ROLES).map((roleKey) => (
@@ -180,7 +188,7 @@ export function AdminUsersPage() {
 
         {/* USERS TABLE */}
         <div className="overflow-x-auto rounded-2xl border border-slate-200/80">
-          <table className="w-full min-w-[720px] text-left border-collapse">
+          <table className="w-full min-w-180 text-left border-collapse">
             <thead className="bg-[#F0F5FF] text-slate-800 border-b border-slate-200">
               <tr>
                 <th scope="col" className="py-3 px-4 text-xs font-bold text-slate-500 uppercase tracking-wider w-12 text-center">
@@ -317,7 +325,7 @@ export function AdminUsersPage() {
               type="button"
               aria-label="Page 1"
               aria-current="page"
-              className="w-7 h-7 rounded-full bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-bold text-xs flex items-center justify-center shadow-xs"
+              className="w-7 h-7 rounded-full bg-linear-to-r from-blue-600 to-indigo-600 text-white font-bold text-xs flex items-center justify-center shadow-xs"
             >
               1
             </button>

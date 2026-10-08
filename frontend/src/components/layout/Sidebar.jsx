@@ -197,18 +197,20 @@ export function Sidebar() {
   return (
     <TooltipProvider delayDuration={150}>
       <m.aside
-        initial={false}
-        animate={{ width: collapsed ? WIDTH_CLOSED : WIDTH_OPEN }}
+        layout
         transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
         className={cn(
           "hidden lg:block relative z-40 h-screen shrink-0 select-none",
           boxed && "py-4 ps-4",
         )}
-        style={boxed ? { boxSizing: "content-box" } : undefined}
+        style={{
+          width: collapsed ? WIDTH_CLOSED : WIDTH_OPEN,
+          ...(boxed && { boxSizing: "content-box" }),
+        }}
       >
         <m.div
-          initial={false}
-          animate={{ width: expanded ? WIDTH_OPEN : WIDTH_CLOSED }}
+          layout
+          style={{ width: expanded ? WIDTH_OPEN : WIDTH_CLOSED }}
           transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
           onMouseEnter={() => setHovering(true)}
           onMouseLeave={() => setHovering(false)}
@@ -220,11 +222,13 @@ export function Sidebar() {
             hoverMode && collapsed && hovering && "shadow-2xl",
           )}
         >
-          <SidebarContent
-            open={expanded}
-            collapsed={collapsed}
-            onToggle={() => setCollapsed(!collapsed)}
-          />
+          <m.div layout="position" className="h-full">
+            <SidebarContent
+              open={expanded}
+              collapsed={collapsed}
+              onToggle={() => setCollapsed(!collapsed)}
+            />
+          </m.div>
         </m.div>
       </m.aside>
     </TooltipProvider>
