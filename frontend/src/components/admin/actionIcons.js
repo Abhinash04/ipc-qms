@@ -11,6 +11,8 @@ import {
   Download,
   RefreshCw,
   Activity,
+  UserCheck,
+  UserX,
 } from 'lucide-react';
 
 const EXACT = {
@@ -29,6 +31,9 @@ const EXACT = {
 
   ATTACHMENT_UPLOADED: { icon: Paperclip, tint: 'bg-teal-100 text-teal-700' },
   ATTACHMENT_DOWNLOADED: { icon: Download, tint: 'bg-teal-100 text-teal-700' },
+
+  USER_REJECTED: { icon: UserX, tint: 'bg-rose-100 text-rose-700' },
+  USER_DEACTIVATED: { icon: UserX, tint: 'bg-slate-100 text-slate-600' },
 };
 
 const PREFIX = [
@@ -37,6 +42,7 @@ const PREFIX = [
   ['EMAIL_', { icon: Mail, tint: 'bg-primary-100 text-primary-700' }],
   ['DRAFT_', { icon: Send, tint: 'bg-primary-100 text-primary-700' }],
   ['CASE_', { icon: Activity, tint: 'bg-primary-100 text-primary-700' }],
+  ['USER_', { icon: UserCheck, tint: 'bg-emerald-100 text-emerald-700' }],
 ];
 
 const FALLBACK = { icon: Activity, tint: 'bg-slate-100 text-slate-600' };

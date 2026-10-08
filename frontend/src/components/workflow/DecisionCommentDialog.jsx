@@ -39,6 +39,8 @@ export function DecisionCommentDialog({
   confirmLabel,
   tone = "approve",
   error = null,
+  maxLength = MAX_COMMENT,
+  hint = null,
   onSubmit,
 }) {
   const fieldId = useId();
@@ -83,14 +85,14 @@ export function DecisionCommentDialog({
               value={comment}
               onChange={(event) => setComment(event.target.value)}
               placeholder={placeholder}
-              maxLength={MAX_COMMENT}
+              maxLength={maxLength}
               rows={5}
               required={required}
               disabled={submitting}
               aria-describedby={`${fieldId}-hint`}
             />
             <p id={`${fieldId}-hint`} className="m-0 text-xs text-muted-foreground">
-              {required ? "Required. The officer works from what you write here." : "Optional. Recorded with your approval."}
+              {hint ?? (required ? "Required. The officer works from what you write here." : "Optional. Recorded with your approval.")}
             </p>
           </div>
 
