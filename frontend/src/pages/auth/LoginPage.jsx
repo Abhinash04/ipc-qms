@@ -446,6 +446,16 @@ export function LoginPage() {
               </div>
             )}
 
+            <div className="mt-6 border-t border-line/60 pt-5 text-center text-[14px] text-ink-muted">
+              Don&apos;t have an account?{" "}
+              <Link
+                to={ROUTE_PATHS.SIGNUP}
+                className="font-semibold text-primary transition-colors hover:text-primary-hover hover:underline"
+              >
+                Sign Up
+              </Link>
+            </div>
+
             {import.meta.env.DEV && (
               <DevQuickLogin
                 loading={loading}
