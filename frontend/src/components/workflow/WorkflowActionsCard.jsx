@@ -465,7 +465,7 @@ function nextStepMeta({ isClosed, canPullback, canForward, links, hasNoActions }
   return "Choose an action";
 }
 
-function DeliveryNotices({ retries }) {
+function DeliveryNotices({ retries, readOnly }) {
   const {
     ackError,
     ackUncertain,
@@ -498,6 +498,7 @@ function DeliveryNotices({ retries }) {
           onRetry={retryAcknowledgement}
           uncertain={ackUncertain}
           onResolve={resolveAcknowledgement}
+          readOnly={readOnly}
         />
       )}
 
@@ -520,6 +521,7 @@ function DeliveryNotices({ retries }) {
           onRetry={retryForward}
           uncertain={forwardUncertain}
           onResolve={resolveForward}
+          readOnly={readOnly}
         />
       )}
     </>
@@ -528,6 +530,7 @@ function DeliveryNotices({ retries }) {
 
 export function WorkflowActionsCard() {
   const { queryId, query, currentStep, currentUser, can, versions = [] } = useQueryCase();
+  const observer = isObserver(currentUser);
   const paths = useRoutePaths();
   const retries = useEmailDeliveryRetries(queryId, currentUser, query);
   const { forward } = retries;
@@ -559,7 +562,7 @@ export function WorkflowActionsCard() {
     >
       <div className="space-y-2.5">
 
-        <DeliveryNotices retries={retries} />
+        <DeliveryNotices retries={retries} readOnly={observer} />
 
         {isClosed && !canPullback && (
           <ClosedState query={query} finalVersion={finalVersion} />

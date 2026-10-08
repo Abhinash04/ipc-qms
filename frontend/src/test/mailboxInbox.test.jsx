@@ -767,8 +767,12 @@ describe('opening a message', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Cancel delete' }));
     expect(screen.queryByText(/^Opened/)).toBeNull();
 
-    fireEvent.click(screen.getByText('Row body to click.'));
-    expect(await screen.findByText('Opened MSG-00002')).toBeInTheDocument();
+    // jsdom has no layout to hit-test, so check the mechanism instead: the subject link is
+    // stretched over the whole row by its ::after, and the row's controls sit above it.
+    const subject = screen.getByRole('link', { name: 'Doomed enquiry' });
+    expect(subject).toHaveClass('after:absolute', 'after:inset-0');
+    expect(trashFor('MSG-00002').closest('.relative.z-10')).not.toBeNull();
+    expect(screen.getByText('Row body to click.').closest('.relative.z-10')).toBeNull();
   });
 
   it('does not open from a click on a tooltip', async () => {

@@ -69,7 +69,7 @@ function AutoReplyActions({ status, queryId, busy, retry, decline }) {
  * acknowledgement; here the Front Office can only send the mail to Human Intervention instead,
  * or retry a reply that could not be sent.
  */
-export function AutoReplyPanel({ message, caseHref = null }) {
+export function AutoReplyPanel({ message, caseHref = null, readOnly = false }) {
   const autoReply = message.autoReply;
   const textId = useId();
   const recipient = parseSender(message.from).email || message.from;
@@ -135,7 +135,9 @@ export function AutoReplyPanel({ message, caseHref = null }) {
           </Link>
         )}
 
-        <AutoReplyActions status={status} queryId={autoReply.queryId} busy={busy} retry={retry} decline={decline} />
+        {!readOnly && (
+          <AutoReplyActions status={status} queryId={autoReply.queryId} busy={busy} retry={retry} decline={decline} />
+        )}
       </div>
     </CaseCard>
   );

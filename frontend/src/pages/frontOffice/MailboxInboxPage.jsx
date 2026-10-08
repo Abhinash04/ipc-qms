@@ -801,27 +801,35 @@ function MailboxRow({
       </div>
 
       <div className="relative z-10 flex items-center justify-end gap-2 w-full">
-        <RowValidationControls
-          message={message}
-          decision={decision}
-          junk={junk}
-          pending={pending}
-          confirming={confirming?.action === "accept" || confirming?.action === "reject" ? confirming.action : null}
-          onAsk={onAskDecision}
-          onCancel={onCancelDecision}
-          onConfirm={onConfirmDecision}
-          onRescue={onRescue}
-        />
-        <RowDeleteControls
-          message={message}
-          known={known}
-          queryId={queryId}
-          confirming={confirming?.action === "delete"}
-          deleting={deleting}
-          onAskConfirm={onAskConfirm}
-          onCancel={onCancel}
-          onDelete={onDelete}
-        />
+        {readOnly ? (
+          <span className="rounded-lg bg-slate-100 px-2.5 py-1 text-[11.5px] font-semibold text-slate-500">
+            View only
+          </span>
+        ) : (
+          <>
+            <RowValidationControls
+              message={message}
+              decision={decision}
+              junk={junk}
+              pending={pending}
+              confirming={confirming?.action === "accept" || confirming?.action === "reject" ? confirming.action : null}
+              onAsk={onAskDecision}
+              onCancel={onCancelDecision}
+              onConfirm={onConfirmDecision}
+              onRescue={onRescue}
+            />
+            <RowDeleteControls
+              message={message}
+              known={known}
+              queryId={queryId}
+              confirming={confirming?.action === "delete"}
+              deleting={deleting}
+              onAskConfirm={onAskConfirm}
+              onCancel={onCancel}
+              onDelete={onDelete}
+            />
+          </>
+        )}
       </div>
     </div>
   );
@@ -1000,6 +1008,8 @@ function InboxResults({ pending, placeholder, messages, filtered, offset, rowPro
 export function MailboxInboxPage() {
   const paths = useRoutePaths();
   const currentUser = useAuthStore((state) => state.currentUser);
+  // Super Admin reads every message; only the Front Office decides on them.
+  const readOnly = isObserver(currentUser);
   const queries = useWorkflowStore((state) => state.queries);
   const emailMessages = useWorkflowStore((state) => state.emailMessages);
   const { running, error, lastResult, accept, reject, checkMailbox } =
@@ -1182,6 +1192,7 @@ export function MailboxInboxPage() {
       caseHref: paths.QUERY_DETAIL ? getQueryDetailPath : null,
       messageHref: (mailboxMessageId) =>
         buildPath(paths.INBOX_DETAIL, { messageId: encodeURIComponent(mailboxMessageId) }),
+      readOnly,
       onAskDecision: (action) =>
         setConfirming({ id: message.mailboxMessageId, action }),
       onCancelDecision: () => setConfirming(null),

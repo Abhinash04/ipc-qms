@@ -252,6 +252,25 @@ describe('Transfer Query Functionality Unit & Integration Tests', () => {
       expect(screen.getAllByText(new RegExp(`Reason: Colleague has better expertise`)).length).toBeGreaterThan(0);
     });
 
+    it('lets the Super Admin view the case, and says why it offers no actions', () => {
+      renderAs(findUserById('USR-0008'), `/super-admin/queries/${queryId}`);
+
+      expect(screen.getByText(/viewing this case as Super Admin/i)).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /Transfer Query/i })).toBeNull();
+      expect(screen.queryByRole('button', { name: /Pullback Query/i })).toBeNull();
+    });
+
+    it("shows the Super Admin an official's queue exactly as that official sees it", () => {
+      renderAs(findUserById('USR-0008'), '/super-admin/my-work');
+
+      const picker = screen.getByLabelText('Viewing work of');
+      fireEvent.change(picker, { target: { value: OFFICIAL_A.id } });
+      expect(screen.getByText(queryId)).toBeInTheDocument();
+
+      fireEvent.change(picker, { target: { value: OFFICIAL_B.id } });
+      expect(screen.queryByText(queryId)).toBeNull();
+    });
+
     it('transfers query out of Official A active work and into Official B active work', () => {
       const { unmount: unmountA1 } = renderAs(OFFICIAL_A, '/assigned-official/my-work');
       expect(screen.getByText(queryId)).toBeInTheDocument();
