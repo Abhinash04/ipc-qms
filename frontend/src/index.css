@@ -512,17 +512,84 @@ body {
 .wf-current {
   animation: wf-ring 1.8s ease-out infinite;
 }
+
+/* Return arc animations (pullback & changes requested) */
+@keyframes wf-arc-march {
+  to {
+    stroke-dashoffset: -20px;
+  }
+}
+@keyframes wf-arc-pulse-travel {
+  0% {
+    stroke-dasharray: 10 180;
+    stroke-dashoffset: 190;
+    opacity: 0;
+  }
+  20% {
+    opacity: 0.9;
+  }
+  80% {
+    opacity: 0.9;
+  }
+  100% {
+    stroke-dasharray: 10 180;
+    stroke-dashoffset: 0;
+    opacity: 0;
+  }
+}
+@keyframes wf-pullback-badge-pop {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.6) translateY(10px);
+  }
+  65% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1.08) translateY(-2px);
+  }
+  100% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1) translateY(0);
+  }
+}
+@keyframes wf-arrow-left-slide {
+  0%, 100% {
+    transform: translateX(0);
+  }
+  50% {
+    transform: translateX(-2.5px);
+  }
+}
+
 .wf-arc {
   stroke-dasharray: 6 4;
-  animation: qms-fade-in 0.4s ease-out both;
-  animation-delay: var(--wf-delay, 0ms);
+  animation: wf-arc-march 0.7s linear infinite, qms-fade-in 0.4s ease-out both;
+  animation-delay: 0s, var(--wf-delay, 0ms);
 }
+.wf-arc-glow {
+  opacity: 0.2;
+}
+.wf-arc-pulse {
+  stroke-dasharray: 10 180;
+  animation: wf-arc-pulse-travel 2.2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  animation-delay: calc(0.25s + var(--wf-delay, 0ms));
+}
+.wf-pullback-badge {
+  animation: wf-pullback-badge-pop 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation-delay: calc(0.2s + var(--wf-delay, 0ms));
+}
+.wf-arrow-left-slide {
+  animation: wf-arrow-left-slide 1.2s ease-in-out infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .wf-fill-x,
   .wf-fill-y,
   .wf-node,
   .wf-current,
   .wf-arc,
+  .wf-arc-pulse,
+  .wf-pullback-badge,
+  .wf-arrow-left-slide,
   .wf-sweep-x,
   .wf-sweep-y,
   .wf-march-x,

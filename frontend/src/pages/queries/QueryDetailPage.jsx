@@ -516,11 +516,11 @@ export function QueryDetailPage({ queryId: viewedQueryId = null, readOnly = fals
 
       <CaseSummaryBar query={query} />
 
+      <WorkflowProgressCard stages={stages} events={specialEvents} audit={audit} />
+
       <div className="mb-5">
         <AutoTransferTimerCard query={query} />
       </div>
-
-      <WorkflowProgressCard stages={stages} events={specialEvents} audit={audit} />
 
       {/* Desktop: content column and a sticky context rail. Tablet and phone: the rail's two cards
           come first, side by side then stacked, and the content follows full width. */}

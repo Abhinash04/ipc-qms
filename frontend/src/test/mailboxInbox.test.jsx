@@ -91,6 +91,7 @@ const trashFor = opened('Delete');
 
 beforeEach(async () => {
   vi.clearAllMocks();
+  useAuthStore.setState({ currentUser: FRONT_OFFICE, authReady: true });
   fetchMailboxMessages.mockResolvedValue({
     messages: [message(1, 'Keep this one'), message(2, 'Doomed enquiry')],
   });

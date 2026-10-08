@@ -1,17 +1,19 @@
 import { mongoose } from '../config/db.js';
-import { ROLES } from '../constants/roles.js';
 
 const userSchema = new mongoose.Schema(
   {
-    userId: { type: String, required: true, unique: true, index: true },
-    name: { type: String, required: true },
-    email: { type: String, required: true, unique: true, index: true },
-    role: { type: String, required: true, enum: Object.values(ROLES), index: true },
+    userId: { type: String, required: false, unique: true, sparse: true, index: true },
+    name: { type: String, required: true, trim: true },
+    email: { type: String, required: true, unique: true, index: true, lowercase: true, trim: true },
+    department: { type: String, required: false, default: '', trim: true },
+    designation: { type: String, required: false, default: '', trim: true },
+    password: { type: String, required: false },
+    role: { type: String, required: true, default: 'Inquirer', index: true },
     divisionId: { type: String, default: null },
+    isActive: { type: Boolean, default: true },
     active: { type: Boolean, default: true },
-    createdAt: { type: String, default: () => new Date().toISOString() },
   },
-  { versionKey: false },
+  { timestamps: true, versionKey: false },
 );
 
 const User = mongoose.models.User || mongoose.model('User', userSchema);

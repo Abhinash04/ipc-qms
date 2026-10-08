@@ -7,7 +7,7 @@ import { ProtectedRoute } from '@/routes/ProtectedRoute';
 import { ROUTE_PATHS, roleHome } from '@/constants/routePaths';
 import { ROLE_ROUTES } from '@/routes/roleRoutes';
 import { useAuthStore } from '@/store/useAuthStore';
-import { MainLayout, LoginPage, SECTION_ELEMENT } from '@/routes/routeElements';
+import { MainLayout, LoginPage, SignUpPage, SECTION_ELEMENT } from '@/routes/routeElements';
 
 function RouteFallback() {
   return (
@@ -32,6 +32,7 @@ export function AppRoutes() {
 
         <Route element={<AuthLayout />}>
           <Route path={ROUTE_PATHS.LOGIN} element={<LoginPage />} />
+          <Route path={ROUTE_PATHS.SIGNUP} element={<SignUpPage />} />
         </Route>
 
         <Route

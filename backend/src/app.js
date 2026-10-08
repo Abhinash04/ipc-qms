@@ -54,6 +54,7 @@ if (env.NODE_ENV !== 'test') {
 }
 
 app.use('/api/v1', apiRoutes);
+app.use('/api', apiRoutes);
 
 app.use(notFound);
 app.use(errorHandler);

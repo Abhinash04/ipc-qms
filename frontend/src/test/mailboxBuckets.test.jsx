@@ -73,6 +73,7 @@ const acceptFor = opened('Accept');
 const rejectFor = opened('Reject');
 
 function renderInbox() {
+  useAuthStore.setState({ currentUser: FRONT_OFFICE, authReady: true });
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={queryClient}>
@@ -85,6 +86,7 @@ function renderInbox() {
 
 beforeEach(async () => {
   vi.clearAllMocks();
+  useAuthStore.setState({ currentUser: FRONT_OFFICE, authReady: true });
   fetchMailboxDecisions.mockResolvedValue({ decisions: [] });
   recordMailboxDecision.mockResolvedValue({ alreadyDecided: false });
   acceptMailboxMessage.mockImplementation(fakeAcceptEndpoint());

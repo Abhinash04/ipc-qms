@@ -3,6 +3,7 @@ import { SECTION } from '@/constants/routeSections';
 
 export { MainLayout } from '@/layouts/MainLayout';
 export { LoginPage } from '@/pages/auth/LoginPage';
+export { SignUpPage } from '@/pages/auth/SignUpPage';
 
 import { DashboardPage } from '@/pages/dashboard/DashboardPage';
 import { MailboxInboxPage } from '@/pages/frontOffice/MailboxInboxPage';

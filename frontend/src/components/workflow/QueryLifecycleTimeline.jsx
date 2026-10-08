@@ -62,21 +62,21 @@ const ARC_STYLES = {
   [WORKFLOW_ITEM.PULL_BACK]: {
     marker: 'pullback-arrowhead',
     stroke: '#FF7300',
-    badge: 'border-[#FFD0A6] bg-[#FFF5EA] ring-orange-200/40',
+    badge: 'border-amber-300 bg-white text-amber-700 shadow-md ring-2 ring-amber-400/20',
     dot: 'bg-[#FF7300]',
     text: 'text-[#FF7300]',
   },
   [WORKFLOW_ITEM.CHANGES_REQUESTED]: {
     marker: 'changes-arrowhead',
     stroke: '#F43F5E',
-    badge: 'border-rose-200 bg-rose-50 ring-rose-200/40',
+    badge: 'border-rose-300 bg-white text-rose-700 shadow-md ring-2 ring-rose-400/20',
     dot: 'bg-rose-500',
     text: 'text-rose-600',
   },
 };
 const arcStyleOf = (arc) => ARC_STYLES[arc.kind] || ARC_STYLES[WORKFLOW_ITEM.PULL_BACK];
-const ARC_RISE = 32;
-const ARC_STEP = 16;
+const ARC_RISE = 48;
+const ARC_STEP = 42;
 const riseOf = (level) => ARC_RISE + (level - 1) * ARC_STEP;
 
 const isStage = (item) => item.kind === WORKFLOW_ITEM.STAGE;
@@ -396,23 +396,47 @@ function ReturnArcs({ arcs, idSuffix }) {
       </defs>
       {arcs.map((arc) => {
         const base = Math.min(arc.y1, arc.y2);
-        const control = base - (riseOf(arc.level) * 4) / 3;
+        const rise = riseOf(arc.level);
+        const controlY = base - (rise * 4) / 3;
+        const dx = Math.abs(arc.x1 - arc.x2);
+        const cp1X = arc.x1 > arc.x2 ? arc.x1 - dx * 0.12 : arc.x1 + dx * 0.12;
+        const cp2X = arc.x1 > arc.x2 ? arc.x2 + dx * 0.12 : arc.x2 - dx * 0.12;
         const style = arcStyleOf(arc);
+        const pathData = `M ${arc.x1} ${arc.y1} C ${cp1X} ${controlY}, ${cp2X} ${controlY}, ${arc.x2} ${arc.y2 - 8}`;
         return (
-          <path
-            key={arc.id}
-            data-return-arc={arc.id}
-            data-arc-kind={arc.kind}
-            d={`M ${arc.x1} ${arc.y1} C ${arc.x1} ${control}, ${arc.x2} ${control}, ${arc.x2} ${arc.y2 - 8}`}
-            fill="none"
-            stroke={style.stroke}
-            strokeWidth="2.2"
-            strokeDasharray="6 4"
-            strokeLinecap="butt"
-            className="wf-arc"
-            style={delay(2 * arc.position)}
-            markerEnd={`url(#${markerOf(style)})`}
-          />
+          <g key={arc.id}>
+            <path
+              d={pathData}
+              fill="none"
+              stroke={style.stroke}
+              strokeWidth="4"
+              strokeLinecap="round"
+              className="wf-arc-glow"
+              style={delay(2 * arc.position)}
+            />
+            <path
+              data-return-arc={arc.id}
+              data-arc-kind={arc.kind}
+              d={pathData}
+              fill="none"
+              stroke={style.stroke}
+              strokeWidth="2.2"
+              strokeDasharray="6 4"
+              strokeLinecap="butt"
+              className="wf-arc"
+              style={delay(2 * arc.position)}
+              markerEnd={`url(#${markerOf(style)})`}
+            />
+            <path
+              d={pathData}
+              fill="none"
+              stroke="#ffffff"
+              strokeWidth="2.5"
+              strokeLinecap="round"
+              className="wf-arc-pulse"
+              style={delay(2 * arc.position)}
+            />
+          </g>
         );
       })}
     </svg>
@@ -568,7 +592,7 @@ export function QueryLifecycleTimeline({ stages = NONE, events = NONE, audit = N
     );
   }
 
-  const lane = leveled.length ? riseOf(Math.max(...leveled.map((connection) => connection.level))) + 18 : 0;
+  const lane = leveled.length ? riseOf(Math.max(...leveled.map((connection) => connection.level))) + 26 : 0;
   const nodeRef = (id) => (element) => {
     if (element) nodesRef.current.set(id, element);
     else nodesRef.current.delete(id);
@@ -588,7 +612,7 @@ export function QueryLifecycleTimeline({ stages = NONE, events = NONE, audit = N
             {arcs.map((arc) => {
               const base = Math.min(arc.y1, arc.y2);
               const midX = (arc.x1 + arc.x2) / 2;
-              const midY = base - riseOf(arc.level);
+              const midY = base - riseOf(arc.level) - 2;
               const style = arcStyleOf(arc);
               const source = itemsById.get(arc.from);
               const label = source && source.kind !== WORKFLOW_ITEM.PULL_BACK ? styleOf(source).pill : 'Pull back';
@@ -596,14 +620,14 @@ export function QueryLifecycleTimeline({ stages = NONE, events = NONE, audit = N
                 <div
                   key={`arc-badge-${arc.id}`}
                   data-arc-badge={arc.id}
-                  className="pointer-events-none absolute z-10 -translate-x-1/2 -translate-y-1/2 select-none"
-                  style={{ left: `${midX}px`, top: `${midY}px`, ...delay(2 * arc.position) }}
+                  className="pointer-events-none absolute z-10 -translate-x-1/2 -translate-y-1/2 select-none wf-pullback-badge"
+                  style={{ left: `${midX}px`, top: `${midY}px`, zIndex: 20 + arc.level, ...delay(2 * arc.position) }}
                 >
-                  <span className={cn('inline-flex items-center gap-1.5 rounded-full border px-3 py-1 shadow-xs ring-2 backdrop-blur-xs', style.badge)}>
-                    <span className={cn('flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-white shadow-2xs', style.dot)}>
-                      <ArrowLeft className="h-2.5 w-2.5 stroke-[3]" aria-hidden="true" />
+                  <span className={cn('inline-flex items-center gap-1 rounded-full border px-2 py-0.5 shadow-sm ring-1.5 transition-transform duration-300 hover:scale-105', style.badge)}>
+                    <span className={cn('flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full text-white shadow-2xs', style.dot)}>
+                      <ArrowLeft className="h-2 w-2 stroke-[3] wf-arrow-left-slide" aria-hidden="true" />
                     </span>
-                    <span className={cn('text-[12px] font-extrabold tracking-tight whitespace-nowrap', style.text)}>
+                    <span className={cn('text-[10.5px] font-bold tracking-tight whitespace-nowrap', style.text)}>
                       {label}
                     </span>
                   </span>
