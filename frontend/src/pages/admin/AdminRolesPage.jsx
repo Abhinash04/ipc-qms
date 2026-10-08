@@ -113,9 +113,7 @@ function Matrix({ caption, label, rows }) {
       data-slot="panel"
       className="rounded-3xl border border-slate-200/90 bg-white shadow-xl shadow-slate-200/40 overflow-hidden select-none"
     >
-      {/* HEADER BANNER */}
-      <div className="bg-gradient-to-r from-blue-700 via-indigo-700 to-purple-800 text-white p-5 sm:p-6 relative overflow-hidden flex flex-wrap items-center justify-between gap-4">
-        {/* Background ambient glow */}
+      <div className="bg-linear-to-r from-blue-700 via-indigo-700 to-purple-800 text-white p-5 sm:p-6 relative overflow-hidden flex flex-wrap items-center justify-between gap-4">
         <div className="absolute -right-12 -top-12 w-48 h-48 bg-white/10 rounded-full blur-2xl pointer-events-none" />
 
         <div className="flex items-center gap-3.5 relative z-10">
@@ -140,7 +138,6 @@ function Matrix({ caption, label, rows }) {
         </div>
       </div>
 
-      {/* LEGEND BAR */}
       <div className="bg-slate-50/90 border-b border-slate-200/80 px-5 py-3 flex flex-wrap items-center justify-between gap-3 text-xs">
         <div className="flex items-center gap-2 text-slate-500 font-semibold">
           <span className="text-[11.5px] uppercase tracking-wider text-slate-400 font-bold">
@@ -161,14 +158,13 @@ function Matrix({ caption, label, rows }) {
         </div>
       </div>
 
-      {/* MATRIX TABLE */}
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[760px] border-collapse">
+        <table className="w-full min-w-190 border-collapse">
           <thead className="bg-[#F0F5FF] text-slate-800 border-b border-slate-200">
             <tr>
               <th
                 scope="col"
-                className="sticky left-0 z-20 bg-[#F0F5FF] px-4 py-3.5 text-left text-[13px] font-bold text-slate-800 border-b border-slate-200 border-r border-slate-200/80 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]"
+                className="sticky left-0 z-20 bg-[#F0F5FF] px-4 py-3.5 text-left text-[13px] font-bold text-slate-800 border-b border-slate-200/80 border-r shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]"
               >
                 <div className="flex items-center gap-2.5">
                   <div className="w-7 h-7 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center shrink-0">
