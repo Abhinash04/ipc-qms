@@ -37,12 +37,13 @@ export const useAuthStore = create((set) => ({
   },
 
   logout: async () => {
+    set({ currentUser: null, authReady: true });
+    useWorkflowStore.getState().resetHydration();
+
     try {
       await authService.logout();
     } catch {}
 
-    set({ currentUser: null, authReady: true });
-    useWorkflowStore.getState().resetHydration();
     notify.info('Signed out');
   },
 

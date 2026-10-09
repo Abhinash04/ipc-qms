@@ -22,20 +22,18 @@ import {
 import { ROUTE_PATHS, roleHome } from "@/constants/routePaths";
 import { useAuthStore } from "@/store/useAuthStore";
 import { HeroBackdrop } from "@/components/common/HeroBackdrop";
-import { PageBackdrop } from "@/components/common/PageBackdrop";
 import { notify } from "@/services/notify";
 import { register } from "@/services/api/authService";
 import { EXPERTISE_AREAS, OFFICER_DESIGNATION } from "@/constants/expertise";
 
 const FIELD_BASE =
-  "w-full rounded-lg border bg-surface py-2 ps-9 text-[13px] text-ink placeholder:text-ink-muted outline-none transition-colors focus:ring-2";
+  "w-full rounded-xl border bg-slate-50/70 py-2.5 ps-10 text-[13.5px] font-medium text-slate-800 placeholder:text-slate-400 outline-none transition-all duration-200 focus:bg-white focus:ring-4 shadow-xs";
 const FIELD_NORMAL =
-  "border-line focus:border-primary focus:ring-primary/20";
+  "border-slate-200 focus:border-sky-500 focus:ring-sky-400/20";
 const FIELD_ERROR =
-  "border-red-400 focus:border-red-500 focus:ring-red-500/20";
+  "border-red-300 bg-red-50/40 focus:border-red-500 focus:ring-red-500/20";
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-// Same limits as the server: bcrypt only reads the first 72 bytes of a password.
 const MIN_PASSWORD_LENGTH = 8;
 const MAX_PASSWORD_BYTES = 72;
 const PENDING_APPROVAL = "An administrator approves new accounts before they can sign in.";
@@ -54,7 +52,6 @@ const DESIGNATIONS = [
   "Super Admin",
 ];
 
-// Same limit as the server for one phrase; a few "Other" entries keep the list focused.
 const MAX_EXPERTISE_CHARS = 60;
 const MAX_OTHER_EXPERTISE = 5;
 const AREA_LABELS = EXPERTISE_AREAS.map((area) => area.label);
@@ -90,11 +87,11 @@ function ExpertiseField({ value, error, onChange }) {
 
   return (
     <fieldset className="m-0 min-w-0 border-0 p-0" aria-describedby="signup-expertise-hint">
-      <legend className="mb-1 block p-0 text-[13px] font-medium text-ink-soft">Areas of expertise</legend>
-      <p id="signup-expertise-hint" className="mb-2 text-[12px] text-ink-muted">
+      <legend className="mb-1 block p-0 text-[13px] font-bold text-slate-700">Areas of expertise</legend>
+      <p id="signup-expertise-hint" className="mb-1.5 text-[12px] text-slate-500">
         Choose every area you work in. They are used to suggest you for matching queries once an administrator approves your account.
       </p>
-      <div className="flex flex-wrap gap-1.5">
+      <div className="flex flex-wrap gap-1">
         {AREA_LABELS.map((label) => {
           const selected = value.some((entry) => sameText(entry, label));
           return (
@@ -103,13 +100,13 @@ function ExpertiseField({ value, error, onChange }) {
               type="button"
               aria-pressed={selected}
               onClick={() => toggle(label)}
-              className={`inline-flex cursor-pointer items-center gap-1 rounded-full border px-2.5 py-1 text-[12px] font-medium transition-colors ${
+              className={`inline-flex cursor-pointer items-center gap-1 rounded-full border px-2.5 py-0.5 text-[12px] font-medium transition-colors ${
                 selected
-                  ? "border-primary bg-primary-50 text-primary"
-                  : "border-line bg-surface text-ink-soft hover:bg-surface-muted"
+                  ? "border-sky-500 bg-sky-50 text-sky-700 font-semibold"
+                  : "border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100"
               }`}
             >
-              {selected && <Check className="h-3 w-3" aria-hidden="true" />}
+              {selected && <Check className="h-3 w-3 text-sky-600" aria-hidden="true" />}
               {label}
             </button>
           );
@@ -117,18 +114,18 @@ function ExpertiseField({ value, error, onChange }) {
       </div>
 
       {others.length > 0 && (
-        <ul className="m-0 mt-2 flex list-none flex-wrap gap-1.5 p-0" aria-label="Other areas of expertise">
+        <ul className="m-0 mt-1.5 flex list-none flex-wrap gap-1 p-0" aria-label="Other areas of expertise">
           {others.map((entry) => (
             <li
               key={entry}
-              className="inline-flex items-center gap-1 rounded-full border border-primary bg-primary-50 py-0.5 ps-2.5 pe-1 text-[12px] font-medium text-primary"
+              className="inline-flex items-center gap-1 rounded-full border border-sky-400 bg-sky-50 py-0.5 ps-2.5 pe-1 text-[12px] font-medium text-sky-700"
             >
               {entry}
               <button
                 type="button"
                 aria-label={`Remove ${entry}`}
                 onClick={() => onChange(value.filter((item) => item !== entry))}
-                className="cursor-pointer rounded-full p-0.5 hover:bg-primary/10"
+                className="cursor-pointer rounded-full p-0.5 hover:bg-sky-100"
               >
                 <X className="h-3 w-3" aria-hidden="true" />
               </button>
@@ -137,10 +134,10 @@ function ExpertiseField({ value, error, onChange }) {
         </ul>
       )}
 
-      <label htmlFor="signup-expertise-other" className="mb-1 mt-2.5 block text-[12px] font-medium text-ink-soft">
+      <label htmlFor="signup-expertise-other" className="mb-1 mt-2 block text-[12px] font-medium text-slate-600">
         Other area (optional)
       </label>
-      <div className="flex gap-2">
+      <div className="flex gap-1.5">
         <input
           id="signup-expertise-other"
           type="text"
@@ -156,15 +153,15 @@ function ExpertiseField({ value, error, onChange }) {
             }
           }}
           placeholder="e.g. Nitrosamine impurities"
-          className={`${FIELD_BASE} ${draftError ? FIELD_ERROR : FIELD_NORMAL} ps-3 pe-3`}
+          className={`${FIELD_BASE} ${draftError ? FIELD_ERROR : FIELD_NORMAL} ps-2.5 pe-2.5`}
         />
         <button
           type="button"
           onClick={addOther}
           disabled={!draft.trim()}
-          className="inline-flex shrink-0 cursor-pointer items-center gap-1 rounded-lg border border-line bg-surface px-3 text-[12.5px] font-semibold text-ink-soft transition-colors hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-60"
+          className="inline-flex shrink-0 cursor-pointer items-center gap-1 rounded-xl border border-slate-200 bg-slate-50 px-2.5 text-[12.5px] font-semibold text-slate-700 transition-colors hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
         >
-          <Plus className="h-3.5 w-3.5" aria-hidden="true" />
+          <Plus className="h-3 w-3" aria-hidden="true" />
           Add
         </button>
       </div>
@@ -203,13 +200,14 @@ function CustomSelect({
     <div className="relative" ref={dropdownRef}>
       <label
         htmlFor={id}
-        className="mb-1 block text-[13px] font-medium text-ink-soft"
+        className="mb-1 flex items-center gap-1.5 text-[13px] font-bold text-slate-700"
       >
-        {label}
+        <Icon className="h-3.5 w-3.5 text-slate-600" strokeWidth={2} />
+        <span>{label}</span>
       </label>
       <div className="relative">
         <Icon
-          className="pointer-events-none absolute inset-s-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-muted z-10"
+          className="pointer-events-none absolute inset-s-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400 z-10"
           strokeWidth={2}
         />
         <button
@@ -219,15 +217,15 @@ function CustomSelect({
           aria-expanded={isOpen}
           onClick={() => setIsOpen((prev) => !prev)}
           className={`${FIELD_BASE} ${error ? FIELD_ERROR : FIELD_NORMAL} flex items-center justify-between cursor-pointer pe-9 ${
-            !value ? "text-ink-muted" : "text-ink"
+            !value ? "text-slate-400" : "text-slate-800"
           }`}
         >
-          <span className={`w-full truncate ${!value ? "text-center" : "text-start"}`}>
+          <span className="w-full truncate text-start">
             {value || placeholder}
           </span>
         </button>
         <ChevronDown
-          className={`pointer-events-none absolute inset-e-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-muted transition-transform duration-200 ${
+          className={`pointer-events-none absolute inset-e-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400 transition-transform duration-200 ${
             isOpen ? "rotate-180" : ""
           }`}
           strokeWidth={2}
@@ -237,7 +235,7 @@ function CustomSelect({
       {isOpen && (
         <div
           role="listbox"
-          className="absolute top-full inset-x-0 z-50 mt-1 max-h-52 overflow-y-auto rounded-xl border border-line bg-surface p-1 shadow-2xl animate-in fade-in slide-in-from-top-2 duration-150"
+          className="absolute top-full inset-x-0 z-50 mt-1 max-h-50 overflow-y-auto rounded-xl border border-slate-200 bg-white p-1 shadow-2xl animate-in fade-in slide-in-from-top-2 duration-150"
         >
           {options.map((opt) => (
             <button
@@ -249,21 +247,21 @@ function CustomSelect({
                 onChange({ target: { name, value: opt } });
                 setIsOpen(false);
               }}
-              className={`flex w-full cursor-pointer items-center justify-between rounded-lg px-2.5 py-2 text-[13px] text-start transition-colors ${
+              className={`flex w-full cursor-pointer items-center justify-between rounded-lg px-3 py-2 text-[13px] text-start transition-colors ${
                 value === opt
-                  ? "bg-primary-50 font-semibold text-primary"
-                  : "text-ink hover:bg-surface-muted"
+                  ? "bg-sky-50 font-bold text-sky-700"
+                  : "text-slate-700 hover:bg-slate-50"
               }`}
             >
               <span>{opt}</span>
-              {value === opt && <Check className="h-3.5 w-3.5 text-primary shrink-0" />}
+              {value === opt && <Check className="h-3.5 w-3.5 text-sky-600 shrink-0" />}
             </button>
           ))}
         </div>
       )}
 
       {error && (
-        <p className="mt-1 text-[12px] font-medium text-red-600">{error}</p>
+        <p className="mt-0.5 text-[11.5px] font-medium text-red-600">{error}</p>
       )}
     </div>
   );
@@ -299,7 +297,6 @@ export function SignUpPage() {
     setFormData((prev) => ({
       ...prev,
       [name]: value,
-      // Expertise belongs to an Assigned Official request only.
       ...(name === "designation" && value !== OFFICER_DESIGNATION && { expertise: [] }),
     }));
     if (errors[name]) {
@@ -402,314 +399,339 @@ export function SignUpPage() {
   };
 
   return (
-    <div className="flex min-h-screen w-full bg-surface-muted text-ink">
-      <aside className="relative hidden w-1/2 overflow-hidden bg-primary text-white lg:flex lg:flex-col lg:items-center lg:justify-center lg:py-12">
-        <HeroBackdrop />
+    <div className="relative flex h-screen max-h-screen w-full items-center justify-center overflow-hidden bg-primary text-white">
+      <HeroBackdrop />
 
-        <div className="relative z-10 max-w-xl px-10 text-center xl:px-12 -mt-12 xl:-mt-16">
-          <div className="flex flex-col items-center justify-center gap-2.5">
-            <img
-              src="/imageFile1.png"
-              alt="IPC Emblem Logo"
-              width="103"
-              height="199"
-              className="h-24 w-auto object-contain drop-shadow-lg brightness-110"
-            />
-            <div className="text-center leading-tight">
-              <div className="text-[16px] font-semibold tracking-wide text-white/95 xl:text-[17px]">
-                भारतीय भेषज संहिता आयोग
+      <div className="relative z-10 flex h-full w-full max-w-[1440px] items-center justify-center gap-20 lg:gap-32 xl:gap-44 px-6 lg:px-14">
+        <aside className="relative z-10 hidden h-full flex-1 flex-col items-center justify-center overflow-hidden px-6 lg:flex max-w-xl">
+          <div className="relative z-10 my-auto flex max-w-xl flex-col items-center justify-center text-center">
+            <div className="flex flex-col items-center justify-center gap-2.5">
+              <img
+                src="/imageFile1.png"
+                alt="IPC Emblem Logo"
+                width="103"
+                height="199"
+                className="h-24 w-auto object-contain drop-shadow-lg brightness-110"
+              />
+              <div className="text-center leading-tight">
+                <div className="text-[17px] font-semibold tracking-wide text-white/95 xl:text-[18px]">
+                  भारतीय भेषज संहिता आयोग
+                </div>
+                <div className="mt-0.5 font-heading text-[18px] font-extrabold uppercase tracking-wider text-white xl:text-[20px]">
+                  Indian Pharmacopoeia Commission
+                </div>
               </div>
-              <div className="mt-1 font-heading text-[18px] font-extrabold uppercase tracking-wider text-white xl:text-[20px]">
-                Indian Pharmacopoeia Commission
-              </div>
             </div>
-          </div>
 
-          <h1 className="mt-6 font-heading text-[38px] font-extrabold leading-[1.15] tracking-tight text-white xl:text-[44px]">
-            <span className="block">Join the AI-powered</span>{" "}
-            <span className="block">IP Stakeholders’</span>{" "}
-            <span className="block bg-linear-to-r from-sky-200 via-cyan-200 to-indigo-200 bg-clip-text text-transparent">
-              BRIDGETECH
-            </span>
-          </h1>
+            <h1 className="mt-6 font-heading text-[36px] font-extrabold leading-[1.15] tracking-tight text-white xl:text-[42px]">
+              <span className="block">Join the AI-powered</span>{" "}
+              <span className="block">IP Stakeholders’</span>{" "}
+              <span className="block bg-linear-to-r from-sky-200 via-cyan-200 to-indigo-200 bg-clip-text text-transparent">
+                BRIDGETECH
+              </span>
+            </h1>
 
-          <p className="mx-auto mt-4 max-w-lg text-[14.5px] leading-relaxed text-white/90">
-            Create your IPC QMS user account to request monograph reviews, track technical enquiries, and access official pharmacopoeia workflows.
-          </p>
-
-          <div className="mx-auto mt-6 flex max-w-lg flex-wrap items-center justify-center gap-3">
-            <div className="flex items-center gap-2 rounded-full border border-white/25 bg-white/10 px-4 py-2.5 text-[14px] font-bold text-white shadow-sm backdrop-blur-md transition-transform hover:scale-105">
-              <Sparkles className="h-4.5 w-4.5 text-amber-300" />
-              <span>IP 2026 Monographs</span>
-            </div>
-            <div className="flex items-center gap-2 rounded-full border border-white/25 bg-white/10 px-4 py-2.5 text-[14px] font-bold text-white shadow-sm backdrop-blur-md transition-transform hover:scale-105">
-              <ShieldCheck className="h-4.5 w-4.5 text-emerald-300" />
-              <span>ISO 17025 Certified</span>
-            </div>
-            <div className="flex items-center gap-2 rounded-full border border-white/25 bg-white/10 px-4 py-2.5 text-[14px] font-bold text-white shadow-sm backdrop-blur-md transition-transform hover:scale-105">
-              <Zap className="h-4.5 w-4.5 text-sky-300" />
-              <span>24H SLA Protocol</span>
-            </div>
-          </div>
-        </div>
-      </aside>
-
-      <main className="relative isolate flex w-full flex-col items-center justify-center overflow-y-auto px-5 py-8 sm:px-10 lg:w-1/2">
-        <PageBackdrop />
-
-        <div className="w-full max-w-md">
-          <div className="rounded-2xl border border-transparent bg-surface p-5 pt-4 shadow-card sm:p-7 sm:pt-5">
-            <div className="flex items-center justify-center gap-3">
-              <h2 className="font-heading text-[22px] font-bold leading-tight text-center text-primary sm:text-[24px]">
-                Sign Up
-              </h2>
-            </div>
-            <p className="mt-1 text-[12.5px] text-center text-ink-muted">
-              Enter your registration details below to create your account.
+            <p className="mx-auto mt-4 max-w-lg text-[15px] leading-relaxed text-white/90">
+              Create your IPC QMS user account to request monograph reviews, track technical enquiries, and access official pharmacopoeia workflows.
             </p>
 
-            <form onSubmit={handleSubmit} noValidate className="mt-5 space-y-3">
-              <div>
-                <label
-                  htmlFor="signup-fullname"
-                  className="mb-1 block text-[13px] font-medium text-ink-soft"
-                >
-                  Full Name
-                </label>
-                <div className="relative">
-                  <User
-                    className="pointer-events-none absolute inset-s-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-muted"
-                    strokeWidth={2}
-                  />
-                  <input
-                    id="signup-fullname"
-                    name="fullName"
-                    type="text"
-                    value={formData.fullName}
-                    onChange={handleChange}
-                    placeholder="e.g. Dr. Rajesh Sharma"
-                    className={`${FIELD_BASE} ${errors.fullName ? FIELD_ERROR : FIELD_NORMAL} pe-4`}
-                  />
-                </div>
-                {errors.fullName && (
-                  <p className="mt-1 text-[12px] font-medium text-red-600">
-                    {errors.fullName}
-                  </p>
-                )}
+            <div className="mx-auto mt-6 flex max-w-lg flex-wrap items-center justify-center gap-3">
+              <div className="flex items-center gap-2 rounded-full border border-white/25 bg-white/10 px-4 py-2 text-[14px] font-bold text-white shadow-sm backdrop-blur-md transition-transform hover:scale-105">
+                <Sparkles className="h-4.5 w-4.5 text-amber-300" />
+                <span>IP 2026 Monographs</span>
               </div>
-
-              <div>
-                <label
-                  htmlFor="signup-email"
-                  className="mb-1 block text-[13px] font-medium text-ink-soft"
-                >
-                  Email
-                </label>
-                <div className="relative">
-                  <Mail
-                    className="pointer-events-none absolute inset-s-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-muted"
-                    strokeWidth={2}
-                  />
-                  <input
-                    id="signup-email"
-                    name="email"
-                    type="email"
-                    value={formData.email}
-                    onChange={handleChange}
-                    placeholder="you@ipc.example"
-                    className={`${FIELD_BASE} ${errors.email ? FIELD_ERROR : FIELD_NORMAL} pe-4`}
-                  />
-                </div>
-                {errors.email && (
-                  <p className="mt-1 text-[12px] font-medium text-red-600">
-                    {errors.email}
-                  </p>
-                )}
+              <div className="flex items-center gap-2 rounded-full border border-white/25 bg-white/10 px-4 py-2 text-[14px] font-bold text-white shadow-sm backdrop-blur-md transition-transform hover:scale-105">
+                <ShieldCheck className="h-4.5 w-4.5 text-emerald-300" />
+                <span>ISO 17025 Certified</span>
               </div>
-
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <CustomSelect
-                  id="signup-department"
-                  name="department"
-                  label="Department"
-                  value={formData.department}
-                  options={DEPARTMENTS}
-                  placeholder="Select Department"
-                  icon={Building2}
-                  error={errors.department}
-                  onChange={handleChange}
-                />
-
-                <CustomSelect
-                  id="signup-designation"
-                  name="designation"
-                  label="Designation"
-                  value={formData.designation}
-                  options={DESIGNATIONS}
-                  placeholder="Select Designation"
-                  icon={Briefcase}
-                  error={errors.designation}
-                  onChange={handleChange}
-                />
+              <div className="flex items-center gap-2 rounded-full border border-white/25 bg-white/10 px-4 py-2 text-[14px] font-bold text-white shadow-sm backdrop-blur-md transition-transform hover:scale-105">
+                <Zap className="h-4.5 w-4.5 text-sky-300" />
+                <span>24H SLA Protocol</span>
               </div>
-
-              {isOfficer && (
-                <ExpertiseField
-                  value={formData.expertise}
-                  error={errors.expertise}
-                  onChange={(expertise) => handleChange({ target: { name: "expertise", value: expertise } })}
-                />
-              )}
-
-              <div>
-                <label
-                  htmlFor="signup-password"
-                  className="mb-1 block text-[13px] font-medium text-ink-soft"
-                >
-                  Password
-                </label>
-                <div className="relative">
-                  <Lock
-                    className="pointer-events-none absolute inset-s-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-muted"
-                    strokeWidth={2}
-                  />
-                  <input
-                    id="signup-password"
-                    name="password"
-                    type={showPassword ? "text" : "password"}
-                    value={formData.password}
-                    onChange={handleChange}
-                    placeholder="••••••••"
-                    className={`${FIELD_BASE} ${errors.password ? FIELD_ERROR : FIELD_NORMAL} pe-10`}
-                  />
-                  <button
-                    type="button"
-                    aria-label={
-                      showPassword ? "Hide password" : "Show password"
-                    }
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute inset-e-2 top-1/2 -translate-y-1/2 cursor-pointer p-1.5 text-ink-muted transition-colors hover:text-ink"
-                  >
-                    {showPassword ? (
-                      <EyeOff className="h-4 w-4" />
-                    ) : (
-                      <Eye className="h-4 w-4" />
-                    )}
-                  </button>
-                </div>
-                {errors.password && (
-                  <p className="mt-1 text-[12px] font-medium text-red-600">
-                    {errors.password}
-                  </p>
-                )}
-              </div>
-
-              <div>
-                <label
-                  htmlFor="signup-confirm-password"
-                  className="mb-1 block text-[13px] font-medium text-ink-soft"
-                >
-                  Confirm Password
-                </label>
-                <div className="relative">
-                  <Lock
-                    className="pointer-events-none absolute inset-s-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-muted"
-                    strokeWidth={2}
-                  />
-                  <input
-                    id="signup-confirm-password"
-                    name="confirmPassword"
-                    type={showConfirmPassword ? "text" : "password"}
-                    value={formData.confirmPassword}
-                    onChange={handleChange}
-                    placeholder="••••••••"
-                    className={`${FIELD_BASE} ${errors.confirmPassword ? FIELD_ERROR : FIELD_NORMAL} pe-10`}
-                  />
-                  <button
-                    type="button"
-                    aria-label={
-                      showConfirmPassword ? "Hide confirm password" : "Show confirm password"
-                    }
-                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                    className="absolute inset-e-2 top-1/2 -translate-y-1/2 cursor-pointer p-1.5 text-ink-muted transition-colors hover:text-ink"
-                  >
-                    {showConfirmPassword ? (
-                      <EyeOff className="h-4 w-4" />
-                    ) : (
-                      <Eye className="h-4 w-4" />
-                    )}
-                  </button>
-                </div>
-                {errors.confirmPassword && (
-                  <p className="mt-1 text-[12px] font-medium text-red-600">
-                    {errors.confirmPassword}
-                  </p>
-                )}
-              </div>
-
-              <p className="text-[12px] text-ink-muted">{PENDING_APPROVAL}</p>
-
-              {generalError && (
-                <div
-                  role="alert"
-                  className="rounded-lg border border-red-200 bg-red-50 p-2.5 text-[12.5px] font-medium text-red-700"
-                >
-                  {generalError}
-                </div>
-              )}
-
-              <button
-                type="submit"
-                disabled={loading}
-                className="mt-2 flex w-full cursor-pointer items-center justify-center gap-2 rounded-lg bg-primary px-6 py-2 text-[13.5px] font-semibold text-white shadow-[0_10px_20px_-8px] shadow-primary/60 transition-[background-color,transform] hover:bg-primary-hover active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-70"
-              >
-                {loading ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    <span>Creating account…</span>
-                  </>
-                ) : (
-                  <>
-                    <UserPlus className="h-4 w-4" strokeWidth={2.2} />
-                    <span>Create Account</span>
-                  </>
-                )}
-              </button>
-            </form>
-
-            <div className="mt-4 border-t border-line/60 pt-3.5 text-center text-[13px] text-ink-muted">
-              Already have an account?{" "}
-              <Link
-                to={ROUTE_PATHS.LOGIN}
-                className="font-semibold text-primary transition-colors hover:text-primary-hover hover:underline"
-              >
-                Sign In
-              </Link>
             </div>
           </div>
+        </aside>
 
-          <footer className="mt-5 flex flex-col items-center gap-1.5 text-center">
-            <p className="text-[11.5px] text-ink-muted">
-              © 2026 Integrated Processing Centre · Indian Pharmacopoeia
-              Commission
-            </p>
-            <div className="flex items-center gap-2">
-              <span className="text-[12.5px] font-semibold text-ink-soft">
-                Powered by
-              </span>
-              <span className="brand-plate">
-                <img
-                  src="/anuvadini_new_logo 2.png"
-                  alt="Anuvadini"
-                  width="512"
-                  height="288"
-                  className="h-10 w-32 object-cover"
-                />
-              </span>
+        <main className="flex h-full w-full flex-col items-center justify-center overflow-hidden lg:flex-1 max-w-xl">
+          <div className="my-auto flex w-full max-w-[500px] flex-col items-center justify-center">
+            {/* Form Container with Premium Layered Borders & Badge */}
+            <div className="relative w-full pt-7">
+              {/* Top Badge Icon floating centered over top edge */}
+              <div className="absolute top-0 left-1/2 -translate-x-1/2 z-20 flex items-center justify-center">
+                <div className="flex h-14 w-14 items-center justify-center rounded-full bg-blue-600/20 p-1.5 backdrop-blur-md shadow-lg shadow-blue-500/20 ring-4 ring-white">
+                  <div className="flex h-full w-full items-center justify-center rounded-full bg-gradient-to-tr from-blue-600 via-indigo-600 to-sky-500 text-white shadow-inner">
+                    <UserPlus className="h-6 w-6" strokeWidth={2.2} />
+                  </div>
+                </div>
+              </div>
+
+              {/* Outer Cyan-to-Violet Layered Border Wrapper */}
+              <div className="relative rounded-[26px] p-[2px] bg-gradient-to-b from-cyan-300 via-blue-500/60 to-indigo-500/90 shadow-[0_20px_50px_-10px_rgba(15,23,42,0.35),0_0_25px_rgba(56,189,248,0.2)]">
+                {/* Inner White Card */}
+                <div className="relative overflow-hidden rounded-[24px] bg-white/95 px-7 pt-8 pb-5.5 sm:px-9 sm:pt-9 sm:pb-6.5 backdrop-blur-xl">
+                  {/* Top Accent Gradient Bar */}
+                  <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-sky-400 via-indigo-500 to-cyan-400" />
+
+                  {/* Heading & Subtitle */}
+                  <div className="mb-4.5 text-center">
+                    <h2 className="font-heading text-[26px] sm:text-[28px] font-extrabold tracking-tight text-[#0f172a] whitespace-nowrap">
+                      Sign Up
+                    </h2>
+                    <p className="mt-1 text-[13px] sm:text-[13.5px] text-slate-500 font-medium leading-relaxed max-w-none whitespace-nowrap mx-auto">
+                      Enter your registration details below to create your account.
+                    </p>
+                  </div>
+
+                  <form onSubmit={handleSubmit} noValidate className="space-y-3">
+                    <div>
+                      <label
+                        htmlFor="signup-fullname"
+                        className="mb-1 flex items-center gap-1.5 text-[13px] font-bold text-slate-700"
+                      >
+                        <User className="h-3.5 w-3.5 text-slate-600" strokeWidth={2} />
+                        <span>Full Name</span>
+                      </label>
+                      <div className="relative">
+                        <User
+                          className="pointer-events-none absolute inset-s-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
+                          strokeWidth={2}
+                        />
+                        <input
+                          id="signup-fullname"
+                          name="fullName"
+                          type="text"
+                          value={formData.fullName}
+                          onChange={handleChange}
+                          placeholder="e.g. Dr. Rajesh Sharma"
+                          className={`${FIELD_BASE} ${errors.fullName ? FIELD_ERROR : FIELD_NORMAL} pe-4`}
+                        />
+                      </div>
+                      {errors.fullName && (
+                        <p className="mt-0.5 text-[11.5px] font-medium text-red-600">
+                          {errors.fullName}
+                        </p>
+                      )}
+                    </div>
+
+                    <div>
+                      <label
+                        htmlFor="signup-email"
+                        className="mb-1 flex items-center gap-1.5 text-[13px] font-bold text-slate-700"
+                      >
+                        <Mail className="h-3.5 w-3.5 text-slate-600" strokeWidth={2} />
+                        <span>Email</span>
+                      </label>
+                      <div className="relative">
+                        <Mail
+                          className="pointer-events-none absolute inset-s-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
+                          strokeWidth={2}
+                        />
+                        <input
+                          id="signup-email"
+                          name="email"
+                          type="email"
+                          value={formData.email}
+                          onChange={handleChange}
+                          placeholder="you@ipc.example"
+                          className={`${FIELD_BASE} ${errors.email ? FIELD_ERROR : FIELD_NORMAL} pe-4`}
+                        />
+                      </div>
+                      {errors.email && (
+                        <p className="mt-0.5 text-[11.5px] font-medium text-red-600">
+                          {errors.email}
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      <CustomSelect
+                        id="signup-department"
+                        name="department"
+                        label="Department"
+                        value={formData.department}
+                        options={DEPARTMENTS}
+                        placeholder="Select Department"
+                        icon={Building2}
+                        error={errors.department}
+                        onChange={handleChange}
+                      />
+
+                      <CustomSelect
+                        id="signup-designation"
+                        name="designation"
+                        label="Designation"
+                        value={formData.designation}
+                        options={DESIGNATIONS}
+                        placeholder="Select Designation"
+                        icon={Briefcase}
+                        error={errors.designation}
+                        onChange={handleChange}
+                      />
+                    </div>
+
+                    {isOfficer && (
+                      <ExpertiseField
+                        value={formData.expertise}
+                        error={errors.expertise}
+                        onChange={(expertise) => handleChange({ target: { name: "expertise", value: expertise } })}
+                      />
+                    )}
+
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      <div>
+                        <label
+                          htmlFor="signup-password"
+                          className="mb-1 flex items-center gap-1.5 text-[13px] font-bold text-slate-700"
+                        >
+                          <Lock className="h-3.5 w-3.5 text-slate-600" strokeWidth={2} />
+                          <span>Password</span>
+                        </label>
+                        <div className="relative">
+                          <Lock
+                            className="pointer-events-none absolute inset-s-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
+                            strokeWidth={2}
+                          />
+                          <input
+                            id="signup-password"
+                            name="password"
+                            type={showPassword ? "text" : "password"}
+                            value={formData.password}
+                            onChange={handleChange}
+                            placeholder="••••••••"
+                            className={`${FIELD_BASE} ${errors.password ? FIELD_ERROR : FIELD_NORMAL} pe-10`}
+                          />
+                          <button
+                            type="button"
+                            aria-label={
+                              showPassword ? "Hide password" : "Show password"
+                            }
+                            onClick={() => setShowPassword(!showPassword)}
+                            className="absolute inset-e-2 top-1/2 -translate-y-1/2 cursor-pointer p-1 text-slate-400 transition-colors hover:text-slate-600"
+                          >
+                            {showPassword ? (
+                              <EyeOff className="h-4 w-4" />
+                            ) : (
+                              <Eye className="h-4 w-4" />
+                            )}
+                          </button>
+                        </div>
+                        {errors.password && (
+                          <p className="mt-0.5 text-[11.5px] font-medium text-red-600">
+                            {errors.password}
+                          </p>
+                        )}
+                      </div>
+
+                      <div>
+                        <label
+                          htmlFor="signup-confirm-password"
+                          className="mb-1 flex items-center gap-1.5 text-[13px] font-bold text-slate-700"
+                        >
+                          <Lock className="h-3.5 w-3.5 text-slate-600" strokeWidth={2} />
+                          <span>Confirm Password</span>
+                        </label>
+                        <div className="relative">
+                          <Lock
+                            className="pointer-events-none absolute inset-s-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
+                            strokeWidth={2}
+                          />
+                          <input
+                            id="signup-confirm-password"
+                            name="confirmPassword"
+                            type={showConfirmPassword ? "text" : "password"}
+                            value={formData.confirmPassword}
+                            onChange={handleChange}
+                            placeholder="••••••••"
+                            className={`${FIELD_BASE} ${errors.confirmPassword ? FIELD_ERROR : FIELD_NORMAL} pe-10`}
+                          />
+                          <button
+                            type="button"
+                            aria-label={
+                              showConfirmPassword ? "Hide confirm password" : "Show confirm password"
+                            }
+                            onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                            className="absolute inset-e-2 top-1/2 -translate-y-1/2 cursor-pointer p-1 text-slate-400 transition-colors hover:text-slate-600"
+                          >
+                            {showConfirmPassword ? (
+                              <EyeOff className="h-4 w-4" />
+                            ) : (
+                              <Eye className="h-4 w-4" />
+                            )}
+                          </button>
+                        </div>
+                        {errors.confirmPassword && (
+                          <p className="mt-0.5 text-[11.5px] font-medium text-red-600">
+                            {errors.confirmPassword}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+
+                    <p className="text-[12px] text-slate-500 font-medium">{PENDING_APPROVAL}</p>
+
+                    {generalError && (
+                      <div
+                        role="alert"
+                        className="rounded-xl border border-red-200 bg-red-50 p-2.5 text-[12.5px] font-medium text-red-700"
+                      >
+                        {generalError}
+                      </div>
+                    )}
+
+                    <button
+                      type="submit"
+                      disabled={loading}
+                      className="mt-1 flex w-full cursor-pointer items-center justify-center gap-2.5 rounded-full bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 py-3 px-6 text-[14.5px] font-bold text-white shadow-lg shadow-blue-600/30 transition-all duration-200 hover:from-blue-700 hover:via-indigo-700 hover:to-blue-800 hover:shadow-blue-600/40 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-70"
+                    >
+                      {loading ? (
+                        <>
+                          <Loader2 className="h-4.5 w-4.5 animate-spin" />
+                          <span>Creating account…</span>
+                        </>
+                      ) : (
+                        <>
+                          <UserPlus className="h-4.5 w-4.5" strokeWidth={2.2} />
+                          <span>Create Account</span>
+                        </>
+                      )}
+                    </button>
+                  </form>
+
+                  <div className="mt-4 border-t border-slate-200/60 pt-3 text-center text-[13.5px] font-medium text-slate-500">
+                    Already have an account?{" "}
+                    <Link
+                      to={ROUTE_PATHS.LOGIN}
+                      className="font-semibold text-blue-600 transition-colors hover:text-blue-700 hover:underline"
+                    >
+                      Sign In
+                    </Link>
+                  </div>
+                </div>
+              </div>
             </div>
-          </footer>
-        </div>
-      </main>
+
+            <footer className="mt-3.5 flex flex-col items-center gap-1 text-center">
+              <p className="text-[11px] text-white/80">
+                © 2026 Integrated Processing Centre · Indian Pharmacopoeia Commission
+              </p>
+              <div className="flex items-center gap-2">
+                <span className="text-[12px] font-semibold text-white/95">
+                  Powered by
+                </span>
+                <span className="brand-plate">
+                  <img
+                    src="/anuvadini_new_logo 2.png"
+                    alt="Anuvadini"
+                    width="512"
+                    height="288"
+                    className="h-9 w-30 object-cover"
+                  />
+                </span>
+              </div>
+            </footer>
+          </div>
+        </main>
+      </div>
     </div>
   );
 }
